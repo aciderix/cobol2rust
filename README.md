@@ -1,0 +1,332 @@
+# COBOL → Rust
+
+Première version fonctionnelle d'un transpileur strict, développée dans le dossier
+`Cobol` du Bureau. Le convertisseur est écrit en Python 3.11 et produit un projet
+Rust lisible, compilable et autonome. Le binaire produit n'utilise ni interpréteur
+COBOL ni GnuCOBOL à l'exécution.
+
+**La version 0.4 convertit un sous-ensemble des sources COBOL, dont les groupes,
+tableaux fixes et variables, index, gestionnaires SIZE ERROR, niveaux 88,
+REDEFINES et fichiers LINE SEQUENTIAL structurés. Elle inspecte les
+exécutables PE/ELF, mais ne les décompile pas encore en Rust.** Il ne constitue
+pas un convertisseur universel et ne valide pas à lui seul une migration métier.
+
+## Démarrer sous Windows
+
+Ouvrir PowerShell dans ce dossier :
+
+```powershell
+cd "$env:USERPROFILE\Desktop\Cobol"
+python -m cobol2rust doctor
+python -m cobol2rust convert examples/invoice.cob -o build/ma-facture --run
+```
+
+Résultat attendu :
+
+```text
+HT=000059.85 TVA=000011.97 TTC=000071.82
+Commande eligible
+```
+
+Le dossier de sortie doit être vide ou inexistant. Cela évite d'écraser un projet
+Rust existant. Choisir un nouveau nom pour refaire une conversion.
+
+Le convertisseur trouve automatiquement Rust dans `~/.cargo/bin` si les outils
+ne sont pas dans le PATH. Le premier build télécharge `num-bigint` et ses
+dépendances ; les builds suivants peuvent utiliser le cache Cargo. La génération
+des sources Rust fonctionne sans accès réseau et sans compilateur installé.
+
+## Convertir un source
+
+```powershell
+python -m cobol2rust convert chemin/programme.cob -o build/programme-rust
+python -m cobol2rust convert examples/fixed.cob --format fixed -o build/fixe --build
+python -m cobol2rust convert examples/copybook.cob -I examples -o build/copies --run
+```
+
+Le projet produit contient :
+
+| Fichier | Contenu |
+| --- | --- |
+| `Cargo.toml` | Projet Rust ; bibliothèque d'entiers de précision arbitraire `num-bigint` épinglée à 0.4.6 |
+| `src/main.rs` | Champs, instructions, conditions, boucles et paragraphes traduits |
+| `src/runtime.rs` | Arithmétique décimale, remplissage des champs, saisie et affichage |
+| `src/storage_runtime.rs` | Mémoire partagée, disposition des données, tableaux, vues REDEFINES et sérialisation |
+| `src/file_runtime.rs` | Fichiers LINE SEQUENTIAL, présent quand le programme utilise des fichiers |
+| `expanded.cob` | Source normalisé avec les COPY développés |
+| `conversion.json` | Empreintes source/copybooks, champs et offsets, conditions, profil mémoire et correspondance des lignes |
+
+Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
+**Les tests de cette livraison ont été exécutés sur Windows.** La compilation
+et l'exécution Linux restent à vérifier sur un environnement Linux disponible.
+
+## Périmètre actuel
+
+| Domaine | Pris en charge |
+| --- | --- |
+| Sources | Format libre, format fixe explicite, commentaires, directive `>>SOURCE FORMAT` |
+| Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
+| Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` |
+| Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON`, `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
+| Conditions | Niveau `88`, listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
+| Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` |
+| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, une destination `GIVING`, `ROUNDED`, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
+| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple |
+| Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
+| Paragraphes | `PERFORM paragraphe`, `THRU`, retours, enchaînement séquentiel, `EXIT PARAGRAPH` |
+| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
+| Fichiers | `SELECT`, `FD` texte ou groupe de colonnes DISPLAY, `OPEN INPUT/OUTPUT/EXTEND`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `CLOSE`, `FILE STATUS`, `SELECT OPTIONAL` |
+| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
+
+Les champs numériques sont limités à **18 chiffres**, les champs texte à
+**256 caractères ASCII par champ élémentaire**. Un groupe peut être plus grand.
+La mémoire totale est limitée à **16 Mio**, les tableaux à **7 dimensions** et
+chaque clause OCCURS à **1..10000 occurrences** (minimum variable autorisé : 0).
+Les clauses et variantes absentes
+de cette liste ne sont pas réputées prises en charge.
+
+Sont notamment refusés : tables variables à offsets ou strides variables,
+`SEARCH`, `USAGE INDEX` explicite, niveaux 66/78,
+REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
+images éditées (`ZZ9.99`), `COPY REPLACING`, continuations
+fixes, conditions abrégées, fonctions intrinsèques, `GO TO`, appels externes,
+fichiers binaires/indexés, SQL embarqué, CICS et plusieurs programmes liés.
+Les conversions implicites entre nombres et texte sont également refusées.
+
+Les erreurs de syntaxe non prise en charge donnent une position et empêchent
+la création du projet. Les lignes des diagnostics et de la correspondance
+Rust désignent le source **normalisé et développé** (`expanded.cob`), pas
+nécessairement la ligne d'origine avant expansion des copybooks.
+
+## Calcul décimal et limites explicites
+
+Le moteur utilise des coefficients entiers décimaux de précision arbitraire.
+Il préserve les échelles des opérandes et reproduit le décalage de **38 chiffres
+de la division GnuCOBOL 3.2**, puis applique troncature ou arrondi à la destination.
+Par exemple, `COMPUTE X = (1 / 3) * 3` ne doit pas être simplifié en `X = 1`.
+Ce choix est fondé sur le comportement de l'oracle et le code de
+[`cob_decimal_div`](https://gnucobol.sourceforge.io/doxygen/gnucobol-2/numeric_8c_source.html).
+Il ne promet pas de reproduire tous les modes arithmétiques IBM/Micro Focus.
+
+Avec `ON SIZE ERROR` ou `NOT ON SIZE ERROR`, une division par zéro ou un résultat
+hors de la PICTURE sélectionne la branche d'erreur et conserve la destination.
+La branche NOT ON est exécutée seulement en cas de réussite. Les arrondis sont
+appliqués avant le contrôle de débordement. Le signe est retiré pour un résultat
+négatif dans une destination non signée, comme dans les cas GnuCOBOL testés.
+Les données numériques invalides et les limites de capacité intermédiaire
+restent des arrêts explicites ; elles ne sont pas absorbées par SIZE ERROR.
+
+Sans ces clauses, une division par zéro, une valeur hors de la PICTURE, un signe négatif dans un
+champ non signé ou une saisie numérique invalide provoque un arrêt explicite,
+avec la ligne COBOL et le code **70**. Les intermédiaires dépassant 1024 décimales
+ou 4096 chiffres sont aussi refusés. Ce choix conservateur diffère volontairement
+des cas où un runtime COBOL tronquerait un dépassement ou continuerait après
+une entrée invalide.
+
+## Groupes, tableaux et mémoire partagée
+
+Les groupes, leurs sous-champs et leurs vues REDEFINES partagent réellement les
+mêmes octets. Un MOVE de groupe copie les octets, sans convertir ses colonnes.
+Un MOVE vers plusieurs destinations résout l'adresse de sa source une seule fois
+et relit cette zone pour chaque destination, conformément aux cas GnuCOBOL testés.
+Cette distinction est nécessaire lorsque la première destination recouvre la
+source. Le corpus vérifie aussi les sous-chaînes qui se recouvrent.
+
+Le profil mémoire implémenté est celui des options par défaut du GnuCOBOL 3.2
+utilisé comme oracle : tailles binaires `1-2-4-8`, ordre **big-endian** pour
+COMP/BINARY, décimal compacté COMP-3 avec signe final, et signe DISPLAY ASCII
+dans le dernier caractère. Par exemple, une colonne signée négative peut finir
+par une lettre `p` à `y` dans sa représentation brute. Un affichage numérique
+conserve le signe et le point décimal ; un affichage du groupe écrit ses octets.
+Ce profil est consigné dans le rapport de conversion et de vérification. Il ne
+couvre pas les options mémoire IBM/Micro Focus, l'EBCDIC, `SIGN SEPARATE`,
+`SYNCHRONIZED` ni les variantes de taille/ordre COMP configurées autrement.
+
+Les sous-scripts sont contrôlés à l'exécution, à partir de 1. Une dimension
+manquante ou un nom ambigu est refusé pendant la conversion ; un indice ou une
+sous-chaîne hors limites provoque un arrêt nommé avec le code 70.
+
+Les tables `OCCURS min TO max DEPENDING ON compteur` réservent leur capacité
+maximale. La longueur active des groupes et les bornes de sous-script suivent
+le compteur. Celui-ci doit être un entier scalaire non ambigu, déclaré hors du
+groupe variable. La table doit terminer tous ses groupes parents, sans OCCURS
+englobant, REDEFINES ni enregistrement FD variable. Ses éléments peuvent être
+des groupes avec tableaux fixes imbriqués. Un compteur hors bornes provoque
+un arrêt explicite.
+
+Les index `INDEXED BY` démarrent à 1 et peuvent servir de sous-scripts, de
+variables PERFORM VARYING ou être transférés par MOVE. Le sous-ensemble actuel
+les représente comme des ordinaux entiers signés de 32 bits, affichés avec au
+moins 9 chiffres et un signe. Les opérations
+SET numériques visent les index déclarés ; UP/DOWN relisent leur opérande pour
+chaque index destinataire. Les index au-delà de cette capacité
+provoquent un arrêt de capacité.
+
+Les niveaux 88 testent leur donnée parente ; ils n'ajoutent pas de mémoire.
+`SET condition TO TRUE` choisit la première valeur déclarée. `SET ... TO FALSE`
+requiert une clause `WHEN SET TO FALSE` explicite. `INITIALIZE` ignore les FILLER
+et les vues REDEFINES subordonnées ; `WITH FILLER` inclut les FILLER. Une vue
+REDEFINES nommée directement peut être initialisée.
+
+L'initialisation d'une occurrence variable précise, par exemple
+`INITIALIZE ligne(index)`, est prise en charge. L'initialisation du groupe
+variable entier est limitée au cas vérifié de champs texte uniformes avec
+table variable élémentaire ; elle remet alors toute la capacité à espaces.
+Les autres INITIALIZE de groupes variables sont refusés car GnuCOBOL 3.2 utilise
+plusieurs stratégies de génération dont les effets ne sont pas encore reproduits.
+
+`IS NUMERIC` permet de contrôler une colonne avant son utilisation numérique.
+Les enregistrements peuvent donc contenir des chiffres invalides qui sont traités
+par une branche de rejet. Utiliser ces données comme un nombre sans validation
+provoque un arrêt explicite.
+
+## Exemple de traitement par lots
+
+```powershell
+python -m cobol2rust verify examples/batch_accounts.cob --data-dir examples/batch_accounts.data
+```
+
+Cet exemple lit un fichier de mouvements à colonnes fixes, valide les numéros de
+compte et montants, applique crédits et débits à un tableau de soldes COMP-3 puis
+écrit `balances.txt`. Il combine fichiers structurés, OCCURS, niveaux 88,
+EVALUATE TRUE et contrôles NUMERIC. Le jeu fourni donne **4 mouvements acceptés,
+3 rejetés** et des soldes de **7,50 ; 100,00 ; -5,00 ; 0 ; 0**.
+
+Un second exemple combine fichiers, table variable COMP-3, index et gestion
+des dépassements de total :
+
+```powershell
+python -m cobol2rust verify examples/variable_batch.cob --data-dir examples/variable_batch.data
+```
+
+Il charge quatre montants, rejette deux lignes et conserve le total précédent
+lors d'un dépassement. Résultat attendu :
+`LOADED=4 REJECTED=02 OVERFLOWS=01 TOTAL=0016.75`.
+Le fichier `summary.txt` contient la représentation brute `TOTAL=001675`.
+
+Il s'agit d'un exemple d'intégration du corpus, pas d'une application métier
+existante portée dans son ensemble.
+
+## Auditer un dossier avant conversion
+
+```powershell
+python -m cobol2rust audit chemin/sources -I chemin/copybooks -o build/audit.json
+```
+
+L'audit parcourt les fichiers `.cob` et `.cbl`, vérifie le parsing, la disposition
+mémoire et l'émission Rust, puis conserve le premier blocage de chaque source.
+Il ignore notamment `.tools`, `build`, `target` et les environnements virtuels.
+Il n'exécute aucun programme et ne prouve aucune équivalence de comportement.
+Un code de retour 1 signale des sources bloquées ; `accepted_by_frontend=true`
+signifie qu'il faut ensuite compiler et vérifier le programme avec ses données.
+
+## Vérifier le comportement
+
+```powershell
+python -m unittest discover -v
+python tools/verify.py
+python -m cobol2rust verify examples/invoice.cob -o build/controle-facture.json
+```
+
+`verify` compile et **exécute** le source donné avec GnuCOBOL et Rust. Il compare
+stdout et les fichiers finaux octet pour octet et exige deux codes de retour nuls. Fournir des sources
+de confiance ; `--stdin-file entrees.txt` permet de donner les mêmes entrées aux
+deux programmes. Le rapport décrit uniquement les entrées testées.
+
+`tools/verify.py` et le sous-ordre `verify` compilent désormais le **source
+original** côté GnuCOBOL. Cela vérifie indépendamment les formats et les COPY,
+en plus de la traduction Rust. Voir [tools/README.md](tools/README.md).
+
+## Fichiers texte séquentiels
+
+```powershell
+python -m cobol2rust verify examples/files.cob -o build/controle-fichiers.json
+python -m cobol2rust convert examples/files.cob -o build/mes-fichiers --run
+python -m cobol2rust verify tests/fixtures/file_copy.cob --data-dir tests/fixtures/file_copy.data
+```
+
+La démo crée `transactions.txt`, ajoute une troisième transaction, puis relit
+les trois lignes. Les chemins relatifs d'un programme généré sont résolus depuis
+son dossier d'exécution. `convert --run` utilise le dossier du projet Cargo
+produit ; un exécutable lancé directement utilise le dossier courant.
+
+Le vérificateur prépare **deux dossiers distincts**, y copie les données de
+`--data-dir` et y lance chaque programme. Il conserve les données originales et
+compare les noms et les octets de tous les fichiers finaux, y compris les entrées
+modifiées. Les empreintes et les différences sont enregistrées dans le rapport.
+Le vérificateur accepte seulement les chemins ASSIGN relatifs sans `..` ; la
+conversion seule peut conserver un chemin absolu. L'exécution n'est pas un bac
+à sable pour des sources non fiables.
+
+Périmètre précis du runtime de fichiers :
+
+- `ORGANIZATION LINE SEQUENTIAL` explicite ; `ASSIGN TO` avec chemin littéral.
+- Un enregistrement `01` par `FD`, sans `VALUE` : PIC X élémentaire ou groupe
+  contenant des colonnes texte et numériques DISPLAY, avec FILLER et niveaux 88.
+  Les champs COMP/COMP-3 dans LINE SEQUENTIAL sont refusés.
+- Texte ASCII imprimable, fins de ligne LF ou CRLF ; les lignes courtes sont
+  complétées par des espaces. Les espaces finaux sont retirés à l'écriture, sauf
+  avec `COB_LS_FIXED=1`. Les sauts de ligne écrits suivent la plateforme.
+- Statuts couverts : `00`, `04`, `05`, `10`, `30`, `35`, `37`, `41`, `42`, `46`,
+  `47`, `48`. `FILE STATUS` doit être un champ `PIC XX` ou `PIC 99 DISPLAY`.
+  Sans `FILE STATUS`, un échec non traité provoque un arrêt explicite. `AT END`
+  traite la première fin de fichier ; la lecture suivante donne `46`.
+- `COB_LS_SPLIT` suit la valeur par défaut GnuCOBOL 3.2 (`true`). Le découpage des
+  lignes dépassant la taille du FD n'est pas implémenté et provoque un arrêt
+  nommé. Pour les tronquer avec le statut `04`, définir `COB_LS_SPLIT=0` pour
+  **les deux programmes**, comme dans l'exemple ci-dessous. Avec le découpage
+  actif, une dernière ligne exactement aussi longue que le FD sans délimiteur
+  est également refusée : le comportement du runtime GnuCOBOL doit être modélisé
+  séparément pour ce cas.
+- Limite de 1 Mio par ligne physique ; caractères de contrôle, données non ASCII,
+  `I-O`, `REWRITE`, verrouillage, redirections de noms par environnement, profils
+  de configuration externes et chemins SELECT identiques non pris en charge.
+  Les accès concurrents et les alias de chemin ne sont pas validés.
+
+```powershell
+python -m cobol2rust verify tests/fixtures/file_read.cob --data-dir tests/fixtures/file_read.data --runtime-env COB_LS_SPLIT=0
+```
+
+Les paramètres `COB_LS_FIXED` et `COB_LS_SPLIT` fournis à `verify` apparaissent
+explicitement dans son rapport. La suite lit leurs valeurs dans les fichiers
+JSON associés aux fixtures ; les dossiers `.data` contiennent les entrées.
+
+## Sans code source : inspection et préparation
+
+```powershell
+python -m cobol2rust inspect chemin/application.exe -o build/inspection.json
+```
+
+Cette commande lit le binaire sans le lancer. Elle relève format, architecture,
+sections, bibliothèques importées, symboles et indices de runtime COBOL. Les
+chaînes de caractères sont des indices, pas une preuve du langage d'origine.
+Les exécutables ELF sans table de sections donnent moins d'informations.
+
+Le rapport propose aussi les commandes ARET `info`, `imports` et `decompile`
+pour x86/x86-64. `--aret chemin/aret.exe` remplace le nom de commande proposé.
+**Aucune de ces commandes n'est exécutée automatiquement et aucun Rust n'est
+produit à partir du binaire.**
+
+L'exploration d'ARET dans le dossier voisin a confirmé que son pipeline chargeur
+→ analyse → IR → émission peut servir de base au futur volet binaire. Son
+backend actuel ne produit pas directement de Rust et la modélisation d'un
+runtime COBOL reste à développer. Les modules mainframe z/OS ne sont pas pris
+en charge par cet inspecteur.
+
+## Suite du développement
+
+1. Ajouter un corpus métier réel : sources, copybooks, fichiers d'entrée et
+   sorties attendues. Épingler le dialecte et les options du compilateur source.
+2. Étendre les tableaux variables aux dispositions plus complexes et à SEARCH,
+   puis les autres profils mémoire et encodages, clauses de signe et images éditées.
+3. Étendre les fichiers `LINE SEQUENTIAL` au découpage des lignes et aux
+   autres modes ; ajouter les fichiers binaires/ISAM, appels
+   interprogrammes et transactions selon les programmes ciblés.
+4. Pour les binaires, commencer par **un compilateur/runtime et une architecture**
+   (par exemple GnuCOBOL x86 PE), lever le code avec ARET, modéliser les appels
+   `cob_*`, produire du Rust puis comparer les effets observables avec l'original.
+5. Ajouter les autres familles de compilateurs et les formats mainframe après
+   validation du premier parcours complet.
+
+Référence de langage utilisée pour ce prototype :
+[manuel GnuCOBOL](https://gnucobol.sourceforge.io/doc/gnucobol.html).

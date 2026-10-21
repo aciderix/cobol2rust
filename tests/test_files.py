@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from cobol2rust.cli import convert
+from cobol2rust.emitter import Emitter
+from cobol2rust.frontend import CobolError, Parser
+from cobol2rust.toolchain import ROOT, build_rust, compiler_env, find_tool
+from cobol2rust.verification import snapshot, validate_file_paths, verify
+
+
+def file_program(body="stop run.", select=None, fd=None, storage="01 fs pic xx."):
+    select = select or 'select f assign to "data.txt" organization line sequential file status fs.'
+    fd = fd or 'fd f. 01 rec pic x(8).'
+    return ("identification division. program-id. file-test.\n"
+            "environment division. input-output section. file-control.\n" + select +
+            "\ndata division. file section.\n" + fd +
+            "\nworking-storage section.\n" + storage + "\nprocedure division.\n" + body)
+
+
+class FileFrontendTests(unittest.TestCase):
+    def test_reject_unmodelled_file_declarations(self):
+        select = 'select f assign to "data.txt" organization line sequential file status fs.'
+        cases = [
+            file_program(select=select.replace("line sequential", "indexed")),
+            file_program(select=select.replace('"data.txt"', "path-name")),
+            file_program(select=select.replace("organization line sequential", "")),
+            file_program(fd="fd f. 01 rec. 05 item-a pic 9(8) comp-3."),
+            file_program(fd="fd f. 01 rec pic 9(8)."),
+            file_program(fd='fd f. 01 rec pic x(8) value "ABC".'),
+            file_program(fd="fd f record contains 8 characters. 01 rec pic x(8)."),
+            file_program(storage="01 fs pic xxx."),
+            file_program(storage="01 fs pic s99."),
+            file_program(storage="01 fs pic 99 comp."),
+            file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(8)."),
+            file_program(select=select + 'select other-file assign to "data.txt" organization line sequential.',
+                         fd="fd f. 01 rec pic x(8). fd other-file. 01 other-rec pic x(8)."),
+        ]
+        for source in cases:
+            with self.subTest(source=source), self.assertRaises(CobolError):
+                Emitter(Parser(source).parse()).generate()
+
+    def test_reject_unsupported_operations_and_incomplete_input(self):
+        cases = ["open f.", "open i-o f.", "open input.", "read.", "write fs.", "close.",
+                 "read f into fs.", "read f with lock.", "rewrite rec.", "write rec after advancing 2 lines.",
+                 "read f at end perform missing end-read."]
+        for body in cases:
+            with self.subTest(body=body), self.assertRaises(CobolError):
+                Emitter(Parser(file_program(body, storage="01 fs pic 99.")).parse()).generate()
+
+    def test_file_metadata_and_read_branches(self):
+        p = Parser(file_program("read f at end display 'END' not at end display rec end-read stop run.")).parse()
+        self.assertEqual(p.files["F"].record, "REC")
+        self.assertEqual(p.files["F"].status, "FS")
+        self.assertEqual(p.entry[0].op, "read")
+        rust, mapping = Emitter(p).generate()
+        self.assertIn("LineFile::new", rust)
+        self.assertEqual(sum(m["operation"] == "display" for m in mapping), 2)
+
+    def test_verification_refuses_paths_outside_work_directories(self):
+        for path in ("../data.txt", "C:\\data.txt", "/tmp/data.txt", "..\\data.txt", "C:data.txt"):
+            with self.subTest(path=path), self.assertRaises(CobolError):
+                validate_file_paths({"files": [{"path": {"text": path}}]})
+        validate_file_paths({"files": [{"path": {"text": "inputs/data.txt"}}]})
+
+
+@unittest.skipUnless(find_tool("cargo"), "Cargo required")
+class FileRuntimeTests(unittest.TestCase):
+    def test_unmodelled_input_aborts_instead_of_changing_data(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            project = directory / "rust"
+            convert(ROOT / "tests" / "fixtures" / "file_read.cob", project)
+            binary = build_rust(project)
+            for data, diagnostic in ((b"A\x01\n", "printable ASCII"), (b"ABCDE\n", "split/unterminated"), (b"TAIL", "split/unterminated")):
+                with self.subTest(data=data):
+                    (directory / "records.txt").write_bytes(data)
+                    result = subprocess.run([str(binary)], cwd=directory, env=compiler_env(find_tool("rustc")), capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, 70)
+                    self.assertIn(diagnostic, result.stderr.decode())
+
+
+@unittest.skipUnless(find_tool("cargo") and find_tool("cobc"), "Cargo and GnuCOBOL required")
+class FileVerificationTests(unittest.TestCase):
+    def test_empty_input_directories_are_available_to_both_programs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data = root / "inputs"
+            (data / "out").mkdir(parents=True)
+            source = root / "source.cob"
+            source.write_text(file_program('open output f write rec from "OK" close f stop run.',
+                                          select='select f assign to "out/data.txt" organization line sequential file status fs.'), encoding="utf-8")
+            result = verify(source, data_dir=data)
+            self.assertTrue(result["match"], result)
+            self.assertIn("out/data.txt", result["cobol_files"])
+            self.assertFalse(any((data / "out").iterdir()))
+
+    def test_input_seed_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp)
+            original = b"USER INPUT MUST REMAIN UNCHANGED\n"
+            (data / "transactions.txt").write_bytes(original)
+            result = verify(ROOT / "examples" / "files.cob", data_dir=data)
+            self.assertTrue(result["match"], result)
+            self.assertTrue(result["files_match"])
+            self.assertEqual((data / "transactions.txt").read_bytes(), original)
+            self.assertNotEqual(result["input_files"]["transactions.txt"]["sha256"], result["cobol_files"]["transactions.txt"]["sha256"])
+
+    def test_file_difference_is_detected_even_when_stdout_matches(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "source.cob"
+            source.write_text(file_program('open output f write rec from "ORIGINAL" close f stop run.'), encoding="utf-8")
+
+            def corrupt_backend(project):
+                main = project / "src" / "main.rs"
+                text = main.read_text(encoding="utf-8")
+                self.assertIn('Value::text("ORIGINAL")', text)
+                main.write_text(text.replace('Value::text("ORIGINAL")', 'Value::text("CHANGED!")'), encoding="utf-8")
+                return build_rust(project)
+
+            with patch("cobol2rust.verification.build_rust", side_effect=corrupt_backend):
+                result = verify(source)
+            self.assertFalse(result["match"])
+            self.assertFalse(result["files_match"])
+            self.assertEqual(result["cobol_stdout"], result["rust_stdout"])
+            self.assertEqual(result["cobol_exit"], 0)
+            self.assertEqual(result["rust_exit"], 0)
+            self.assertEqual(result["file_differences"], ["data.txt"])

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cobol2rust"
+version = "0.4.0"
+description = "Strict COBOL to standalone Rust transpiler and binary triage"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+[project.scripts]
+cobol2rust = "cobol2rust.cli:main"
+
+[tool.setuptools]
+packages = ["cobol2rust"]
+
+[tool.setuptools.package-data]
+cobol2rust = ["*.rs"]
