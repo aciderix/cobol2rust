@@ -29,11 +29,9 @@ class FileFrontendTests(unittest.TestCase):
         cases = [
             file_program(select=select.replace("line sequential", "indexed")),
             file_program(select=select.replace('"data.txt"', "path-name")),
-            file_program(select=select.replace("organization line sequential", "")),
             file_program(fd="fd f. 01 rec. 05 item-a pic 9(8) comp-3."),
             file_program(fd="fd f. 01 rec pic 9(8)."),
             file_program(fd='fd f. 01 rec pic x(8) value "ABC".'),
-            file_program(fd="fd f record contains 8 characters. 01 rec pic x(8)."),
             file_program(storage="01 fs pic xxx."),
             file_program(storage="01 fs pic s99."),
             file_program(storage="01 fs pic 99 comp."),
@@ -59,7 +57,7 @@ class FileFrontendTests(unittest.TestCase):
         self.assertEqual(p.files["F"].status, "FS")
         self.assertEqual(p.entry[0].op, "read")
         rust, mapping = Emitter(p).generate()
-        self.assertIn("LineFile::new", rust)
+        self.assertIn("CobolFile::new", rust)
         self.assertEqual(sum(m["operation"] == "display" for m in mapping), 2)
 
     def test_verification_refuses_paths_outside_work_directories(self):

@@ -79,7 +79,7 @@ pub enum Value {
 
 impl Value {
     pub fn is_text(&self) -> bool {
-        match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text), Self::Text(_) | Self::Bytes(_) => true, _ => false }
+        match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Edited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
     pub fn snapshot(&self) -> Self { match self { Self::View(view) => view.value(), _ => self.clone() } }
     pub fn at(&self, indices: &[Value]) -> Self {
@@ -109,6 +109,29 @@ impl Value {
     }
     pub fn bytes(&self) -> Vec<u8> {
         match self { Self::View(view) => view.value().bytes(), Self::Bytes(b) => b.clone(), _ => self.show().into_bytes() }
+    }
+    pub fn numeric_move_text(&self, group: bool) -> Self {
+        match self {
+            Self::View(view) => view.numeric_move_text(group),
+            _ => fail("numeric MOVE to text requires a source storage view"),
+        }
+    }
+    pub fn comparison_text(&self) -> Self {
+        match self {
+            Self::View(view) => view.comparison_text(),
+            _ => fail("mixed comparison requires a numeric storage view"),
+        }
+    }
+    pub fn compare_zero(&self) -> std::cmp::Ordering {
+        if !self.is_text() { fail("figurative ZERO comparison requires text"); }
+        let bytes = self.bytes();
+        bytes.cmp(&vec![b'0'; bytes.len()])
+    }
+    pub fn assign_text_move(&mut self, source: &Self, raw_group: bool) {
+        match self {
+            Self::View(view) => view.assign_text_move(source, raw_group),
+            _ => fail("text MOVE requires a storage destination"),
+        }
     }
     pub fn is_numeric(&self) -> bool {
         match self { Self::View(view) => view.is_numeric(), Self::Num(..) => true, _ => self.bytes().iter().all(u8::is_ascii_digit) }

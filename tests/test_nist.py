@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import io
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from tools import prepare_nist
+
+
+class NistPreparationTests(unittest.TestCase):
+    def test_existing_output_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            marker = output / "user-file"
+            marker.write_bytes(b"preserve me")
+            with self.assertRaisesRegex(ValueError, "inexistant"):
+                prepare_nist.prepare(output)
+            self.assertEqual(marker.read_bytes(), b"preserve me")
+            self.assertEqual(list(output.iterdir()), [marker])
+
+    def test_corrupt_download_stops_before_compilation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "nist"
+            with (patch.object(prepare_nist.shutil, "which", return_value="unused-tool"),
+                  patch.object(prepare_nist, "build_opener") as opener,
+                  patch.object(prepare_nist, "run") as run):
+                opener.return_value.open.return_value = io.BytesIO(b"corrupt archive")
+                with self.assertRaisesRegex(ValueError, "SHA256 incorrect"):
+                    prepare_nist.prepare(output)
+                run.assert_not_called()
+                self.assertFalse((output / "manifest.json").exists())
+                self.assertEqual(list((output / "extracted").iterdir()), [])
+
+    def test_unsafe_archive_members_are_rejected(self):
+        for name, member_type in [("../escape", tarfile.REGTYPE),
+                                  ("newcob.val", tarfile.SYMTYPE)]:
+            with self.subTest(name=name, member_type=member_type), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                archive = root / "corpus.tar.gz"
+                with tarfile.open(archive, "w:gz") as package:
+                    member = tarfile.TarInfo(name)
+                    member.type = member_type
+                    member.linkname = "../escape" if member_type == tarfile.SYMTYPE else ""
+                    package.addfile(member)
+                destination = root / "output"
+                destination.mkdir()
+                with self.assertRaisesRegex(ValueError, "Archive NIST inattendue"):
+                    prepare_nist.extract_archive(archive, destination)
+                self.assertEqual(list(destination.iterdir()), [])
+                self.assertFalse((root / "escape").exists())
+
+    def test_missing_modules_cannot_produce_successful_manifest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "NC").mkdir()
+            (root / "NC" / "NC101A.CBL").write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Corpus incomplet"):
+                prepare_nist.corpus_manifest(root)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,17 +1,26 @@
-// LINE SEQUENTIAL, printable ASCII records. File errors are visible as COBOL statuses.
+// GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL and fixed SEQUENTIAL.
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use crate::runtime::{Value, fail};
 
 enum State { Closed, Input(BufReader<File>), Output(File), Missing }
 
-pub struct LineFile {
+#[derive(Clone, Copy)]
+pub enum Advance { BeforeLines(u32), AfterLines(u32), BeforePage, AfterPage }
+
+#[derive(Clone, Copy, PartialEq)]
+enum Organization { LineSequential, Sequential }
+
+pub struct CobolFile {
     path: String,
     optional: bool,
+    organization: Organization,
     state: State,
     eof: bool,
     fixed: bool,
     split: bool,
+    needs_nl: bool,
+    last_read_size: usize,
 }
 
 fn setting(name: &str, default: bool) -> bool {
@@ -26,21 +35,50 @@ fn setting(name: &str, default: bool) -> bool {
     }
 }
 
-impl LineFile {
-    pub fn new(path: &str, optional: bool) -> Self {
+fn write_advance(file: &mut File, advance: Advance) {
+    let bytes = match advance {
+        Advance::BeforeLines(count) | Advance::AfterLines(count) => {
+            if count > u16::MAX as u32 { fail("ADVANCING count exceeds supported range 0..65535"); }
+            if count == 0 { vec![b'\r'] } else { vec![b'\n'; count as usize] }
+        },
+        Advance::BeforePage | Advance::AfterPage => vec![b'\x0c'],
+    };
+    file.write_all(&bytes).unwrap_or_else(|e| fail(&format!("file advancing failed: {e}")));
+}
+
+impl CobolFile {
+    pub fn new(path: &str, optional: bool, organization: &str) -> Self {
+        let organization = match organization {
+            "LINE SEQUENTIAL" => Organization::LineSequential,
+            "SEQUENTIAL" => Organization::Sequential,
+            _ => fail("unsupported file organization"),
+        };
         // Unknown profile/remapping settings must not silently change the reference behavior.
-        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF", "COB_LS_NULLS", "COB_LS_USES_CR"] {
+        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF"] {
             if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
+        }
+        if organization == Organization::LineSequential {
+            for key in ["COB_LS_NULLS", "COB_LS_USES_CR"] {
+                if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
+            }
+        } else {
+            for key in ["COB_SEQ_CONCAT_NAME", "COB_SEQ_CONCAT_SEP"] {
+                if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
+            }
         }
         for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
             if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
         }
-        Self { path: path.into(), optional, state: State::Closed, eof: false,
-               fixed: setting("COB_LS_FIXED", false), split: setting("COB_LS_SPLIT", true) }
+        let line = organization == Organization::LineSequential;
+        Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
+               fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
+               needs_nl: false, last_read_size: 0 }
     }
 
     pub fn open(&mut self, mode: &str) -> u8 {
         if !matches!(self.state, State::Closed) { return 41; }
+        self.needs_nl = false;
+        self.last_read_size = 0;
         let result = match mode {
             "INPUT" => File::open(&self.path).map(|f| State::Input(BufReader::new(f))),
             "OUTPUT" => OpenOptions::new().write(true).create(true).truncate(true).open(&self.path).map(State::Output),
@@ -70,19 +108,44 @@ impl LineFile {
     pub fn close(&mut self) -> u8 {
         if matches!(self.state, State::Closed) { return 42; }
         if let State::Output(file) = &mut self.state {
+            if self.needs_nl {
+                file.write_all(b"\n").unwrap_or_else(|e| fail(&format!("file closing newline failed: {e}")));
+            }
             file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
         }
         self.state = State::Closed;
         self.eof = false;
+        self.needs_nl = false;
+        self.last_read_size = 0;
         0
     }
 
+    pub fn last_read_size(&self) -> usize { self.last_read_size }
+
     pub fn read(&mut self, record: &mut Value) -> u8 {
+        self.last_read_size = 0;
         if !matches!(self.state, State::Input(_) | State::Missing) { return 47; }
         if self.eof { return 46; }
         if matches!(self.state, State::Missing) { self.eof = true; return 10; }
         let size = record.text_size();
         let reader = match &mut self.state { State::Input(reader) => reader, _ => unreachable!() };
+        if self.organization == Organization::Sequential {
+            // A short final fixed record replaces only the bytes physically read.
+            let mut bytes = record.bytes();
+            let mut count = 0;
+            while count < size {
+                match reader.read(&mut bytes[count..size]) {
+                    Ok(0) => break,
+                    Ok(read) => count += read,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => fail(&format!("file read failed: {error}")),
+                }
+            }
+            if count == 0 { self.eof = true; return 10; }
+            self.last_read_size = count;
+            record.assign(&Value::Bytes(bytes), false);
+            return 0;
+        }
         let mut line = Vec::new();
         // Keep memory bounded even for an input with no record delimiter.
         loop {
@@ -108,14 +171,30 @@ impl LineFile {
             fail("split/unterminated full records unsupported; use COB_LS_SPLIT=0 for truncation semantics");
         }
         let status = if line.len() > size { 4 } else { 0 };
+        self.last_read_size = line.len().min(size);
         let text = std::str::from_utf8(&line[..line.len().min(size)]).unwrap();
         record.assign(&Value::text(text), false);
         status
     }
 
-    pub fn write(&mut self, record: &Value) -> u8 {
+    pub fn write(&mut self, record: &Value, advancing: Option<Advance>) -> u8 {
+        if self.organization == Organization::LineSequential && advancing.is_some() {
+            fail("ADVANCING on LINE SEQUENTIAL is not supported");
+        }
         let file = match &mut self.state { State::Output(file) => file, _ => return 48 };
         let bytes = record.bytes();
+        if self.organization == Organization::Sequential {
+            if let Some(advance @ (Advance::AfterLines(_) | Advance::AfterPage)) = advancing {
+                write_advance(file, advance);
+                self.needs_nl = true;
+            }
+            file.write_all(&bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
+            if let Some(advance @ (Advance::BeforeLines(_) | Advance::BeforePage)) = advancing {
+                write_advance(file, advance);
+                self.needs_nl = false;
+            }
+            return 0;
+        }
         if !bytes.iter().all(|b| (32..=126).contains(b)) {
             fail("LINE SEQUENTIAL requires printable ASCII records");
         }
@@ -124,6 +203,13 @@ impl LineFile {
         file.write_all(text.as_bytes()).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
         file.write_all(if cfg!(windows) { b"\r\n" } else { b"\n" }).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
         0
+    }
+}
+
+impl Drop for CobolFile {
+    fn drop(&mut self) {
+        // STOP RUN closes open files too, including a pending AFTER newline.
+        if !matches!(self.state, State::Closed) { self.close(); }
     }
 }
 

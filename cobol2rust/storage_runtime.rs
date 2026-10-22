@@ -10,7 +10,11 @@ pub fn memory(size: usize) -> Memory { Rc::new(RefCell::new(vec![0; size])) }
 #[derive(Clone, Copy, Debug)]
 pub enum Usage { Display, Packed, Binary, Index }
 #[derive(Clone, Copy, Debug)]
-pub enum Kind { Text, Numeric { digits: u32, scale: u32, signed: bool, usage: Usage } }
+pub enum Kind {
+    Text,
+    Numeric { digits: u32, scale: u32, signed: bool, usage: Usage },
+    Edited { picture: &'static str, digits: u32, scale: u32 },
+}
 #[derive(Clone, Debug)]
 pub struct Initializer {
     pub offset: usize,
@@ -33,6 +37,47 @@ fn offsets(dimensions: &[(usize, usize)], base: usize, action: &mut impl FnMut(u
     if let Some(((stride, count), tail)) = dimensions.split_first() {
         for index in 0..*count { offsets(tail, base + index * stride, action); }
     } else { action(base); }
+}
+
+fn move_whitespace(byte: u8) -> bool {
+    matches!(byte, b'\t'..=b'\r' | b' ')
+}
+
+// GnuCOBOL's alphanumeric-to-DISPLAY transfer fills a finite digit buffer.
+// Leading integer overflow is skipped before validation, and validation stops
+// as soon as the buffer is full. This differs from parsing a decimal string.
+fn text_move_digits(raw: &[u8], digits: usize, scale: usize) -> (Vec<u8>, bool, bool) {
+    let mut result = vec![b'0'; digits];
+    let mut position = 0;
+    while position < raw.len() && move_whitespace(raw[position]) { position += 1; }
+    let mut negative = false;
+    if position < raw.len() && matches!(raw[position], b'+' | b'-') {
+        negative = raw[position] == b'-';
+        position += 1;
+    }
+    let count = raw[position..].iter().take_while(|&&byte| byte != b'.')
+        .filter(|&&byte| byte.is_ascii_digit()).count();
+    let integer = digits - scale;
+    let mut destination = if count < integer { integer - count } else { 0 };
+    for _ in integer..count {
+        while !raw[position].is_ascii_digit() { position += 1; }
+        position += 1;
+    }
+    let mut point = false;
+    while position < raw.len() && destination < digits {
+        let byte = raw[position];
+        position += 1;
+        if byte.is_ascii_digit() {
+            result[destination] = byte;
+            destination += 1;
+        } else if byte == b'.' && !point {
+            point = true;
+        } else if !move_whitespace(byte) && byte != b',' {
+            result.fill(b'0');
+            return (result, negative, false);
+        }
+    }
+    (result, negative, true)
 }
 
 impl View {
@@ -106,12 +151,112 @@ impl View {
     }
     pub fn value(&self) -> Value {
         match self.kind {
-            Kind::Text => Value::Bytes(self.raw()),
+            Kind::Text | Kind::Edited { .. } => Value::Bytes(self.raw()),
             _ => self.number().unwrap_or_else(|error| fail(error)),
         }
     }
     pub fn is_numeric(&self) -> bool {
-        match self.kind { Kind::Text => self.raw().iter().all(u8::is_ascii_digit), _ => self.number().is_ok() }
+        match self.kind {
+            Kind::Text | Kind::Edited { .. } => self.raw().iter().all(u8::is_ascii_digit),
+            _ => self.number().is_ok(),
+        }
+    }
+    pub fn numeric_move_text(&self, group: bool) -> Value {
+        self.resolved();
+        if group {
+            // A group receiver requests storage bytes, including a DISPLAY
+            // overpunch or the original COMP/COMP-3 representation.
+            match self.kind {
+                Kind::Numeric { usage: Usage::Index, .. } => fail("MOVE of an index to a group requires native index storage"),
+                Kind::Numeric { .. } => return Value::Bytes(self.raw()),
+                _ => fail("numeric MOVE to text requires a numeric source"),
+            }
+        }
+        self.numeric_text(false)
+    }
+    pub fn comparison_text(&self) -> Value {
+        self.numeric_text(true)
+    }
+    fn numeric_text(&self, comparison: bool) -> Value {
+        self.resolved();
+        let (digits, scale, signed, usage) = match self.kind {
+            Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage),
+            _ => fail("numeric text operation requires a numeric source"),
+        };
+        if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
+        if !comparison && scale != 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
+        let bytes = match usage {
+            Usage::Display => {
+                let mut bytes = self.raw();
+                if signed {
+                    // GnuCOBOL normalizes some malformed sign encodings and
+                    // can mutate the sender. Keep those cases outside this
+                    // profile rather than silently changing their behavior.
+                    if self.number().is_err() { fail("invalid signed DISPLAY numeric MOVE"); }
+                    if let Some(last) = bytes.last_mut() {
+                        if (b'p'..=b'y').contains(last) { *last = b'0' + (*last - b'p'); }
+                    }
+                }
+                // An unsigned DISPLAY sender is copied as bytes even when
+                // its storage is not valid numeric data.
+                bytes
+            },
+            Usage::Packed | Usage::Binary | Usage::Index => {
+                let number = self.number().unwrap_or_else(|error| fail(error));
+                let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
+                format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
+            },
+        };
+        Value::Bytes(bytes)
+    }
+    pub fn assign_text_move(&mut self, source: &Value, raw_group: bool) {
+        self.resolved();
+        if !source.is_text() { fail("text MOVE requires an alphanumeric source"); }
+        let bytes = source.bytes();
+        if matches!(self.kind, Kind::Numeric { usage: Usage::Index, .. }) {
+            fail("MOVE of text to an index requires native index semantics");
+        }
+        if raw_group {
+            // Group category wins over the receiver's elementary category.
+            // Copy storage bytes and spaces, without numeric interpretation.
+            let mut result = bytes;
+            result.resize(self.size, b' ');
+            result.truncate(self.size);
+            self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
+            return;
+        }
+        if let Kind::Numeric { digits, scale, signed, usage: Usage::Display } = self.kind {
+            let (mut result, negative, _) = text_move_digits(&bytes, digits as usize, scale as usize);
+            if signed && negative {
+                let last = result.last_mut().unwrap();
+                *last = b'p' + (*last - b'0');
+            }
+            if result.len() != self.size { fail("unsupported DISPLAY storage for text MOVE"); }
+            self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
+            return;
+        }
+        // Other numeric usages and edited receivers pass through a signed
+        // DISPLAY buffer of 76 positions and 38 fractional positions.
+        let (result, source_negative, valid) = text_move_digits(&bytes, 76, 38);
+        let coefficient = BigInt::parse_bytes(&result, 10).unwrap();
+        let negative = source_negative && valid;
+        let number = Number::new(if negative { -coefficient } else { coefficient }, 38);
+        match self.kind {
+            Kind::Edited { .. } => self.assign(&Value::Num(number, None), false),
+            Kind::Numeric { digits, scale, signed, usage } => {
+                let magnitude = absolute(&number.units(scale, false)) % power(digits);
+                let units = if signed && negative { -magnitude } else { magnitude };
+                self.assign(&Value::Num(Number::new(units, scale), None), false);
+                // BigInt has no negative zero, but a signed packed MOVE keeps
+                // its D nibble even when scaling or truncation leaves zero.
+                if signed && negative && matches!(usage, Usage::Packed) {
+                    let mut memory = self.memory.borrow_mut();
+                    let last = &mut memory[self.offset + self.size - 1];
+                    *last = (*last & 0xf0) | 0x0d;
+                }
+            },
+            _ => fail("text MOVE requires a numeric or edited receiver"),
+        }
     }
     pub fn assign(&mut self, source: &Value, rounded: bool) {
         self.resolved();
@@ -121,6 +266,34 @@ impl View {
                 let mut bytes = source.bytes();
                 bytes.resize(self.size, b' ');
                 bytes.truncate(self.size);
+                bytes
+            },
+            Kind::Edited { picture, digits, scale } => {
+                if source.is_text() { fail("numeric-edited assignment requires a numeric source; de-editing is unsupported"); }
+                let units = source.num().units(scale, rounded);
+                // Determine the sign after scaling, before discarding excess high digits.
+                let negative = units.sign() == Sign::Minus;
+                let coefficient = absolute(&units) % power(digits);
+                let ascii = format!("{:0>width$}", coefficient.to_string(), width = digits as usize);
+                let mut positions = ascii.bytes();
+                let mut suppress = true;
+                let mut bytes = Vec::with_capacity(self.size);
+                for symbol in picture.bytes() {
+                    bytes.push(match symbol {
+                        b'+' => if negative { b'-' } else { b'+' },
+                        b'-' => if negative { b'-' } else { b' ' },
+                        b'.' => b'.',
+                        b'9' | b'Z' => {
+                            let digit = positions.next().unwrap_or_else(|| fail("invalid numeric-edited picture capacity"));
+                            if symbol == b'Z' && suppress && digit == b'0' { b' ' }
+                            else { suppress = false; digit }
+                        },
+                        _ => fail("unsupported numeric-edited picture symbol"),
+                    });
+                }
+                if bytes.len() != self.size || positions.next().is_some() {
+                    fail("invalid numeric-edited picture layout");
+                }
                 bytes
             },
             Kind::Numeric { digits, scale, signed, usage } => {
@@ -186,6 +359,10 @@ impl View {
             let mut item = self.clone();
             item.offset = offset;
             item.dimensions.clear();
+            // Edited VALUE literals describe storage bytes, not a numeric MOVE.
+            if matches!(item.kind, Kind::Edited { .. }) && source.is_text() {
+                item.kind = Kind::Text;
+            }
             item.assign(source, false);
         });
     }

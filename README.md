@@ -11,6 +11,19 @@ REDEFINES et fichiers LINE SEQUENTIAL structurés. Elle inspecte les
 exécutables PE/ELF, mais ne les décompile pas encore en Rust.** Il ne constitue
 pas un convertisseur universel et ne valide pas à lui seul une migration métier.
 
+La couverture universelle est désormais l'objectif de développement. La
+[feuille de route et les mesures de couverture](COVERAGE.md) distinguent ce
+cap de ce qui est effectivement accepté, compilé et vérifié.
+
+La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
+ou explicites, avec octets bruts, descriptions FD de même taille partageant leur
+mémoire et contrôles d'impression `WRITE ... ADVANCING`.
+Elle prend aussi en charge un premier sous-ensemble de PICTURE numériques
+éditées et les clauses FD LABEL/BLOCK, RECORD de taille exacte et RECORDING F
+du profil disque GnuCOBOL vérifié.
+Les séparateurs virgule/point-virgule et les paragraphes documentaires
+d'IDENTIFICATION sont également pris en charge dans le profil décrit ci-dessous.
+
 ## Démarrer sous Windows
 
 Ouvrir PowerShell dans ce dossier :
@@ -49,33 +62,42 @@ Le projet produit contient :
 | Fichier | Contenu |
 | --- | --- |
 | `Cargo.toml` | Projet Rust ; bibliothèque d'entiers de précision arbitraire `num-bigint` épinglée à 0.4.6 |
-| `src/main.rs` | Champs, instructions, conditions, boucles et paragraphes traduits |
+| `src/main.rs` | Champs, instructions, conditions, boucles, sections et paragraphes traduits |
 | `src/runtime.rs` | Arithmétique décimale, remplissage des champs, saisie et affichage |
 | `src/storage_runtime.rs` | Mémoire partagée, disposition des données, tableaux, vues REDEFINES et sérialisation |
-| `src/file_runtime.rs` | Fichiers LINE SEQUENTIAL, présent quand le programme utilise des fichiers |
+| `src/file_runtime.rs` | Fichiers LINE SEQUENTIAL et SEQUENTIAL fixes, présent quand le programme utilise des fichiers |
 | `expanded.cob` | Source normalisé avec les COPY développés |
-| `conversion.json` | Empreintes source/copybooks, champs et offsets, conditions, profil mémoire et correspondance des lignes |
+| `conversion.json` | Empreintes source/copybooks, champs et offsets, conditions, sections/blocs de procédure, profil mémoire et correspondance des lignes |
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
-**Les tests de cette livraison ont été exécutés sur Windows.** La compilation
-et l'exécution Linux restent à vérifier sur un environnement Linux disponible.
+Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
+également validé sous Linux 199 tests Python, avec un test d'inspection du PE
+Windows ignoré (200 découverts), et les 51 comparaisons COBOL/Rust du corpus actuel.
+Les détails sont dans [VALIDATION.md](VALIDATION.md).
+Ces résultats portent sur les entrées testées.
 
 ## Périmètre actuel
 
 | Domaine | Pris en charge |
 | --- | --- |
-| Sources | Format libre, format fixe explicite, commentaires, directive `>>SOURCE FORMAT` |
+| Sources | Format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
+| Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
+| Configuration | `ENVIRONMENT DIVISION`, `CONFIGURATION SECTION`, `SOURCE-COMPUTER` et `OBJECT-COMPUTER` avec nom machine seul |
 | Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
 | Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` |
+| Édition numérique | Signe fixe `+`/`-`, `9` et point décimal explicite ; `Z` initiaux suivis de `9` obligatoires ; rendu depuis une source numérique, copie brute vers texte |
 | Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON`, `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
 | Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` |
 | Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, une destination `GIVING`, `ROUNDED`, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
-| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple |
+| MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
+| MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ; groupe source copié brut vers numérique/édité |
+| Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |
+| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
-| Paragraphes | `PERFORM paragraphe`, `THRU`, retours, enchaînement séquentiel, `EXIT PARAGRAPH` |
+| Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
-| Fichiers | `SELECT`, `FD` texte ou groupe de colonnes DISPLAY, `OPEN INPUT/OUTPUT/EXTEND`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `CLOSE`, `FILE STATUS`, `SELECT OPTIONAL` |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` en SEQUENTIAL, `CLOSE`, `FILE STATUS`, `SELECT OPTIONAL` |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
@@ -88,10 +110,80 @@ de cette liste ne sont pas réputées prises en charge.
 Sont notamment refusés : tables variables à offsets ou strides variables,
 `SEARCH`, `USAGE INDEX` explicite, niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
-images éditées (`ZZ9.99`), `COPY REPLACING`, continuations
-fixes, conditions abrégées, fonctions intrinsèques, `GO TO`, appels externes,
-fichiers binaires/indexés, SQL embarqué, CICS et plusieurs programmes liés.
-Les conversions implicites entre nombres et texte sont également refusées.
+images éditées hors du sous-ensemble décrit ci-dessous, `COPY REPLACING`, conditions abrégées,
+fonctions intrinsèques, appels externes, `ALTER`, `GO TO` sans cible,
+`EXIT SECTION` hors section explicite, `EXIT PERFORM`, noms de procédure qualifiés ou homonymes et
+segments SECTION numérotés,
+fichiers à enregistrements variables, relatifs/indexés, SQL embarqué, CICS et
+plusieurs programmes liés. Les formats binaires autres que les enregistrements
+SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
+La déédition, les calculs sur texte et les calculs vers PIC X restent refusés.
+Le MOVE d'un littéral texte vers un champ numérique ordinaire reste refusé :
+les optimisations natives diffèrent du transfert depuis un champ PIC X.
+
+Pour `MOVE`, un entier numérique vers PIC X ou sous-chaîne fournit les chiffres
+de sa magnitude sur la largeur PICTURE, sans signe, puis tronque à droite ou
+complète d'espaces. Une destination groupe reçoit les octets du stockage source,
+y compris overpunch et COMP/COMP-3 ; elle peut aussi recevoir une source avec V.
+Une telle source décimale vers PIC X élémentaire est refusée par GnuCOBOL dans
+le profil vérifié. Les chiffres d'un littéral sont conservés sans signe ni point :
+`MOVE -0012.30 TO texte` envoie `001230`. `ZERO` remplit la destination de zéros,
+tandis que le littéral `0` est complété d'espaces.
+
+Le MOVE d'un index implicite vers un groupe reste refusé à cause de son stockage
+natif. Les données DISPLAY non signées invalides sont copiées brutes vers PIC X ;
+les données signées invalides déclenchent un arrêt nommé, car certaines
+normalisations natives de signe et leurs effets sur la source restent à modéliser.
+
+Un MOVE depuis PIC X ou une sous-chaîne vers un champ numérique ou édité suit
+la lecture native avec signe initial, point, espaces et virgules. DISPLAY lit
+un buffer limité à sa PICTURE ; COMP/COMP-3 et edited passent par 76 positions,
+dont 38 fractionnaires. Le remplissage peut arrêter la validation avant un
+caractère invalide ; sinon ce caractère ramène le buffer à zéro. Un groupe
+source demande au contraire une copie brute du stockage. `MOVE " " TO edited`
+est accepté ; la constante figurative `SPACE` reste refusée dans ce contexte.
+
+Une comparaison mixte transforme le champ numérique en chiffres de magnitude
+sur sa largeur PICTURE, sans signe ni point, même avec V, puis compare les
+octets complétés d'espaces. Les littéraux numériques non signés gardent leurs
+chiffres lexicaux ; ZERO remplit la largeur texte. Face à un champ numérique,
+un littéral texte direct n'est accepté que pour un entier et des chiffres de
+même largeur : GnuCOBOL replie d'autres cas selon la PICTURE. Copier le littéral
+vers PIC X permet la comparaison à l'exécution. Restent refusés dans les
+comparaisons mixtes : index, signes numériques explicites, expressions
+arithmétiques, sujets/cas EVALUATE de catégories différentes et valeurs 88
+de catégorie différente du parent.
+
+Les sauts conservent les retours PERFORM en attente ; seule la borne exacte du
+cadre au sommet de pile peut reprendre sa continuation. Les fins de paragraphe
+et de section sont distinctes. Les compteurs TIMES sont partagés par site lors
+d'une réentrée récursive, comme dans le profil GnuCOBOL vérifié. GO DEPENDING
+accepte les données entières, tables subscriptées et index implicites ; une
+valeur hors de 1..N ne saute pas. Les contrôleurs décimaux ou de plus de neuf
+chiffres restent refusés en raison des conversions natives non uniformes.
+
+Le format fixe suit les colonnes 8 à 72 et les taquets de tabulation de huit
+colonnes du profil GnuCOBOL utilisé. Les espaces jusqu'à la colonne 72 sont
+conservés dans les littéraux continués. Les indicateurs debug `D`, les
+continuations à travers une directive de format et les clauses de configuration
+ayant une sémantique non modélisée (`SPECIAL-NAMES`, collation, mode debug,
+etc.) restent refusés.
+
+Les virgules et points-virgules séparent les mots et opérandes sans terminer
+une phrase. Dans les sous-scripts, ils gardent les indices distincts, y compris
+`table(1,+2)` ; les suites mixtes de séparateurs restent refusées dans ces listes.
+Une PICTURE est un mot contigu : ses virgules d'édition sont conservées et
+restent hors du sous-ensemble accepté. Les espaces internes ne sont pas recollés.
+COPY conserve sa syntaxe propre ; les séparateurs supplémentaires non cités
+sur une ligne COPY sont refusés.
+
+Un en-tête documentaire doit être le premier mot de sa ligne physique dans
+IDENTIFICATION. En format libre, seul le reste de cette ligne est ignoré ; en
+fixe, la prose de zone B continue jusqu'à la prochaine ligne de code en zone A.
+Les guillemets et COPY de cette prose sont ignorés avant l'analyse du code.
+Les directives de format sur leur propre ligne restent actives, et une ligne
+de continuation `-` dans cette prose est refusée. Les clauses sémantiques de
+PROGRAM-ID et de CONFIGURATION restent analysées.
 
 Les erreurs de syntaxe non prise en charge donnent une position et empêchent
 la création du projet. Les lignes des diagnostics et de la correspondance
@@ -116,12 +208,45 @@ négatif dans une destination non signée, comme dans les cas GnuCOBOL testés.
 Les données numériques invalides et les limites de capacité intermédiaire
 restent des arrêts explicites ; elles ne sont pas absorbées par SIZE ERROR.
 
-Sans ces clauses, une division par zéro, une valeur hors de la PICTURE, un signe négatif dans un
+Sans ces clauses, pour les destinations numériques non éditées, une division par zéro, une valeur hors de la PICTURE, un signe négatif dans un
 champ non signé ou une saisie numérique invalide provoque un arrêt explicite,
 avec la ligne COBOL et le code **70**. Les intermédiaires dépassant 1024 décimales
 ou 4096 chiffres sont aussi refusés. Ce choix conservateur diffère volontairement
 des cas où un runtime COBOL tronquerait un dépassement ou continuerait après
 une entrée invalide.
+
+## Images numériques éditées
+
+Le sous-ensemble comprend notamment `-9(9).9(9)`, `-.9(18)`, `+9(3).99`,
+`9(3).99` et `ZZZ9.99`. Les signes sont fixes ; les Z doivent précéder des 9
+entiers obligatoires. Les décimales sont des 9, avec un point explicite.
+La capacité reste limitée à 18 positions numériques ; le signe et le point
+occupent des octets supplémentaires (20 octets pour `-9(9).9(9)`).
+
+Ces champs gardent une catégorie distincte : ils s'affichent et se copient vers
+PIC X en octets bruts. MOVE depuis un nombre, COMPUTE et GIVING peuvent les
+alimenter. Le moteur ajuste l'échelle, applique ROUNDED si demandé, puis
+tronque les chiffres excédentaires à gauche comme GnuCOBOL. Le signe est fixé
+après ajustement d'échelle, avant cette troncature. INITIALIZE et l'absence
+de VALUE donnent zéro formaté ; un VALUE textuel copie ses octets tels quels
+et complète à droite par des espaces.
+
+IS NUMERIC vérifie les octets présents, même lorsque REDEFINES les a modifiés.
+Les comparaisons et sujets/cas EVALUATE portant directement sur un champ édité
+restent refusés : l'optimisation de constantes GnuCOBOL peut dépendre de sa
+PICTURE et ne correspond pas toujours à une comparaison des octets affichés.
+Copier vers PIC X ou utiliser une sous-chaîne alphanumérique explicite permet
+de comparer les octets.
+La déédition vers un nombre ou une autre image éditée, ACCEPT édité,
+l'utilisation comme opérande arithmétique et SIZE ERROR
+sur une destination éditée restent refusés. Les signes flottants, séparateurs
+de milliers, devises, CR/DB et autres formes non décrites restent hors périmètre.
+
+```powershell
+python -m cobol2rust verify tests/fixtures/edited_report.cob
+```
+
+Cette fixture combine arrondis, suppression Z, FD partagés et rapport imprimé.
 
 ## Groupes, tableaux et mémoire partagée
 
@@ -291,6 +416,49 @@ Les paramètres `COB_LS_FIXED` et `COB_LS_SPLIT` fournis à `verify` apparaissen
 explicitement dans son rapport. La suite lit leurs valeurs dans les fichiers
 JSON associés aux fixtures ; les dossiers `.data` contiennent les entrées.
 
+## Fichiers SEQUENTIAL fixes et rapports
+
+```powershell
+python -m cobol2rust verify tests/fixtures/sequential_records.cob
+python -m cobol2rust verify tests/fixtures/sequential_report.cob
+```
+
+`ORGANIZATION SEQUENTIAL`, explicite ou implicite, conserve les enregistrements
+fixes octet pour octet et les concatène sans séparateur. Les groupes peuvent
+contenir COMP/BINARY et COMP-3 ; un octet nul ou LF reste une donnée. Il ne faut
+pas assimiler ce format au texte LINE SEQUENTIAL décrit plus haut.
+
+Plusieurs descriptions `01` d'un même FD sont acceptées si leurs tailles
+physiques sont égales. Elles partagent la même mémoire et `WRITE` utilise la
+description nommée. Des tailles différentes sélectionneraient un format variable
+à en-têtes, qui reste refusé.
+
+Une lecture finale partielle conserve la queue précédente du buffer FD et
+retourne `00` dans le profil GnuCOBOL vérifié, puis `10` et `46` aux lectures
+suivantes. `READ INTO` copie uniquement les octets effectivement lus, puis
+complète sa destination, au lieu de recopier cette queue ancienne.
+
+`WRITE ... BEFORE/AFTER ADVANCING` est pris en charge pour ces fichiers avec
+PAGE ou un entier littéral de 0 à 65535 lignes. Les contrôles sont les octets
+LF (lignes), CR (zéro ligne) et FF (PAGE). AFTER écrit le contrôle avant le
+record ; BEFORE l'écrit après. Les espaces des records sont conservés. Un LF
+final restant après AFTER est écrit à CLOSE ou à la fermeture implicite de
+STOP RUN. OPEN réinitialise cet état.
+
+Les clauses FD `LABEL RECORDS OMITTED/STANDARD`, `BLOCK CONTAINS` (en records
+ou caractères, éventuellement sous forme de plage) et `RECORDING MODE F` sont
+acceptées dans le profil disque GnuCOBOL vérifié. LABEL/BLOCK sont conservées
+dans les métadonnées sans ajouter de labels ni de blocage physique. Une clause
+`RECORD CONTAINS n CHARACTERS` exige que n égale la taille physique de chaque
+description FD ; sinon le compilateur natif pourrait sélectionner un format
+variable et la conversion est refusée.
+
+Les compteurs ADVANCING variables, LINAGE, les autres clauses FD,
+les formats variables, I-O/REWRITE et les fichiers relatifs/indexés restent
+refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
+modélisés (`COB_SEQ_CONCAT_NAME`, `COB_SEQ_CONCAT_SEP`). Les options `COB_LS_FIXED`
+et `COB_LS_SPLIT` s'appliquent seulement au runtime LINE SEQUENTIAL.
+
 ## Sans code source : inspection et préparation
 
 ```powershell
@@ -320,7 +488,7 @@ en charge par cet inspecteur.
 2. Étendre les tableaux variables aux dispositions plus complexes et à SEARCH,
    puis les autres profils mémoire et encodages, clauses de signe et images éditées.
 3. Étendre les fichiers `LINE SEQUENTIAL` au découpage des lignes et aux
-   autres modes ; ajouter les fichiers binaires/ISAM, appels
+   autres modes ; ajouter les enregistrements variables/ISAM, appels
    interprogrammes et transactions selon les programmes ciblés.
 4. Pour les binaires, commencer par **un compilateur/runtime et une architecture**
    (par exemple GnuCOBOL x86 PE), lever le code avec ARET, modéliser les appels

@@ -1,6 +1,345 @@
 # Handoff — COBOL vers Rust
 
-État au 21 octobre 2026, après livraison de la version **0.4.0**.
+État au 22 octobre 2026, après livraison de la version **0.4.0**.
+
+## Reprise cloud et objectif élargi
+
+Dernière étape : séparateurs virgule/point-virgule et entrées documentaires
+d'Identification. Le lexer conserve une PICTURE comme un mot contigu, avec ses
+virgules d'édition ; il sépare un seul point/virgule terminal et s'arrête aussi
+sur `;` ou `*>`. Ne pas reconstruire l'image en recollant des tokens espacés.
+Les séparateurs ordinaires ne terminent pas une phrase ; dans les parenthèses,
+ils restent des délimiteurs pour ne pas transformer `table(1,+2)` en `table(1+2)`.
+Une séquence contiguë du même séparateur forme un seul token. Les listes mixtes
+plus larges restent refusées. PIC/PICTURE sont refusés comme noms ordinaires,
+mais restent permis comme noms COPY non cités.
+
+`DocumentaryFilter` dans `documentary.py` est appelé par `normalize`, avant
+`fixed_fragment`, lex et COPY. AUTHOR, INSTALLATION, DATE-WRITTEN, DATE-COMPILED,
+SECURITY et REMARKS doivent commencer leur ligne physique avec un point.
+En fixe, la prose de zone B continue jusqu'à la prochaine ligne normale de zone A,
+réanalysée ; en libre, seule la ligne d'en-tête est masquée. Les guillemets ouverts
+et COPY documentaires ne deviennent pas du code. Un littéral ordinaire déjà
+ouvert garde ses contrôles, et `-` documentaire reste explicitement refusé.
+Une directive séparée reste active : FREE termine la prose fixe, FIXED la conserve.
+Ne pas faire passer le source brut directement au Parser pour ce filtrage :
+il attend le source normalisé, comme auparavant.
+
+La ligne COPY garde sa validation propre et refuse les virgules/points-virgules
+supplémentaires non cités. Les noms cités avec ponctuation et les commentaires
+finaux sont préservés. Ne pas déduire la grammaire du préprocesseur de celle du
+lexer ordinaire.
+
+Validation après revue : **200 tests découverts, 199 réussis, un PE Windows ignoré**
+(`/workspace/tooling/separators-documentary-reviewed-tests.log`). Les 37 ajouts
+couvrent notamment les limites PICTURE/commentaires, guillemets, COPY, positions,
+formats, portée de phrase et sous-scripts avec signe unaire.
+
+NIST statique : **12/458 émissions acceptées**, 16 blocages au prétraitement,
+430 à l'analyse, aucun à l'émission et zéro erreur interne
+(`build/coverage-nist-separators-documentary-reviewed.json`). Les premiers
+diagnostics/statuts changent pour 94 sources ; 57 passent du prétraitement à
+l'analyse. NC246A et SQ202A sont les deux nouvelles sources acceptées.
+
+Les **51/51 comparaisons locales** passent
+(`build/verification-separators-documentary.json`). NC246A et SQ202A ont aussi
+**2/2 comparaisons natives conformes**, stdout identique, codes nuls et fichiers
+identiques aux références indépendantes. Leurs bilans donnent **49 + 1 = 50 PASS**,
+sans FAIL/DELETED/INSPECT (`build/nist-separators-documentary-verification.json`).
+SQ202A crée et relit 750 records de 120 octets ; son XXXXX001 fait 90000 octets,
+SHA256 `c3a5a8f0b77c2ddb7ee6f59ae960fb0beb2b39e82f99ab1b101fa94c49e9c415`.
+Les références natives et leur provenance sont conservées dans
+`/workspace/tooling/separator-nist-probes`. Aucun changement des sources NIST
+ni jeu d'entrée externe n'a été nécessaire. Cela ne remplace pas le runner NIST
+complet. Priorités désormais : FD DATA RECORD (36 premiers diagnostics),
+RELATIVE (32), INDEXED (26), FILE STATUS de groupe (25), VALUE/USAGE de groupe (24).
+
+Étape précédente : comparaisons mixtes et MOVE depuis du texte. Les comparaisons
+conservent le contexte AST dans `comparison_order`, sans assouplir `Value.compare`.
+Un champ numérique DISPLAY/COMP/COMP-3, même avec V, est comparé à un champ PIC X,
+groupe ou refmod par ses chiffres de magnitude sur la largeur PICTURE, sans
+signe ni point. Les littéraux numériques non signés gardent leurs chiffres
+lexicaux ; ZERO remplit la largeur texte. Un littéral texte vide représente un
+espace dans ce contexte. DISPLAY non signé invalide est comparé brut ; signé
+invalide garde l'arrêt conservateur nommé.
+
+Attention : GnuCOBOL peut replier une comparaison directe contre un littéral
+texte selon la PICTURE, même après MOVE. Garde actuelle : champ entier et
+littéral ASCII uniquement numérique de même largeur. Les autres littéraux
+doivent passer par PIC X pour être comparés. Index, signes numériques explicites,
+expressions arithmétiques et catégories mixtes EVALUATE/88 restent refusés.
+La régression native DIRECT:FALSE/FIELD:TRUE préserve ce contre-exemple.
+
+`assign_text_move` gère les sources PIC X/refmod vers Numeric ou edited, les
+littéraux texte vers edited seulement, et les groupes source par copie brute.
+La lecture suit un buffer natif : DISPLAY à sa capacité/échelle, autres usages
+et edited à 76 positions dont 38 fractionnaires. Les caractères invalides ne
+sont examinés que jusqu'au remplissage du buffer ; l'excès entier est sauté
+avant validation. DISPLAY conserve le signe initial, même si les chiffres
+deviennent zéro ; le chemin indirect l'efface si invalide. Les zéros négatifs
+gardent overpunch p ou nibble D en stockage, même si l'affichage vaut +0000.
+
+`Expr.figurative_space` distingue SPACE, refusé vers edited, du littéral " ",
+accepté. La déédition, les calculs sur/vers texte, VALUE texte vers numérique,
+le texte vers index et les littéraux texte vers Numeric ordinaire restent
+refusés. Ne pas promouvoir ces chemins via `num()` ou `View.assign`.
+Voir `tests/test_mixed_types.py` et `tests/fixtures/mixed_types.cob`.
+
+Validation : **163 tests découverts, 162 réussis et un PE Windows ignoré**,
+**49/49 comparaisons locales conformes** (`build/verification-mixed-types.json`).
+La suite ciblée de 22 tests passe aussi après le correctif du littéral texte
+vide. Le fichier attendu de la fixture a 13 octets (`MATCH\n-12.30\n`), SHA256
+`3513c1fc64a7b34e0ed21ae9a38eba43bcd1cec141594786c5a81054fb00267a`.
+
+NIST : **10/458 émissions acceptées**, 73 blocages au prétraitement, 375 à
+l'analyse, aucun blocage d'émission et zéro erreur interne
+(`build/coverage-nist-mixed-types-final.json`). NC132A et ST126A sont désormais
+acceptés. NC132A, ST107A et ST126A ont **3/3 comparaisons natives conformes**,
+codes nuls et fichiers identiques aux références indépendantes. Leurs bilans
+déclarent **25 + 6 + 18 = 49 PASS**, sans FAIL/DELETED/INSPECT
+(`build/nist-mixed-types-verification.json`).
+
+Les données ST107A/ST126A ont finalement été produites avec les générateurs
+officiels ST106A/ST125A en GnuCOBOL, sous
+`/workspace/tooling/nist-mixed-probes/seed-st107` et `seed-st126`. Les fichiers
+XXXXX001/2/3 font chacun 243 octets, neuf records de 27 octets, SHA256
+`50fbb785d0857f495d756ba1632e236ec9115aac8ab413570871c8db2fe05cf7`.
+Les mentions historiques ci-dessous de données absentes sont donc levées.
+Ne pas compter les deux PASS des générateurs natifs comme support Rust de SORT.
+Voir `tools/README.md` pour reproduire la génération et la comparaison.
+
+Étape précédente : MOVE numérique vers texte des rapports CCVS. Le frontend
+distingue désormais `Stmt("move")` de `assign` arithmétique et conserve
+`Expr.figurative_zero`. L'émission convertit chaque source juste avant le
+récepteur, à partir d'une vue résolue une fois ; ne pas prendre de snapshot
+unique des octets avant tous les récepteurs, cela casserait les alias.
+
+Un entier DISPLAY/COMP/COMP-3/index vers PIC X ou refmod envoie sa magnitude
+sur la largeur PICTURE, sans signe ; le récepteur tronque à droite ou complète
+d'espaces. COMP/COMP-3/index font un modulo de capacité après décodage.
+Une destination groupe reçoit au contraire le stockage brut, signe overpunch,
+COMP/COMP-3 et source V compris. Un champ V vers PIC X ou refmod est refusé
+comme dans le profil GnuCOBOL par défaut. Index vers groupe reste refusé : son
+stockage natif diffère du profil interne big-endian des index synthétiques.
+
+Les littéraux préservent leurs chiffres lexicaux sans signe ni point
+(`-0012.30` envoie `001230`). ZERO/ZEROS/ZEROES remplissent toute la taille
+active du récepteur ; le littéral 0 est suivi d'espaces. Les calculs vers PIC X,
+texte vers nombre, déédition et comparaisons mixtes restent refusés.
+DISPLAY non signé invalide est copié brut vers PIC X ; signé invalide s'arrête
+avec un diagnostic nommé, car GnuCOBOL peut normaliser le signe en modifiant
+la source. Les helpers `numeric_move_text` ne changent pas `View.assign` ou
+`Value.bytes`, ni les règles d'initialisation VALUE.
+
+Les **17 tests ciblés** passent : règles de largeur/signe, groupes bruts,
+littéraux/ZERO, modulo binaire/index, alias, source indexée résolue une fois,
+rapport avec octets attendus et refus explicites. Voir
+`tests/test_numeric_move.py` et `tests/fixtures/numeric_move_report.cob`.
+
+Validation complète : **141 tests découverts, 140 réussis et un PE Windows
+ignoré** ; **48/48 comparaisons locales conformes**
+(`build/verification-numeric-move.json`). Le fichier attendu de la nouvelle
+fixture a 28 octets, SHA256
+`6a4189b0879af9bba617f35fa87b29897c19d48db58e7d8afd82c7d45c586f60`.
+
+La mesure NIST passe à **8/458 émissions acceptées**, avec 73 blocages au
+prétraitement, 375 à l'analyse, 2 à l'émission et aucune erreur interne
+(`build/coverage-nist-numeric-move.json`). NC127A, NC136A, NC137A, SM106A,
+SM107A et ST107A rejoignent NC110M et SM301M. NC132A atteint maintenant une
+comparaison nombre/texte, ST126A un transfert texte vers nombre. Ces deux
+opérations restent refusées. La mesure est statique ; ST107A requiert en outre
+des données de tri externes pour une exécution pertinente.
+
+Les **5 nouveaux programmes autonomes** NC127A, NC136A, NC137A, SM106A et
+SM107A ont aussi une comparaison native réussie, codes nuls, stdout et fichiers
+identiques (`build/nist-numeric-move-verification.json`). Leurs REPORT ont les
+mêmes empreintes qu'une exécution native indépendante. Bilans : 2, 8, 8, 0 et
+200 PASS automatiques, soit **218 réussites, aucun FAIL/DELETED et une
+inspection requise dans SM106A**. Ne pas transformer cette inspection en PASS.
+Ce contrôle des bilans ne remplace pas le runner NIST complet. ST107A attend
+`XXXXX001` (SEQUENTIAL, 27 octets par record) généré par ST106A ; données absentes,
+donc pas d'exécution ni de jeu fabriqué.
+
+Étape précédente : GO TO et contrôle explicite des retours PERFORM. Le nouveau
+`control.py` abaisse tous les contrôles en graphe avec continuations ;
+`emitter.py` génère une boucle `pc` et une pile
+`PerformFrame { through, return_pc }`, en remplacement des appels de méthodes
+Rust par bloc. Un GO ne dépile aucun cadre : une fin de PERFORM peut être
+atteinte plus tard, après un détour hors de sa plage. Chaque point de retour
+compare seulement le sommet et dépile un seul cadre correspondant.
+
+Les fins de paragraphe et de section sont distinctes, même en fin du dernier
+paragraphe. EXIT SECTION est maintenant accepté dans une section explicite et
+saute directement à sa borne, en contournant le retour d'un éventuel PERFORM
+de paragraphe. EXIT PARAGRAPH vise sa propre borne ; EXIT nu reste sans effet.
+GO accepte TO facultatif, cibles section/paragraphe et DEPENDING [ON] avec
+contrôleur entier de neuf chiffres au plus (table subscriptée ou index implicite
+inclus). Les valeurs hors de 1..N poursuivent sans saut. Les décimaux et grandes
+largeurs restent refusés : GnuCOBOL a des conversions dépendantes du stockage,
+dont une réduction à 32 bits de grands DISPLAY/COMP-3.
+
+Autre règle native importante : le compteur TIMES est unique par site syntaxique
+et non sauvegardé par un appel PERFORM. Une réentrée récursive au même site
+écrase son compteur externe. Le nouveau moteur reproduit cet effet ; les sites
+distincts gardent des compteurs distincts. IF/EVALUATE, READ, SIZE ERROR et les
+boucles inline ont des continuations explicites, que GO peut quitter.
+
+Les **37 tests ciblés** passent (21 GO et 16 sections). Les preuves natives
+conservent les cadres dormants, comparaisons au sommet, deux points de retour,
+sauts depuis handlers/boucles, compteurs récursifs et contrôleurs calculés.
+Les variantes ALTER/GO sans cible, EXIT SECTION hors section explicite,
+EXIT PERFORM/CYCLE, qualifications/homonymes et sections segmentées restent
+refusées. Voir `tests/test_goto.py` et `tests/fixtures/goto_flow.cob`.
+
+La suite complète découvre **124 tests : 123 réussis, un PE Windows ignoré**.
+Le corpus local donne **47/47 comparaisons conformes**
+(`build/verification-goto.json`), y compris la nouvelle fixture de sauts.
+
+NIST : **2/458 émissions acceptées**, 73 blocages au prétraitement, 375 à
+l'analyse, 8 à l'émission et aucune erreur interne
+(`build/coverage-nist-goto.json`). Les premiers diagnostics/statuts changent
+pour 47 sources. GO TO ne bloque plus en premier ; les huit nouveaux blocages
+d'émission sont des conversions numérique/texte CCVS-E-4 non modélisées.
+NC110M rejoint SM301M parmi les sources acceptées. Cette mesure reste statique.
+NC110M a aussi une comparaison native réussie, codes nuls et octets identiques
+(`build/nist-nc110m-verification.json`). Sa ligne PASS est présente, sa ligne
+FAIL absente et sa fin de test atteinte : cette preuve GO/PERFORM ciblée ne
+constitue pas une exécution complète du runner de conformité NIST.
+
+Étape précédente (21 octobre) : sections de procédure et PERFORM. Le frontend conserve
+l'entrée anonyme, chaque préambule de section (même vide) et les paragraphes
+dans `Program.blocks`, avec des plages semi-ouvertes dans `Program.sections`.
+`entry` et `paragraphs` partagent toujours les listes des corps correspondants.
+`procedure_range` résout un paragraphe seul ou toute une section. THRU/THROUGH
+accepte des bornes mixtes, y compris un paragraphe jusqu'à sa propre section.
+
+L'émission utilise une méthode par bloc et `perform_range`, avec retours
+imbriqués/récursifs et enchaînement séquentiel. EXIT PARAGRAPH termine seulement
+le bloc courant ; une section continue ensuite. EXIT nu est désormais sans
+effet. STOP RUN/GOBACK restent propagés. Le rapport CLI expose les sections et
+blocs sans introduire de faux noms dans la liste des paragraphes.
+
+Les 16 tests ciblés passent, dont 8 comparaisons Rust/GnuCOBOL et une preuve
+native du refus EXIT SECTION. La suite complète découvre **103 tests : 102
+réussis, un PE Windows ignoré**. Le corpus local donne **46/46 comparaisons
+conformes** (`build/verification-sections.json`). Sous GnuCOBOL, EXIT SECTION dans un paragraphe
+appelé peut dépasser le retour de son PERFORM et poursuivre dans la section
+suivante. Ne pas le traduire par un retour Rust ou par un saut qui dépilerait
+les appels. Il faudra modéliser les positions de contrôle et la pile des
+PERFORM pour couvrir ces transferts. EXIT PERFORM, qualifications/homonymes
+de procédures et sections à segments numérotés restent refusés. Une cible de
+procédure homonyme d'une donnée reste aussi hors profil du parser actuel.
+
+La mesure `build/coverage-nist-sections.json` conserve **1/458 émission
+acceptée**, 73 blocages au prétraitement, 384 à l'analyse et zéro erreur
+interne. Les premiers diagnostics changent pour 48 sources ; GO TO est
+désormais le premier obstacle sur 46 sources. Ce rapport est statique et ne
+valide pas les assertions NIST. Voir `tests/test_sections.py` et
+`tests/fixtures/sections.cob`.
+
+Étape précédente : première famille de PICTURE éditées (signe fixe +/- avec 9,
+point explicite, Z initiaux suivis de 9 obligatoires), y compris les images
+NIST `-9(9).9(9)` et `-.9(18)`. Les offsets des tokens distinguent le point
+interne de fin de déclaration. La catégorie `edited` conserve les octets,
+formate les sources numériques et reste distincte des opérandes numériques.
+Échelle/ROUNDED précèdent le calcul du signe puis le modulo de capacité.
+VALUE texte est brut ; INITIALIZE et le défaut formatent zéro. La déédition,
+MOVE texte vers edited, ACCEPT édité et SIZE ERROR vers edited sont refusés.
+Les comparaisons et sujets/cas EVALUATE directement édités sont aussi refusés :
+GnuCOBOL replie certains littéraux composés de chiffres selon la PICTURE, même
+si REDEFINES a modifié les octets. Une comparaison brute serait alors fausse.
+Les sous-chaînes alphanumériques et copies vers PIC X restent comparables ;
+un test natif conserve la différence. IS NUMERIC examine toujours les octets.
+
+Les clauses FD LABEL OMITTED/STANDARD, BLOCK, RECORD exact et RECORDING F du
+profil disque GnuCOBOL sont analysées dans `file_parser.py` et conservées dans
+`FileSpec.fd_clauses`. Après layout, RECORD doit égaler la taille physique de
+chaque description : un écart peut activer le format variable natif.
+
+Validation de cette extension : **86 tests réussis, un ignoré** (87 découverts),
+**45/45 comparaisons locales conformes** (`build/verification-edited-final.json`).
+NIST reste à **1/458 émission acceptée**, 73 blocages au prétraitement et 384 à
+l'analyse, zéro erreur interne (`build/coverage-nist-edited-final.json`). Les anciens
+blocages de PICTURE et LABEL/BLOCK révèlent notamment les sections de procédure
+(44 premiers diagnostics CCVS1 SECTION), les paragraphes AUTHOR et d'autres
+clauses FD (DATA RECORD). Voir `tests/test_edited.py`, `tests/test_fd_clauses.py`
+et la fixture intégrée `tests/fixtures/edited_report.cob`.
+
+Étape précédente : SEQUENTIAL fixe, implicite ou explicite, conserve les octets
+bruts sans délimiteur et accepte COMP/COMP-3 dans les groupes FD. Plusieurs
+descriptions 01 de même taille partagent leur mémoire ; des tailles différentes
+restent refusées pour ne pas produire un format fixe à la place d'un variable.
+WRITE conserve désormais le nom du record dans son AST. `CobolFile` distingue
+SEQUENTIAL et LINE SEQUENTIAL ; le rapport de conversion expose l'organisation
+par fichier.
+
+BEFORE/AFTER ADVANCING accepte PAGE ou un entier littéral 0..65535. Contrôles
+bruts LF/CR/FF ; AFTER arme un LF final, BEFORE le désarme, WRITE nu conserve
+l'état. CLOSE et Drop couvrent la fermeture implicite à STOP RUN. Une lecture
+SEQ partielle conserve la queue du FD et retourne 00, puis 10 et 46 ; READ INTO
+copie seulement `last_read_size()` octets avant le padding de sa destination.
+
+Validation de cette extension : **75 tests réussis, un ignoré** (76 découverts),
+**44/44 comparaisons locales conformes** (`build/verification-sequential.json`).
+NIST reste à **1/458 émission acceptée**, 73 blocages au prétraitement et 384 à
+l'analyse, zéro erreur interne (`build/coverage-nist-sequential.json`). Le
+SEQUENTIAL implicite ne bloque plus ; les premières erreurs révèlent notamment
+les PICTURE éditées, clauses FD LABEL/BLOCK, fichiers relatifs/indexés et
+paragraphes documentaires. Les formats variables, autres clauses FD et
+compteurs ADVANCING variables restent refusés. Voir `tests/test_sequential.py`
+et les fixtures `sequential_records.cob`, `sequential_report.cob`.
+
+Étape précédente : le normaliseur accepte les continuations fixes (mots, nombres,
+PICTURE et littéraux), les espaces jusqu'à la colonne 72 et les tabulations
+aux taquets de huit colonnes. Les guillemets en colonne 72 et les littéraux
+fermés adjacents ont des tests natifs. Le parser accepte ENVIRONMENT et
+CONFIGURATION vides, SOURCE-COMPUTER et OBJECT-COMPUTER à nom machine seul.
+Les clauses de configuration non modélisées et indicateurs debug restent
+refusés. Voir `tests/test_fixed.py`, `tests/test_configuration.py` et la nouvelle
+fixture `tests/fixtures/fixed_continuation.cob`.
+
+Validation de cette extension : **63 tests réussis, un ignoré** (64 découverts),
+**42/42 comparaisons locales conformes** (`build/verification-continuations.json`).
+NIST : **1/458 émission acceptée**, 73 blocages au prétraitement et 384 à
+l'analyse, zéro erreur interne (`build/coverage-nist-fixed.json`). Le seul
+programme accepté, SM301M avec COPY KSM31, a également une comparaison native
+réussie (`build/nist-sm301m-verification.json`), sans valider ses assertions
+NIST de signalement des standards. Les mesures initiales ci-dessous restent
+conservées pour comparaison. Les obstacles majoritaires suivants concernent
+les fichiers séquentiels implicites et leurs rapports, puis le lexing et les
+paragraphes documentaires.
+
+L'utilisateur fixe désormais comme objectif une **garantie universelle de
+conversion COBOL vers Rust**. Ne pas limiter la feuille de route au sous-ensemble actuel,
+ni annoncer cette garantie avant d'en avoir établi la portée et les preuves.
+Voir [COVERAGE.md](COVERAGE.md) pour les profils, niveaux de validation et
+premières mesures sur un corpus externe.
+
+Le checkout actif est `/workspace/cobol2rust` sous Linux ; les chemins Windows
+ci-dessous décrivent la livraison historique. Pour les outils de cette machine :
+`source /workspace/tooling/activate.sh`, puis activer `.venv/bin/activate` depuis
+la racine du checkout. Chaque tâche cloud est isolée ; utiliser le checkout
+existant sans créer de worktree sauf demande explicite.
+
+La reprise Linux a validé les 41 comparaisons du corpus livré et 33 tests Python,
+avec un test d'inspection du PE Windows ignoré (34 découverts). Le rapport actuel
+est `build/verification.json`. Cela lève l'absence de validation Linux signalée
+dans les sections historiques ci-dessous, pour ces entrées seulement.
+
+Les nouveaux outils `tools/prepare_nist.py` et `tools/coverage.py` préparent
+et mesurent NIST CCVS85. Le corpus sous `.tools/nist-ccvs85/extracted` comprend
+414 `.CBL` et 44 `.SUB` : **0/458 émission acceptée**, 398 blocages au
+prétraitement et 60 à l'analyse, sans erreur interne. Les continuations fixes
+et sections CONFIGURATION sont les premiers obstacles majoritaires. Aucun cas
+NIST n'a été exécuté ; seul l'extracteur EXEC85 l'a été. Ne pas confondre le
+corpus local de 41 programmes avec une conformité COBOL85. Le rapport est
+`build/coverage-nist.json`, la provenance `.tools/nist-ccvs85/manifest.json`.
+
+Après la première étape d'ajout des outils, la suite complète découvrait
+49 tests : 48 réussissaient, un test PE Windows était ignoré. Le langage pris
+en charge par le convertisseur n'avait pas encore été étendu dans cette
+première étape de mesure. Les paquets de livraison
+historiques n'ont pas été régénérés et la version reste 0.4.0.
 
 ## Objectif et dossier de travail
 
@@ -34,7 +373,8 @@ Le sous-ensemble source comprend notamment :
 - INDEXED BY, SET TO/UP BY/DOWN BY, index signés de 32 bits et PERFORM VARYING.
 - Calcul décimal, ROUNDED, ON SIZE ERROR et NOT ON SIZE ERROR sur les cinq
   verbes arithmétiques ; une destination GIVING.
-- IF, EVALUATE, boucles, paragraphes, PERFORM THRU et enchaînement séquentiel.
+- IF, EVALUATE, boucles, sections et paragraphes, PERFORM THRU mixte,
+  retours imbriqués/récursifs et enchaînement séquentiel.
 - Console et fichiers LINE SEQUENTIAL, y compris enregistrements structurés,
   statuts, fichiers optionnels et branches de fin de fichier.
 
@@ -125,13 +465,16 @@ a échoué car `bdist_wheel` n'était pas installé dans le Python système.
 | Fichier | Rôle |
 | --- | --- |
 | `cobol2rust/frontend.py` | Lexer, formats/COPY, AST, expressions, références et instructions |
-| `cobol2rust/data_parser.py` | Déclarations, groupes, OCCURS, index et conditions 88 |
+| `cobol2rust/documentary.py` | Filtrage des entrées documentaires IDENTIFICATION avant littéraux/COPY |
+| `cobol2rust/data_parser.py` | Déclarations, PICTURE éditées, groupes, OCCURS, index et conditions 88 |
+| `cobol2rust/file_parser.py` | Clauses FD du profil disque et métadonnées |
 | `cobol2rust/layout.py` | Tailles physiques, offsets, dimensions et validation des dispositions |
 | `cobol2rust/emitter.py` | Génération Rust, longueurs actives ODO et correspondance des lignes |
 | `cobol2rust/runtime.rs` | Valeurs, décimaux exacts, opérations contrôlées et diagnostics |
 | `cobol2rust/storage_runtime.rs` | Mémoire partagée, vues, sérialisation, tableaux et initialisation |
-| `cobol2rust/file_runtime.rs` | Fichiers LINE SEQUENTIAL et statuts |
+| `cobol2rust/file_runtime.rs` | LINE SEQUENTIAL, SEQUENTIAL fixe, contrôles ADVANCING et statuts |
 | `cobol2rust/cli.py` | Commandes et génération du projet/rapport de conversion |
+| `cobol2rust/control.py` | Graphe de contrôle, continuations et points de retour PERFORM |
 | `cobol2rust/verification.py` | Oracle indépendant, données d'entrée et comparaison des effets |
 | `cobol2rust/toolchain.py` | Détection et environnement des compilateurs |
 | `cobol2rust/audit.py`, `binary.py` | Audit statique et inspection binaire |
@@ -178,6 +521,35 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
    les fichiers dans les comparaisons. `COB_LS_FIXED` et `COB_LS_SPLIT` sont les
    seules options runtime configurables du vérificateur ; leurs valeurs sont
    enregistrées dans le rapport.
+   SEQUENTIAL fixe conserve tous les octets et ne sépare pas les records par
+   LF. Les descriptions FD égales sont des vues partagées. Le préfixe physique
+   d'un READ partiel et la queue inchangée du buffer doivent rester distincts
+   pour READ INTO. Ne pas perdre le LF final pending après AFTER, même si des
+   WRITE nus suivent, ni l'ajouter après BEFORE.
+10. **PICTURE éditées et FD.** Une image éditée n'est pas un opérande numérique.
+    Ne pas ajouter une déédition implicite dans Value.num(). Son signe est fixé
+    après l'échelle, avant la troncature de capacité ; un débordement de MOVE
+    n'est pas traité comme l'overflow conservateur des champs non édités.
+    Les VALUE texte et numériques ont des chemins distincts. Ne pas ignorer
+    un RECORD CONTAINS incohérent : cela peut changer le format physique.
+    Une comparaison directe edited n'est pas une simple comparaison de texte
+    sous toutes les optimisations GnuCOBOL ; conserver le refus tant que ce
+    profil de comparaison n'est pas modélisé.
+11. **Procédures.** Conserver l'ordre des blocs et les préambules de sections
+    vides. GO ne dépile pas les retours en attente ; les points de retour
+    comparent seulement le sommet. Fin paragraphe et fin section sont deux
+    points distincts. EXIT SECTION saute la première, EXIT PARAGRAPH la vise.
+    EXIT nu ne retourne pas. TIMES partage son compteur par site, même lors
+    d'une réentrée récursive ; ne pas restaurer le compteur externe.
+12. **MOVE vers texte.** Un groupe destinataire copie le stockage brut ; PIC X
+    ou refmod reçoit les chiffres d'un entier. Ne pas confondre ces catégories
+    ni traiter les champs V comme les littéraux décimaux. Préserver les chiffres
+    lexicaux et la distinction ZERO/0. Réserver la conversion au MOVE, sans
+    accepter de calcul vers texte ou de texte vers nombre par effet de bord.
+13. **Comparaisons et MOVE depuis texte.** Préserver l'AST : littéral, champ et
+    groupe ne sont pas interchangeables. Les optimisations de littéraux texte
+    exigent la garde de largeur/échelle. La lecture alpha utilise un buffer fini,
+    pas un parseur décimal générique ; conserver signe et zéros négatifs natifs.
 
 Les lignes des diagnostics et source maps désignent `expanded.cob`, après
 normalisation et expansion des COPY, et non toujours le source d'origine.
@@ -186,21 +558,25 @@ normalisation et expansion des COPY, et non toujours le source d'origine.
 
 Les limites détaillées sont dans le README. Restent notamment hors périmètre :
 SEARCH, tables à glissement ou stride variable, ODO dans un FD, USAGE INDEX
-explicite, COMP-5, images éditées, profils IBM/Micro Focus/EBCDIC, COPY REPLACING,
-continuations fixes, fonctions intrinsèques, appels interprogrammes, fichiers
-binaires/indexés, SQL et CICS. Sans gestionnaire arithmétique, les dépassements
+explicite, COMP-5, images éditées complexes et déédition, profils IBM/Micro Focus/EBCDIC, COPY REPLACING,
+fonctions intrinsèques, appels interprogrammes, enregistrements variables,
+fichiers relatifs/indexés, SQL et CICS. Sans gestionnaire arithmétique, les dépassements
 et signes négatifs non signés provoquent encore un arrêt conservateur de code 70.
 Le découpage LINE SEQUENTIAL avec COB_LS_SPLIT actif reste partiellement refusé.
 
 Priorités possibles pour la prochaine étape :
 
-1. Étendre le sous-ensemble source à partir de cas concrets, avec un essai natif
-   avant chaque nouvelle règle et des comparaisons stdout/fichiers. SEARCH
-   constitue une extension naturelle des tables et index actuels.
+1. Lever les blocages suivants du corpus NIST après séparateurs et paragraphes
+   documentaires : DATA RECORD, organisations RELATIVE/INDEXED, FILE STATUS
+   de groupe et VALUE/USAGE de groupe. Utiliser un essai natif avant chaque
+   nouvelle règle et des comparaisons stdout/fichiers.
+   SEARCH reste une extension utile des tables.
 2. Reprendre précisément INITIALIZE des groupes ODO composés en examinant le C
    généré et le runtime GnuCOBOL ; conserver le refus tant que l'équivalence
    n'est pas établie.
-3. Valider les projets générés sur un environnement Linux réel.
+3. Maintenir la validation Linux désormais acquise pour le corpus local et
+   l'étendre aux nouveaux profils ; elle ne valide pas les dialectes IBM ou
+   Micro Focus.
 4. Pour le parcours sans sources, choisir d'abord une cible étroite, par exemple
    GnuCOBOL x86 PE. Compiler un petit exemple connu, analyser ses imports/appels
    `cob_*`, étudier son levage avec ARET puis comparer le Rust aux effets du

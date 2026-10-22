@@ -29,7 +29,8 @@ def manifest(files):
 def validate_file_paths(conversion):
     files = conversion.get("files", [])
     if files:
-        for key in ("COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF", "COB_LS_NULLS", "COB_LS_USES_CR"):
+        for key in ("COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF", "COB_LS_NULLS", "COB_LS_USES_CR",
+                    "COB_SEQ_CONCAT_NAME", "COB_SEQ_CONCAT_SEP"):
             if key in os.environ:
                 raise CobolError(f"configuration de fichiers non prise en charge: {key}")
     for spec in files:

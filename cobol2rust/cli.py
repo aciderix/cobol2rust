@@ -28,18 +28,30 @@ def convert(source: Path, output: Path, fmt="auto", includes=()):
         raise CobolError("le dossier de sortie doit être distinct du dossier source")
     crate = "cobol_" + re.sub(r"[^a-z0-9_]", "_", program.name.lower())
     manifest = f'[package]\nname = "{crate}"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\nnum-bigint = "=0.4.6"\n'
+    organizations = sorted({f.organization for f in program.files.values()})
     report = {"schema_version": 1, "tool_version": __version__, "program": program.name,
               "source": str(source.resolve()), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
               "expanded_sha256": hashlib.sha256(expanded.encode("utf-8")).hexdigest(),
               "copybook_sha256": {path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in copies},
               "copybooks": copies, "fields": [asdict(f) for f in program.fields.values()],
               "paragraphs": list(program.paragraphs), "source_map": mapping,
+              "sections": {name: {"start_block": start, "end_block_exclusive": end}
+                           for name, (start, end) in program.sections.items()},
+              "procedure_blocks": [{"index": index, "paragraph": block.name, "section": block.section}
+                                   for index, block in enumerate(program.blocks)],
+              "control_flow": {"model": "explicit program counter and PERFORM stack",
+                               "returns": "top frame only; distinct paragraph and section checkpoints",
+                               "times_counters": "shared per source site, including recursive re-entry"},
               "files": [asdict(f) for f in program.files.values()],
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
               "storage_profile": {"binary_size": "1-2-4-8", "binary_byteorder": "big-endian", "display_sign": "ASCII trailing overpunch"},
-              "file_runtime": {"organization": "LINE SEQUENTIAL", "records": "PIC X or groups of DISPLAY columns, printable ASCII",
+              "file_runtime": {"organization": organizations[0] if len(organizations) == 1 else "MIXED",
+                               "organizations": organizations,
+                               "records": "LINE SEQUENTIAL: printable ASCII DISPLAY; SEQUENTIAL: fixed raw bytes, equal-length FD aliases",
+                               "advancing": "SEQUENTIAL only: BEFORE/AFTER, PAGE or literal 0..65535 lines; LF/CR/FF controls",
                                "settings": ["COB_LS_FIXED", "COB_LS_SPLIT"],
+                               "settings_apply_to": "LINE SEQUENTIAL",
                                "split_overflow": "explicit abort when COB_LS_SPLIT is enabled"} if program.files else None,
               "diagnostic_lines": "expanded.cob (after COPY expansion and fixed-format normalization)",
               "policy": "Reject unsupported syntax; SIZE ERROR handlers catch arithmetic overflow/division by zero and preserve the receiver; otherwise abort on overflow, invalid input or division by zero.",

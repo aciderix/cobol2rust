@@ -32,7 +32,7 @@ class FrontendTests(unittest.TestCase):
 
     def test_reject_unsupported_instead_of_skipping(self):
         cases = [
-            program("call 'external'."), program("go to finish. finish. stop run."),
+            program("call 'external'."), program("alter finish to proceed to other."),
             program("open input file-a."), program("display function current-date."),
             program("exec sql select 1 end-exec."), program("next sentence."),
             program("perform missing stop run."), program("if n = 1 or 2 display 'bad' end-if.", "01 n pic 9."),
@@ -40,7 +40,6 @@ class FrontendTests(unittest.TestCase):
             program("stop run.", "01 group-a."),
             program("stop run.", "01 n pic 9(2) comp-5."),
             program("stop run.", "01 n pic 9(19)."),
-            program("stop run.", "01 n pic ZZ9.99."),
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("stop run.", "01 n pic 9. 01 n pic 9."),
             program("stop run.", "01 x pic x(0)."),
@@ -52,7 +51,7 @@ class FrontendTests(unittest.TestCase):
 
     def test_semantic_type_errors(self):
         declarations = '01 n pic 99. 01 t pic x(3).'
-        for body in ['move t to n.', 'compute n = t + 1.', 'if t = 1 continue end-if.', 'perform t times continue end-perform.']:
+        for body in ['compute n = t + 1.', 'perform t times continue end-perform.']:
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(body, declarations)).parse()).generate()
 

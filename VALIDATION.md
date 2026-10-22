@@ -1,4 +1,235 @@
-# Validation — 21 octobre 2026
+# Validation — 22 octobre 2026
+
+## Séparateurs et paragraphes documentaires
+
+- **200 tests découverts : 199 réussis, un test PE Windows ignoré.** Les 37
+  ajouts couvrent séparateurs et portée de phrase, indices signés, PICTURE
+  contiguës, commentaires adjacents, refus des éditions non modélisées,
+  COPY conservateur et entrées documentaires en formats fixe/libre. Les cas
+  documentaires vérifient les guillemets ouverts, COPY ignorés/réels, directives,
+  lignes de diagnostic et conservation des clauses sémantiques. Log local :
+  `/workspace/tooling/separators-documentary-reviewed-tests.log`.
+- **51/51 comparaisons locales conformes**. Les nouvelles fixtures
+  `separators.cob` et `documentary_fixed.cob` ont des sorties attendues vérifiées
+  indépendamment ; le source documentaire fixe est aussi compilé nativement
+  depuis le profil libre grâce à sa directive de format. Rapport :
+  `build/verification-separators-documentary.json`.
+- NIST statique : **12/458 émissions acceptées**, 16 blocages au prétraitement,
+  430 à l'analyse, aucun à l'émission et zéro erreur interne. **94 sources**
+  changent de premier diagnostic/statut, dont 57 passent du prétraitement à
+  l'analyse. NC246A et SQ202A deviennent acceptés. Rapport :
+  `build/coverage-nist-separators-documentary-reviewed.json`.
+- **2/2 comparaisons NIST supplémentaires conformes**, codes nuls, stdout et
+  fichiers identiques aux références natives indépendantes. NC246A vérifie
+  **49 PASS**, SQ202A **1 PASS**, sans FAIL/DELETED/INSPECT. Les bilans et
+  lignes de détail sont contrôlés ; les en-têtes répétés ne sont pas comptés
+  comme des tests. Rapport : `build/nist-separators-documentary-verification.json`.
+- SQ202A écrit et relit **750 records de 120 octets**. Les 90000 octets de
+  XXXXX001 ont le SHA256
+  `c3a5a8f0b77c2ddb7ee6f59ae960fb0beb2b39e82f99ab1b101fa94c49e9c415`.
+  Les deux programmes sont autonomes : aucun stdin, fichier d'entrée, COPY ou
+  programme externe. Ce contrôle reste ciblé et ne constitue pas une exécution
+  complète du runner NIST ni une garantie universelle.
+
+## Comparaisons mixtes et MOVE depuis texte
+
+- **163 tests découverts : 162 réussis, un test PE Windows ignoré.** Les
+  22 nouveaux tests couvrent les six relations dans les deux ordres, largeur
+  PICTURE, V, groupes/refmod, littéraux non signés et ZERO, lectures textuelles,
+  troncature, invalides, alias et négatifs zéro bruts DISPLAY/COMP-3. Une preuve
+  native conserve DIRECT:FALSE/FIELD:TRUE pour une comparaison optimisée avec
+  littéral texte ; les cas hors de la garde sont refusés. La suite ciblée a
+  aussi été relancée après ajout du cas `ZERO = ""`, faux nativement.
+- **49/49 comparaisons locales conformes**. La fixture `mixed_types.cob` combine
+  comparaison, lecture signée depuis PIC X, édition et fichier de rapport.
+  `mixed-report.txt` contient `MATCH\n-12.30\n` (13 octets), SHA256
+  `3513c1fc64a7b34e0ed21ae9a38eba43bcd1cec141594786c5a81054fb00267a`.
+  Rapport : `build/verification-mixed-types.json`.
+- NIST : **10/458 émissions acceptées**, 73 blocages au prétraitement, 375 à
+  l'analyse, aucun blocage d'émission restant et zéro erreur interne. NC132A
+  et ST126A sont les deux nouvelles sources acceptées. Rapport :
+  `build/coverage-nist-mixed-types-final.json`.
+- **3/3 comparaisons NIST supplémentaires conformes**, codes nuls, stdout et
+  fichiers finaux identiques aux références natives : NC132A, ST107A et ST126A.
+  Leurs bilans donnent **25, 6 et 18 PASS**, soit **49 réussites**, sans FAIL,
+  DELETED ni INSPECT. Empreintes sources/COPY, entrées, sorties et bilans :
+  `build/nist-mixed-types-verification.json`.
+- Les entrées de ST107A et ST126A ont été produites par les programmes officiels
+  ST106A et ST125A exécutés en GnuCOBOL. Chaque fichier fait 243 octets, neuf
+  records SEQUENTIAL de 27 octets, SHA256
+  `50fbb785d0857f495d756ba1632e236ec9115aac8ab413570871c8db2fe05cf7`.
+  Les deux PASS des producteurs ne sont pas comptés comme preuve Rust ; SORT
+  reste hors périmètre du convertisseur.
+
+Les littéraux texte vers Numeric ordinaire, la déédition, les calculs sur texte
+et les catégories mixtes EVALUATE/88 restent refusés. Les comparaisons directes
+contre littéral texte exigent un entier et des chiffres de même largeur ; les
+autres cas passent par un champ PIC X. Les résultats ne constituent pas une
+exécution complète du runner NIST ni une garantie universelle.
+
+## MOVE numérique vers texte et rapports CCVS
+
+- **141 tests découverts : 140 réussis, un test PE Windows ignoré.** Les
+  17 nouveaux tests vérifient la distinction MOVE/calcul, chiffres et signe,
+  littéraux/ZERO, groupes bruts, source avec V, sous-chaînes, modulo COMP/index,
+  alias et adresse source indexée résolue une fois. Les sorties et fichiers
+  attendus sont indépendants de l'implémentation.
+- **48/48 comparaisons locales conformes**. La nouvelle fixture
+  `numeric_move_report.cob` combine compteurs de rapport, remplissage ZERO,
+  littéraux et copie brute signée. Son fichier de 28 octets a le SHA256
+  `6a4189b0879af9bba617f35fa87b29897c19d48db58e7d8afd82c7d45c586f60`.
+  Rapport : `build/verification-numeric-move.json`.
+- NIST passe de **2 à 8/458 émissions acceptées** : 73 blocages au
+  prétraitement, 375 à l'analyse, 2 à l'émission et zéro erreur interne. Les
+  huit anciens diagnostics d'émission changent ; six sources sont acceptées,
+  NC132A atteint une comparaison nombre/texte et ST126A un transfert texte vers
+  nombre, toujours refusés. Rapport : `build/coverage-nist-numeric-move.json`.
+- **5/5 nouvelles comparaisons NIST conformes**, stdout, codes nuls et fichiers
+  finaux : NC127A, NC136A, NC137A, SM106A et SM107A. Leurs fichiers REPORT sont
+  identiques aux sorties natives indépendantes et donnent respectivement
+  2, 8, 8, 0 et 200 PASS automatiques : **218 réussites**, aucun FAIL ni DELETED,
+  **une inspection requise dans SM106A**. Ce dernier cas n'est pas compté PASS.
+  Rapport avec empreintes, lignes de bilan et compteurs :
+  `build/nist-numeric-move-verification.json`.
+- ST107A est accepté statiquement mais non exécuté : il attend `XXXXX001`,
+  fichier SEQUENTIAL de 27 octets par record produit par ST106A. Ces données
+  ne sont pas livrées ; aucun jeu d'entrée de substitution n'a été fabriqué.
+
+Les preuves portent sur ces programmes et ce profil GnuCOBOL, sans runner
+complet de conformité. Les DISPLAY signés invalides restent un arrêt nommé ;
+la normalisation native de leurs signes et ses mutations restent hors profil.
+Un index vers un groupe, les calculs vers texte, la déédition et les conversions
+texte vers nombre restent refusés. DISPLAY non signé invalide est copié brut.
+
+## GO TO et retours PERFORM explicites
+
+- **124 tests découverts : 123 réussis, un test PE Windows ignoré.** Les
+  21 nouveaux tests GO et les 16 tests sections passent. Les comparaisons
+  natives couvrent sauts avant/arrière et vers section, cadres PERFORM en
+  attente hors de leur plage, retour au sommet uniquement, deux points de
+  retour distincts, EXIT SECTION, sorties des handlers et des boucles inline.
+- **47/47 comparaisons locales conformes**, avec `goto_flow.cob` qui combine
+  détour hors d'une plage PERFORM, retour différé, GO DEPENDING et EXIT SECTION.
+  Rapport : `build/verification-goto.json`.
+- Une régression reproduit l'écrasement du compteur TIMES lors d'une réentrée
+  récursive au même site, en inline comme en outlined. Les contrôleurs GO
+  DEPENDING sont vérifiés en DISPLAY, COMP, COMP-3, table subscriptée et index
+  implicite, avec ON facultatif et continuation pour les indices hors plage.
+  Décimaux et contrôleurs de plus de neuf chiffres sont explicitement refusés.
+- NIST : **2/458 émissions acceptées**, 73 blocages au prétraitement, 375 à
+  l'analyse, 8 à l'émission, zéro erreur interne. Les premiers diagnostics ou
+  statuts changent pour 47 sources. Rapport : `build/coverage-nist-goto.json`.
+  Les blocages GO TO révèlent notamment des conversions numérique/texte des
+  rapports CCVS encore refusées ; la mesure reste statique.
+- NC110M est aussi compilé et exécuté séparément en GnuCOBOL et Rust : mêmes
+  octets stdout, codes nuls, aucun fichier divergent. Sa ligne PASS est présente,
+  sa ligne FAIL absente et sa fin de test atteinte. Rapport :
+  `build/nist-nc110m-verification.json`. Ces contrôles portent sur les deux
+  comportements GO/PERFORM de ce programme, pas sur une conformité NIST complète.
+
+Les étapes ci-dessous conservent leurs résultats historiques.
+
+## Sections de procédure et PERFORM
+
+- **103 tests découverts : 102 réussis, un test PE Windows ignoré.** Les
+  16 nouveaux tests comprennent huit comparaisons Rust/GnuCOBOL avec sorties
+  attendues indépendantes : bornes section/paragraphe et THRU mixtes,
+  préambules et sections vides, enchaînement sans STOP, tous les modes de boucle,
+  appels récursifs, propagation STOP RUN et EXIT PARAGRAPH, EXIT nu sans effet.
+- **46/46 comparaisons locales conformes**, y compris la fixture intégrée
+  `sections.cob` : préambule, section vide, THRU mixte et sorties de paragraphe.
+  Rapport : `build/verification-sections.json`.
+- Une preuve GnuCOBOL montre que EXIT SECTION peut dépasser le retour d'un
+  PERFORM de paragraphe et poursuivre dans la section suivante. Le frontend
+  refuse cette instruction, ainsi que EXIT PERFORM, qualifications/homonymes
+  de procédures et segments SECTION numérotés.
+- Le rapport de conversion conserve les paragraphes déclarés et expose en
+  plus les sections, leurs intervalles et les blocs anonymes. Inspection de
+  la fixture `sections.cob` : préambules conservés, y compris section vide,
+  et aucun nom synthétique ajouté aux paragraphes.
+- NIST reste à **1/458 émission acceptée**, 73 blocages au prétraitement,
+  384 à l'analyse et zéro erreur interne. Les premiers diagnostics changent
+  pour 48 sources ; GO TO est désormais le premier obstacle sur 46 sources.
+  Rapport : `build/coverage-nist-sections.json`. Cette mesure statique ne
+  compile ni n'exécute les programmes NIST.
+
+## PICTURE éditées et clauses FD
+
+- **87 tests découverts : 86 réussis, un test PE Windows ignoré.** Les nouveaux
+  tests comparent des sorties attendues indépendantes en plus de GnuCOBOL/Rust :
+  signe après échelle et avant modulo, ROUNDED, suppression Z, initialisation,
+  valeurs textuelles brutes, alias, sous-chaînes et IS NUMERIC. Une régression
+  native démontre le repli de constantes des comparaisons/EVALUATE directement
+  édités et impose leur refus explicite jusqu'à modélisation.
+- **45/45 comparaisons locales conformes**. `edited_report.cob` combine FD
+  LABEL/BLOCK/RECORD/RECORDING F, images éditées, alias et contrôles d'impression.
+  Rapport : `build/verification-edited-final.json`.
+- RECORD CONTAINS n'est accepté qu'à taille physique exacte ; les longueurs
+  pouvant sélectionner un format variable sont refusées. Les preuves natives
+  couvrent LABEL/BLOCK en SEQUENTIAL et LINE SEQUENTIAL, octets et statuts.
+- NIST reste à **1/458 émission acceptée**, 73 blocages au prétraitement, 384
+  à l'analyse et zéro erreur interne. Les PICTURE et LABEL/BLOCK révèlent
+  notamment 44 premiers blocages CCVS1 SECTION et 18 clauses FD DATA.
+  Rapport : `build/coverage-nist-edited-final.json`.
+
+La déédition et les images non modélisées restent refusées. Ces tests ne sont
+pas une exécution des assertions de conformité NIST.
+
+## Extension SEQUENTIAL fixe et rapports
+
+- **76 tests découverts : 75 réussis, un test PE Windows ignoré.** Les nouveaux
+  essais natifs comparent aussi les octets attendus : records bruts sans LF,
+  COMP/COMP-3, alias FD, lectures partielles, READ INTO, AFTER/BEFORE avec zéro
+  ligne, plusieurs lignes ou PAGE, fermeture implicite et réouverture EXTEND.
+- **44/44 comparaisons locales conformes**, avec `sequential_records.cob` et
+  `sequential_report.cob`. Rapport : `build/verification-sequential.json`.
+- NIST reste à **1/458 émission acceptée**, 73 blocages au prétraitement et
+  384 à l'analyse, sans erreur interne. Les anciens refus du SEQUENTIAL
+  implicite révèlent désormais les PICTURE éditées, clauses FD et autres
+  fonctionnalités manquantes. Rapport : `build/coverage-nist-sequential.json`.
+
+Les organisations SEQUENTIAL et LINE SEQUENTIAL ont des implémentations
+distinctes. Les descriptions FD de tailles différentes restent refusées,
+ainsi que les formats variables, autres clauses FD et compteurs ADVANCING
+variables. Les preuves portent sur le profil GnuCOBOL et les entrées testés.
+
+## Extension du format fixe et des paragraphes de configuration
+
+- **64 tests découverts : 63 réussis, un test PE Windows ignoré.** Les tests
+  supplémentaires couvrent continuations, guillemets à la colonne 72,
+  littéraux distincts, espaces, tabulations, commentaires et rejets explicites.
+  Les comparaisons ciblées utilisent le source fixe original côté GnuCOBOL.
+- **42/42 comparaisons du corpus local conformes**, avec une nouvelle fixture
+  combinant configuration et continuations. Rapport :
+  `build/verification-continuations.json`.
+- Le même corpus NIST de 458 sources donne **1 émission acceptée**, 73 blocages
+  au prétraitement, 384 à l'analyse et aucune erreur interne. Rapport :
+  `build/coverage-nist-fixed.json`.
+- SM301M a été compilé et exécuté séparément en COBOL et Rust ; sortie d'un
+  espace suivi de LF, codes nuls et fichiers identiques. Rapport :
+  `build/nist-sm301m-verification.json`. Cette vérification ne porte pas sur
+  les diagnostics de conformité que le test NIST attend du compilateur.
+
+Les sections suivantes décrivent les étapes précédentes.
+
+## Reprise Linux et mesure de couverture externe
+
+Le corpus livré a été recompilé et exécuté sous Linux : **41/41 comparaisons
+conformes**, rapport `build/verification.json`. La suite Python historique a
+découvert 34 tests : **33 réussis, un ignoré** car le PE du GnuCOBOL portable
+Windows n'est pas installé. Les outils sont Python 3.12.14, Rust 1.99.1 et
+GnuCOBOL 3.2.0 sur Debian 13 x86-64.
+
+Les outils de préparation et de mesure NIST ajoutent 15 tests. La suite complète
+découvre désormais **49 tests : 48 réussis, un ignoré**. La préparation réelle a
+produit les mêmes 511 empreintes qu'une extraction avec les outils officiels.
+
+L'analyse statique NIST CCVS85 a inventorié **458 sources** (414 `.CBL` et
+44 `.SUB`), toutes bloquées avant émission Rust : 398 au prétraitement, 60 à
+l'analyse, zéro erreur interne. Aucun cas NIST n'a été exécuté ; ce résultat
+mesure les lacunes de prise en charge, pas une conformité. Les détails,
+empreintes et priorités sont dans [COVERAGE.md](COVERAGE.md). Les sections de
+livraison ci-dessous conservent leurs résultats historiques Windows.
 
 ## Version 0.4 : tables variables, index et erreurs de taille
 

@@ -1,0 +1,68 @@
+"""FD clauses for the tested GnuCOBOL 3.2 ordinary disk-file profile.
+
+LABEL and BLOCK clauses are retained as metadata. GnuCOBOL does not add labels
+or physical blocking for the supported disk files. RECORD is accepted only as
+a fixed length; the caller must validate it against every FD record after layout.
+"""
+from __future__ import annotations
+
+
+def unsigned(parser, clause, minimum=0):
+    token = parser.t
+    if (token.string or not token.text.isascii() or not token.text.isdigit()
+            or len(token.text.lstrip("0")) > 10):
+        parser.error(f"{clause} requiert un entier littéral non signé")
+    value = int(parser.take().text.lstrip("0") or "0")
+    if not minimum <= value <= 2147483647:
+        parser.error(f"{clause} limité à {minimum}..2147483647")
+    return value
+
+
+def parse_fd_clauses(parser, spec):
+    """Consume FD options and their terminating period, preserving metadata."""
+    clauses = {}
+
+    def put(name, value):
+        if name in clauses:
+            parser.error(f"clause FD {name} dupliquée")
+        clauses[name] = value
+
+    while not parser.at("."):
+        if parser.accept("LABEL"):
+            if not (parser.accept("RECORD") or parser.accept("RECORDS")):
+                parser.error("LABEL requiert RECORD ou RECORDS")
+            parser.accept("IS") or parser.accept("ARE")
+            if parser.accept("OMITTED"):
+                label = "OMITTED"
+            elif parser.accept("STANDARD"):
+                label = "STANDARD"
+            else:
+                parser.error("LABEL RECORDS limité à OMITTED ou STANDARD")
+            put("label_records", label)
+        elif parser.accept("BLOCK"):
+            parser.accept("CONTAINS")
+            low = unsigned(parser, "BLOCK")
+            high = unsigned(parser, "BLOCK") if parser.accept("TO") else low
+            if high < low:
+                parser.error("bornes BLOCK inversées non prises en charge")
+            unit = "CHARACTERS" if parser.accept("CHARACTERS") else "RECORDS"
+            if unit == "RECORDS":
+                parser.accept("RECORDS")
+            put("block_contains", {"minimum": low, "maximum": high, "unit": unit})
+        elif parser.accept("RECORD"):
+            parser.accept("CONTAINS")
+            length = unsigned(parser, "RECORD CONTAINS", minimum=1)
+            if parser.at("TO") or parser.at("DEPENDING"):
+                parser.error("RECORD variable non pris en charge; longueur fixe exacte requise")
+            parser.accept("CHARACTERS")
+            put("record_contains", length)
+        elif parser.accept("RECORDING"):
+            parser.accept("MODE")
+            parser.accept("IS")
+            if not parser.accept("F"):
+                parser.error("RECORDING MODE limité à F pour des enregistrements fixes")
+            put("recording_mode", "F")
+        else:
+            parser.error("clause FD non prise en charge")
+    parser.expect(".")
+    spec.fd_clauses = clauses

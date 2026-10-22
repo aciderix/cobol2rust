@@ -96,10 +96,9 @@ def declaration(p, file_record=False):
             if picture:
                 p.error("PICTURE dupliquée")
             p.accept("IS")
-            while p.t.key not in {"VALUE", "USAGE", "OCCURS", "REDEFINES", "INDEXED", ".", "<EOF>"} | USAGES:
-                if p.t.string:
-                    p.error("PICTURE invalide")
-                picture += p.take().key
+            if p.t.string or p.t.key in {".", "<EOF>", "VALUE", "USAGE", "OCCURS", "INDEXED"} | USAGES:
+                p.error("mot PICTURE contigu attendu")
+            picture = p.take().key
         elif p.accept("OCCURS"):
             if table or not p.t.key.isdigit():
                 p.error("nombre OCCURS attendu")
@@ -144,7 +143,13 @@ def declaration(p, file_record=False):
                 p.error("USAGE/clause non pris en charge")
             usage = p.take().key
     p.expect(".")
-    expanded = re.sub(r"([9X])\((\d+)\)", lambda m: m[1] * min(int(m[2]), 257), picture)
+    def repeat(match):
+        count = int(match[2])
+        if count < 1:
+            p.error("répétition PICTURE strictement positive requise")
+        return match[1] * min(count, 257)
+
+    expanded = re.sub(r"([9XZ])\((\d+)\)", repeat, picture)
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
         if initial or has_usage:
@@ -160,18 +165,26 @@ def declaration(p, file_record=False):
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
         if digits > 18:
             p.error("PIC numérique limité à 18 chiffres")
+    elif (re.fullmatch(r"[+-]9+(?:\.9+)?", expanded) or
+          re.fullmatch(r"[+-]?9*\.9+", expanded) or
+          re.fullmatch(r"Z+9+(?:\.9+)?", expanded)):
+        kind, digits, signed = "edited", expanded.count("9") + expanded.count("Z"), expanded.startswith(("+", "-"))
+        scale = len(expanded.split(".")[1]) if "." in expanded else 0
+        if digits > 18 or len(expanded) > 256 or usage != "DISPLAY":
+            p.error("PIC éditée limitée à 18 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
     if initial is not None:
         if file_record or redefines:
             p.error("VALUE sur FD/REDEFINES non pris en charge")
-        if (kind == "text") != initial.string:
+        if kind != "edited" and (kind == "text") != initial.string:
             p.error("VALUE incompatible avec la PICTURE")
     else:
         initial = Token("" if kind == "text" else "0", p.t.line, kind == "text")
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.occurs_min, descriptor.depending = minimum, depending
+    descriptor.editing = expanded if kind == "edited" else ""
     p.fields[key] = descriptor
     if parent:
         p.fields[parent].children.append(key)

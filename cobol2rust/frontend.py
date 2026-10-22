@@ -14,23 +14,64 @@ class Token:
     text: str
     line: int
     string: bool = False
+    start: int = field(default=0, compare=False, repr=False)
+    end: int = field(default=0, compare=False, repr=False)
 
     @property
     def key(self):
         return self.text if self.string else self.text.upper()
 
 
+def fixed_fragment(area: str, quotation=None):
+    """Read columns 8..72, retaining GnuCOBOL's column-72 quote state."""
+    consecutive = False
+    end = len(area)
+    for index, char in enumerate(area):
+        if quotation is None and area.startswith("*>", index):
+            end = index
+            break
+        if char in "\"'":
+            if quotation is None:
+                quotation = char
+            elif char == quotation:
+                if index == 64:
+                    consecutive = True
+                else:
+                    quotation = None
+    text = area[:end]
+    if quotation is not None:
+        text = text.ljust(65)
+    else:
+        text = text.rstrip()
+        # A closed literal must not merge with the next opening delimiter.
+        if text.endswith(("'", '"')):
+            text += " "
+    return text, quotation, consecutive
+
+
 def normalize(source: str, fmt: str = "auto") -> str:
+    from .documentary import DocumentaryFilter
+
     lines = source.splitlines()
     fmt = source_format(source, fmt)
+    documentary = DocumentaryFilter()
     result = []
+    previous = None
+    quotation = None
+    consecutive = False
     for number, line in enumerate(lines, 1):
         directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
         if directive:
+            if quotation is not None and not consecutive:
+                raise CobolError(f"ligne {number}: directive au milieu d'un littéral fixe continué")
             fmt = directive[1].lower()
+            documentary.format_changed(fmt)
+            previous, quotation, consecutive = None, None, False
             result.append("")
             continue
         if fmt == "fixed":
+            # Default GnuCOBOL tab width, applied before counting source columns.
+            line = line.expandtabs(8)
             if not line.strip():
                 result.append("")
                 continue
@@ -40,29 +81,104 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if indicator in "*/":
                 result.append("")
                 continue
-            if indicator != " ":
+            if indicator not in " -":
                 raise CobolError(f"ligne {number}: indicateur fixe {indicator!r} non pris en charge")
             line = line[7:72]
             directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
             if directive:
+                if quotation is not None and not consecutive:
+                    raise CobolError(f"ligne {number}: directive au milieu d'un littéral fixe continué")
+                if indicator == "-":
+                    raise CobolError(f"ligne {number}: directive sur une ligne de continuation")
                 fmt = directive[1].lower()
+                documentary.format_changed(fmt)
+                previous, quotation, consecutive = None, None, False
                 result.append("")
                 continue
-        result.append(line)
+            if indicator != "-" and quotation is not None and not consecutive and line.strip():
+                raise CobolError(f"ligne {number}: littéral fixe non terminé; indicateur '-' attendu")
+            # Documentary prose may contain arbitrary quotes and COPY words.
+            # Filter it before literal continuation and token processing, while
+            # keeping genuine literal continuations outside the filter.
+            if not (quotation is not None and indicator == "-") and documentary.is_comment(line, fmt, indicator, number):
+                previous, quotation, consecutive = None, None, False
+                result.append("")
+                continue
+            if not line.strip():
+                result.append("")
+                continue
+            if indicator == "-":
+                if previous is None:
+                    raise CobolError(f"ligne {number}: continuation fixe sans ligne précédente")
+                start = len(line) - len(line.lstrip(" "))
+                prefix = quotation * (2 if consecutive else 1) if quotation else ""
+                if prefix and not line[start:].startswith(prefix):
+                    raise CobolError(f"ligne {number}: délimiteur de littéral continué attendu: {prefix!r}")
+                if quotation:
+                    # Keep original column positions for padding and the col-72 rule.
+                    line = " " * (start + 1) + line[start + 1:]
+                    if consecutive:
+                        quotation = None
+                    start += 1
+                fragment, quotation, consecutive = fixed_fragment(line, quotation)
+                result[previous] += fragment[start:]
+                result.append("")
+                continue
+            if quotation is not None and not consecutive:
+                raise CobolError(f"ligne {number}: littéral fixe non terminé; indicateur '-' attendu")
+            fragment, quotation, consecutive = fixed_fragment(line)
+            result.append(fragment)
+            if fragment.strip():
+                previous = len(result) - 1
+            continue
+        result.append("" if documentary.is_comment(line, fmt, line=number) else line)
     return "\n".join(result)
 
 
 def lex(source: str) -> list[Token]:
     tokens = []
     i, line = 0, 1
+    picture_pending = False
+    parentheses = 0
     while i < len(source):
         c = source[i]
+        token_start = i
         if c.isspace():
             line += c == "\n"
             i += 1
         elif source.startswith("*>", i):
             end = source.find("\n", i)
             i = len(source) if end < 0 else end
+        elif picture_pending:
+            # A PICTURE is one contiguous word, not ordinary COBOL tokens.
+            # Keep commas of editing images; return one terminal comma/period
+            # to the normal scanner, matching the reference compiler.
+            end = i
+            while (end < len(source) and not source[end].isspace() and source[end] != ";"
+                   and not source.startswith("*>", end)):
+                end += 1
+            word = source[i:end]
+            if word.upper() == "IS":
+                tokens.append(Token(word, line, False, i, end))
+                i = end
+                continue
+            if word.endswith((".", ",")):
+                end -= 1
+                word = source[i:end]
+            if not word or not word.isascii():
+                raise CobolError(f"ligne {line}: mot PICTURE ASCII contigu attendu")
+            tokens.append(Token(word, line, False, i, end))
+            i = end
+            picture_pending = False
+        elif c in ",;":
+            # Parenthesized lists need a delimiter: dropping it would merge
+            # t(1,+2) into the single arithmetic subscript t(1+2).
+            end = i + 1
+            while end < len(source) and source[end] == c:
+                end += 1
+            if parentheses:
+                tokens.append(Token(c, line, False, i, end))
+            i = end
         elif c in "\"'":
             quote, start, value = c, line, ""
             i += 1
@@ -82,14 +198,20 @@ def lex(source: str) -> list[Token]:
                 raise CobolError(f"ligne {start}: littéral non terminé")
             if not value.isascii():
                 raise CobolError(f"ligne {start}: seuls les littéraux ASCII sont pris en charge")
-            tokens.append(Token(value, start, True))
+            tokens.append(Token(value, start, True, token_start, i))
         else:
             match = re.match(r"\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|[.(),:+*/=<>-]", source[i:])
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
-            tokens.append(Token(match[0], line))
+            tokens.append(Token(match[0], line, False, i, i + len(match[0])))
             i += len(match[0])
-    tokens.append(Token("<EOF>", line))
+            if match[0].upper() in {"PIC", "PICTURE"} and not (len(tokens) > 1 and tokens[-2].key == "COPY"):
+                picture_pending = True
+            elif match[0] == "(":
+                parentheses += 1
+            elif match[0] == ")" and parentheses:
+                parentheses -= 1
+    tokens.append(Token("<EOF>", line, False, len(source), len(source)))
     return tokens
 
 
@@ -113,6 +235,16 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
             end = toks[i + 2].line
             if start != end or any(t.line == start for t in toks[:i]) or (toks[i + 3].key != "<EOF>" and toks[i + 3].line == end):
                 raise CobolError(f"ligne {start}: COPY doit occuper une ligne entière")
+            # The COPY preprocessor has its own separator grammar. Do not
+            # admit extra punctuation just because the ordinary lexer skips it.
+            declaration_line = lines[start - 1]
+            first, name_token, period = toks[i:i + 3]
+            line_start = text.rfind("\n", 0, first.start) + 1
+            pieces = [declaration_line[:first.start - line_start],
+                      text[first.end:name_token.start], text[name_token.end:period.start],
+                      declaration_line[period.end - line_start:].split("*>", 1)[0]]
+            if any("," in piece or ";" in piece for piece in pieces):
+                raise CobolError(f"ligne {start}: séparateurs supplémentaires dans COPY non pris en charge")
             roots = [path.parent, *include_dirs]
             candidates = [root / (name + ext) for root in roots for ext in ("", ".cpy", ".CPY", ".cob", ".cbl")]
             found = next((p for p in candidates if p.is_file()), None)
@@ -154,6 +286,7 @@ class Field:
     occurs_min: int = 1
     depending: str | None = None
     index_for: str | None = None
+    editing: str = ""
 
 
 @dataclass(frozen=True)
@@ -177,6 +310,8 @@ class Condition:
 class Expr:
     op: str
     args: tuple
+    figurative_zero: bool = False
+    figurative_space: bool = False
 
 
 @dataclass
@@ -193,6 +328,16 @@ class FileSpec:
     optional: bool = False
     status: str | None = None
     record: str | None = None
+    organization: str = "LINE SEQUENTIAL"
+    records: list[str] = field(default_factory=list)
+    fd_clauses: dict = field(default_factory=dict)
+
+
+@dataclass
+class ProcedureBlock:
+    name: str | None
+    section: str | None
+    body: list[Stmt]
 
 
 @dataclass
@@ -204,9 +349,23 @@ class Program:
     files: dict[str, FileSpec] = field(default_factory=dict)
     conditions: dict[str, Condition] = field(default_factory=dict)
     memory_size: int = 0
+    blocks: list[ProcedureBlock] = field(default_factory=list)
+    sections: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+    def procedure_range(self, name: str) -> tuple[int, int]:
+        if name in self.sections:
+            return self.sections[name]
+        if self.blocks:
+            for index, block in enumerate(self.blocks):
+                if block.name == name:
+                    return index, index + 1
+        elif name in self.paragraphs:
+            index = list(self.paragraphs).index(name) + 1
+            return index, index + 1
+        raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE CLOSE SET".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE CLOSE SET GO".split())
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE AT NOT ON . <EOF>".split())
 
 
@@ -255,6 +414,8 @@ class Parser:
     def name(self):
         if self.t.string or not re.fullmatch(r"[A-Z_][A-Z_0-9-]*", self.t.key):
             self.error("identifiant attendu")
+        if self.t.key in {"PIC", "PICTURE"}:
+            self.error("nom réservé: " + self.t.key)
         return self.take().key
 
     def variable(self):
@@ -303,7 +464,7 @@ class Parser:
             else:
                 indices.append(first)
                 while not self.accept(")"):
-                    self.accept(",")
+                    self.accept(",") or self.accept(";")
                     if self.at("<EOF>"):
                         self.error("sous-script non terminé")
                     indices.append(self.expr())
@@ -329,15 +490,7 @@ class Parser:
         name = self.name()
         self.expect(".")
         if self.accept("ENVIRONMENT"):
-            self.expect("DIVISION")
-            self.expect(".")
-            self.expect("INPUT-OUTPUT")
-            self.expect("SECTION")
-            self.expect(".")
-            self.expect("FILE-CONTROL")
-            self.expect(".")
-            while self.at("SELECT"):
-                self.file_control()
+            self.environment_division()
         if self.accept("DATA"):
             self.expect("DIVISION")
             self.expect(".")
@@ -349,15 +502,24 @@ class Parser:
                     spec = self.files[file_name]
                     if spec.record:
                         self.error("FD dupliqué")
-                    self.expect(".")
-                    self.data_stack = []
-                    record = self.t
-                    spec.record = self.declaration(file_record=True)
-                    while self.t.key.isdigit() and self.t.key not in {"01", "1", "77"}:
-                        self.declaration(file_record=True)
-                    field = self.fields[spec.record]
-                    if record.key not in {"01", "1"} or field.kind != "text" or field.table:
-                        self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS à la racine")
+                    from .file_parser import parse_fd_clauses
+                    parse_fd_clauses(self, spec)
+                    while not spec.records or (self.t.key.isdigit() and self.t.key in {"01", "1", "77"}):
+                        self.data_stack = []
+                        record = self.t
+                        key = self.declaration(file_record=True)
+                        while self.t.key.isdigit() and self.t.key not in {"01", "1", "77"}:
+                            self.declaration(file_record=True)
+                        descriptor = self.fields[key]
+                        if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
+                            self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
+                        if spec.records:
+                            if spec.organization != "SEQUENTIAL":
+                                self.error("plusieurs enregistrements FD limités à SEQUENTIAL de taille fixe égale")
+                            descriptor.redefines = spec.record
+                        else:
+                            spec.record = key
+                        spec.records.append(key)
             if self.accept("WORKING-STORAGE"):
                 self.expect("SECTION")
                 self.expect(".")
@@ -378,7 +540,10 @@ class Parser:
         self.expect("PROCEDURE")
         self.expect("DIVISION")
         self.expect(".")
-        entry, paragraphs, current = [], {}, None
+        entry, paragraphs = [], {}
+        blocks = [ProcedureBlock(None, None, entry)]
+        sections = {}
+        current_body, current_section = entry, None
         while not self.at("<EOF>"):
             if self.accept("."):
                 continue
@@ -389,17 +554,64 @@ class Parser:
                 self.expect(".")
                 self.expect("<EOF>")
                 break
-            if self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
-                current = self.name()
-                if current in paragraphs:
-                    self.error("paragraphe dupliqué")
+            if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
+                section = self.name()
+                if section in sections or section in paragraphs:
+                    self.error(f"nom de procédure dupliqué: {section}; les homonymes ne sont pas pris en charge")
+                self.expect("SECTION")
+                if self.t.key.isdigit():
+                    self.error("numéro de segment SECTION non pris en charge")
                 self.expect(".")
-                paragraphs[current] = []
+                if current_section is not None:
+                    sections[current_section] = (sections[current_section][0], len(blocks))
+                current_section = section
+                sections[section] = (len(blocks), len(blocks) + 1)
+                current_body = []
+                blocks.append(ProcedureBlock(None, section, current_body))
+            elif self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
+                paragraph = self.name()
+                if paragraph in paragraphs or paragraph in sections:
+                    self.error(f"nom de procédure dupliqué: {paragraph}; les homonymes ne sont pas pris en charge")
+                self.expect(".")
+                current_body = []
+                paragraphs[paragraph] = current_body
+                blocks.append(ProcedureBlock(paragraph, current_section, current_body))
             else:
-                (entry if current is None else paragraphs[current]).append(self.statement())
-        program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size)
+                current_body.append(self.statement())
+        if current_section is not None:
+            sections[current_section] = (sections[current_section][0], len(blocks))
+        program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
+                          blocks, sections)
         self.validate_calls(program)
         return program
+
+    def environment_division(self):
+        self.expect("DIVISION")
+        self.expect(".")
+        if self.accept("CONFIGURATION"):
+            self.expect("SECTION")
+            self.expect(".")
+            computers = set()
+            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER"):
+                paragraph = self.take().key
+                if paragraph in computers:
+                    self.error(f"paragraphe {paragraph} dupliqué")
+                computers.add(paragraph)
+                self.expect(".")
+                self.name()
+                if not self.accept("."):
+                    self.error(f"clause {paragraph} non prise en charge; seul le nom de machine est accepté")
+            if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
+                self.error("paragraphe CONFIGURATION non pris en charge")
+        if self.accept("INPUT-OUTPUT"):
+            self.expect("SECTION")
+            self.expect(".")
+            self.expect("FILE-CONTROL")
+            self.expect(".")
+            while self.at("SELECT"):
+                self.file_control()
+        if not (self.at("DATA") or self.at("PROCEDURE")):
+            self.error("clause ENVIRONMENT DIVISION non prise en charge")
 
     def file_name(self):
         name = self.name()
@@ -420,12 +632,12 @@ class Parser:
             self.error("ASSIGN requiert un chemin littéral entre guillemets")
         if not path.text or any(ord(c) < 32 for c in path.text):
             self.error("chemin ASSIGN vide ou invalide")
-        organization, status, access = False, None, False
+        organization, organization_seen, status, access = "SEQUENTIAL", False, None, False
         while not self.at("."):
-            if self.accept("ORGANIZATION") and not organization:
-                organization = True
+            if self.accept("ORGANIZATION") and not organization_seen:
+                organization_seen = True
                 self.accept("IS")
-                self.expect("LINE")
+                organization = "LINE SEQUENTIAL" if self.accept("LINE") else "SEQUENTIAL"
                 self.expect("SEQUENTIAL")
             elif self.accept("ACCESS") and not access:
                 access = True
@@ -439,9 +651,7 @@ class Parser:
             else:
                 self.error("clause SELECT non prise en charge")
         self.expect(".")
-        if not organization:
-            self.error("ORGANIZATION LINE SEQUENTIAL explicite requise")
-        self.files[name] = FileSpec(name, path, optional, status)
+        self.files[name] = FileSpec(name, path, optional, status, organization=organization)
 
     def validate_files(self):
         paths = set()
@@ -456,12 +666,16 @@ class Parser:
             if spec.status:
                 spec.status = self.resolve(spec.status)
                 status = self.fields.get(spec.status)
-                if not status or status.digits != 2 or status.scale or status.signed or status.usage != "DISPLAY" or status.dimensions:
+                if not status or status.kind not in {"text", "number"} or status.digits != 2 or status.scale or status.signed or status.usage != "DISPLAY" or status.dimensions:
                     self.error(f"FILE STATUS {spec.status} doit être PIC XX ou PIC 99 DISPLAY")
-                if any(spec.status == f.record for f in self.files.values()):
-                    self.error("FILE STATUS ne peut pas être un enregistrement FD")
+                if status.file_record:
+                    self.error("FILE STATUS ne peut pas être une donnée FD")
             from .layout import leaves
-            if any(f.usage != "DISPLAY" for f in leaves(self.fields, spec.record, True)):
+            if any(self.fields[key].size != self.fields[spec.record].size for key in spec.records):
+                self.error("enregistrements FD de tailles différentes non pris en charge; format variable requis")
+            if "record_contains" in spec.fd_clauses and any(self.fields[key].size != spec.fd_clauses["record_contains"] for key in spec.records):
+                self.error("RECORD CONTAINS doit égaler la taille physique de chaque description FD; format variable non pris en charge")
+            if spec.organization == "LINE SEQUENTIAL" and any(f.usage != "DISPLAY" for f in leaves(self.fields, spec.record, True)):
                 self.error("LINE SEQUENTIAL requiert des colonnes DISPLAY")
 
     def declaration(self, file_record=False):
@@ -475,9 +689,9 @@ class Parser:
         elif re.fullmatch(r"\d+(?:\.\d+)?", t.text):
             left = Expr("number", (t.text,))
         elif t.key in {"ZERO", "ZEROS", "ZEROES"}:
-            left = Expr("number", ("0",))
+            left = Expr("number", ("0",), figurative_zero=True)
         elif t.key in {"SPACE", "SPACES"}:
-            left = Expr("text", (" ",))
+            left = Expr("text", (" ",), figurative_space=True)
         elif t.key in {"+", "-"}:
             left = Expr("unary" + t.key, (self.expr(30),))
         elif t.key == "(":
@@ -626,12 +840,26 @@ class Parser:
             return Stmt("read", (name, into, at_end, not_end), line)
         if verb == "WRITE":
             record = self.variable()
-            files = [f.name for f in self.files.values() if f.record == record.name and not record.indices and record.start is None]
+            files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
             if not files:
                 self.error(f"WRITE requiert un enregistrement FD: {record}")
             value = self.expr() if self.accept("FROM") else None
+            advancing = None
+            if self.at("BEFORE") or self.at("AFTER"):
+                direction = self.take().key
+                self.expect("ADVANCING")
+                if self.accept("PAGE"):
+                    count = None
+                else:
+                    if self.t.string or not self.t.text.isdigit() or not 0 <= int(self.t.text) <= 65535:
+                        self.error("ADVANCING requiert PAGE ou un entier littéral de 0 à 65535")
+                    count = int(self.take().text)
+                    self.accept("LINE") or self.accept("LINES")
+                if self.files[files[0]].organization != "SEQUENTIAL":
+                    self.error("WRITE ADVANCING limité à SEQUENTIAL dans le profil actuel")
+                advancing = (direction, count)
             self.accept("END-WRITE")
-            return Stmt("write", (files[0], value), line)
+            return Stmt("write", (files[0], record.name, value, advancing), line)
         if verb == "DISPLAY":
             values = []
             while self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}:
@@ -647,13 +875,15 @@ class Parser:
             return Stmt("display", (values, newline), line)
         if verb == "ACCEPT":
             name = self.variable()
+            if self.fields[name.name].kind == "edited" and name.start is None:
+                self.error("ACCEPT vers une PICTURE éditée non pris en charge")
             self.accept("END-ACCEPT")
             return Stmt("accept", (name,), line)
         if verb == "MOVE":
             value = self.expr()
             self.expect("TO")
             targets = self.targets()
-            return Stmt("assign", (value, targets, False), line)
+            return Stmt("move", (value, targets, False), line)
         if verb == "COMPUTE":
             name = self.variable()
             rounded = self.accept("ROUNDED")
@@ -685,12 +915,37 @@ class Parser:
             if not self.accept("END-IF") and not self.at("."):
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
+        if verb == "GO":
+            self.accept("TO")
+            targets = []
+            while not self.at("DEPENDING") and (self.t.string or self.t.key not in BOUNDARIES):
+                targets.append(self.name())
+                if self.at("OF") or self.at("IN"):
+                    self.error("nom de procédure qualifié non pris en charge")
+            if not targets:
+                self.error("GO TO requiert une cible; GO TO modifié par ALTER non pris en charge")
+            controller = None
+            if self.accept("DEPENDING"):
+                self.accept("ON")
+                controller = self.variable()
+                field = self.fields[controller.name]
+                if controller.start is not None or field.kind != "number" or field.scale != 0:
+                    self.error("GO TO DEPENDING ON requiert une donnée numérique entière non éditée")
+                if field.digits > 9:
+                    self.error("GO TO DEPENDING ON limité aux contrôleurs de 9 chiffres au plus; conversions natives larges non modélisées")
+            elif len(targets) != 1:
+                self.error("GO TO à plusieurs cibles requiert DEPENDING ON")
+            return Stmt("goto", (targets, controller), line)
         if verb == "PERFORM":
             target = None
             if self.t.key not in {"UNTIL", "VARYING", "WITH"} and not self.candidates(self.t.key) and re.fullmatch(r"[A-Z_][A-Z_0-9-]*", self.t.key):
                 target = [self.name()]
+                if self.at("OF") or self.at("IN"):
+                    self.error("nom de procédure qualifié non pris en charge")
                 if self.accept("THRU") or self.accept("THROUGH"):
                     target.append(self.name())
+                    if self.at("OF") or self.at("IN"):
+                        self.error("nom de procédure qualifié non pris en charge")
             test_after = False
             if self.accept("WITH"):
                 self.expect("TEST")
@@ -753,8 +1008,15 @@ class Parser:
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
         if verb == "EXIT":
-            self.expect("PARAGRAPH")
-            return Stmt("exit_paragraph", (), line)
+            if self.accept("PARAGRAPH"):
+                return Stmt("exit_paragraph", (), line)
+            if self.accept("SECTION"):
+                return Stmt("exit_section", (), line)
+            if self.at("PERFORM") or self.at("CYCLE"):
+                self.error(f"EXIT {self.t.key} non pris en charge")
+            if not self.t.string and self.t.key in BOUNDARIES:
+                return Stmt("continue", (), line)
+            self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")
         self.error(f"instruction non prise en charge: {verb}")
 
     def arithmetic(self, verb, value, targets, rounded, line):
@@ -783,29 +1045,34 @@ class Parser:
         return names
 
     def validate_calls(self, program):
-        def walk(stmts):
+        def walk(stmts, section=None):
             for s in stmts:
-                if s.op == "call":
+                if s.op in {"call", "goto"}:
                     targets = s.args[0]
-                    for name in targets:
-                        if name not in program.paragraphs:
-                            raise CobolError(f"ligne {s.line}: paragraphe inconnu: {name}")
-                    if len(targets) == 2:
-                        names = list(program.paragraphs)
-                        if names.index(targets[0]) > names.index(targets[1]):
-                            raise CobolError(f"ligne {s.line}: intervalle THRU inversé")
+                    try:
+                        ranges = [program.procedure_range(name) for name in targets]
+                    except CobolError as error:
+                        raise CobolError(f"ligne {s.line}: {error}") from None
+                    if s.op == "call" and len(ranges) == 2 and ranges[-1][1] <= ranges[0][0]:
+                        raise CobolError(f"ligne {s.line}: intervalle THRU inversé")
+                elif s.op == "exit_section" and section is None:
+                    raise CobolError(f"ligne {s.line}: EXIT SECTION requiert une section de procédure")
                 elif s.op == "loop":
-                    walk(s.args[2])
+                    walk(s.args[2], section)
                 elif s.op == "if":
-                    walk(s.args[1]); walk(s.args[2])
+                    walk(s.args[1], section); walk(s.args[2], section)
                 elif s.op == "evaluate":
                     for _, body in s.args[1]:
-                        walk(body)
-                    walk(s.args[2])
+                        walk(body, section)
+                    walk(s.args[2], section)
                 elif s.op == "read":
-                    walk(s.args[2]); walk(s.args[3])
+                    walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
-                    walk(s.args[3]); walk(s.args[4])
-        walk(program.entry)
-        for body in program.paragraphs.values():
-            walk(body)
+                    walk(s.args[3], section); walk(s.args[4], section)
+        if program.blocks:
+            for block in program.blocks:
+                walk(block.body, block.section)
+        else:
+            walk(program.entry)
+            for body in program.paragraphs.values():
+                walk(body)
