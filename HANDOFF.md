@@ -4,6 +4,16 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : OPEN I-O et REWRITE SEQUENTIAL. `State::InputOutput(File)`
+lit sans tampon pour que REWRITE recule exactement d'un enregistrement
+(`sequential_rewrite`). Mesures natives : I-O absent 35 ; OPTIONAL absent 05 et
+fichier créé vide ; REWRITE sans READ réussi 43 (aussi après un REWRITE, un
+WRITE ou une fin de fichier) ; WRITE en I-O 48 ; REWRITE hors I-O 49. Un READ 0x
+arme REWRITE (`read_done`). LINE SEQUENTIAL en I-O/REWRITE est refusé : la
+réécriture native écrase des lignes de longueur différente. REWRITE après un
+enregistrement partiel s'arrête. NIST **66/458**, **66/66 conformes**
+(539 PASS, 1 INSPECT) : `build/nist-verify-66.json`.
+
 Dernière étape : DECLARATIVES, READ souple et CLOSE WITH LOCK.
 `USE AFTER [STANDARD] {ERROR|EXCEPTION} PROCEDURE [ON] {fichiers|INPUT|OUTPUT|
 I-O|EXTEND}` est analysé dans `use_statement` ; `Program.file_declaratives`,

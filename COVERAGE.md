@@ -441,6 +441,14 @@ sont conformes avec `tools/nist_verify.py`, REPORT identiques au runner natif,
 117 PASS sans FAIL (`build/nist-verify-decl.json`, `build/nist-verify-rc.json`).
 Rapport statique : `build/coverage-nist-read-close.json`.
 
+## Progression : OPEN I-O et REWRITE séquentiels
+
+OPEN I-O et REWRITE SEQUENTIAL portent l'émission acceptée à **66/458**. Toutes
+les sources acceptées sont reverifiées avec les entrées du runner : **66/66
+conformes**, 539 PASS, 1 INSPECT (SM106A), aucun FAIL
+(`build/nist-verify-66.json`). Prochains obstacles : RELATIVE (32), INDEXED (26),
+fonctions intrinsèques, WITH DEBUGGING MODE et PROGRAM COLLATING SEQUENCE.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

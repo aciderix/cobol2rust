@@ -310,6 +310,12 @@ class Emitter:
             for name, lock in a[0]:
                 self.write(f"let status = self.{self.files[name]}.close({str(lock).lower()});")
                 self.file_status(name, "status")
+        elif op == "rewrite":
+            name, record, value = a
+            if value:
+                self.assignment(value, [record], False)
+            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.names[record]});")
+            self.file_status(name, "status")
         elif op == "write":
             name, record, value, advancing = a
             if value:

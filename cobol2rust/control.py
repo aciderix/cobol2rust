@@ -101,7 +101,7 @@ class ControlGraph:
             for part in reversed(args[0]):
                 position = self._statement(Stmt(op, ([part],), stmt.line), position, block)
             return position
-        if op in {"open", "close", "write"}:
+        if op in {"open", "close", "write", "rewrite"}:
             name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
             return self._add("io", (stmt, after, self._declaratives(name, after)), stmt)
         if op == "arithmetic":

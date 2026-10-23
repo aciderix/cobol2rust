@@ -1,9 +1,9 @@
 // GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL and fixed SEQUENTIAL.
 use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use crate::runtime::{Value, fail};
 
-enum State { Closed, Locked, Input(BufReader<File>), Output(File), Missing }
+enum State { Closed, Locked, Input(BufReader<File>), Output(File), InputOutput(File), Missing }
 
 #[derive(Clone, Copy)]
 pub enum Advance { BeforeLines(u32), AfterLines(u32), BeforePage, AfterPage }
@@ -22,6 +22,7 @@ pub struct CobolFile {
     needs_nl: bool,
     last_read_size: usize,
     last_open_mode: &'static str,
+    read_done: bool,
 }
 
 fn setting(name: &str, default: bool) -> bool {
@@ -73,7 +74,7 @@ impl CobolFile {
         let line = organization == Organization::LineSequential;
         Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
-               needs_nl: false, last_read_size: 0, last_open_mode: "" }
+               needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false }
     }
 
     /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
@@ -84,9 +85,29 @@ impl CobolFile {
         if matches!(self.state, State::Locked) { return 38; }
         if !matches!(self.state, State::Closed) { return 41; }
         self.last_open_mode = match mode {
-            "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND",
+            "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        self.read_done = false;
+        if mode == "I-O" {
+            if self.organization != Organization::Sequential { fail("OPEN I-O limited to SEQUENTIAL files"); }
+            self.needs_nl = false;
+            self.last_read_size = 0;
+            // GnuCOBOL opens "r+"; a missing OPTIONAL file is created empty (05).
+            return match OpenOptions::new().read(true).write(true).open(&self.path) {
+                Ok(file) => { self.state = State::InputOutput(file); self.eof = false; 0 },
+                Err(error) if error.kind() == io::ErrorKind::NotFound && self.optional => {
+                    match OpenOptions::new().read(true).write(true).create(true).open(&self.path) {
+                        Ok(file) => { self.state = State::InputOutput(file); self.eof = false; 5 },
+                        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => 37,
+                        Err(error) => fail(&format!("unmodelled OPEN I-O failure: {error}")),
+                    }
+                },
+                Err(error) if error.kind() == io::ErrorKind::NotFound => 35,
+                Err(error) if error.kind() == io::ErrorKind::PermissionDenied => 37,
+                Err(error) => fail(&format!("unmodelled OPEN I-O failure: {error}")),
+            };
+        }
         self.needs_nl = false;
         self.last_read_size = 0;
         let result = match mode {
@@ -118,6 +139,10 @@ impl CobolFile {
     pub fn close(&mut self, lock: bool) -> u8 {
         if matches!(self.state, State::Closed) { return 42; }
         if matches!(self.state, State::Locked) { fail("CLOSE of a file closed WITH LOCK not modelled"); }
+        self.read_done = false;
+        if let State::InputOutput(file) = &mut self.state {
+            file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+        }
         if let State::Output(file) = &mut self.state {
             if self.needs_nl {
                 file.write_all(b"\n").unwrap_or_else(|e| fail(&format!("file closing newline failed: {e}")));
@@ -134,13 +159,26 @@ impl CobolFile {
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     pub fn read(&mut self, record: &mut Value) -> u8 {
+        let status = self.read_record(record);
+        // Like cob_read, any 0x status enables a following REWRITE.
+        self.read_done = status < 10;
+        status
+    }
+
+    fn read_record(&mut self, record: &mut Value) -> u8 {
         self.last_read_size = 0;
-        if !matches!(self.state, State::Input(_) | State::Missing) { return 47; }
+        self.read_done = false;
+        if !matches!(self.state, State::Input(_) | State::InputOutput(_) | State::Missing) { return 47; }
         if self.eof { return 46; }
         if matches!(self.state, State::Missing) { self.eof = true; return 10; }
         let size = record.text_size();
-        let reader = match &mut self.state { State::Input(reader) => reader, _ => unreachable!() };
         if self.organization == Organization::Sequential {
+            // I-O reads are unbuffered so that REWRITE seeks from the true position.
+            let reader: &mut dyn Read = match &mut self.state {
+                State::Input(reader) => reader,
+                State::InputOutput(file) => file,
+                _ => unreachable!(),
+            };
             // A short final fixed record replaces only the bytes physically read.
             let mut bytes = record.bytes();
             let mut count = 0;
@@ -157,6 +195,7 @@ impl CobolFile {
             record.assign(&Value::Bytes(bytes), false);
             return 0;
         }
+        let reader = match &mut self.state { State::Input(reader) => reader, _ => unreachable!() };
         let mut line = Vec::new();
         // Keep memory bounded even for an input with no record delimiter.
         loop {
@@ -188,7 +227,22 @@ impl CobolFile {
         status
     }
 
+    /// SEQUENTIAL REWRITE of the record just read, as sequential_rewrite does:
+    /// seek back one record size from the current position and overwrite it.
+    pub fn rewrite(&mut self, record: &Value) -> u8 {
+        let read_done = self.read_done;
+        self.read_done = false;
+        let file = match &mut self.state { State::InputOutput(file) => file, _ => return 49 };
+        if !read_done { return 43; }
+        let bytes = record.bytes();
+        if self.last_read_size != bytes.len() { fail("REWRITE after a partial SEQUENTIAL record not modelled"); }
+        file.seek(SeekFrom::Current(-(bytes.len() as i64))).unwrap_or_else(|e| fail(&format!("file seek failed: {e}")));
+        file.write_all(&bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
+        0
+    }
+
     pub fn write(&mut self, record: &Value, advancing: Option<Advance>) -> u8 {
+        self.read_done = false;
         if self.organization == Organization::LineSequential && advancing.is_some() {
             fail("ADVANCING on LINE SEQUENTIAL is not supported");
         }

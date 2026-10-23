@@ -381,8 +381,8 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE CLOSE SET GO".split())
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE AT NOT ON . <EOF>".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE CLOSE SET GO".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE AT NOT ON . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -930,16 +930,18 @@ class Parser:
             return Stmt("set_condition", (refs, truth), line)
         if verb == "OPEN":
             actions, mode = [], None
-            while self.t.key in {"INPUT", "OUTPUT", "EXTEND"} | self.files.keys():
-                if self.t.key in {"INPUT", "OUTPUT", "EXTEND"}:
+            modes = {"INPUT", "OUTPUT", "EXTEND", "I-O"}
+            while self.t.key in modes | self.files.keys():
+                if self.t.key in modes:
                     mode = self.take().key
-                    actions.append((mode, self.file_name()))
-                elif mode:
-                    actions.append((mode, self.file_name()))
-                else:
-                    self.error("mode INPUT, OUTPUT ou EXTEND attendu avant le fichier")
+                elif not mode:
+                    self.error("mode INPUT, OUTPUT, I-O ou EXTEND attendu avant le fichier")
+                name = self.file_name()
+                if mode == "I-O" and self.files[name].organization != "SEQUENTIAL":
+                    self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
+                actions.append((mode, name))
             if not actions:
-                self.error("OPEN requiert INPUT, OUTPUT ou EXTEND et un fichier déclaré")
+                self.error("OPEN requiert INPUT, OUTPUT, I-O ou EXTEND et un fichier déclaré")
             return Stmt("open", (actions,), line)
         if verb == "CLOSE":
             names = []
@@ -972,6 +974,18 @@ class Parser:
                 not_end = self.block({"END-READ"})
             self.accept("END-READ")
             return Stmt("read", (name, into, at_end, not_end), line)
+        if verb == "REWRITE":
+            record = self.variable()
+            files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
+            if not files:
+                self.error(f"REWRITE requiert un enregistrement FD: {record}")
+            if self.files[files[0]].organization != "SEQUENTIAL":
+                self.error("REWRITE limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
+            value = self.expr() if self.accept("FROM") else None
+            if self.at("INVALID"):
+                self.error("REWRITE INVALID KEY non pris en charge pour SEQUENTIAL")
+            self.accept("END-REWRITE")
+            return Stmt("rewrite", (files[0], record.name, value), line)
         if verb == "WRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]

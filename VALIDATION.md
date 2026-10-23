@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## OPEN I-O et REWRITE — 23 octobre 2026
+
+- **239 tests découverts : 238 réussis, un test PE Windows ignoré.**
+- `sequential_io.cob` : statuts 35/05/43/48/49 et octets finaux identiques ;
+  le fichier OPTIONAL ouvert en I-O est créé vide comme en natif.
+- NIST : **66/458** ; vérification complète des acceptées **66/66** conformes.
+
 ## DECLARATIVES et fichiers — 23 octobre 2026
 
 - **235 tests découverts : 234 réussis, un test PE Windows ignoré.**
