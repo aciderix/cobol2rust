@@ -2,6 +2,12 @@
 
 ## Environnement Linux de référence
 
+Dans une session cloud Claude Code, le hook `.claude/hooks/session-start.sh`
+exécute automatiquement les étapes ci-dessous à chaque démarrage : GnuCOBOL,
+corpus NIST, corpus publics et cache Cargo. Chaque étape est sautée si elle
+est déjà faite ; le journal est écrit dans `build/session-start.log`. Depuis
+un conteneur vide, l'installation complète prend environ 1 min 20 s.
+
 Sous Debian/Ubuntu, `install_gnucobol.sh` (root) installe les dépendances,
 vérifie le SHA256 et la signature GNU de GnuCOBOL 3.2, puis le compile avec
 GMP, Berkeley DB (gestionnaire INDEXED), libxml2 et json-c :
