@@ -308,6 +308,8 @@ class Field:
     edit_symbols: list = field(default_factory=list)
     edit_size: int = 0
     blank_zero: bool = False
+    # Alphanumeric-edited picture, one symbol per position.
+    alnum_edit: str = ""
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
 

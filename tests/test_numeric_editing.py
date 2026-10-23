@@ -38,3 +38,19 @@ class NumericEditingNativeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class AlnumEditingNativeTests(unittest.TestCase):
+    def test_fixture_matches_gnucobol(self):
+        report = verify(ROOT / "tests" / "fixtures" / "alnum_editing.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        lines = report["cobol_stdout"].splitlines()
+        # No VALUE: edited spaces; explicit VALUE: stored as written.
+        self.assertEqual(lines[0], "[   0   0 ][  /  /  ][ab c0d ][     ]")
+        # A group sender is a group move: no insertion.
+        self.assertIn("[GH12     ]", lines)
+
+    def test_alnum_edited_picture_is_text(self):
+        field = Parser(program("01 a pic x(2)b0/x.")).parse().fields["A"]
+        self.assertEqual((field.kind, field.alnum_edit, field.size), ("text", "XXB0/X", 6))

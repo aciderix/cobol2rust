@@ -331,6 +331,8 @@ def declaration(p, file_record=False):
         usage = next((a.group_usage for a in ancestors if a.group_usage), usage)
     if any(a.group_value is not None for a in ancestors) and initial is not None:
         p.error("VALUE subordonné à un VALUE de groupe non pris en charge")
+    alnum_edit = ""
+
     def repeat(match):
         count = int(match[2])
         if count < 1:
@@ -353,6 +355,13 @@ def declaration(p, file_record=False):
             group_usage = usage
             usage = "DISPLAY"
         initial = None
+    elif (re.fullmatch(r"[XA9B0/]+", re.sub(r"([XA9B0/])\((\d+)\)", repeat, picture.upper()))
+          and set(picture.upper()) & set("XA") and set(re.sub(r"\(\d+\)", "", picture.upper())) & set("B0/")):
+        # Alphanumeric-edited: stored and compared as text, edited on MOVE.
+        alnum_edit = re.sub(r"([XA9B0/])\((\d+)\)", repeat, picture.upper())
+        kind, digits, scale, signed = "text", len(alnum_edit), 0, False
+        if digits > 256 or usage != "DISPLAY":
+            p.error("PIC alphanumérique éditée limitée à 256 caractères DISPLAY")
     elif re.fullmatch(r"X+|A+", expanded):
         # PIC A is alphabetic: stored and compared like PIC X; the emitter
         # refuses the numeric MOVEs that GnuCOBOL rejects for it.
@@ -405,6 +414,7 @@ def declaration(p, file_record=False):
     descriptor.occurs_min, descriptor.depending = minimum, depending
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
+    descriptor.alnum_edit = alnum_edit
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero

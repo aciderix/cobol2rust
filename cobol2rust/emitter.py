@@ -143,9 +143,9 @@ class Emitter:
                 and self.program.fields[expr.args[0].name].picture.upper().startswith("A"))
 
     def comparison_order(self, left, right):
-        kinds = self.kind(left), self.kind(right)
-        if "edited" in kinds:
-            raise CobolError("comparaison de champ édité non prise en charge; copier vers PIC X pour comparer les octets")
+        # A numeric-edited item is not numeric for libcob's cob_cmp: it
+        # compares as alphanumeric, by its edited bytes.
+        kinds = tuple("text" if kind == "edited" else kind for kind in (self.kind(left), self.kind(right)))
         if kinds[0] == kinds[1]:
             return f"({self.expression(left)}).compare(&({self.expression(right)}))"
         if set(kinds) != {"number", "text"}:
@@ -202,6 +202,13 @@ class Emitter:
                 raw_group = (source_ref is not None and source_ref.start is None and
                              not self.program.fields[source_ref.name].picture)
                 conversions[-1] = "raw_text" if raw_group else "parsed_text"
+                continue
+            edited_text = ref.start is None and bool(field.alnum_edit)
+            if edited_text and expr.op == "all":
+                raise CobolError("MOVE ALL vers alphanumérique édité non pris en charge (remplissage natif brut)")
+            if edited_text and expr.op == "var" and expr.args[0].start is None and not self.program.fields[expr.args[0].name].picture:
+                # A group sender is a group move: bytes are copied unedited.
+                conversions[-1] = "raw_text"
                 continue
             if expr.op == "all":
                 if not move or destination != "text":
@@ -549,14 +556,11 @@ class Emitter:
             self.write(f"pc = {continuation};")
         elif op == "evaluate":
             subject, branches, otherwise = a
-            if self.kind(subject) == "edited":
-                raise CobolError("EVALUATE de champ édité non pris en charge")
+            category = lambda e: "text" if self.kind(e) == "edited" else self.kind(e)
             temp = self.unique()
             self.write(f"let {temp} = {self.expression(subject)};")
             for i, (case, target) in enumerate(branches):
-                if self.kind(case) == "edited":
-                    raise CobolError("EVALUATE avec cas édité non pris en charge")
-                if self.kind(case) != self.kind(subject):
+                if category(case) != category(subject):
                     raise CobolError("EVALUATE: types incompatibles")
                 comparison = f"{temp} == ({self.expression(case)})" if self.kind(case) == "bool" else f"{temp}.compare(&({self.expression(case)})) == std::cmp::Ordering::Equal"
                 self.write(f"{'if' if i == 0 else '} else if'} {comparison} {{")
@@ -634,6 +638,8 @@ class Emitter:
 
     def storage_kind(self, f):
         if f.kind == "text":
+            if f.alnum_edit:
+                return f"storage_runtime::Kind::AlnumEdited {{ symbols: b{quoted(f.alnum_edit)} }}"
             return "storage_runtime::Kind::Text"
         if f.kind == "edited":
             symbols = ", ".join(f"(b'{c}', {n})" for c, n in f.edit_symbols)

@@ -112,7 +112,7 @@ pub enum Value {
 
 impl Value {
     pub fn is_text(&self) -> bool {
-        match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Edited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
+        match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
     pub fn snapshot(&self) -> Self { match self { Self::View(view) => view.value(), _ => self.clone() } }
     pub fn at(&self, indices: &[Value]) -> Self {

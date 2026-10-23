@@ -14,6 +14,9 @@ pub enum Kind {
     Text,
     Numeric { digits: u32, scale: i32, signed: bool, usage: Usage },
     Edited { symbols: &'static [(u8, u32)], digits: u32, scale: i32, blank_zero: bool },
+    /// Alphanumeric-edited: one byte per position, A/X/9 take the sender's
+    /// bytes, B is a space, 0 and / are inserted (cob_move_alphanum_to_edited).
+    AlnumEdited { symbols: &'static [u8] },
 }
 #[derive(Clone, Debug)]
 pub struct Initializer {
@@ -297,13 +300,13 @@ impl View {
     }
     pub fn value(&self) -> Value {
         match self.kind {
-            Kind::Text | Kind::Edited { .. } => Value::Bytes(self.raw()),
+            Kind::Text | Kind::Edited { .. } | Kind::AlnumEdited { .. } => Value::Bytes(self.raw()),
             _ => self.number().unwrap_or_else(|error| fail(error)),
         }
     }
     pub fn is_numeric(&self) -> bool {
         match self.kind {
-            Kind::Text | Kind::Edited { .. } => self.raw().iter().all(u8::is_ascii_digit),
+            Kind::Text | Kind::Edited { .. } | Kind::AlnumEdited { .. } => self.raw().iter().all(u8::is_ascii_digit),
             _ => self.number().is_ok(),
         }
     }
@@ -466,6 +469,16 @@ impl View {
     pub fn assign(&mut self, source: &Value, rounded: bool) {
         self.resolved();
         let mut bytes = match self.kind {
+            Kind::AlnumEdited { symbols } => {
+                if !source.is_text() { fail("numeric/text MOVE unsupported"); }
+                let bytes = source.bytes();
+                let mut sender = bytes.iter();
+                symbols.iter().map(|&symbol| match symbol {
+                    b'A' | b'X' | b'9' => *sender.next().unwrap_or(&b' '),
+                    b'B' => b' ',
+                    other => other,
+                }).collect()
+            },
             Kind::Text => {
                 if !source.is_text() { fail("numeric/text MOVE unsupported"); }
                 let mut bytes = source.bytes();
@@ -535,7 +548,7 @@ impl View {
             offsets(&initializer.dimensions, self.offset + initializer.offset, &mut |offset| {
                 let mut leaf = Self { memory: self.memory.clone(), offset, size: initializer.size,
                                       kind: initializer.kind, dimensions: vec![], initializers: vec![] };
-                let value = match initializer.kind { Kind::Text => Value::text(""), _ => Value::number("0") };
+                let value = match initializer.kind { Kind::Text | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };
                 leaf.assign(&value, false);
             });
         }
@@ -546,7 +559,10 @@ impl View {
             item.offset = offset;
             item.dimensions.clear();
             // Edited VALUE literals describe storage bytes, not a numeric MOVE.
-            if matches!(item.kind, Kind::Edited { .. }) && source.is_text() {
+            // So does an explicit VALUE of an alphanumeric-edited item; with
+            // no VALUE it starts as edited spaces, as GnuCOBOL initializes it.
+            if matches!(item.kind, Kind::Edited { .. }) && source.is_text()
+                || matches!(item.kind, Kind::AlnumEdited { .. }) && source.text_size() > 0 {
                 item.kind = Kind::Text;
             }
             if matches!(item.kind, Kind::Edited { .. }) { item.move_edited(source); } else { item.assign(source, false); }
