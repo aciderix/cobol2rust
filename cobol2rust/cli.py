@@ -172,7 +172,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=()):
     (output / "src" / "main.rs").write_text(rust, encoding="utf-8")
     (output / "src" / "runtime.rs").write_text(Path(__file__).with_name("runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    if program.files:
+    if program.files or any(sub.files for _, sub, _, _ in subprograms):
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "expanded.cob").write_text(expanded + "\n", encoding="utf-8")
     (output / "conversion.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

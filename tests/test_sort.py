@@ -49,3 +49,14 @@ class SortNativeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class CloseReelNativeTests(unittest.TestCase):
+    def test_close_reel_unit_no_rewind(self):
+        report = verify(ROOT / "tests" / "fixtures" / "close_reel.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        lines = report["cobol_stdout"].splitlines()
+        # REEL leaves the file open; NO REWIND closes it; both give 07.
+        self.assertEqual(lines[:2], ["reel 07", "write after reel 00"])
+        self.assertIn("write after no rewind 48", lines)

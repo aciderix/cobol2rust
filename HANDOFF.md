@@ -4,6 +4,12 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : segments de SECTION acceptés (ALTER refusé, donc sans effet),
+`CobolFile::close_unit` pour CLOSE REEL/UNIT/NO REWIND, OPEN NO REWIND/REVERSED
+ignorés. NIST **198/458**, 196/196 conformes. Prochains blocages : INDEXED (34,
+format BDB), SPECIAL-NAMES (11) et PROGRAM COLLATING (12), DEBUGGING MODE (12),
+USAGE INDEX (7), COPY REPLACING (10), SAME RECORD AREA (6), FUNCTION (IF).
+
 Dernière étape : SORT/MERGE. `FileSpec.sort` (SD), `Parser.sort_statement`,
 nœuds `sort_init`/`sort_using`/`sort_giving`/`sort_close` et `return_sort` dans
 `control.py` (procédures = nœuds `call` comme PERFORM), `file_runtime::SortFile`

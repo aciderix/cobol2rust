@@ -657,8 +657,12 @@ class Parser:
                 if section in sections or section in paragraphs:
                     self.error(f"nom de procédure dupliqué: {section}; les homonymes ne sont pas pris en charge")
                 self.expect("SECTION")
-                if self.t.key.isdigit():
-                    self.error("numéro de segment SECTION non pris en charge")
+                if self.t.key.isdigit() and not self.t.string:
+                    # Segment numbers only matter to paragraphs modified by
+                    # ALTER (codegen.c zaps their labels), and ALTER is refused.
+                    segment = int(self.take().text)
+                    if segment > 99 or (declaratives and segment >= 50):
+                        self.error("numéro de segment SECTION hors limites (0-99, moins de 50 en DECLARATIVES)")
                 self.expect(".")
                 if current_section is not None:
                     sections[current_section] = (sections[current_section][0], len(blocks))
@@ -1112,6 +1116,13 @@ class Parser:
                 if mode == "I-O" and self.files[name].organization == "LINE SEQUENTIAL":
                     self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
                 actions.append((mode, name))
+                # cobc parses OPEN ... WITH NO REWIND and REVERSED and ignores
+                # them (CB_PENDING): the file opens as usual.
+                if self.accept("WITH") or self.at("NO"):
+                    self.expect("NO")
+                    self.expect("REWIND")
+                else:
+                    self.accept("REVERSED")
             if not actions:
                 self.error("OPEN requiert INPUT, OUTPUT, I-O ou EXTEND et un fichier déclaré")
             return Stmt("open", (actions,), line)
@@ -1119,14 +1130,21 @@ class Parser:
             names = []
             while not names or (self.t.key in self.files and not self.t.string):
                 name = self.file_name()
-                lock = False
+                mode = "normal"
                 if self.accept("WITH") or self.at("LOCK") or self.at("NO"):
-                    if not self.accept("LOCK"):
-                        self.error("CLOSE limité à WITH LOCK; NO REWIND, REEL et UNIT non pris en charge")
-                    lock = True
-                elif self.at("REEL") or self.at("UNIT"):
-                    self.error("CLOSE limité à WITH LOCK; NO REWIND, REEL et UNIT non pris en charge")
-                names.append((name, lock))
+                    if self.accept("NO"):
+                        self.expect("REWIND")
+                        mode = "no_rewind"
+                    else:
+                        self.expect("LOCK")
+                        mode = "lock"
+                elif self.accept("REEL") or self.accept("UNIT"):
+                    if self.accept("FOR"):
+                        self.expect("REMOVAL")
+                    mode = "reel"
+                if mode in {"no_rewind", "reel"} and self.files[name].organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                    self.error("CLOSE REEL/UNIT/NO REWIND limité aux fichiers séquentiels")
+                names.append((name, mode))
             return Stmt("close", (names,), line)
         if verb in {"SORT", "MERGE"}:
             return self.sort_statement(verb, line)

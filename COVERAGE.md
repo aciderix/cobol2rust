@@ -529,6 +529,16 @@ STATUS des fichiers USING/GIVING ne sont pas mis à jour, comme en natif.
 Émission acceptée : **182/458** ; revérification : **180/180 programmes
 conformes**, 4474 PASS, 0 FAIL (`build/nist-verify-sort.json`).
 
+## Progression : segments, CLOSE REEL/UNIT/NO REWIND
+
+Numéros de segment de SECTION acceptés (sans effet hors ALTER, toujours
+refusé, comme dans codegen.c), `CLOSE REEL/UNIT [FOR REMOVAL]` (le fichier reste
+ouvert, 07) et `CLOSE WITH NO REWIND` (fermé, 07) comme `cob_file_close`,
+`OPEN … WITH NO REWIND/REVERSED` ignorés comme par cobc, et `file_runtime.rs`
+fourni quand seul un sous-programme a des fichiers. Émission acceptée :
+**198/458** ; revérification : **196/196 programmes conformes**, 4566 PASS,
+0 FAIL (`build/nist-verify-close.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

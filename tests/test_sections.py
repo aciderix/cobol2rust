@@ -103,8 +103,9 @@ gamma. continue.
                 Parser(program(body)).parse()
 
     def test_segmented_sections_and_unsupported_exit_variants_are_rejected(self):
-        for body in ("area-a section 1. continue.", "area-a section 50. continue.",
-                     "exit section.",
+        # Segment numbers only matter with ALTER, which stays refused.
+        Parser(program("area-a section 1. continue. area-b section 50. continue.")).parse()
+        for body in ("area-a section 100. continue.", "exit section.",
                      "perform 2 times exit perform end-perform.",
                      "perform 2 times exit perform cycle end-perform."):
             with self.subTest(body=body), self.assertRaises(CobolError):

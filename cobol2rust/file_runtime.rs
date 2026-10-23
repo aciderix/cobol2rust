@@ -194,6 +194,21 @@ impl CobolFile {
         0
     }
 
+    /// CLOSE REEL/UNIT and WITH NO REWIND of a disk file (cob_file_close):
+    /// NO REWIND closes and returns 07; REEL and UNIT only synchronize the
+    /// file, which stays open, and return 07. A missing OPTIONAL file closes as usual.
+    pub fn close_unit(&mut self, no_rewind: bool) -> u8 {
+        if matches!(self.state, State::Closed) { return 42; }
+        if matches!(self.state, State::Locked) { fail("CLOSE of a file closed WITH LOCK not modelled"); }
+        if matches!(self.state, State::Missing) { return self.close(false); }
+        if no_rewind { self.close(false); return 7; }
+        self.read_done = false;
+        if let State::Output(file) | State::InputOutput(file) = &mut self.state {
+            file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+        }
+        7
+    }
+
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     fn variable(&self) -> bool { self.record_min != self.record_max }

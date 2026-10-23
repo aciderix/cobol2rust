@@ -1,5 +1,11 @@
 # Validation — 22 octobre 2026
 
+## Segments, CLOSE REEL/NO REWIND — 24 octobre 2026
+
+- **290 tests découverts : 289 réussis, un test PE Windows ignoré.**
+- **77/77 comparaisons locales conformes** ; nouvelle fixture `close_reel.cob`.
+- NIST : **198/458** ; **196/196 programmes acceptés conformes** (4566 PASS).
+
 ## SORT et MERGE — 24 octobre 2026
 
 - **289 tests découverts : 288 réussis, un test PE Windows ignoré.**

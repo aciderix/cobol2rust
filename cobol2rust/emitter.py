@@ -451,8 +451,11 @@ class Emitter:
                 self.write(f"let status = self.{self.files[name]}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
-            for name, lock in a[0]:
-                self.write(f"let status = self.{self.files[name]}.close({str(lock).lower()});")
+            for name, mode in a[0]:
+                if mode in {"reel", "no_rewind"}:
+                    self.write(f"let status = self.{self.files[name]}.close_unit({str(mode == 'no_rewind').lower()});")
+                else:
+                    self.write(f"let status = self.{self.files[name]}.close({str(mode == 'lock').lower()});")
                 self.file_status(name, "status")
         elif op == "rewrite":
             name, record, value, _, _ = a
