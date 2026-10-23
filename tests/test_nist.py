@@ -34,6 +34,26 @@ class NistPreparationTests(unittest.TestCase):
                 self.assertFalse((output / "manifest.json").exists())
                 self.assertEqual(list((output / "extracted").iterdir()), [])
 
+    def test_mirror_is_used_only_after_network_error(self):
+        name = "newcob.val.tar.gz"
+        url, _ = prepare_nist.ASSETS[name]
+        mirror = prepare_nist.MIRRORS[name][0]
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / name
+            def fake_download(candidate, path, expected):
+                path.write_bytes(b"partial")
+                if candidate == url:
+                    raise prepare_nist.URLError("HTTP Error 403: Forbidden")
+            with patch.object(prepare_nist, "download", side_effect=fake_download) as download:
+                self.assertEqual(prepare_nist.download_asset(name, destination), mirror)
+            self.assertEqual([call.args[0] for call in download.call_args_list], [url, mirror])
+            destination.unlink()
+            with (patch.object(prepare_nist, "download",
+                               side_effect=ValueError("SHA256 incorrect")) as download,
+                  self.assertRaisesRegex(ValueError, "SHA256 incorrect")):
+                prepare_nist.download_asset(name, destination)
+            self.assertEqual(download.call_count, 1)
+
     def test_unsafe_archive_members_are_rejected(self):
         for name, member_type in [("../escape", tarfile.REGTYPE),
                                   ("newcob.val", tarfile.SYMTYPE)]:

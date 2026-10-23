@@ -1,5 +1,38 @@
 # Outils de validation
 
+## Environnement Linux de référence
+
+Sous Debian/Ubuntu, `install_gnucobol.sh` (root) installe les dépendances,
+vérifie le SHA256 et la signature GNU de GnuCOBOL 3.2, puis le compile avec
+GMP, Berkeley DB (gestionnaire INDEXED), libxml2 et json-c :
+
+```bash
+sudo tools/install_gnucobol.sh
+python -m cobol2rust doctor
+```
+
+`fetch_corpora.py` récupère dans `.tools/corpora` des dépôts publics COBOL
+épinglés par commit, ainsi que les sources GnuCOBOL 3.2 (testsuite autotest
+`tests/testsuite.src/*.at` et runtime `libcob`). Il ne compile ni n'exécute
+aucun programme ; le manifeste conserve commits, licences et inventaires.
+
+```bash
+python tools/fetch_corpora.py --output .tools/corpora
+```
+
+| Corpus | Contenu | Licence |
+| --- | --- | --- |
+| `beg-cobol-for-programmers` | Programmes d'apprentissage avec fichiers de données | Freeware Apress |
+| `carddemo` | Application CICS/VSAM/DB2 IBM, JCL et BMS | Apache-2.0 |
+| `cobol-programming-course` | Cours Open Mainframe Project, IBM Enterprise COBOL | CC-BY-4.0 |
+| `proleap-cobol-parser` | Fichiers de test d'un parser COBOL 85, dialectes variés | MIT |
+| `che4z-lsp-for-cobol` | Fichiers de test d'un serveur de langage COBOL IBM | EPL-2.0 |
+| `zopeneditor-sample` | Petite application exemple IBM | Apache-2.0 |
+| `gnucobol-3.2` | Testsuite GnuCOBOL (1346 cas AT_SETUP) et runtime | GPL-3.0+ |
+
+Les fichiers de test des parsers contiennent surtout des fragments et
+extensions de dialectes : ils mesurent l'analyse, pas un comportement natif.
+
 ## Mesure d'un corpus externe
 
 `coverage.py` mesure séparément le prétraitement, l'analyse et l'émission Rust.
@@ -22,6 +55,10 @@ python tools/coverage.py .tools/nist-ccvs85/extracted --format fixed \
   --report build/coverage-nist.json
 ```
 
+Le site web du projet GnuCOBOL peut refuser les clients non navigateurs (403).
+L'archive est alors téléchargée depuis le miroir de fichiers SourceForge, avec
+le même SHA256 ; le manifeste enregistre l'URL effectivement utilisée.
+
 La préparation télécharge des artefacts épinglés et vérifie leurs SHA256. Elle
 compile et lance seulement l'extracteur officiel EXEC85, puis prépare les
 sources avec les adaptations GnuCOBOL enregistrées dans son manifeste. Aucun
@@ -37,6 +74,22 @@ une erreur interne survient ou le rapport ne peut pas être enregistré. Un code
 ajoute les `.SUB` aux `.cob`/`.cbl` ; les exclusions et le dénominateur sont
 enregistrés dans le rapport. Les listes COPY restent inconnues sur échec du
 prétraitement.
+
+## Référence native du runner NIST complet
+
+Le runner officiel de GnuCOBOL exécute toute la suite en natif. Il sert de
+référence pour les bilans PASS/FAIL des comparaisons Rust ; il ne mesure pas
+le convertisseur. Depuis les sources GnuCOBOL 3.2 configurées :
+
+```bash
+cp .tools/nist-ccvs85/inputs/newcob.val /opt/src/gnucobol-3.2/tests/cobol85/
+make -C /opt/src/gnucobol-3.2/tests/cobol85 test
+```
+
+Le 23 octobre 2026 sous Ubuntu 24.04 x86-64 (GnuCOBOL 3.2.0, BDB 5.3) :
+**426 programmes exécutés, 9748 tests, 9610 PASS, 0 FAIL, 20 DELETED et
+118 INSPECT**, sans écart avec le `summary.txt` attendu. Les journaux par
+programme sont copiés dans `.tools/nist-native-gnucobol-3.2`.
 
 ## Consommateurs NIST avec données de tri officielles
 

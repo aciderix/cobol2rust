@@ -4,6 +4,19 @@
 
 ## Reprise cloud et objectif élargi
 
+Environnement Linux du 23 octobre 2026 (Ubuntu 24.04) : GnuCOBOL 3.2.0
+compilé depuis les sources GNU signées avec BDB (`tools/install_gnucobol.sh`).
+La suite découvre **201 tests : 200 réussis, un PE Windows ignoré** ; les
+comparaisons COBOL/Rust ne sont plus ignorées. NIST est reproduit à **12/458**
+(`build/coverage-nist-baseline.json`). Le site web GnuCOBOL renvoyant 403,
+`prepare_nist.py` bascule sur le miroir SourceForge, SHA256 inchangé.
+Le runner NIST natif donne 9610 PASS et 0 FAIL sur 9748 tests
+(`.tools/nist-native-gnucobol-3.2`). `tools/fetch_corpora.py` ajoute six dépôts
+publics épinglés et la testsuite GnuCOBOL 3.2. Acceptation statique initiale :
+beg-cobol 16/113, proleap 43/759, che4z 55/1504, carddemo 0/44,
+cobol-programming-course 0/7, zopeneditor 0/5 (`build/coverage-<corpus>.json`).
+Les 1346 cas `.at` GnuCOBOL ne sont pas encore extraits en programmes autonomes.
+
 Dernière étape : séparateurs virgule/point-virgule et entrées documentaires
 d'Identification. Le lexer conserve une PICTURE comme un mot contigu, avec ses
 virgules d'édition ; il sépare un seul point/virgule terminal et s'arrête aussi

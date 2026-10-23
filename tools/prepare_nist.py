@@ -32,6 +32,11 @@ ASSETS = {
     "COPYING": (f"{GNUCOBOL_URL}/COPYING",
                 "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"),
 }
+# Le site web du projet peut refuser les clients non navigateurs (403) ;
+# le miroir de fichiers SourceForge sert la même archive, vérifiée par SHA256.
+MIRRORS = {
+    "newcob.val.tar.gz": ("https://downloads.sourceforge.net/project/gnucobol/nist/newcob.val.tar.gz",),
+}
 NEWCOB_SHA256 = "744a04982095a3abea29a9df5faf63d226083edecc7b5bf34bc412eae0d53274"
 MODULES = ("NC", "SM", "IC", "SQ", "RL", "IX", "ST", "SG", "OB", "IF", "RW", "DB", "CM")
 EXPECTED_COUNTS = {"cbl": 414, "sub": 44, "copybooks": 51, "data": 2}
@@ -70,6 +75,21 @@ def download(url: str, destination: Path, expected: str) -> None:
         with destination.open("xb") as stream:
             shutil.copyfileobj(response, stream)
     check_digest(destination, expected)
+
+
+def download_asset(name: str, destination: Path) -> str:
+    """Try the pinned URL, then its mirrors on network errors only; return the URL used."""
+    url, expected = ASSETS[name]
+    candidates = (url, *MIRRORS.get(name, ()))
+    for index, candidate in enumerate(candidates):
+        try:
+            download(candidate, destination, expected)
+            return candidate
+        except URLError:
+            destination.unlink(missing_ok=True)
+            if index == len(candidates) - 1:
+                raise
+    raise AssertionError("unreachable")
 
 
 def extract_archive(archive: Path, destination: Path) -> Path:
@@ -137,9 +157,10 @@ def prepare(output: Path) -> dict:
     inputs, work, extracted = (output / name for name in ("inputs", "extractor", "extracted"))
     for directory in (inputs, work, extracted):
         directory.mkdir()
-    for name, (url, expected) in ASSETS.items():
+    used = {}
+    for name in ASSETS:
         print(f"Téléchargement vérifié : {name}", flush=True)
-        download(url, inputs / name, expected)
+        used[name] = download_asset(name, inputs / name)
     source = extract_archive(inputs / "newcob.val.tar.gz", inputs)
     make_extractor(source, work / "EXEC85.cob")
     log, env = output / "preparation.log", os.environ.copy()
@@ -158,8 +179,8 @@ def prepare(output: Path) -> dict:
     manifest = {
         "corpus": "NIST CCVS85", "prepared": True, "validation_cases_executed": False,
         "conformance_claimed": False, "gnucobol_tools_commit": GNUCOBOL_COMMIT,
-        "inputs": [{"path": f"inputs/{name}", "url": url, "sha256": expected}
-                   for name, (url, expected) in ASSETS.items()],
+        "inputs": [{"path": f"inputs/{name}", "url": used[name], "sha256": expected}
+                   for name, (_, expected) in ASSETS.items()],
         "newcob_val_sha256": NEWCOB_SHA256,
         "extractor_sha256": file_sha256(work / "EXEC85.cob"),
         "extractor_replacements": {key.decode(): value.decode() for key, value in EXTRACTOR_REPLACEMENTS.items()},
