@@ -51,7 +51,7 @@ if __name__ == "__main__":
 class SetAndAllTests(unittest.TestCase):
     def test_unmodelled_all_and_set_forms_are_refused(self):
         data = "01 t. 02 e pic x occurs 2 indexed by ix. 01 n pic 99. 01 d pic 9v9. 01 x pic x(3)."
-        for body in ("move all 'A' to n.", "if x = all 'A' display 'y' end-if.", "set n to x.",
+        for body in ("move all 'A' to n.", "if n = all 'A' display 'y' end-if.", "set n to x.",
                      "set d to ix.", "compute n = all 'A'."):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(data, body + " stop run.")).parse()).generate()

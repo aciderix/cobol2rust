@@ -205,6 +205,18 @@ impl Value {
         Ok(Self::Num(left.divide(right), None))
     }
     pub fn neg(&self) -> Self { Self::Num(self.num().neg(), None) }
+    /// cob_div_remainder: the dividend less the divisor times the quotient
+    /// truncated to the quotient item's scale (not its stored, rounded value).
+    pub fn remainder_after(&self, divisor: &Self, quotient_scale: i32) -> Self {
+        let (dividend, divisor) = (self.num(), divisor.num());
+        let units = dividend.clone().divide(divisor.clone()).units(quotient_scale, false);
+        let product = Number::scaled(units, quotient_scale).times(divisor);
+        Self::Num(dividend.plus(product.neg()), None)
+    }
+    pub fn checked_remainder(&self, divisor: &Self, quotient_scale: i32) -> Result<Self, SizeError> {
+        if divisor.num().n == BigInt::from(0) { return Err(SizeError); }
+        Ok(self.remainder_after(divisor, quotient_scale))
+    }
     pub fn checked_assign(&mut self, source: &Self, rounded: bool) -> Result<(), SizeError> {
         match self {
             Self::View(view) => view.checked_assign(source, rounded),

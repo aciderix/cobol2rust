@@ -508,6 +508,15 @@ aligné ; le remplissage de `compute_size` reste refusé), FILLER implicite,
 Émission acceptée : **153/458** ; revérification : **151/151 programmes
 conformes**, 3656 PASS, 0 FAIL (`build/nist-verify-sign.json`).
 
+## Progression : formes arithmétiques, HIGH/LOW-VALUE, START >=
+
+`ADD a b GIVING c` sans TO, `DIVIDE … BY … GIVING`, REMAINDER (reste calculé
+sur le quotient complet tronqué à l'échelle du quotient, comme
+`cob_div_quotient`), HIGH-VALUE/LOW-VALUE (octets 0xFF/0x00 en VALUE, MOVE,
+comparaisons ALL et niveaux 88) et `START … >=`/`GREATER OR EQUAL` (COB_GE).
+Émission acceptée : **166/458** ; revérification : **164/164 programmes
+conformes**, 4296 PASS, 0 FAIL (`build/nist-verify-arith.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

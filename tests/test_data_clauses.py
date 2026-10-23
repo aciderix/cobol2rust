@@ -49,3 +49,22 @@ class DataClauseNativeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class ArithmeticFormsNativeTests(unittest.TestCase):
+    def test_divide_remainder_and_add_giving(self):
+        report = verify(ROOT / "tests" / "fixtures" / "divide_remainder.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        # ROUNDED quotient 14.3; the remainder uses the truncated 14.2.
+        self.assertIn("+014.3 +000.60", report["cobol_stdout"].splitlines())
+
+    def test_high_and_low_values(self):
+        report = verify(ROOT / "tests" / "fixtures" / "high_low_values.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertTrue(report["cobol_stdout"].startswith("[\\xff\\xff][\x00\x00\x00]"))
+
+    def test_relative_start_greater_or_equal(self):
+        report = verify(ROOT / "tests" / "fixtures" / "relative_start_ge.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertIn("invalid 23", report["cobol_stdout"].splitlines())

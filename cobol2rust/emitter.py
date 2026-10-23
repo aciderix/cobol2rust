@@ -17,6 +17,17 @@ def quoted(text):
     return '"' + ''.join(escapes.get(c, f"\\x{ord(c):02x}" if ord(c) < 32 or ord(c) == 127 else c) for c in text) + '"'
 
 
+def text_value(text):
+    """A Rust Value for COBOL text; HIGH-VALUE/LOW-VALUE bytes are not ASCII."""
+    if all(ord(c) < 128 for c in text):
+        return f"Value::text({quoted(text)})"
+    return "Value::Bytes(vec![" + ", ".join(str(ord(c)) for c in text) + "])"
+
+
+def byte_pattern(text):
+    return "[" + ", ".join(f"{ord(c)}u8" for c in text) + "]"
+
+
 class Emitter:
     def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=()):
         self.program = program
@@ -99,6 +110,9 @@ class Emitter:
             return f"{self.shared}.clone()"
         if op == "all":
             raise CobolError("ALL littéral limité au MOVE vers texte, groupe ou sous-chaîne")
+        if op == "remainder":
+            dividend, divisor, scale = args
+            return f"({self.expression(dividend)}).remainder_after(&({self.expression(divisor)}), {scale})"
         if op == "bool":
             return str(args[0]).lower()
         if op == "numeric_class":
@@ -117,8 +131,10 @@ class Emitter:
                 else:
                     terms.append(f"({self.expression(Expr('cmp>=', (value, left)))} && {self.expression(Expr('cmp<=', (value, right)))})")
             return "(" + " || ".join(terms) + ")"
-        if op in {"number", "text"}:
-            return f"Value::{op}({quoted(numeric_text(args[0]) if op == 'number' else args[0])})"
+        if op == "text":
+            return text_value(args[0])
+        if op == "number":
+            return f"Value::number({quoted(numeric_text(args[0]))})"
         if op in {"unary+", "unary-"}:
             if self.kind(args[0]) != "number":
                 raise CobolError("opérateur numérique sur un champ texte")
@@ -200,6 +216,15 @@ class Emitter:
         # A numeric-edited item is not numeric for libcob's cob_cmp: it
         # compares as alphanumeric, by its edited bytes.
         kinds = tuple("text" if kind == "edited" else kind for kind in (self.kind(left), self.kind(right)))
+        if left.op == "all" or right.op == "all":
+            # cob_cmp_all: each position against the repeated figurative.
+            other, figurative = (right, left) if left.op == "all" else (left, right)
+            if other.op == "all" or self.kind(other) not in {"text", "edited"}:
+                raise CobolError("comparaison avec ALL/figurative limitée aux champs alphanumériques")
+            value = self.expression(other)
+            pattern = f"Value::Bytes({byte_pattern(figurative.args[0])}.iter().cycle().take(({value}).text_size()).copied().collect())"
+            result = f"({value}).compare(&{pattern})"
+            return result if left is other else result + ".reverse()"
         if kinds[0] == kinds[1]:
             return f"({self.expression(left)}).compare(&({self.expression(right)}))"
         if set(kinds) != {"number", "text"}:
@@ -314,7 +339,7 @@ class Emitter:
             elif conversion == "all":
                 receiver = self.unique()
                 self.write(f"let mut {receiver} = {self.reference(ref)}.clone();")
-                self.write(f"let all = Value::text(&{quoted(expr.args[0])}.chars().cycle().take({receiver}.text_size()).collect::<String>());")
+                self.write(f"let all = Value::Bytes({byte_pattern(expr.args[0])}.iter().cycle().take({receiver}.text_size()).copied().collect());")
                 self.write(f"{receiver}.assign(&all, false);")
             elif conversion == "zero":
                 receiver = self.unique()
@@ -364,6 +389,9 @@ class Emitter:
                 return f"{left}.checked_divide(&{right})"
             method = {"+": "plus", "-": "minus", "*": "times"}[op]
             return f"Ok::<Value, runtime::SizeError>({left}.{method}(&{right}))"
+        if op == "remainder":
+            dividend, divisor, scale = args
+            return (f"({self.checked_expression(dividend)}?).checked_remainder(&({self.checked_expression(divisor)}?), {scale})")
         if op in {"unary+", "unary-"}:
             value = self.checked_expression(args[0])
             return value if op == "unary+" else f"Ok::<Value, runtime::SizeError>(({value}?).neg())"
@@ -776,7 +804,8 @@ class Emitter:
                 continue
             constructor = "text" if field.initial.string else "number"
             initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
-            self.write(f"result.{self.names[name]}.declare(&Value::{constructor}({quoted(initial)}));")
+            value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
+            self.write(f"result.{self.names[name]}.declare(&{value});")
         # A group VALUE fills the whole group as alphanumeric data after its
         # leaves, on every occurrence: GnuCOBOL gives it precedence.
         for name, field in self.program.fields.items():
@@ -788,9 +817,9 @@ class Emitter:
             text, fill = field.group_value
             if isinstance(fill, tuple):
                 text = (fill[1] * field.size)[:field.size]
-            elif fill in {"0", '"'}:
+            elif fill in {"0", '"', "\xff", "\x00"}:
                 text = fill * field.size
-            self.write(f"result.{self.names[name]}.declare(&Value::text({quoted(text)}));")
+            self.write(f"result.{self.names[name]}.declare(&{text_value(text)});")
         self.write("result")
         self.indent -= 1
         self.write("}")

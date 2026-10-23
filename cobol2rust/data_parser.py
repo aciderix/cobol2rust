@@ -21,6 +21,10 @@ def literal(p):
         token = Token(" ", token.line, True)
     elif token.key in {"QUOTE", "QUOTES"}:
         token = Token('"', token.line, True)
+    elif token.key in {"HIGH-VALUE", "HIGH-VALUES"}:
+        token = Token("\xff", token.line, True)
+    elif token.key in {"LOW-VALUE", "LOW-VALUES"}:
+        token = Token("\x00", token.line, True)
     elif not re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", token.text):
         p.error("littéral attendu")
     if negative:
@@ -211,7 +215,7 @@ def declaration(p, file_record=False):
         values = []
         while not p.at(".") and not p.at("WHEN"):
             parent = p.fields[p.last_data]
-            figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES"} | (
+            figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
             if p.accept("ALL") or figurative:
                 # ALL literal and figurative constants: repeated over the item.
@@ -329,7 +333,8 @@ def declaration(p, file_record=False):
             # A group VALUE fills its whole area: keep ZERO distinct from 0.
             figurative = None if p.t.string else (
                 "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"}
-                else '"' if p.t.key in {"QUOTE", "QUOTES"} else None)
+                else '"' if p.t.key in {"QUOTE", "QUOTES"} else "\xff" if p.t.key in {"HIGH-VALUE", "HIGH-VALUES"}
+                else "\x00" if p.t.key in {"LOW-VALUE", "LOW-VALUES"} else None)
             initial = literal(p)
             if repeated:
                 # VALUE ALL literal repeats the literal over the item.
@@ -458,9 +463,9 @@ def declaration(p, file_record=False):
             p.error("VALUE ALL limité aux PIC X/A et groupes")
         if picture:
             initial = Token((figurative[1] * digits)[:digits], initial.line, True)
-    elif figurative == '"' and initial is not None and kind == "text":
+    elif figurative in {'"', "\xff", "\x00"} and initial is not None and kind == "text":
         # A figurative constant fills every position of the item.
-        initial = Token('"' * digits, initial.line, True)
+        initial = Token(figurative * digits, initial.line, True)
     group_sign = None
     if not picture:
         # A group SIGN clause applies to its signed numeric DISPLAY items.

@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 282 tests Python, avec un test d'inspection du PE
-Windows ignoré (283 découverts), et les 72 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 286 tests Python, avec un test d'inspection du PE
+Windows ignoré (287 découverts), et les 75 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 

@@ -965,6 +965,10 @@ class Parser:
         elif t.key in {"QUOTE", "QUOTES"}:
             # Like ALL '"': a figurative constant fills its receiver.
             left = Expr("all", ('"',))
+        elif t.key in {"HIGH-VALUE", "HIGH-VALUES"}:
+            left = Expr("all", ("\xff",))
+        elif t.key in {"LOW-VALUE", "LOW-VALUES"}:
+            left = Expr("all", ("\x00",))
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,))
@@ -1182,10 +1186,17 @@ class Parser:
                 self.accept("IS")
                 if self.accept("=") or (self.accept("EQUAL") and (self.accept("TO") or True)):
                     condition = "Equal"
+                elif self.accept(">="):
+                    condition = "NotLess"
                 elif self.accept(">") or (self.accept("GREATER") and (self.accept("THAN") or True)):
                     condition = "Greater"
-                    if self.at("OR") or self.at("="):
-                        self.error("START >= non pris en charge; utiliser NOT LESS")
+                    # >= and GREATER OR EQUAL are COB_GE, as NOT LESS.
+                    if self.accept("="):
+                        condition = "NotLess"
+                    elif self.accept("OR"):
+                        self.expect("EQUAL")
+                        self.accept("TO")
+                        condition = "NotLess"
                 elif self.accept("NOT"):
                     if not (self.accept("<") or (self.accept("LESS") and (self.accept("THAN") or True))):
                         self.error("START KEY NOT < attendu")
@@ -1255,13 +1266,28 @@ class Parser:
         if verb in {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}:
             values = [self.expr()]
             separator = {"ADD": "TO", "SUBTRACT": "FROM", "MULTIPLY": "BY", "DIVIDE": "INTO"}[verb]
-            while verb in {"ADD", "SUBTRACT"} and not self.at(separator):
+            while verb in {"ADD", "SUBTRACT"} and not self.at(separator) and not (verb == "ADD" and self.at("GIVING")):
                 values.append(self.expr())
-            self.expect(separator)
             op = {"ADD": "+", "SUBTRACT": "-", "MULTIPLY": "*", "DIVIDE": "/"}[verb]
             operand = values[0]
             for extra in values[1:]:
                 operand = Expr("+", (operand, extra))
+            if verb == "ADD" and self.accept("GIVING"):
+                # ADD a b GIVING c: TO is optional when GIVING is present.
+                items = [(ref, Expr("shared", ()), rounded) for ref, rounded in self.rounded_receivers()]
+                return self.arithmetic(verb, operand, items, line)
+            if verb == "DIVIDE" and self.accept("BY"):
+                divisor = self.expr()
+                self.expect("GIVING")
+                return self.divide_giving(operand, divisor, line)
+            self.expect(separator)
+            if verb == "DIVIDE":
+                # DIVIDE a INTO b GIVING c [REMAINDER r]
+                start = self.i
+                dividend = self.expr()
+                if self.accept("GIVING"):
+                    return self.divide_giving(dividend, operand, line)
+                self.i = start
             if self.t.string or not self.candidates(self.t.key):
                 # Only a GIVING form can take a literal second operand.
                 second = self.expr()
@@ -1497,6 +1523,34 @@ class Parser:
         while not self.t.string and self.candidates(self.t.key):
             receivers.append((self.variable(), self.accept("ROUNDED")))
         return receivers
+
+    def divide_giving(self, dividend, divisor, line):
+        """DIVIDE ... GIVING receivers [REMAINDER r], as cob_div_quotient and
+        cob_div_remainder: the remainder is the dividend less the divisor
+        times the quotient truncated to the quotient item's scale."""
+        receivers = self.rounded_receivers()
+        shared = Expr("/", (dividend, divisor))
+        items = [(ref, Expr("shared", ()), rounded) for ref, rounded in receivers]
+        if self.accept("REMAINDER"):
+            if len(receivers) != 1:
+                self.error("REMAINDER requiert un seul quotient GIVING")
+            quotient = receivers[0][0]
+            remainder = self.variable()
+            q = self.fields[quotient.name]
+            if q.kind not in {"number", "edited"} or quotient.start is not None:
+                self.error("REMAINDER requiert un quotient numérique")
+            # libcob reads both operands before storing the quotient.
+            for operand in (dividend, divisor):
+                if operand.op == "var" and self.overlaps(operand.args[0], quotient):
+                    self.error("REMAINDER avec un quotient recouvrant un opérande non pris en charge")
+            items.append((remainder, Expr("remainder", (dividend, divisor, q.scale)), False))
+        return self.arithmetic("DIVIDE", shared, items, line)
+
+    def overlaps(self, a, b):
+        fa, fb = self.fields[a.name], self.fields[b.name]
+        span = lambda f: (f.offset, f.offset + f.size * max(1, f.occurs) if f.table else f.offset + f.size)
+        (a0, a1), (b0, b1) = span(fa), span(fb)
+        return a0 < b1 and b0 < a1
 
     def fits_int(self, e):
         """cobc's cb_fits_int for an ADD/SUBTRACT operand."""

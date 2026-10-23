@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## Formes arithmétiques, HIGH/LOW-VALUE — 23 octobre 2026
+
+- **287 tests découverts : 286 réussis, un test PE Windows ignoré.**
+- **75/75 comparaisons locales conformes** ; nouvelles fixtures
+  `divide_remainder.cob`, `high_low_values.cob`, `relative_start_ge.cob`.
+- NIST : **166/458** ; **164/164 programmes acceptés conformes** (4296 PASS).
+
 ## SIGN, SYNCHRONIZED, clauses de données — 23 octobre 2026
 
 - **283 tests découverts : 282 réussis, un test PE Windows ignoré.**
