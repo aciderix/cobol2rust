@@ -123,6 +123,24 @@ class ControlGraph:
                                             self._body(success, after, block)), stmt)
         if op == "loop":
             return self._loop(stmt, after, block)
+        if op == "sort":
+            # cobc: init and keys, input (USING or PERFORM), output (GIVING or
+            # PERFORM), then cob_file_sort_close.
+            name, keys, source, target, merge = args
+            position = self._add("sort_close", (name, after), stmt)
+            if target[0] == "procedure":
+                position = self._statement(Stmt("call", (target[1],), stmt.line), position, block)
+            else:
+                position = self._add("sort_giving", (name, target[1], position), stmt)
+            if source[0] == "procedure":
+                position = self._statement(Stmt("call", (source[1],), stmt.line), position, block)
+            else:
+                position = self._add("sort_using", (name, source[1], position), stmt)
+            return self._add("sort_init", (name, keys, position), stmt)
+        if op == "return_sort":
+            name, into, at_end, not_at_end = args
+            return self._add("return_sort", (name, into, self._body(at_end, after, block),
+                                             self._body(not_at_end, after, block)), stmt)
         if op == "call":
             targets = args[0]
             entry, checkpoint = self._target(targets[0])

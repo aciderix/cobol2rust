@@ -517,6 +517,18 @@ comparaisons ALL et niveaux 88) et `START … >=`/`GREATER OR EQUAL` (COB_GE).
 Émission acceptée : **166/458** ; revérification : **164/164 programmes
 conformes**, 4296 PASS, 0 FAIL (`build/nist-verify-arith.json`).
 
+## Progression : SORT et MERGE
+
+SD, SORT/MERGE (clés ASCENDING/DESCENDING, WITH DUPLICATES), USING/GIVING
+SEQUENTIAL et LINE SEQUENTIAL à enregistrements fixes, INPUT/OUTPUT PROCEDURE,
+RELEASE [FROM] et RETURN [INTO] AT END, abaissés comme le C de cobc
+(`cob_file_sort_init`, PERFORM des procédures, `cob_file_sort_close`). Le tri
+est celui de libcob : stable, clés numériques par valeur, les autres octet par
+octet ; MERGE est un tri stable des fichiers USING dans l'ordre. Les FILE
+STATUS des fichiers USING/GIVING ne sont pas mis à jour, comme en natif.
+Émission acceptée : **182/458** ; revérification : **180/180 programmes
+conformes**, 4474 PASS, 0 FAIL (`build/nist-verify-sort.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

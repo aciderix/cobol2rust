@@ -367,6 +367,8 @@ class FileSpec:
     record_min: int = 0
     record_max: int = 0
     depending: str | None = None
+    # SD: a sort/merge file, with no physical file of its own.
+    sort: bool = False
 
 
 @dataclass
@@ -412,8 +414,8 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT".split())
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -545,11 +547,16 @@ class Parser:
             if self.accept("FILE"):
                 self.expect("SECTION")
                 self.expect(".")
-                while self.accept("FD"):
+                while self.at("FD") or self.at("SD"):
+                    sort_file = self.take().key == "SD"
                     file_name = self.file_name()
                     spec = self.files[file_name]
                     if spec.record:
                         self.error("FD dupliqué")
+                    if sort_file:
+                        if spec.status or spec.optional or spec.relative_key or spec.organization == "RELATIVE":
+                            self.error("SELECT d'un fichier SD limité à ASSIGN")
+                        spec.sort, spec.organization = True, "SORT"
                     from .file_parser import parse_fd_clauses
                     parse_fd_clauses(self, spec)
                     while not spec.records or (self.t.key.isdigit() and self.t.key in {"01", "1", "77"}):
@@ -562,7 +569,7 @@ class Parser:
                         if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
                             self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
-                            if spec.organization not in {"SEQUENTIAL", "RELATIVE"}:
+                            if spec.organization not in {"SEQUENTIAL", "RELATIVE", "SORT"}:
                                 self.error("plusieurs enregistrements FD limités à SEQUENTIAL/RELATIVE de taille fixe égale")
                             descriptor.redefines = spec.record
                         else:
@@ -1121,6 +1128,33 @@ class Parser:
                     self.error("CLOSE limité à WITH LOCK; NO REWIND, REEL et UNIT non pris en charge")
                 names.append((name, lock))
             return Stmt("close", (names,), line)
+        if verb in {"SORT", "MERGE"}:
+            return self.sort_statement(verb, line)
+        if verb == "RELEASE":
+            record = self.variable()
+            files = [f.name for f in self.files.values() if f.sort and record.name in f.records]
+            if not files or record.indices or record.start is not None:
+                self.error("RELEASE requiert un enregistrement SD")
+            value = self.expr() if self.accept("FROM") else None
+            return Stmt("release", (files[0], record, value), line)
+        if verb == "RETURN":
+            name = self.file_name()
+            if not self.files[name].sort:
+                self.error("RETURN requiert un fichier SD")
+            self.accept("RECORD")
+            into = self.variable() if self.accept("INTO") else None
+            if into and self.fields[into.name].kind != "text" and into.start is None:
+                self.error("RETURN INTO requiert un champ alphanumérique")
+            self.accept("AT")
+            self.expect("END")
+            at_end = self.block({"NOT", "END-RETURN"})
+            not_at_end = []
+            if self.accept("NOT"):
+                self.accept("AT")
+                self.expect("END")
+                not_at_end = self.block({"END-RETURN"})
+            self.accept("END-RETURN")
+            return Stmt("return_sort", (name, into, at_end, not_at_end), line)
         if verb == "READ":
             name = self.file_name()
             # GnuCOBOL: READ file [NEXT] [RECORD] [INTO x] [[AT] END] [NOT [AT] END].
@@ -1524,6 +1558,79 @@ class Parser:
             receivers.append((self.variable(), self.accept("ROUNDED")))
         return receivers
 
+    def sort_statement(self, verb, line):
+        """SORT/MERGE sd ON ASCENDING/DESCENDING KEY ... as cobc emits it:
+        cob_file_sort_init and keys, USING files or a PERFORM of the input
+        procedure, GIVING files or a PERFORM of the output procedure, close."""
+        name = self.file_name()
+        spec = self.files[name]
+        if not spec.sort:
+            self.error(f"{verb} requiert un fichier SD")
+        keys = []
+        while self.accept("ON") or self.at("ASCENDING") or self.at("DESCENDING"):
+            if not (self.at("ASCENDING") or self.at("DESCENDING")):
+                self.error("ASCENDING ou DESCENDING attendu")
+            descending = self.take().key == "DESCENDING"
+            self.accept("KEY")
+            self.accept("IS")
+            while not self.t.string and self.candidates(self.t.key):
+                key = self.variable()
+                field = self.fields[key.name]
+                record = next((r for r in spec.records if key.name == r or key.name.startswith(r + ".")), None)
+                if record is None or key.indices or key.start is not None or field.dimensions:
+                    self.error("clé de tri requise dans l'enregistrement SD, sans indice")
+                if field.kind not in {"text", "number"} or (field.kind == "number" and field.usage == "INDEX"):
+                    self.error("clé de tri limitée aux champs alphanumériques et numériques")
+                keys.append((descending, key))
+        if not keys:
+            self.error(f"{verb} requiert au moins une clé")
+        if self.accept("WITH") or self.at("DUPLICATES"):
+            # libcob's sort is stable: records with equal keys keep their order.
+            self.expect("DUPLICATES")
+            self.accept("IN")
+            self.accept("ORDER")
+        if self.at("COLLATING") or self.at("SEQUENCE"):
+            self.error(f"{verb} COLLATING SEQUENCE non pris en charge")
+
+        def procedure():
+            self.accept("IS")
+            target = [self.name()]
+            if self.accept("THRU") or self.accept("THROUGH"):
+                target.append(self.name())
+            return ("procedure", target)
+
+        def files(word):
+            names = []
+            while not self.t.string and self.t.key in self.files:
+                names.append(self.file_name())
+            if not names:
+                self.error(f"{word} requiert au moins un fichier")
+            for file_name in names:
+                other = self.files[file_name]
+                if other.sort or other.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                    self.error(f"{word} limité aux fichiers SEQUENTIAL et LINE SEQUENTIAL")
+                if other.record_min != other.record_max or other.depending:
+                    self.error(f"{word} limité aux fichiers à enregistrements fixes")
+            return (word.lower(), names)
+
+        if self.accept("INPUT"):
+            if verb == "MERGE":
+                self.error("MERGE n'admet pas INPUT PROCEDURE")
+            self.expect("PROCEDURE")
+            source = procedure()
+        else:
+            self.expect("USING")
+            source = files("USING")
+            if verb == "MERGE" and len(source[1]) < 2:
+                self.error("MERGE requiert au moins deux fichiers USING")
+        if self.accept("OUTPUT"):
+            self.expect("PROCEDURE")
+            target = procedure()
+        else:
+            self.expect("GIVING")
+            target = files("GIVING")
+        return Stmt("sort", (name, keys, source, target, verb == "MERGE"), line)
+
     def divide_giving(self, dividend, divisor, line):
         """DIVIDE ... GIVING receivers [REMAINDER r], as cob_div_quotient and
         cob_div_remainder: the remainder is the dividend less the divisor
@@ -1609,6 +1716,19 @@ class Parser:
     def validate_calls(self, program):
         def walk(stmts, section=None):
             for s in stmts:
+                if s.op == "sort":
+                    for kind, targets in (s.args[2], s.args[3]):
+                        if kind == "procedure":
+                            try:
+                                ranges = [program.procedure_range(name) for name in targets]
+                            except CobolError as error:
+                                raise CobolError(f"ligne {s.line}: {error}") from None
+                elif s.op in {"open", "close", "read", "write", "rewrite", "delete", "start"}:
+                    names = ([mode_name[1] for mode_name in s.args[0]] if s.op == "open" else
+                             [name_lock[0] for name_lock in s.args[0]] if s.op == "close" else [s.args[0]])
+                    for name in names:
+                        if isinstance(name, str) and name in program.files and program.files[name].sort:
+                            raise CobolError(f"ligne {s.line}: entrée-sortie ordinaire sur le fichier SD {name}")
                 if s.op in {"call", "goto"}:
                     targets = s.args[0]
                     try:
@@ -1631,7 +1751,7 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
                     walk(s.args[2], section); walk(s.args[3], section)
-                elif s.op in {"write", "rewrite", "delete", "start", "call_program"}:
+                elif s.op in {"write", "rewrite", "delete", "start", "call_program", "return_sort"}:
                     walk(s.args[-2], section); walk(s.args[-1], section)
         if program.blocks:
             for block in program.blocks:

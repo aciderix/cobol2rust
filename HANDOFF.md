@@ -4,6 +4,12 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : SORT/MERGE. `FileSpec.sort` (SD), `Parser.sort_statement`,
+nœuds `sort_init`/`sort_using`/`sort_giving`/`sort_close` et `return_sort` dans
+`control.py` (procédures = nœuds `call` comme PERFORM), `file_runtime::SortFile`
+(tri stable au premier RETURN comme `cob_file_sort_compare`). Restent refusés :
+COLLATING SEQUENCE, fichiers USING/GIVING variables ou RELATIVE/INDEXED.
+
 Dernière étape : clauses de données. SIGN = variantes `Usage::SignLeading`,
 `SignLeadingSeparate`, `SignTrailingSeparate` et helpers `display_digits`/
 `display_bytes` (seul '-' séparé est négatif ; un octet séparé autre que +/-

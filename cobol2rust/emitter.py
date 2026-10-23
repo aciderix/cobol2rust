@@ -530,6 +530,11 @@ class Emitter:
                     if self.variable_groups[ref.name].children or any(f.kind != "text" or (f.filler and not a[1]) for f in fields):
                         raise CobolError("INITIALIZE de groupe variable limité aux champs texte uniformes; initialiser les occurrences explicitement")
                 self.write(f"{self.reference(ref)}.initialize_with_filler({str(a[1]).lower()});")
+        elif op == "release":
+            name, record, value = a
+            if value is not None:
+                self.assignment(value, [record], False, move=True)
+            self.write(f"self.{self.files[name]}.release(&self.{self.files[name]}_area);")
         elif op == "cancel":
             for kind, target in a[0]:
                 if kind == "literal":
@@ -581,6 +586,73 @@ class Emitter:
             self.write("None => runtime::fail(\"CALL of a program absent from the conversion or recursive; not modelled\"),")
             self.indent -= 1
             self.write("}")
+        elif op == "sort_init":
+            name, keys, following = a
+            spec = self.program.files[name]
+            base = self.program.fields[spec.record].offset
+            specs = []
+            for descending, ref in keys:
+                field = self.program.fields[ref.name]
+                specs.append(f"file_runtime::SortKey {{ offset: {field.offset - base}, size: {field.size}, "
+                             f"kind: {self.storage_kind(field)}, descending: {str(descending).lower()} }}")
+            self.write(f"self.{self.files[name]}.init(vec![{', '.join(specs)}]);")
+            self.write(f"pc = {following};")
+        elif op == "sort_using":
+            # cob_file_sort_using: OPEN INPUT, READ each record into the SD
+            # area (cob_copy_check) and release it, CLOSE. The user's FILE
+            # STATUS is not updated; a file that fails to open is skipped.
+            name, files, following = a
+            sort = self.files[name]
+            for using in files:
+                rust = self.files[using]
+                self.write(f"if self.{rust}.open(\"INPUT\") < 10 {{")
+                self.indent += 1
+                self.write(f"while self.{rust}.read(&mut self.{rust}_area, None) < 10 {{")
+                self.write(f"    self.{sort}.release_from(&self.{rust}_area, &mut self.{sort}_area);")
+                self.write("}")
+                self.write(f"self.{rust}.close(false);")
+                self.indent -= 1
+                self.write("}")
+            self.write(f"pc = {following};")
+        elif op == "sort_giving":
+            # cob_file_sort_giving: OPEN OUTPUT each file, WRITE every record to
+            # each one opened (record area at its maximum size), CLOSE them.
+            name, files, following = a
+            sort = self.files[name]
+            opened = self.unique()
+            self.write(f"let mut {opened} = vec![false; {len(files)}];")
+            for index, giving in enumerate(files):
+                self.write(f"{opened}[{index}] = self.{self.files[giving]}.open(\"OUTPUT\") < 10;")
+            initially = self.unique()
+            self.write(f"let {initially} = {opened}.clone();")
+            self.write(f"while self.{sort}.retrieve(&mut self.{sort}_area) == 0 {{")
+            self.indent += 1
+            for index, giving in enumerate(files):
+                rust, spec = self.files[giving], self.program.files[giving]
+                self.write(f"if {opened}[{index}] {{")
+                self.write(f"    self.{rust}_area.assign(&Value::Bytes(self.{sort}_area.bytes()), false);")
+                self.write(f"    if self.{rust}.write(&self.{rust}_area, {spec.record_max}, None, None) >= 30 {{ {opened}[{index}] = false; }}")
+                self.write("}")
+            self.indent -= 1
+            self.write("}")
+            for index, giving in enumerate(files):
+                self.write(f"if {initially}[{index}] {{ self.{self.files[giving]}.close(false); }}")
+            self.write(f"pc = {following};")
+        elif op == "sort_close":
+            self.write(f"self.{self.files[a[0]]}.close();")
+            self.write(f"pc = {a[1]};")
+        elif op == "return_sort":
+            name, into, at_end, not_at_end, = a
+            sort = self.files[name]
+            self.write(f"if self.{sort}.retrieve(&mut self.{sort}_area) == 0 {{")
+            self.indent += 1
+            if into:
+                record = self.names[self.program.files[name].record]
+                self.write(f"let record = self.{record}.snapshot();")
+                self.write(f"{self.reference(into)}.assign(&record, false);")
+            self.write(f"pc = {not_at_end};")
+            self.indent -= 1
+            self.write(f"}} else {{ pc = {at_end}; }}")
         elif op == "jump":
             self.write(f"pc = {a[0]};")
         elif op == "checkpoint":
@@ -768,7 +840,8 @@ class Emitter:
         for name in self.names:
             self.write(f"{self.names[name]}: Value, // {name} PIC {self.program.fields[name].picture}")
         for name, rust_name in self.files.items():
-            kind = "RelativeFile" if self.program.files[name].organization == "RELATIVE" else "CobolFile"
+            organization = self.program.files[name].organization
+            kind = "RelativeFile" if organization == "RELATIVE" else "SortFile" if organization == "SORT" else "CobolFile"
             self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
         self.indent -= 1
@@ -786,7 +859,9 @@ class Emitter:
         for name, rust_name in self.files.items():
             spec = self.program.files[name]
             limits = f"{spec.record_min}, {spec.record_max}"
-            if spec.organization == "RELATIVE":
+            if spec.sort:
+                self.write(f"{rust_name}: file_runtime::SortFile::new({spec.record_max}),")
+            elif spec.organization == "RELATIVE":
                 self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}),")
             else:
                 self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}),")

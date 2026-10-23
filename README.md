@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 286 tests Python, avec un test d'inspection du PE
-Windows ignoré (287 découverts), et les 75 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 289 tests Python, avec un test d'inspection du PE
+Windows ignoré (290 découverts), et les 76 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -244,6 +244,13 @@ comparaison d'un champ DISPLAY avec un littéral trop long est résolue à la
 compilation (`S99 > -100` est FAUX, comme en natif). JUSTIFIED RIGHT, VALUE ALL
 et QUOTE sont pris en charge, ainsi que SIGN LEADING/TRAILING [SEPARATE] et
 SYNCHRONIZED lorsqu'il n'impose aucun octet de remplissage.
+
+## SORT et MERGE
+
+SORT et MERGE (SD, clés ASCENDING/DESCENDING, USING/GIVING de fichiers
+séquentiels fixes, INPUT/OUTPUT PROCEDURE, RELEASE, RETURN) reproduisent le tri
+stable de libcob. COLLATING SEQUENCE et les fichiers USING/GIVING variables
+restent refusés.
 
 ## Calcul décimal et limites explicites
 

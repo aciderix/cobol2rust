@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## SORT et MERGE — 24 octobre 2026
+
+- **290 tests découverts : 289 réussis, un test PE Windows ignoré.**
+- **76/76 comparaisons locales conformes** ; nouvelle fixture `sort_merge.cob`
+  (USING/GIVING, procédures, MERGE ; octets des fichiers GIVING identiques).
+- NIST : **182/458** ; **180/180 programmes acceptés conformes** (4474 PASS).
+
 ## Formes arithmétiques, HIGH/LOW-VALUE — 23 octobre 2026
 
 - **287 tests découverts : 286 réussis, un test PE Windows ignoré.**

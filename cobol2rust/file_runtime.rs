@@ -749,3 +749,71 @@ impl Drop for RelativeFile {
         if !self.open_mode.is_empty() { self.close(false); }
     }
 }
+
+/// One SORT/MERGE key: its place in the SD record and its description.
+pub struct SortKey { pub offset: usize, pub size: usize, pub kind: crate::storage_runtime::Kind, pub descending: bool }
+
+/// An SD file as libcob's cob_file_sort_*: records are kept in RELEASE order
+/// and sorted on the first RETURN by cob_file_sort_compare, numeric keys by
+/// value and others byte by byte; ties keep their order (unique sequence).
+pub struct SortFile { record_max: usize, keys: Vec<SortKey>, records: Vec<Vec<u8>>, sorted: bool, next: usize }
+
+impl SortFile {
+    pub fn new(record_max: usize) -> Self {
+        Self { record_max, keys: Vec::new(), records: Vec::new(), sorted: false, next: 0 }
+    }
+    pub fn init(&mut self, keys: Vec<SortKey>) {
+        self.keys = keys;
+        self.records.clear();
+        self.sorted = false;
+        self.next = 0;
+    }
+    /// RELEASE: the SD record area, at its maximum size.
+    pub fn release(&mut self, area: &Value) {
+        if self.sorted { fail("RELEASE after RETURN is not modelled"); }
+        let mut bytes = area.bytes();
+        bytes.resize(self.record_max, b' ');
+        self.records.push(bytes);
+    }
+    /// cob_copy_check of a USING record into the SD area, then RELEASE.
+    pub fn release_from(&mut self, record: &Value, area: &mut Value) {
+        area.assign(&Value::Bytes(record.bytes()), false);
+        self.release(area);
+    }
+    fn key_value(&self, record: &[u8], key: &SortKey) -> Value {
+        let bytes = record[key.offset..key.offset + key.size].to_vec();
+        match key.kind {
+            crate::storage_runtime::Kind::Numeric { .. } => Value::View(crate::storage_runtime::View {
+                memory: std::rc::Rc::new(std::cell::RefCell::new(bytes)), offset: 0, size: key.size, kind: key.kind,
+                dimensions: vec![], initializers: vec![] }).snapshot(),
+            _ => Value::Bytes(bytes),
+        }
+    }
+    fn sort(&mut self) {
+        let mut indexed: Vec<(Vec<Value>, Vec<u8>)> = std::mem::take(&mut self.records).into_iter()
+            .map(|record| (self.keys.iter().map(|key| self.key_value(&record, key)).collect(), record)).collect();
+        let keys = &self.keys;
+        indexed.sort_by(|(a, _), (b, _)| {
+            for ((x, y), key) in a.iter().zip(b.iter()).zip(keys.iter()) {
+                let order = x.compare(y);
+                if order != std::cmp::Ordering::Equal { return if key.descending { order.reverse() } else { order }; }
+            }
+            std::cmp::Ordering::Equal
+        });
+        self.records = indexed.into_iter().map(|(_, record)| record).collect();
+        self.sorted = true;
+    }
+    /// RETURN: the next record into the SD area, 00, or 10 at the end.
+    pub fn retrieve(&mut self, area: &mut Value) -> u8 {
+        if !self.sorted { self.sort(); }
+        if self.next >= self.records.len() { return 10; }
+        area.assign(&Value::Bytes(self.records[self.next].clone()), false);
+        self.next += 1;
+        0
+    }
+    pub fn close(&mut self) {
+        self.records.clear();
+        self.sorted = false;
+        self.next = 0;
+    }
+}
