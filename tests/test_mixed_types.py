@@ -53,9 +53,8 @@ class MixedTypeTests(unittest.TestCase):
                 self.emit(data, body)
 
     def test_direct_text_literals_with_unmodelled_native_optimizations_are_rejected(self):
-        for data, condition in (("01 n pic s99v99.", 'n = "1230"'),
-                                ("01 n pic s99v99.", '"1230" = n'),
-                                ("01 n pic 999.", 'n = "12"'),
+        # n = "1230" with PIC S99V99 is folded by cobc (comparison_folding.cob).
+        for data, condition in (("01 n pic 999.", 'n = "12"'),
                                 ("01 n pic 999.", '"0012" = n'),
                                 ("01 n pic 999.", 'n = "12A"')):
             with self.subTest(data=data, condition=condition), self.assertRaises(CobolError):
@@ -66,8 +65,9 @@ class MixedTypeTests(unittest.TestCase):
                      '01 t pic xx. 88 chosen value 12.'):
             with self.subTest(data=data), self.assertRaises(CobolError):
                 self.emit(data, "if chosen continue end-if.")
+        # Edited items compare as alphanumeric (comparison_folding.cob).
         for condition in ('edited-a = "12"', "edited-a = 12"):
-            with self.subTest(condition=condition), self.assertRaises(CobolError):
+            with self.subTest(condition=condition):
                 self.emit("01 edited-a pic +99.", f"if {condition} continue end-if.")
 
     def test_text_literals_to_numeric_and_index_receivers_remain_rejected(self):
@@ -257,8 +257,6 @@ if n = "1230" display "DIRECT:TRUE" else display "DIRECT:FALSE" end-if
 if n = t display "FIELD:TRUE" else display "FIELD:FALSE" end-if
 stop run.
 ''')
-        with self.assertRaises(CobolError):
-            Emitter(Parser(source_text).parse()).generate()
         cobc = find_tool("cobc")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -272,6 +270,13 @@ stop run.
                                     capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         self.assertEqual(result.stdout, b"DIRECT:FALSE\nFIELD:TRUE\n")
+        # The direct comparison is folded like cobc's compare_field_literal.
+        if find_tool("cargo"):
+            with tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "literal-optimization.cob"
+                source.write_text(source_text, encoding="utf-8")
+                report = verify(source, fmt="free")
+            self.assertTrue(report["match"], report)
 
 
 if __name__ == "__main__":

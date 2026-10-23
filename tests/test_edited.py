@@ -65,13 +65,7 @@ class EditedPictureTests(unittest.TestCase):
             "compute number-a = edited-a + 1.",
             "add edited-a to number-a.",
             "add 1 to edited-a.",
-            "compute edited-a = 1 on size error continue end-compute.",
-            "add 1 to number-a giving edited-a on size error continue end-add.",
             "accept edited-a.",
-            "if edited-a = 123 continue end-if.",
-            'if edited-a = "-001.25" continue end-if.',
-            "if edited-a = other-a continue end-if.",
-            'evaluate edited-a when "123.45" continue when other continue end-evaluate.',
             "perform varying edited-a from 1 by 1 until number-a > 3 continue end-perform.",
         ):
             with self.subTest(body=body), self.assertRaises(CobolError):
@@ -200,9 +194,14 @@ end-evaluate stop run.
             native = subprocess.run([str(binary)], capture_output=True, env=compiler_env(cobc), timeout=10)
             self.assertEqual(native.returncode, 0, native.stderr.decode(errors="replace"))
             self.assertEqual(native.stdout, b"1234567\nCOMPARE:BAD\nEVALUATE:BAD\n")
-        # Preserve this known semantic gap as an explicit refusal, not a false translation.
-        with self.assertRaisesRegex(CobolError, "édité"):
-            Emitter(Parser(contents).parse()).generate()
+        # cobc folds the comparison: the literal has more digits than the
+        # edited item (compare_field_literal), so it is always FALSE.
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "comparison.cob"
+            source.write_text(contents, encoding="utf-8")
+            report = verify(source, fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertEqual(report["rust_stdout"], "1234567\nCOMPARE:BAD\nEVALUATE:BAD\n")
 
 
 if __name__ == "__main__":

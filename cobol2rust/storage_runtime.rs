@@ -17,6 +17,8 @@ pub enum Kind {
     /// Alphanumeric-edited: one byte per position, A/X/9 take the sender's
     /// bytes, B is a space, 0 and / are inserted (cob_move_alphanum_to_edited).
     AlnumEdited { symbols: &'static [u8] },
+    /// JUSTIFIED RIGHT alphanumeric: a MOVE keeps the rightmost bytes and pads on the left.
+    Justified,
 }
 #[derive(Clone, Debug)]
 pub struct Initializer {
@@ -300,13 +302,13 @@ impl View {
     }
     pub fn value(&self) -> Value {
         match self.kind {
-            Kind::Text | Kind::Edited { .. } | Kind::AlnumEdited { .. } => Value::Bytes(self.raw()),
+            Kind::Text | Kind::Justified | Kind::Edited { .. } | Kind::AlnumEdited { .. } => Value::Bytes(self.raw()),
             _ => self.number().unwrap_or_else(|error| fail(error)),
         }
     }
     pub fn is_numeric(&self) -> bool {
         match self.kind {
-            Kind::Text | Kind::Edited { .. } | Kind::AlnumEdited { .. } => self.raw().iter().all(u8::is_ascii_digit),
+            Kind::Text | Kind::Justified | Kind::Edited { .. } | Kind::AlnumEdited { .. } => self.raw().iter().all(u8::is_ascii_digit),
             _ => self.number().is_ok(),
         }
     }
@@ -333,8 +335,9 @@ impl View {
             _ => fail("numeric text operation requires a numeric source"),
         };
         if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
-        if scale < 0 || scale as u32 > digits { fail("alphanumeric view of a P-scaled item not modelled"); }
-        if !comparison && scale != 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
+        if comparison && (scale < 0 || scale as u32 > digits) { fail("alphanumeric comparison of a P-scaled item not modelled"); }
+        if !comparison && scale > 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
+        if scale < 0 && !matches!(usage, Usage::Display) { fail("P-scaled binary or packed MOVE to alphanumeric not modelled"); }
         let bytes = match usage {
             Usage::Display => {
                 let mut bytes = self.raw();
@@ -348,7 +351,10 @@ impl View {
                     }
                 }
                 // An unsigned DISPLAY sender is copied as bytes even when
-                // its storage is not valid numeric data.
+                // its storage is not valid numeric data. Trailing P positions
+                // follow as zeros (cob_move_display_to_alphanum).
+                let mut bytes = bytes;
+                bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize));
                 bytes
             },
             Usage::Packed | Usage::Binary | Usage::Index => {
@@ -479,6 +485,12 @@ impl View {
                     other => other,
                 }).collect()
             },
+            Kind::Justified => {
+                if !source.is_text() { fail("numeric/text MOVE unsupported"); }
+                let bytes = source.bytes();
+                if bytes.len() >= self.size { bytes[bytes.len() - self.size..].to_vec() }
+                else { let mut padded = vec![b' '; self.size - bytes.len()]; padded.extend(bytes); padded }
+            },
             Kind::Text => {
                 if !source.is_text() { fail("numeric/text MOVE unsupported"); }
                 let mut bytes = source.bytes();
@@ -496,11 +508,13 @@ impl View {
                 edit(symbols, self.size, coefficient.to_string().as_bytes(), scale, negative, blank_zero)
             },
             Kind::Numeric { digits, scale, signed, usage } => {
-                let units = source.num().units(scale, rounded);
+                let mut units = source.num().units(scale, rounded);
+                // An unsigned receiver stores the absolute value (cob_decimal_get_field).
+                if !signed && !matches!(usage, Usage::Index) { units = absolute(&units); }
                 if matches!(usage, Usage::Index) {
                     if units < BigInt::from(i32::MIN) || units > BigInt::from(i32::MAX) { fail("native index capacity exceeded"); }
-                } else if absolute(&units) >= power(digits) || (!signed && units.sign() == Sign::Minus) {
-                    fail("destination PICTURE overflow or negative unsigned value");
+                } else if absolute(&units) >= power(digits) {
+                    fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled");
                 }
                 let negative = units.sign() == Sign::Minus;
                 let ascii = format!("{:0>width$}", absolute(&units).to_string(), width = digits as usize).into_bytes();
@@ -530,6 +544,13 @@ impl View {
     }
     pub fn checked_assign(&mut self, source: &Value, rounded: bool) -> Result<(), SizeError> {
         self.resolved();
+        if let Kind::Edited { digits, scale, .. } = self.kind {
+            // cob_decimal_get_field keeps the receiver when the result
+            // overflows the DISPLAY temporary of the picture's digits.
+            if absolute(&source.num().units(scale, rounded)) >= power(digits) { return Err(SizeError); }
+            self.assign(source, rounded);
+            return Ok(());
+        }
         let (digits, scale, signed, usage) = match self.kind {
             Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage),
             _ => fail("checked arithmetic destination requires numeric storage"),
@@ -548,7 +569,7 @@ impl View {
             offsets(&initializer.dimensions, self.offset + initializer.offset, &mut |offset| {
                 let mut leaf = Self { memory: self.memory.clone(), offset, size: initializer.size,
                                       kind: initializer.kind, dimensions: vec![], initializers: vec![] };
-                let value = match initializer.kind { Kind::Text | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };
+                let value = match initializer.kind { Kind::Text | Kind::Justified | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };
                 leaf.assign(&value, false);
             });
         }
@@ -562,7 +583,7 @@ impl View {
             // So does an explicit VALUE of an alphanumeric-edited item; with
             // no VALUE it starts as edited spaces, as GnuCOBOL initializes it.
             if matches!(item.kind, Kind::Edited { .. }) && source.is_text()
-                || matches!(item.kind, Kind::AlnumEdited { .. }) && source.text_size() > 0 {
+                || matches!(item.kind, Kind::AlnumEdited { .. } | Kind::Justified) && source.text_size() > 0 {
                 item.kind = Kind::Text;
             }
             if matches!(item.kind, Kind::Edited { .. }) { item.move_edited(source); } else { item.assign(source, false); }

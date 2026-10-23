@@ -19,6 +19,8 @@ def literal(p):
         token = Token("0", token.line)
     elif token.key in {"SPACE", "SPACES"}:
         token = Token(" ", token.line, True)
+    elif token.key in {"QUOTE", "QUOTES"}:
+        token = Token('"', token.line, True)
     elif not re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", token.text):
         p.error("littéral attendu")
     if negative:
@@ -241,7 +243,7 @@ def declaration(p, file_record=False):
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
     figurative = None
-    blank_zero = False
+    blank_zero = justified = False
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -301,10 +303,22 @@ def declaration(p, file_record=False):
             if initial is not None:
                 p.error("VALUE dupliqué")
             p.accept("IS")
+            repeated = p.accept("ALL")
             # A group VALUE fills its whole area: keep ZERO distinct from 0.
             figurative = None if p.t.string else (
-                "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"} else None)
+                "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"}
+                else '"' if p.t.key in {"QUOTE", "QUOTES"} else None)
             initial = literal(p)
+            if repeated:
+                # VALUE ALL literal repeats the literal over the item.
+                if not initial.string:
+                    p.error("VALUE ALL limité aux littéraux alphanumériques et constantes figuratives")
+                figurative = ("ALL", initial.text)
+        elif p.accept("JUSTIFIED") or p.accept("JUST"):
+            if justified:
+                p.error("JUSTIFIED dupliqué")
+            p.accept("RIGHT")
+            justified = True
         elif p.accept("BLANK"):
             p.accept("WHEN")
             if blank_zero or not (p.accept("ZERO") or p.accept("ZEROS") or p.accept("ZEROES")):
@@ -362,7 +376,8 @@ def declaration(p, file_record=False):
         kind, digits, scale, signed = "text", len(alnum_edit), 0, False
         if digits > 256 or usage != "DISPLAY":
             p.error("PIC alphanumérique éditée limitée à 256 caractères DISPLAY")
-    elif re.fullmatch(r"X+|A+", expanded):
+    elif re.fullmatch(r"X+|A+", expanded) or (re.fullmatch(r"[XA9]+", expanded) and set(expanded) - {"9"}
+                                                and len(set(expanded)) > 1):
         # PIC A is alphabetic: stored and compared like PIC X; the emitter
         # refuses the numeric MOVEs that GnuCOBOL rejects for it.
         kind, digits, scale, signed = "text", len(expanded), 0, False
@@ -397,6 +412,16 @@ def declaration(p, file_record=False):
             kind, symbols, edit_size = "edited", [("9", digits)], digits
         elif kind != "edited" or any(c == "*" for c, _ in symbols):
             p.error("BLANK WHEN ZERO limité aux PICTURE éditées sans * et aux entiers DISPLAY non signés")
+    if isinstance(figurative, tuple):
+        if kind != "text" or alnum_edit:
+            p.error("VALUE ALL limité aux PIC X/A et groupes")
+        if picture:
+            initial = Token((figurative[1] * digits)[:digits], initial.line, True)
+    elif figurative == '"' and initial is not None and kind == "text":
+        # A figurative constant fills every position of the item.
+        initial = Token('"' * digits, initial.line, True)
+    if justified and (kind != "text" or alnum_edit or not picture):
+        p.error("JUSTIFIED limité aux PIC X/A élémentaires")
     explicit_value = initial is not None
     if initial is not None:
         if file_record or redefines:
@@ -415,6 +440,7 @@ def declaration(p, file_record=False):
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
     descriptor.alnum_edit = alnum_edit
+    descriptor.justified = justified
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero

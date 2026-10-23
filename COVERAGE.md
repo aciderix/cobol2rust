@@ -486,6 +486,18 @@ d'appel, comme le résolveur de libcob) et PICTURE P portent l'émission accept�
 maintenant sur l'édition numérique générale (`/ , B 0 $ CR DB *`, P édité),
 QUOTE, SYNCHRONIZED, CORRESPONDING, BLANK WHEN ZERO et RENAMES.
 
+## Progression : édition numérique et alphanumérique, pliage des comparaisons
+
+`cob_move_display_to_edited` et `cob_move_alphanum_to_edited` sont portés
+symbole par symbole ; les images suivent `cb_build_picture` et la table de
+précédence de cobc (63 images, aucun écart d'acceptation). Les comparaisons de
+champs édités sont alphanumériques ; les comparaisons champ DISPLAY/littéral
+suivent le pliage `compare_field_literal` de cobc (par exemple `S99 > -100`
+vaut FAUX natif). S'y ajoutent BLANK WHEN ZERO, JUSTIFIED, QUOTE, VALUE ALL,
+SIZE ERROR sur receveur édité, MOVE de champs P vers X et la valeur absolue dans
+un receveur non signé. Émission acceptée : **141/458** ; revérification :
+**139/139 programmes conformes**, 3072 PASS, 0 FAIL (`build/nist-verify-editing.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

@@ -54,3 +54,19 @@ class AlnumEditingNativeTests(unittest.TestCase):
     def test_alnum_edited_picture_is_text(self):
         field = Parser(program("01 a pic x(2)b0/x.")).parse().fields["A"]
         self.assertEqual((field.kind, field.alnum_edit, field.size), ("text", "XXB0/X", 6))
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class EditedSizeErrorAndJustifiedNativeTests(unittest.TestCase):
+    def test_edited_size_error_quote_and_p_to_text(self):
+        report = verify(ROOT / "tests" / "fixtures" / "edited_size_error.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertIn("[120][12000 ]", report["cobol_stdout"].splitlines())
+
+    def test_value_all_and_justified(self):
+        report = verify(ROOT / "tests" / "fixtures" / "value_all_justified.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        lines = report["cobol_stdout"].splitlines()
+        # VALUE is stored as written; MOVE, even from a group, is justified.
+        self.assertEqual(lines[0], '[""""""""""][ababa][    ][xyxyx][ab    ]')
+        self.assertEqual(lines[3], "[ xyxyx]")

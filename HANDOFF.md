@@ -4,6 +4,16 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : édition et comparaisons. `data_parser.edited_picture` refait
+`cb_build_picture` (groupes de symboles identiques, CR/DB = C/D, chiffres et
+échelle, taille) et `valid_char_order` la table de précédence de tree.c.
+`storage_runtime::edit` est `cob_move_display_to_edited` ligne à ligne ; MOVE
+édite les chiffres propres de l'émetteur (`move_edited`), un calcul passe par
+les chiffres de l'image (modulo). `Kind::AlnumEdited` (valeur initiale éditée
+sans VALUE, groupe émetteur brut, MOVE ALL refusé) et `Kind::Justified`.
+`Emitter.folded_comparison` = `compare_field_literal` (tree.c), appliqué aux
+conditions et aux WHEN d'EVALUATE. Un numérique édité se compare comme texte.
+
 Dernière étape : NEXT SENTENCE, programmes frères, PICTURE P. Le parseur ajoute
 un marqueur `sentence_end` à chaque point séparateur du niveau paragraphe ; le
 graphe (construit à rebours) fait de NEXT SENTENCE un saut vers la suite du

@@ -310,6 +310,7 @@ class Field:
     blank_zero: bool = False
     # Alphanumeric-edited picture, one symbol per position.
     alnum_edit: str = ""
+    justified: bool = False
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
 
@@ -956,6 +957,9 @@ class Parser:
             left = Expr("number", ("0",), figurative_zero=True)
         elif t.key in {"SPACE", "SPACES"}:
             left = Expr("text", (" ",), figurative_space=True)
+        elif t.key in {"QUOTE", "QUOTES"}:
+            # Like ALL '"': a figurative constant fills its receiver.
+            left = Expr("all", ('"',))
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,))
@@ -1199,7 +1203,7 @@ class Parser:
             advancing = None
             if self.at("BEFORE") or self.at("AFTER"):
                 direction = self.take().key
-                self.expect("ADVANCING")
+                self.accept("ADVANCING")  # optional word in WRITE BEFORE/AFTER
                 if self.accept("PAGE"):
                     count = None
                 else:

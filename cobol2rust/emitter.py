@@ -134,13 +134,67 @@ class Emitter:
         if op == "not":
             return f"!({self.expression(args[0])})"
         if op.startswith("cmp"):
+            folded = self.folded_comparison(op[3:], *args)
+            if folded is not None:
+                return str(folded).lower()
             operator = {"=": "==", "<>": "!=", "<": "<", ">": ">", "<=": "<=", ">=": ">="}[op[3:]]
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
 
+    def folded_comparison(self, op, left, right):
+        """cobc's compare_field_literal constant folding (tree.c), or None.
+
+        A DISPLAY numeric or numeric-edited item compared with an all-digit
+        literal having more decimals, or more integer digits than the item's
+        size minus scale, is never equal; for a numeric item cobc also makes
+        > and >= FALSE and < and <= TRUE, whatever the literal's sign.
+        Alphanumeric items fold only when the literal is longer than the item,
+        where a runtime comparison gives the same result.
+        """
+        for swapped, field_expr, literal in ((True, right, left), (False, left, right)):
+            if field_expr.op != "var" or field_expr.args[0].start is not None:
+                continue
+            field = self.program.fields[field_expr.args[0].name]
+            if field.usage != "DISPLAY" or field.kind not in {"number", "edited"}:
+                continue
+            if literal.op in {"unary+", "unary-"} and literal.args[0].op == "number":
+                literal = literal.args[0]
+            if literal.op == "number":
+                text = literal.args[0]
+                data, scale = text.replace(".", ""), len(text.split(".")[1]) if "." in text else 0
+            elif literal.op == "text":
+                data, scale = literal.args[0].rstrip(" "), 0
+            else:
+                continue
+            if field.scale < 0 or not data or not data.isascii() or not data.isdigit():
+                return None
+            if set(data) == {"0"}:
+                return None
+            digits = data.lstrip("0")
+            count = len(digits)
+            while scale > 0 and digits and digits[-1] == "0":
+                digits, scale, count = digits[:-1], scale - 1, count - 1
+            if scale > 0 and field.scale < scale and op in {"=", "<>"}:
+                return op == "<>"
+            if swapped:
+                op = {">": "<", ">=": "<=", "<": ">", "<=": ">="}.get(op, op)
+            if count - scale > 0 and field.size - field.scale >= 0 and count - scale > field.size - field.scale:
+                if op in {"=", "<>"}:
+                    return op == "<>"
+                if field.kind == "number":
+                    return op in {"<", "<="}
+            return None
+        return None
+
     def alphabetic(self, expr):
         return (expr.op == "var" and expr.args[0].start is None
-                and self.program.fields[expr.args[0].name].picture.upper().startswith("A"))
+                and self.is_alphabetic(self.program.fields[expr.args[0].name]))
+
+    @staticmethod
+    def is_alphabetic(field):
+        """PIC A only (with B for alphabetic-edited); mixed with X or 9 it is alphanumeric."""
+        picture = re.sub(r"\(\d+\)", "", field.picture.upper())
+        return bool(picture) and set(picture) <= {"A", "B"} and "A" in picture
 
     def comparison_order(self, left, right):
         # A numeric-edited item is not numeric for libcob's cob_cmp: it
@@ -189,7 +243,7 @@ class Emitter:
             conversions.append(None)
             field = self.program.fields[ref.name]
             destination = "text" if ref.start is not None else field.kind
-            if ref.start is None and field.picture.upper().startswith("A") and source_kind in {"number", "edited"}:
+            if ref.start is None and self.is_alphabetic(field) and source_kind in {"number", "edited"}:
                 raise CobolError("MOVE numérique vers alphabétique (PIC A) invalide, comme pour GnuCOBOL")
             if move and source_kind == "text" and destination in {"number", "edited"}:
                 if expr.figurative_space:
@@ -225,7 +279,7 @@ class Emitter:
                     source_field = self.program.fields[expr.args[0].name]
                     if group and source_field.usage == "INDEX":
                         raise CobolError("MOVE index vers groupe non pris en charge; stockage natif non modélisé")
-                    if not group and source_field.scale:
+                    if not group and source_field.scale > 0:
                         raise CobolError("MOVE numérique non entier vers PIC X ou sous-chaîne invalide; utiliser un groupe pour copier le stockage brut")
                     conversion = "group" if group else "integer"
                 else:
@@ -559,6 +613,8 @@ class Emitter:
             category = lambda e: "text" if self.kind(e) == "edited" else self.kind(e)
             temp = self.unique()
             self.write(f"let {temp} = {self.expression(subject)};")
+            branches = [(case, target) for case, target in branches
+                        if self.kind(case) == "bool" or self.folded_comparison("=", subject, case) is not False]
             for i, (case, target) in enumerate(branches):
                 if category(case) != category(subject):
                     raise CobolError("EVALUATE: types incompatibles")
@@ -567,11 +623,13 @@ class Emitter:
                 self.indent += 1
                 self.write(f"pc = {target};")
                 self.indent -= 1
-            self.write("} else {")
-            self.indent += 1
+            if branches:
+                self.write("} else {")
+                self.indent += 1
             self.write(f"pc = {otherwise};")
-            self.indent -= 1
-            self.write("}")
+            if branches:
+                self.indent -= 1
+                self.write("}")
         elif op == "read":
             name, into, success, eof, continuation, self.io_handlers = a
             spec = self.program.files[name]
@@ -610,7 +668,7 @@ class Emitter:
             self.write(f"}} else if {status} >= 10 {{ pc = handler.unwrap_or({continuation}); }} else {{ pc = {continuation}; }}")
         elif op == "arithmetic":
             shared, items, error, success = a
-            if any(ref.start is not None or self.program.fields[ref.name].kind != "number" for ref, _, _ in items):
+            if any(ref.start is not None or self.program.fields[ref.name].kind not in {"number", "edited"} for ref, _, _ in items):
                 raise CobolError("destination numérique requise pour SIZE ERROR")
             if shared is not None:
                 self.shared = self.unique()
@@ -640,6 +698,8 @@ class Emitter:
         if f.kind == "text":
             if f.alnum_edit:
                 return f"storage_runtime::Kind::AlnumEdited {{ symbols: b{quoted(f.alnum_edit)} }}"
+            if f.justified:
+                return "storage_runtime::Kind::Justified"
             return "storage_runtime::Kind::Text"
         if f.kind == "edited":
             symbols = ", ".join(f"(b'{c}', {n})" for c, n in f.edit_symbols)
@@ -716,7 +776,10 @@ class Emitter:
                    if key == name or key.startswith(name + ".")):
                 raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
             text, fill = field.group_value
-            text = fill * field.size if fill == "0" else text
+            if isinstance(fill, tuple):
+                text = (fill[1] * field.size)[:field.size]
+            elif fill in {"0", '"'}:
+                text = fill * field.size
             self.write(f"result.{self.names[name]}.declare(&Value::text({quoted(text)}));")
         self.write("result")
         self.indent -= 1

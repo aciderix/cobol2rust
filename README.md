@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 268 tests Python, avec un test d'inspection du PE
-Windows ignoré (269 découverts), et les 65 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 277 tests Python, avec un test d'inspection du PE
+Windows ignoré (278 découverts), et les 69 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -233,6 +233,16 @@ position décimale implicite. MOVE, calcul, comparaison numérique et DISPLAY
 (`+990`, `.0012`) sont identiques au natif, y compris la troncature de
 l'opérande par `cob_add_int` (`ADD 15 TO S99P` ajoute 10). P est limité à USAGE
 DISPLAY ; les MOVE entre texte et champ P sont refusés.
+
+## Édition et comparaisons
+
+Les images éditées numériques (`Z`, `*`, `9`, `+`, `-`, `$` fixes ou flottants,
+`,`, `.`, `B`, `0`, `/`, `CR`, `DB`, `P`, BLANK WHEN ZERO) et alphanumériques
+(`X`, `A`, `9` avec `B`, `0`, `/`) sont éditées comme libcob, et acceptées ou
+refusées comme cobc. Un champ édité se compare comme texte. Comme cobc, une
+comparaison d'un champ DISPLAY avec un littéral trop long est résolue à la
+compilation (`S99 > -100` est FAUX, comme en natif). JUSTIFIED RIGHT, VALUE ALL
+et QUOTE sont pris en charge.
 
 ## Calcul décimal et limites explicites
 

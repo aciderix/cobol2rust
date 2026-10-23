@@ -32,7 +32,6 @@ class GroupValueTests(unittest.TestCase):
             "01 g value 'AB'. 02 a pic xx value 'CD'.",  # native: the group overrides it
             "01 g value 'AB'. 02 h value 'C'. 03 a pic x.",
             "01 g value 12. 02 a pic 99.",
-            "01 g value all 'AB'. 02 a pic x(5).",
             "01 g value high-values. 02 a pic xx.",
             "01 g comp. 02 a pic x.",
             "01 r pic x(4). 01 g redefines r value 'AB'. 02 a pic x(4).",

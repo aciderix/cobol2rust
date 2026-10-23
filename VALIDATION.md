@@ -1,5 +1,13 @@
 # Validation — 22 octobre 2026
 
+## Édition, pliage des comparaisons, JUSTIFIED — 23 octobre 2026
+
+- **278 tests découverts : 277 réussis, un test PE Windows ignoré.**
+- **69/69 comparaisons locales conformes** ; nouvelles fixtures
+  `numeric_editing.cob` (23 images × 8 valeurs), `alnum_editing.cob`,
+  `comparison_folding.cob`, `edited_size_error.cob`, `value_all_justified.cob`.
+- NIST : **141/458** ; **139/139 programmes acceptés conformes** (3072 PASS).
+
 ## NEXT SENTENCE, programmes frères, PICTURE P — 23 octobre 2026
 
 - **269 tests découverts : 268 réussis, un test PE Windows ignoré.**
