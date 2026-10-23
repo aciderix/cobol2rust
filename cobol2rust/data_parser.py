@@ -19,7 +19,7 @@ def literal(p):
         token = Token("0", token.line)
     elif token.key in {"SPACE", "SPACES"}:
         token = Token(" ", token.line, True)
-    elif not re.fullmatch(r"\d+(?:\.\d+)?", token.text):
+    elif not re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", token.text):
         p.error("littéral attendu")
     if negative:
         token = Token("-" + token.text, token.line, token.string)
@@ -117,6 +117,13 @@ def declaration(p, file_record=False):
             if variable:
                 p.expect("DEPENDING"); p.expect("ON")
                 depending = p.name()
+            # ASCENDING/DESCENDING KEY only serves SEARCH ALL, which stays refused.
+            while p.accept("ASCENDING") or p.accept("DESCENDING"):
+                p.accept("KEY"); p.accept("IS")
+                p.name()
+                while not p.t.string and p.t.key not in {"ASCENDING", "DESCENDING", "INDEXED", "PIC", "PICTURE",
+                                                         "VALUE", "USAGE", ".", "<EOF>"} | USAGES:
+                    p.name()
         elif p.accept("INDEXED"):
             if not table:
                 p.error("INDEXED BY requiert OCCURS")
@@ -164,7 +171,7 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 257)
 
-    expanded = re.sub(r"([9XZ])\((\d+)\)", repeat, picture)
+    expanded = re.sub(r"([9XZA])\((\d+)\)", repeat, picture)
     group_value = group_usage = None
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
@@ -180,11 +187,13 @@ def declaration(p, file_record=False):
             group_usage = usage
             usage = "DISPLAY"
         initial = None
-    elif re.fullmatch(r"X+", expanded):
+    elif re.fullmatch(r"X+|A+", expanded):
+        # PIC A is alphabetic: stored and compared like PIC X; the emitter
+        # refuses the numeric MOVEs that GnuCOBOL rejects for it.
         kind, digits, scale, signed = "text", len(expanded), 0, False
         if digits > 256 or usage != "DISPLAY":
-            p.error("PIC X limité à 256 caractères DISPLAY")
-    elif re.fullmatch(r"S?9+(?:V9+)?", expanded):
+            p.error("PIC X/A limité à 256 caractères DISPLAY")
+    elif re.fullmatch(r"S?(?:9+(?:V9*)?|V9+)", expanded):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
         if digits > 18:

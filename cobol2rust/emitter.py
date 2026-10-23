@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import re
+
 from .frontend import CobolError, Program, ProcedureBlock, DataRef, Expr
 from .layout import leaves
 from .control import ControlGraph
+
+
+def numeric_text(text):
+    """A numeric literal may start with its decimal point (.5): runtime needs 0.5."""
+    return re.sub(r"^([+-]?)\.", r"\g<1>0.", text)
 
 
 def quoted(text):
@@ -101,7 +108,7 @@ class Emitter:
                     terms.append(f"({self.expression(Expr('cmp>=', (value, left)))} && {self.expression(Expr('cmp<=', (value, right)))})")
             return "(" + " || ".join(terms) + ")"
         if op in {"number", "text"}:
-            return f"Value::{op}({quoted(args[0])})"
+            return f"Value::{op}({quoted(numeric_text(args[0]) if op == 'number' else args[0])})"
         if op in {"unary+", "unary-"}:
             if self.kind(args[0]) != "number":
                 raise CobolError("opérateur numérique sur un champ texte")
@@ -121,6 +128,10 @@ class Emitter:
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
 
+    def alphabetic(self, expr):
+        return (expr.op == "var" and expr.args[0].start is None
+                and self.program.fields[expr.args[0].name].picture.upper().startswith("A"))
+
     def comparison_order(self, left, right):
         kinds = self.kind(left), self.kind(right)
         if "edited" in kinds:
@@ -130,6 +141,8 @@ class Emitter:
         if set(kinds) != {"number", "text"}:
             raise CobolError("comparaison entre catégories non prise en charge")
         number, text = (left, right) if kinds[0] == "number" else (right, left)
+        if self.alphabetic(text):
+            raise CobolError("comparaison numérique/alphabétique (PIC A) non prise en charge")
         # GnuCOBOL treats an empty alphanumeric literal as one SPACE.
         text_value = 'Value::text(" ")' if text.op == "text" and not text.args[0] else self.expression(text)
         if number.figurative_zero:
@@ -166,6 +179,8 @@ class Emitter:
             conversions.append(None)
             field = self.program.fields[ref.name]
             destination = "text" if ref.start is not None else field.kind
+            if ref.start is None and field.picture.upper().startswith("A") and source_kind in {"number", "edited"}:
+                raise CobolError("MOVE numérique vers alphabétique (PIC A) invalide, comme pour GnuCOBOL")
             if move and source_kind == "text" and destination in {"number", "edited"}:
                 if expr.figurative_space:
                     raise CobolError("MOVE de la constante figurative SPACE vers nombre ou champ édité non pris en charge")
@@ -597,7 +612,8 @@ class Emitter:
             if cursor:
                 continue
             constructor = "text" if field.initial.string else "number"
-            self.write(f"result.{self.names[name]}.declare(&Value::{constructor}({quoted(field.initial.text)}));")
+            initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
+            self.write(f"result.{self.names[name]}.declare(&Value::{constructor}({quoted(initial)}));")
         # A group VALUE fills the whole group as alphanumeric data after its
         # leaves, on every occurrence: GnuCOBOL gives it precedence.
         for name, field in self.program.fields.items():

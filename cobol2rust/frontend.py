@@ -210,7 +210,13 @@ def lex(source: str) -> list[Token]:
                 raise CobolError(f"ligne {start}: seuls les littéraux ASCII sont pris en charge")
             tokens.append(Token(value, start, True, token_start, i))
         else:
-            match = re.match(r"\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|[.(),:+*/=<>-]", source[i:])
+            # A COBOL word may start with digits when it holds a letter (3-DIMENSION-TBL);
+            # a numeric literal may start with its decimal point after a separator.
+            point = (c == "." and i + 1 < len(source) and source[i + 1].isdigit()
+                     and (i == 0 or source[i - 1].isspace() or source[i - 1] in "(+-*/=<>,"))
+            match = re.match(r"\.\d+" if point else
+                             r"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|[.(),:+*/=<>-]",
+                             source[i:])
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
             tokens.append(Token(match[0], line, False, i, i + len(match[0])))
@@ -430,7 +436,7 @@ class Parser:
             self.error(f"{word} attendu")
 
     def name(self):
-        if self.t.string or not re.fullmatch(r"[A-Z_][A-Z_0-9-]*", self.t.key):
+        if self.t.string or not re.fullmatch(r"[A-Z_][A-Z_0-9-]*|\d[A-Z0-9-]*[A-Z][A-Z_0-9-]*", self.t.key):
             self.error("identifiant attendu")
         if self.t.key in {"PIC", "PICTURE"}:
             self.error("nom réservé: " + self.t.key)
@@ -862,7 +868,7 @@ class Parser:
         t = self.take()
         if t.string:
             left = Expr("text", (t.text,))
-        elif re.fullmatch(r"\d+(?:\.\d+)?", t.text):
+        elif re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", t.text):
             left = Expr("number", (t.text,))
         elif t.key in {"ZERO", "ZEROS", "ZEROES"}:
             left = Expr("number", ("0",), figurative_zero=True)
