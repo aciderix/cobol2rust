@@ -4,6 +4,22 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : enregistrements variables, PERFORM VARYING AFTER, formes
+lexicales et MOVE ALL. Limites comme `finalize_file` de cobc (clause élargie par
+les 01, minimum par défaut au premier puis au plus petit) dans `FileSpec.record_min/
+record_max/depending`. La zone FD (`fileN_area`, vue de `record_max` octets) sert
+aux lectures ; les 01 alternatifs peuvent être plus grands (layout étend la zone).
+Écriture : taille = DEPENDING ON plafonné à la taille de l'enregistrement nommé,
+44 hors limites. SEQUENTIAL variable : en-tête 4 octets (u16 big endian + 0 0,
+COB_VARSEQ_FORMAT 0). RELATIVE : `size_t` = taille, données `record_max`.
+Lecture : DEPENDING ON = taille lue ; READ INTO déplace la taille lue (préfixe).
+REWRITE SEQUENTIAL : 44 si la taille lue diffère (remplace l'ancien arrêt).
+LINE SEQUENTIAL variable reste refusé. PERFORM VARYING ... AFTER suit
+`output_perform_until` (réinitialisation du niveau suivant en tête de boucle).
+Mots commençant par un chiffre, littéraux `.5` (normalisés à l'émission par
+`numeric_text`), PIC `V9(n)`, PIC A, ASCENDING KEY, MOVE ALL et SET entier TO
+index ajoutés. NIST **115/458** ; nouvelles sources toutes conformes.
+
 Dernière étape : fichiers RELATIVE (`file_runtime::RelativeFile`). Format
 GnuCOBOL 3.2 Linux x86-64 : emplacement = `size_t` little endian (8 octets,
 taille d'enregistrement, 0 = vide, trou lu comme vide) puis `record_max`

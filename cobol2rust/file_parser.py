@@ -3,6 +3,7 @@
 LABEL and BLOCK clauses are retained as metadata. GnuCOBOL does not add labels
 or physical blocking for the supported disk files. RECORD is accepted only as
 a fixed length; the caller must validate it against every FD record after layout.
+RECORD VARYING and RECORD CONTAINS m TO n give the limits of a variable file.
 DATA RECORDS is obsolete documentation: GnuCOBOL parses its names without
 resolving them and gives the clause no effect, so they are kept as metadata.
 """
@@ -58,12 +59,42 @@ def parse_fd_clauses(parser, spec):
                 parser.accept("RECORDS")
             put("block_contains", {"minimum": low, "maximum": high, "unit": unit})
         elif parser.accept("RECORD"):
-            parser.accept("CONTAINS")
-            length = unsigned(parser, "RECORD CONTAINS", minimum=1)
-            if parser.at("TO") or parser.at("DEPENDING"):
-                parser.error("RECORD variable non pris en charge; longueur fixe exacte requise")
-            parser.accept("CHARACTERS")
-            put("record_contains", length)
+            if parser.accept("IS") or parser.at("VARYING"):
+                # RECORD [IS] VARYING [IN] [SIZE] [[FROM] m] [TO n] [CHARACTERS] [DEPENDING [ON] x]
+                parser.expect("VARYING")
+                parser.accept("IN")
+                parser.accept("SIZE")
+                low = high = None
+                if parser.accept("FROM") or (not parser.t.string and parser.t.text.isdigit()):
+                    low = unsigned(parser, "RECORD VARYING", minimum=1)
+                if parser.accept("TO"):
+                    high = unsigned(parser, "RECORD VARYING", minimum=1)
+                parser.accept("CHARACTERS")
+                depending = None
+                if parser.accept("DEPENDING"):
+                    parser.accept("ON")
+                    depending = parser.name()
+                    if parser.at("OF") or parser.at("IN"):
+                        parser.error("DEPENDING ON qualifié non pris en charge")
+                if low and high and high <= low:
+                    parser.error("RECORD VARYING invalide: maximum inférieur ou égal au minimum")
+                put("record_varying", {"minimum": low, "maximum": high, "depending": depending})
+            else:
+                parser.accept("CONTAINS")
+                length = unsigned(parser, "RECORD CONTAINS", minimum=1)
+                if parser.accept("TO"):
+                    high = unsigned(parser, "RECORD CONTAINS", minimum=1)
+                    parser.accept("CHARACTERS")
+                    if parser.at("DEPENDING"):
+                        parser.error("RECORD CONTAINS ... DEPENDING (extension GCOS) non pris en charge")
+                    if high <= length:
+                        parser.error("RECORD CONTAINS invalide: maximum inférieur ou égal au minimum")
+                    put("record_varying", {"minimum": length, "maximum": high, "depending": None})
+                else:
+                    if parser.at("DEPENDING"):
+                        parser.error("RECORD variable non pris en charge; longueur fixe exacte requise")
+                    parser.accept("CHARACTERS")
+                    put("record_contains", length)
         elif parser.accept("RECORDING"):
             parser.accept("MODE")
             parser.accept("IS")

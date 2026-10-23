@@ -294,6 +294,10 @@ class Emitter:
             return value if op == "unary+" else f"Ok::<Value, runtime::SizeError>(({value}?).neg())"
         return f"Ok::<Value, runtime::SizeError>({self.expression(expr)})"
 
+    def depending(self, file_name, mutable):
+        name = self.program.files[file_name].depending
+        return f"Some(&{'mut ' if mutable else ''}self.{self.names[name]})" if name else "None"
+
     def relative_key(self, file_name, mutable):
         key = self.program.files[file_name].relative_key
         if key is None:
@@ -351,8 +355,9 @@ class Emitter:
             name, record, value, _, _ = a
             if value:
                 self.assignment(value, [record], False)
-            key = f", {self.relative_key(name, False)}" if self.program.files[name].organization == "RELATIVE" else ""
-            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.names[record]}{key});")
+            key = f"{self.relative_key(name, False)}, " if self.program.files[name].organization == "RELATIVE" else ""
+            size = self.program.fields[record].size
+            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "delete":
             name = a[0]
@@ -375,7 +380,8 @@ class Emitter:
                 control = f"Some(file_runtime::Advance::{variant}{argument})"
             if self.program.files[name].organization == "RELATIVE":
                 control = self.relative_key(name, True)
-            self.write(f"let status = self.{self.files[name]}.write(&self.{self.names[record]}, {control});")
+            size = self.program.fields[record].size
+            self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "display":
             values = []
@@ -510,20 +516,22 @@ class Emitter:
             random = node.stmt.args[4]
             # AT END takes every 1x status of a sequential read, INVALID KEY every 2x.
             exception_class = 2 if random else 1
+            area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
             if spec.organization != "RELATIVE":
-                self.write(f"let {status} = self.{self.files[name]}.read(&mut self.{record});")
+                self.write(f"let {status} = self.{self.files[name]}.read(&mut {area}, {depending});")
             elif random:
-                self.write(f"let {status} = self.{self.files[name]}.read_key(&mut self.{record}, &self.{self.names[spec.relative_key]});")
+                self.write(f"let {status} = self.{self.files[name]}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
             else:
-                self.write(f"let {status} = self.{self.files[name]}.read_next(&mut self.{record}, {self.relative_key(name, True)});")
+                self.write(f"let {status} = self.{self.files[name]}.read_next(&mut {area}, {self.relative_key(name, True)}, {depending});")
             self.io_invalid = handled and random
             self.file_status(name, status, handled and not random)
             self.io_handlers, self.io_invalid = None, False
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1
             if into:
-                if spec.organization == "SEQUENTIAL":
-                    self.write(f"let record = Value::Bytes(self.{record}.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
+                if spec.organization in {"SEQUENTIAL", "RELATIVE"}:
+                    # READ INTO moves the record as read: its size is the size read.
+                    self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
                 else:
                     self.write(f"let record = self.{record}.snapshot();")
                 self.write(f"{self.reference(into)}.assign(&record, false);")
@@ -597,6 +605,7 @@ class Emitter:
         for name, rust_name in self.files.items():
             kind = "RelativeFile" if self.program.files[name].organization == "RELATIVE" else "CobolFile"
             self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
+            self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
         self.indent -= 1
         self.write("}")
         self.write("impl Program {")
@@ -611,11 +620,13 @@ class Emitter:
             self.write(f"{self.names[name]}: {value},")
         for name, rust_name in self.files.items():
             spec = self.program.files[name]
+            limits = f"{spec.record_min}, {spec.record_max}"
             if spec.organization == "RELATIVE":
-                size = self.program.fields[spec.record].size
-                self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {size}),")
+                self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}),")
             else:
-                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}),")
+                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}),")
+            offset = self.program.fields[spec.record].offset
+            self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
         self.indent -= 1
         self.write("};")
         for name, field in self.program.fields.items():

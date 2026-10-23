@@ -457,6 +457,14 @@ sources sont conformes au runner natif (762 PASS, 4 DELETED également natifs ;
 `build/nist-verify-rel.json`, `build/nist-verify-rel2.json`). Les `.SUB` lisent
 des fichiers RELATIVE écrits par les producteurs GnuCOBOL.
 
+## Progression : enregistrements variables et formes de langage
+
+Enregistrements variables SEQUENTIAL/RELATIVE au format exact de GnuCOBOL,
+PERFORM VARYING ... AFTER, mots commençant par un chiffre, littéraux à point
+initial, PIC A/V, MOVE ALL et SET depuis un index portent l'émission acceptée à
+**115/458**. Toutes les nouvelles sources sont conformes au runner natif
+(`build/nist-verify-var.json` : 12/12, 643 PASS).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

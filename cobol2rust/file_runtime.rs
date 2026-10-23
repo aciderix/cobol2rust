@@ -23,6 +23,21 @@ pub struct CobolFile {
     last_read_size: usize,
     last_open_mode: &'static str,
     read_done: bool,
+    record_min: usize,
+    record_max: usize,
+}
+
+/// cob_write/cob_rewrite record size: DEPENDING ON value capped at the size
+/// of the record named in the statement, or that record's size.
+fn record_size(record_size: usize, depending: Option<&Value>) -> usize {
+    match depending {
+        Some(value) => (value.integer("RECORD DEPENDING ON").max(0) as usize).min(record_size),
+        None => record_size,
+    }
+}
+
+fn set_depending(depending: Option<&mut Value>, size: usize) {
+    if let Some(value) = depending { value.move_number(&Value::number(&size.to_string())); }
 }
 
 thread_local! {
@@ -65,7 +80,7 @@ fn write_advance(file: &mut File, advance: Advance) {
 }
 
 impl CobolFile {
-    pub fn new(path: &str, optional: bool, organization: &str) -> Self {
+    pub fn new(path: &str, optional: bool, organization: &str, record_min: usize, record_max: usize) -> Self {
         let organization = match organization {
             "LINE SEQUENTIAL" => Organization::LineSequential,
             "SEQUENTIAL" => Organization::Sequential,
@@ -90,7 +105,7 @@ impl CobolFile {
         let line = organization == Organization::LineSequential;
         Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
-               needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false }
+               needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max }
     }
 
     /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
@@ -181,10 +196,43 @@ impl CobolFile {
 
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
-    pub fn read(&mut self, record: &mut Value) -> u8 {
+    fn variable(&self) -> bool { self.record_min != self.record_max }
+
+    pub fn read(&mut self, record: &mut Value, depending: Option<&mut Value>) -> u8 {
         let status = self.read_record(record);
         // Like cob_read, any 0x status enables a following REWRITE.
         self.read_done = status < 10;
+        if status < 10 { set_depending(depending, self.last_read_size); }
+        status
+    }
+
+    /// sequential_read of a variable file: a 4-byte header holds the size as
+    /// a big-endian u16 followed by two zero bytes (COB_VARSEQ_FORMAT 0).
+    fn read_variable(&mut self, record: &mut Value) -> u8 {
+        let (minimum, maximum) = (self.record_min, self.record_max);
+        let reader: &mut dyn Read = match &mut self.state {
+            State::Input(reader) => reader,
+            State::InputOutput(file) => file,
+            _ => unreachable!(),
+        };
+        let mut header = [0u8; 4];
+        let count = read_into(reader, &mut header);
+        if count == 0 { self.eof = true; return 10; }
+        if count != 4 || header[2] != 0 || header[3] != 0 { return 39; }
+        let mut size = u16::from_be_bytes([header[0], header[1]]) as usize;
+        let mut status = 0;
+        let mut skip = 0;
+        if size < minimum { status = 4; }
+        if size > maximum { skip = size - maximum; size = maximum; status = 4; }
+        let mut bytes = record.bytes();
+        let count = read_into(reader, &mut bytes[..size]);
+        if count == 0 && size > 0 { self.last_read_size = 0; return 4; }
+        self.last_read_size = count;
+        record.assign(&Value::Bytes(bytes), false);
+        if skip > 0 {
+            let mut rest = vec![0u8; skip];
+            read_into(reader, &mut rest);
+        }
         status
     }
 
@@ -195,6 +243,9 @@ impl CobolFile {
         if self.eof { return 46; }
         if matches!(self.state, State::Missing) { self.eof = true; return 10; }
         let size = record.text_size();
+        if self.organization == Organization::Sequential && self.variable() {
+            return self.read_variable(record);
+        }
         if self.organization == Organization::Sequential {
             // I-O reads are unbuffered so that REWRITE seeks from the true position.
             let reader: &mut dyn Read = match &mut self.state {
@@ -252,29 +303,43 @@ impl CobolFile {
 
     /// SEQUENTIAL REWRITE of the record just read, as sequential_rewrite does:
     /// seek back one record size from the current position and overwrite it.
-    pub fn rewrite(&mut self, record: &Value) -> u8 {
+    /// cob_rewrite: the size of the record read must equal the size of the
+    /// record named (and its DEPENDING ON value), else 44.
+    pub fn rewrite(&mut self, area: &Value, size: usize, depending: Option<&Value>) -> u8 {
         let read_done = self.read_done;
         self.read_done = false;
+        let last = self.last_read_size;
         let file = match &mut self.state { State::InputOutput(file) => file, _ => return 49 };
         if !read_done { return 43; }
-        let bytes = record.bytes();
-        if self.last_read_size != bytes.len() { fail("REWRITE after a partial SEQUENTIAL record not modelled"); }
-        file.seek(SeekFrom::Current(-(bytes.len() as i64))).unwrap_or_else(|e| fail(&format!("file seek failed: {e}")));
-        file.write_all(&bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
+        if last != size { return 44; }
+        if let Some(value) = depending {
+            if value.integer("RECORD DEPENDING ON") != last as i128 { return 44; }
+        }
+        let bytes = area.bytes();
+        file.seek(SeekFrom::Current(-(last as i64))).unwrap_or_else(|e| fail(&format!("file seek failed: {e}")));
+        file.write_all(&bytes[..last]).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
         0
     }
 
-    pub fn write(&mut self, record: &Value, advancing: Option<Advance>) -> u8 {
+    pub fn write(&mut self, area: &Value, size: usize, advancing: Option<Advance>, depending: Option<&Value>) -> u8 {
         self.read_done = false;
         if self.organization == Organization::LineSequential && advancing.is_some() {
             fail("ADVANCING on LINE SEQUENTIAL is not supported");
         }
+        let variable = self.variable();
+        let size = record_size(size, depending);
         let file = match &mut self.state { State::Output(file) => file, _ => return 48 };
-        let bytes = record.bytes();
+        if size < self.record_min || size > self.record_max { return 44; }
+        let bytes = area.bytes()[..size].to_vec();
         if self.organization == Organization::Sequential {
             if let Some(advance @ (Advance::AfterLines(_) | Advance::AfterPage)) = advancing {
                 write_advance(file, advance);
                 self.needs_nl = true;
+            }
+            if variable {
+                let length = u16::try_from(size).unwrap_or_else(|_| fail("variable record exceeds 65535 bytes"));
+                let [high, low] = length.to_be_bytes();
+                file.write_all(&[high, low, 0, 0]).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
             }
             file.write_all(&bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
             if let Some(advance @ (Advance::BeforeLines(_) | Advance::BeforePage)) = advancing {
@@ -327,7 +392,9 @@ pub struct RelativeFile {
     path: String,
     optional: bool,
     access: Access,
+    record_min: usize,
     record_max: usize,
+    last_read_size: usize,
     file: Option<File>,
     open_mode: &'static str,
     locked: bool,
@@ -338,10 +405,12 @@ pub struct RelativeFile {
     read_done: bool,
 }
 
-fn read_full(file: &mut File, buffer: &mut [u8]) -> usize {
+fn read_full(file: &mut File, buffer: &mut [u8]) -> usize { read_into(file, buffer) }
+
+fn read_into(reader: &mut dyn Read, buffer: &mut [u8]) -> usize {
     let mut count = 0;
     while count < buffer.len() {
-        match file.read(&mut buffer[count..]) {
+        match reader.read(&mut buffer[count..]) {
             Ok(0) => break,
             Ok(read) => count += read,
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
@@ -365,7 +434,7 @@ fn key_number(key: &Value) -> i64 {
 }
 
 impl RelativeFile {
-    pub fn new(path: &str, optional: bool, access: &str, record_max: usize) -> Self {
+    pub fn new(path: &str, optional: bool, access: &str, record_min: usize, record_max: usize) -> Self {
         for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH"] {
             if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
         }
@@ -376,11 +445,14 @@ impl RelativeFile {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported RELATIVE access mode"),
         };
-        Self { path: path.into(), optional, access, record_max, file: None, open_mode: "", locked: false,
+        Self { path: path.into(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
                last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+
+    /// Record size of the last READ (the slot's size field), for READ INTO.
+    pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     fn slot_size(&self) -> u64 { self.record_max as u64 + 8 }
 
@@ -445,7 +517,13 @@ impl RelativeFile {
     }
 
     /// cob_read_next followed by relative_read_next.
-    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>, depending: Option<&mut Value>) -> u8 {
+        let status = self.cob_read_next(record, key);
+        if status < 10 { set_depending(depending, self.last_read_size); }
+        status
+    }
+
+    fn cob_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -484,6 +562,7 @@ impl RelativeFile {
                 let mut data = vec![0u8; record_max];
                 if read_full(file, &mut data) != record_max { return 30; }
                 record.assign(&Value::Bytes(data), false);
+                self.last_read_size = u64::from_le_bytes(size) as usize;
                 if let Some(key) = key {
                     let number = offset / slot + 1;
                     key.move_number(&Value::number("0"));
@@ -499,7 +578,13 @@ impl RelativeFile {
     }
 
     /// cob_read with a key, then relative_read.
-    pub fn read_key(&mut self, record: &mut Value, key: &Value) -> u8 {
+    pub fn read_key(&mut self, record: &mut Value, key: &Value, depending: Option<&mut Value>) -> u8 {
+        let status = self.cob_read_key(record, key);
+        if status < 10 { set_depending(depending, self.last_read_size); }
+        status
+    }
+
+    fn cob_read_key(&mut self, record: &mut Value, key: &Value) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -523,6 +608,7 @@ impl RelativeFile {
         let mut data = vec![0u8; record_max];
         if read_full(file, &mut data) != record_max { return 30; }
         record.assign(&Value::Bytes(data), false);
+        self.last_read_size = u64::from_le_bytes(size) as usize;
         self.first_read = 0;
         self.read_done = true;
         self.end_of_file = false;
@@ -530,12 +616,15 @@ impl RelativeFile {
     }
 
     /// cob_write then relative_write.
-    pub fn write(&mut self, record: &Value, key: Option<&mut Value>) -> u8 {
+    /// relative_write stores the record size in the slot, then the whole area.
+    pub fn write(&mut self, area: &Value, size: usize, key: Option<&mut Value>, depending: Option<&Value>) -> u8 {
         self.read_done = false;
         let allowed = if self.access == Access::Sequential { ["OUTPUT", "EXTEND"] } else { ["OUTPUT", "I-O"] };
         if !allowed.contains(&self.open_mode) { return 48; }
-        let bytes = record.bytes();
-        if bytes.len() != self.record_max { fail("RELATIVE record size differs from the file record"); }
+        let size = record_size(size, depending);
+        if size < self.record_min || size > self.record_max { return 44; }
+        let bytes = area.bytes();
+        if bytes.len() != self.record_max { fail("RELATIVE record area differs from the file record"); }
         let slot = self.slot_size();
         let sequential = self.access == Access::Sequential;
         let file = self.file.as_mut().unwrap();
@@ -551,7 +640,7 @@ impl RelativeFile {
             offset
         };
         seek(file, SeekFrom::Start(offset));
-        put(file, &(bytes.len() as u64).to_le_bytes());
+        put(file, &(size as u64).to_le_bytes());
         put(file, &bytes);
         if sequential {
             if let Some(key) = key {
@@ -564,13 +653,15 @@ impl RelativeFile {
 
     /// cob_rewrite then relative_rewrite. A random rewrite of an empty slot
     /// inside the file writes the data, keeps the zero size and returns 00.
-    pub fn rewrite(&mut self, record: &Value, key: Option<&Value>) -> u8 {
+    pub fn rewrite(&mut self, area: &Value, size: usize, key: Option<&Value>, depending: Option<&Value>) -> u8 {
         let read_done = self.read_done;
         self.read_done = false;
         if self.open_mode != "I-O" { return 49; }
         if self.access == Access::Sequential && !read_done { return 43; }
-        let bytes = record.bytes();
-        if bytes.len() != self.record_max { fail("RELATIVE record size differs from the file record"); }
+        let size = record_size(size, depending);
+        if self.record_min != self.record_max && (size < self.record_min || size > self.record_max) { return 44; }
+        let bytes = area.bytes();
+        if bytes.len() != self.record_max { fail("RELATIVE record area differs from the file record"); }
         let slot = self.slot_size();
         let sequential = self.access == Access::Sequential;
         let file = self.file.as_mut().unwrap();

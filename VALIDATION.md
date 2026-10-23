@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## Enregistrements variables — 23 octobre 2026
+
+- **255 tests découverts : 254 réussis, un test PE Windows ignoré.**
+- **61/61 comparaisons locales conformes** (nouvelles fixtures
+  `variable_records`, `perform_after`, `lexical_forms`, `set_all`).
+- NIST : **115/458** ; 12 + 7 + 1 nouvelles sources conformes.
+
 ## RELATIVE — 23 octobre 2026
 
 - **243 tests découverts : 242 réussis, un test PE Windows ignoré.**

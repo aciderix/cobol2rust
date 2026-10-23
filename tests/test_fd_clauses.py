@@ -53,7 +53,7 @@ class FdClauseTests(unittest.TestCase):
 
     def test_unsupported_and_ambiguous_fd_clauses_are_not_ignored(self):
         cases = [
-            "record contains 7 to 9 characters.", "record is varying from 1 to 9 characters.",
+            "record contains 9 to 7 characters.", "record is varying from 9 to 9 characters.",
             "record contains 0 characters.", "record contains -5 characters.",
             "record contains 5.5 characters.", "record contains 5 character.",
             "block contains 12 to 1 records.", "block contains -1 records.",

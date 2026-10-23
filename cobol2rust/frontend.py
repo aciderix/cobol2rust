@@ -351,6 +351,9 @@ class FileSpec:
     fd_clauses: dict = field(default_factory=dict)
     access: str = "SEQUENTIAL"
     relative_key: str | None = None
+    record_min: int = 0
+    record_max: int = 0
+    depending: str | None = None
 
 
 @dataclass
@@ -853,8 +856,29 @@ class Parser:
                 if any(key.name == r or key.name.startswith(r + ".") for r in spec.records):
                     self.error("RELATIVE KEY dans l'enregistrement de son propre fichier non prise en charge")
             from .layout import leaves
-            if any(self.fields[key].size != self.fields[spec.record].size for key in spec.records):
-                self.error("enregistrements FD de tailles différentes non pris en charge; format variable requis")
+            sizes = [self.fields[key].size for key in spec.records]
+            varying = spec.fd_clauses.get("record_varying")
+            # cobc's finalize_file: clause limits widened by the 01 sizes; the
+            # minimum defaults to the first record, then the smallest one.
+            low = (varying or {}).get("minimum") or 0
+            high = (varying or {}).get("maximum") or 0
+            if varying and low and high and high <= low:
+                self.error("RECORD VARYING invalide: maximum inférieur ou égal au minimum")
+            for size in sizes:
+                if low and size < low:
+                    low = size
+                if high and size > high:
+                    high = size
+            low = low or sizes[0]
+            spec.record_min, spec.record_max = min([low, *sizes]), max([high, *sizes])
+            if spec.record_min != spec.record_max and spec.organization == "LINE SEQUENTIAL":
+                self.error("enregistrements LINE SEQUENTIAL de tailles différentes non pris en charge")
+            if varying and varying["depending"]:
+                spec.depending = self.resolve(varying["depending"])
+                dep = self.fields[spec.depending]
+                if (dep.kind != "number" or dep.scale or dep.signed or dep.digits > 9 or dep.dimensions
+                        or dep.usage == "INDEX" or any(dep.name == r or dep.name.startswith(r + ".") for r in spec.records)):
+                    self.error("RECORD DEPENDING ON limité à un entier non signé de 9 chiffres hors de l'enregistrement")
             if "record_contains" in spec.fd_clauses and any(self.fields[key].size != spec.fd_clauses["record_contains"] for key in spec.records):
                 self.error("RECORD CONTAINS doit égaler la taille physique de chaque description FD; format variable non pris en charge")
             if spec.organization == "LINE SEQUENTIAL" and any(f.usage != "DISPLAY" for f in leaves(self.fields, spec.record, True)):

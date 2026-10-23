@@ -22,6 +22,8 @@ def layout_fields(fields):
             raise CobolError(f"zone de données trop grande: {f.name}")
         return f.size * f.occurs
 
+    extents = {}
+
     def siblings(keys, start):
         cursor = start
         for key in keys:
@@ -29,8 +31,14 @@ def layout_fields(fields):
             total = size(key)
             if f.redefines:
                 target = fields[f.redefines]
-                if total > target.size * target.occurs:
-                    raise CobolError(f"REDEFINES plus grand que sa zone non pris en charge: {key}")
+                extent = extents.get(target.name, target.size * target.occurs)
+                if total > extent:
+                    # Alternate FD records follow their first record and may be
+                    # larger: the record area grows to the largest one.
+                    if not (f.file_record and target.file_record and f.parent is None):
+                        raise CobolError(f"REDEFINES plus grand que sa zone non pris en charge: {key}")
+                    cursor += total - extent
+                    extents[target.name] = total
                 f.offset = target.offset
             else:
                 f.offset = cursor

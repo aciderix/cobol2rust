@@ -32,9 +32,6 @@ class SequentialFrontendTests(unittest.TestCase):
 
     def test_variable_record_formats_and_unsupported_controls_are_rejected(self):
         cases = [
-            sequential(fd="fd f. 01 rec pic x(5). 01 other-rec pic x(3)."),
-            sequential(fd="fd f. 01 rec pic x(3). 01 other-rec pic x(5)."),
-            sequential(fd="fd f record varying from 3 to 5 characters. 01 rec pic x(5)."),
             sequential("write rec after advancing fs lines."),
             sequential("write rec after advancing -1 lines."),
             sequential("write rec after advancing 1.5 lines."),
