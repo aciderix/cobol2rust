@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## SIGN, SYNCHRONIZED, clauses de données — 23 octobre 2026
+
+- **283 tests découverts : 282 réussis, un test PE Windows ignoré.**
+- **72/72 comparaisons locales conformes** ; nouvelles fixtures
+  `sign_clause.cob`, `condition_figuratives.cob`.
+- NIST : **153/458** ; **151/151 programmes acceptés conformes** (3656 PASS).
+
 ## Édition, pliage des comparaisons, JUSTIFIED — 23 octobre 2026
 
 - **278 tests découverts : 277 réussis, un test PE Windows ignoré.**

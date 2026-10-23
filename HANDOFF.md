@@ -4,6 +4,13 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : clauses de données. SIGN = variantes `Usage::SignLeading`,
+`SignLeadingSeparate`, `SignTrailingSeparate` et helpers `display_digits`/
+`display_bytes` (seul '-' séparé est négatif ; un octet séparé autre que +/-
+arrête). Le 4e élément de la méta `Value::Num` dit d'afficher le signe en fin.
+SYNCHRONIZED : `layout.py` refuse tout cas où cobc insérerait du remplissage.
+MOVE -0 vers un nombre signé refusé (cobc garde un zéro négatif).
+
 Dernière étape : édition et comparaisons. `data_parser.edited_picture` refait
 `cb_build_picture` (groupes de symboles identiques, CR/DB = C/D, chiffres et
 échelle, taille) et `valid_char_order` la table de précédence de tree.c.

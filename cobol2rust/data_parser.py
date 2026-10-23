@@ -192,7 +192,13 @@ def declaration(p, file_record=False):
     if p.t.string or not p.t.key.isdigit():
         p.error("niveau de donnée attendu")
     level = int(p.take().key)
-    label = p.name()
+    # A description without a name is an implicit FILLER.
+    implicit_filler = level != 88 and not p.t.string and p.t.key in {
+        "PIC", "PICTURE", "VALUE", "VALUES", "USAGE", "OCCURS", "REDEFINES", "SIGN", "BLANK", "JUSTIFIED",
+        "JUST", "LEADING", "TRAILING", "SYNC", "SYNCHRONIZED", "."} | USAGES
+    if implicit_filler and p.t.key in {"PIC", "PICTURE"} and p.tokens[p.i + 1].key in {"PIC", "PICTURE"}:
+        p.error("nom réservé: " + p.t.key)
+    label = "FILLER" if implicit_filler else p.name()
     if level == 88:
         if not p.last_data or not p.fields[p.last_data].picture:
             p.error("niveau 88 requiert une donnée élémentaire précédente")
@@ -204,6 +210,20 @@ def declaration(p, file_record=False):
         p.accept("IS") or p.accept("ARE")
         values = []
         while not p.at(".") and not p.at("WHEN"):
+            parent = p.fields[p.last_data]
+            figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES"} | (
+                {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
+            if p.accept("ALL") or figurative:
+                # ALL literal and figurative constants: repeated over the item.
+                token = literal(p)
+                if not token.string:
+                    token = Token(token.text, token.line, True)
+                if not token.string or parent.kind != "text":
+                    p.error("VALUE ALL de niveau 88 limité aux PIC X/A")
+                low = Token((token.text * parent.digits)[:parent.digits], token.line, True)
+                values.append((low, low))
+                p.accept(",")
+                continue
             low = literal(p)
             high = literal(p) if p.accept("THRU") or p.accept("THROUGH") else low
             values.append((low, high))
@@ -244,6 +264,8 @@ def declaration(p, file_record=False):
     minimum, depending = 1, None
     figurative = None
     blank_zero = justified = False
+    sign_clause = None
+    synchronized = False
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -314,6 +336,22 @@ def declaration(p, file_record=False):
                 if not initial.string:
                     p.error("VALUE ALL limité aux littéraux alphanumériques et constantes figuratives")
                 figurative = ("ALL", initial.text)
+        elif p.at("SIGN") or p.at("LEADING") or p.at("TRAILING"):
+            # SIGN [IS] LEADING|TRAILING [SEPARATE [CHARACTER]]
+            if sign_clause is not None:
+                p.error("SIGN dupliqué")
+            if p.accept("SIGN"):
+                p.accept("IS")
+            if not (p.at("LEADING") or p.at("TRAILING")):
+                p.error("SIGN requiert LEADING ou TRAILING")
+            position = p.take().key
+            separate = p.accept("SEPARATE")
+            if separate:
+                p.accept("CHARACTER")
+            sign_clause = (position, separate)
+        elif p.accept("SYNCHRONIZED") or p.accept("SYNC"):
+            p.accept("LEFT") or p.accept("RIGHT")
+            synchronized = True
         elif p.accept("JUSTIFIED") or p.accept("JUST"):
             if justified:
                 p.error("JUSTIFIED dupliqué")
@@ -412,6 +450,9 @@ def declaration(p, file_record=False):
             kind, symbols, edit_size = "edited", [("9", digits)], digits
         elif kind != "edited" or any(c == "*" for c, _ in symbols):
             p.error("BLANK WHEN ZERO limité aux PICTURE éditées sans * et aux entiers DISPLAY non signés")
+    if figurative == "0" and initial is not None and kind == "text" and picture and not alnum_edit:
+        # VALUE ZERO of an alphanumeric item: zeros in every position.
+        initial = Token("0" * digits, initial.line, True)
     if isinstance(figurative, tuple):
         if kind != "text" or alnum_edit:
             p.error("VALUE ALL limité aux PIC X/A et groupes")
@@ -420,6 +461,16 @@ def declaration(p, file_record=False):
     elif figurative == '"' and initial is not None and kind == "text":
         # A figurative constant fills every position of the item.
         initial = Token('"' * digits, initial.line, True)
+    group_sign = None
+    if not picture:
+        # A group SIGN clause applies to its signed numeric DISPLAY items.
+        group_sign, sign_clause = sign_clause, None
+    elif sign_clause is None:
+        sign_clause = next((a.group_sign for a in ancestors if a.group_sign), None)
+        if sign_clause and not (kind == "number" and signed and usage == "DISPLAY"):
+            sign_clause = None
+    if sign_clause and not (kind == "number" and signed and usage == "DISPLAY"):
+        p.error("SIGN requiert une PICTURE numérique signée USAGE DISPLAY")
     if justified and (kind != "text" or alnum_edit or not picture):
         p.error("JUSTIFIED limité aux PIC X/A élémentaires")
     explicit_value = initial is not None
@@ -440,6 +491,10 @@ def declaration(p, file_record=False):
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
     descriptor.alnum_edit = alnum_edit
+    descriptor.synchronized = synchronized
+    descriptor.group_sign = group_sign
+    descriptor.sign_leading = bool(sign_clause and sign_clause[0] == "LEADING")
+    descriptor.sign_separate = bool(sign_clause and sign_clause[1])
     descriptor.justified = justified
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size

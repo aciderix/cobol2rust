@@ -498,6 +498,16 @@ SIZE ERROR sur receveur édité, MOVE de champs P vers X et la valeur absolue da
 un receveur non signé. Émission acceptée : **141/458** ; revérification :
 **139/139 programmes conformes**, 3072 PASS, 0 FAIL (`build/nist-verify-editing.json`).
 
+## Progression : SIGN, SYNCHRONIZED et clauses de données
+
+Clause SIGN (LEADING/TRAILING, SEPARATE, héritée du groupe) comme
+`cob_real_get_sign`/`cob_real_put_sign`, affichage du signe séparé final comme
+`pretty_display_numeric`, SYNCHRONIZED sans remplissage (DISPLAY ou binaire déjà
+aligné ; le remplissage de `compute_size` reste refusé), FILLER implicite,
+`88 … VALUE ALL` et constantes figuratives de niveau 88, VALUE ZERO sur PIC X.
+Émission acceptée : **153/458** ; revérification : **151/151 programmes
+conformes**, 3656 PASS, 0 FAIL (`build/nist-verify-sign.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

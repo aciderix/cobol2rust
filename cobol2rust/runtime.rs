@@ -104,7 +104,9 @@ impl Number {
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Num(Number, Option<(u32, i32, bool)>),
+    /// A number, with the PICTURE of the item it was read from: digits,
+    /// scale, signed, and whether DISPLAY shows the sign after the digits.
+    Num(Number, Option<(u32, i32, bool, bool)>),
     Text(String),
     Bytes(Vec<u8>),
     View(crate::storage_runtime::View),
@@ -181,7 +183,7 @@ impl Value {
         Self::Text(text.to_string())
     }
     pub fn numeric_field(digits: u32, scale: i32, signed: bool, initial: &str) -> Self {
-        let mut result = Self::Num(Number::scaled(BigInt::from(0), scale), Some((digits, scale, signed)));
+        let mut result = Self::Num(Number::scaled(BigInt::from(0), scale), Some((digits, scale, signed, false)));
         result.assign(&Self::number(initial), false);
         result
     }
@@ -230,7 +232,7 @@ impl Value {
     pub fn assign(&mut self, source: &Self, rounded: bool) {
         match self {
             Self::View(view) => view.assign(source, rounded),
-            Self::Num(n, Some((digits, scale, signed))) => {
+            Self::Num(n, Some((digits, scale, signed, _))) => {
                 let units = source.num().units(*scale, rounded);
                 if absolute(&units) >= power(*digits) || (!*signed && units.sign() == Sign::Minus) {
                     fail("destination PICTURE overflow or negative unsigned value");
@@ -293,14 +295,17 @@ impl Value {
             Self::View(view) => view.value().show(),
             Self::Bytes(b) => String::from_utf8(b.clone()).unwrap_or_else(|_| fail("binary group requires raw byte output")),
             Self::Text(s) => s.clone(),
-            Self::Num(n, Some((digits, scale, signed))) => {
+            Self::Num(n, Some((digits, scale, signed, trailing_sign))) => {
                 // pretty_display_numeric: trailing P positions print as zero
                 // digits; leading ones widen the fraction (PIC PP9 -> .ddd).
                 let (units, width) = if *scale < 0 { (n.units(0, false), (*digits as i32 - *scale) as usize) }
                                      else { (n.units(*scale, false), (*digits).max(*scale as u32) as usize) };
                 let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = width);
                 if *scale > 0 { s.insert(s.len() - *scale as usize, '.'); }
-                if *signed { s.insert(0, if units.sign() == Sign::Minus { '-' } else { '+' }); }
+                if *signed {
+                    let sign = if units.sign() == Sign::Minus { '-' } else { '+' };
+                    if *trailing_sign { s.push(sign); } else { s.insert(0, sign); }
+                }
                 s
             },
             Self::Num(n, None) => {

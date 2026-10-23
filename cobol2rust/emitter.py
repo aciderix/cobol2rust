@@ -292,6 +292,12 @@ class Emitter:
                 continue
             if destination == "edited" or destination != source_kind:
                 raise CobolError(f"conversion implicite numérique/texte non prise en charge: {ref.name}")
+        if (move and expr.op == "unary-" and expr.args[0].op == "number"
+                and not expr.args[0].args[0].replace(".", "").strip("0")
+                and any(ref.start is None and self.program.fields[ref.name].kind == "number"
+                        and self.program.fields[ref.name].signed for ref in targets)):
+            # cobc keeps the literal's sign: a signed receiver gets a negative zero.
+            raise CobolError("MOVE d'un zéro négatif littéral vers un nombre signé non pris en charge")
         # A numeric MOVE truncates instead of raising SIZE ERROR. Index senders
         # keep the stricter assignment: their native transfer is not modelled.
         truncating = (move and source_kind == "number" and not
@@ -690,6 +696,10 @@ class Emitter:
 
     @staticmethod
     def storage_usage(f):
+        if f.usage == "DISPLAY" and f.sign_leading:
+            return "SignLeadingSeparate" if f.sign_separate else "SignLeading"
+        if f.usage == "DISPLAY" and f.sign_separate:
+            return "SignTrailingSeparate"
         if f.usage in {"INDEX", "DISPLAY"}:
             return f.usage.capitalize()
         return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"

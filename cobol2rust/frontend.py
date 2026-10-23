@@ -311,6 +311,11 @@ class Field:
     # Alphanumeric-edited picture, one symbol per position.
     alnum_edit: str = ""
     justified: bool = False
+    # SIGN clause of a signed DISPLAY item; a group's clause for its items.
+    sign_leading: bool = False
+    sign_separate: bool = False
+    group_sign: tuple | None = None
+    synchronized: bool = False
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
 
@@ -1515,7 +1520,7 @@ class Parser:
         if field.scale > 0:
             return False
         if field.usage == "DISPLAY":
-            return field.digits < 10
+            return field.digits + field.sign_separate < 10
         if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
             return field.digits < 10
         return field.digits <= 9

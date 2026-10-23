@@ -13,7 +13,7 @@ def layout_fields(fields):
             elif f.usage != "DISPLAY":
                 f.size = 1 if f.digits <= 2 else 2 if f.digits <= 4 else 4 if f.digits <= 9 else 8
             else:
-                f.size = f.digits
+                f.size = f.digits + (1 if f.sign_separate else 0)
         else:
             if not f.children:
                 raise CobolError(f"groupe vide: {f.name}")
@@ -60,6 +60,30 @@ def layout_fields(fields):
             locate(child, f.offset, f.dimensions)
     for key in roots:
         locate(key, 0, [])
+    # SYNCHRONIZED aligns binary items of 2, 4 or 8 bytes inside their record
+    # (cobc compute_size), padding before them and after table entries; it
+    # has no effect on other items. Only layouts needing no padding are kept.
+    for f in fields.values():
+        cursor, synced = f, f.synchronized
+        while cursor.parent:
+            cursor = fields[cursor.parent]
+            synced = synced or (cursor.synchronized and f.usage != "DISPLAY")
+        if not synced or not f.picture or f.usage in {"DISPLAY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+            continue
+        align = f.size if f.size in {2, 4, 8} else 1
+        if f.index_for or f.usage == "INDEX":
+            align = 4
+        if align == 1:
+            continue
+        aligned = (f.offset - cursor.offset) % align == 0
+        tables = []
+        parent = f.parent
+        while parent:
+            if fields[parent].table:
+                tables.append(fields[parent])
+            parent = fields[parent].parent
+        if not aligned or any(table.size % align for table in tables) or (f.table and f.size % align):
+            raise CobolError(f"SYNCHRONIZED avec remplissage d'alignement non pris en charge: {f.label}")
     # A terminal ODO has a fixed address and a variable enclosing group length.
     # Sliding fields, variable strides and record I/O need a separate layout model.
     for f in fields.values():

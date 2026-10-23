@@ -8,7 +8,51 @@ pub type Memory = Rc<RefCell<Vec<u8>>>;
 pub fn memory(size: usize) -> Memory { Rc::new(RefCell::new(vec![0; size])) }
 
 #[derive(Clone, Copy, Debug)]
-pub enum Usage { Display, Packed, Binary, Index }
+pub enum Usage {
+    Display, Packed, Binary, Index,
+    /// Signed DISPLAY with a SIGN clause: overpunched first digit, or a
+    /// separate '+'/'-' byte before or after the digits.
+    SignLeading, SignLeadingSeparate, SignTrailingSeparate,
+}
+impl Usage {
+    pub fn is_display(self) -> bool {
+        matches!(self, Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate)
+    }
+}
+
+/// The digits of DISPLAY storage and its sign, as cob_real_get_sign reads
+/// them: an overpunch 'p'..'y' on the sign digit, or a separate byte where
+/// only '-' is negative. Unsigned items have no sign position.
+fn display_digits(bytes: &[u8], usage: Usage, signed: bool) -> (Vec<u8>, bool) {
+    let mut digits = bytes.to_vec();
+    if !signed || digits.is_empty() { return (digits, false); }
+    match usage {
+        Usage::SignLeadingSeparate => { let sign = digits.remove(0); (digits, sign == b'-') },
+        Usage::SignTrailingSeparate => { let sign = digits.pop().unwrap(); (digits, sign == b'-') },
+        _ => {
+            let position = if matches!(usage, Usage::SignLeading) { 0 } else { digits.len() - 1 };
+            let negative = (b'p'..=b'y').contains(&digits[position]);
+            if negative { digits[position] -= b'p' - b'0'; }
+            (digits, negative)
+        },
+    }
+}
+
+/// DISPLAY storage for digits and a sign (cob_real_put_sign).
+fn display_bytes(mut digits: Vec<u8>, negative: bool, usage: Usage, signed: bool) -> Vec<u8> {
+    if !signed { return digits; }
+    match usage {
+        Usage::SignLeadingSeparate => { digits.insert(0, if negative { b'-' } else { b'+' }); digits },
+        Usage::SignTrailingSeparate => { digits.push(if negative { b'-' } else { b'+' }); digits },
+        _ => {
+            if negative && !digits.is_empty() {
+                let position = if matches!(usage, Usage::SignLeading) { 0 } else { digits.len() - 1 };
+                digits[position] += b'p' - b'0';
+            }
+            digits
+        },
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
     Text,
@@ -269,14 +313,17 @@ impl View {
             Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage),
             _ => return Err("numeric view required"),
         };
-        let mut bytes = self.raw();
+        let bytes = self.raw();
         let coefficient = match usage {
-            Usage::Display => {
-                let last = bytes.last_mut().ok_or("empty numeric field")?;
-                let negative = signed && (b'p'..=b'y').contains(last);
-                if negative { *last = b'0' + (*last - b'p'); }
-                if !bytes.iter().all(u8::is_ascii_digit) { return Err("invalid DISPLAY numeric data"); }
-                let n = BigInt::parse_bytes(&bytes, 10).ok_or("invalid DISPLAY data")?;
+            Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {
+                if bytes.is_empty() { return Err("empty numeric field"); }
+                if matches!(usage, Usage::SignLeadingSeparate) && !matches!(bytes[0], b'+' | b'-')
+                    || matches!(usage, Usage::SignTrailingSeparate) && !matches!(bytes[bytes.len() - 1], b'+' | b'-') {
+                    return Err("invalid separate sign");
+                }
+                let (digits, negative) = display_digits(&bytes, usage, signed);
+                if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) { return Err("invalid DISPLAY numeric data"); }
+                let n = BigInt::parse_bytes(&digits, 10).ok_or("invalid DISPLAY data")?;
                 if negative { -n } else { n }
             },
             Usage::Packed => {
@@ -298,7 +345,7 @@ impl View {
                 else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             },
         };
-        Ok(Value::Num(Number::scaled(coefficient, scale), Some((digits, scale, signed))))
+        Ok(Value::Num(Number::scaled(coefficient, scale), Some((digits, scale, signed, matches!(usage, Usage::SignTrailingSeparate)))))
     }
     pub fn value(&self) -> Value {
         match self.kind {
@@ -337,18 +384,17 @@ impl View {
         if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
         if comparison && (scale < 0 || scale as u32 > digits) { fail("alphanumeric comparison of a P-scaled item not modelled"); }
         if !comparison && scale > 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
-        if scale < 0 && !matches!(usage, Usage::Display) { fail("P-scaled binary or packed MOVE to alphanumeric not modelled"); }
+        if scale < 0 && !usage.is_display() { fail("P-scaled binary or packed MOVE to alphanumeric not modelled"); }
         let bytes = match usage {
-            Usage::Display => {
+            Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {
                 let mut bytes = self.raw();
                 if signed {
                     // GnuCOBOL normalizes some malformed sign encodings and
                     // can mutate the sender. Keep those cases outside this
                     // profile rather than silently changing their behavior.
                     if self.number().is_err() { fail("invalid signed DISPLAY numeric MOVE"); }
-                    if let Some(last) = bytes.last_mut() {
-                        if (b'p'..=b'y').contains(last) { *last = b'0' + (*last - b'p'); }
-                    }
+                    // The data without its sign: a separate sign byte is not part of it.
+                    bytes = display_digits(&bytes, usage, signed).0;
                 }
                 // An unsigned DISPLAY sender is copied as bytes even when
                 // its storage is not valid numeric data. Trailing P positions
@@ -384,15 +430,14 @@ impl View {
         if let Kind::Numeric { scale, digits, .. } = self.kind {
             if scale < 0 || scale as u32 > digits { fail("text MOVE to a P-scaled item not modelled"); }
         }
-        if let Kind::Numeric { digits, scale, signed, usage: Usage::Display } = self.kind {
-            let (mut result, negative, _) = text_move_digits(&bytes, digits as usize, scale as usize);
-            if signed && negative {
-                let last = result.last_mut().unwrap();
-                *last = b'p' + (*last - b'0');
+        if let Kind::Numeric { digits, scale, signed, usage } = self.kind {
+            if usage.is_display() {
+                let (result, negative, _) = text_move_digits(&bytes, digits as usize, scale as usize);
+                let result = display_bytes(result, signed && negative, usage, signed);
+                if result.len() != self.size { fail("unsupported DISPLAY storage for text MOVE"); }
+                self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
+                return;
             }
-            if result.len() != self.size { fail("unsupported DISPLAY storage for text MOVE"); }
-            self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
-            return;
         }
         // Other numeric usages and edited receivers pass through a signed
         // DISPLAY buffer of 76 positions and 38 fractional positions.
@@ -463,14 +508,13 @@ impl View {
         self.move_number(source)
     }
     fn mark_negative_zero(&mut self) {
-        let usage = match self.kind { Kind::Numeric { usage, .. } => usage, _ => return };
-        let mut memory = self.memory.borrow_mut();
-        let last = &mut memory[self.offset + self.size - 1];
-        match usage {
-            Usage::Display => *last = b'p' + (*last - b'0'),
-            Usage::Packed => *last = (*last & 0xf0) | 0x0d,
-            Usage::Binary | Usage::Index => {},
-        }
+        let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
+        let mut bytes = match usage {
+            Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
+            Usage::Binary | Usage::Index => return,
+            _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
+        };
+        self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
     pub fn assign(&mut self, source: &Value, rounded: bool) {
         self.resolved();
@@ -519,11 +563,7 @@ impl View {
                 let negative = units.sign() == Sign::Minus;
                 let ascii = format!("{:0>width$}", absolute(&units).to_string(), width = digits as usize).into_bytes();
                 match usage {
-                    Usage::Display => {
-                        let mut bytes = ascii;
-                        if negative { let last = bytes.last_mut().unwrap(); *last = b'p' + (*last - b'0'); }
-                        bytes
-                    },
+                    Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => display_bytes(ascii, negative, usage, signed),
                     Usage::Packed => {
                         let mut nibbles: Vec<u8> = ascii.iter().map(|b| b - b'0').collect();
                         nibbles.push(if !signed { 15 } else if negative { 13 } else { 12 });

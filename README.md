@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 277 tests Python, avec un test d'inspection du PE
-Windows ignoré (278 découverts), et les 69 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 282 tests Python, avec un test d'inspection du PE
+Windows ignoré (283 découverts), et les 72 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -242,7 +242,8 @@ Les images éditées numériques (`Z`, `*`, `9`, `+`, `-`, `$` fixes ou flottant
 refusées comme cobc. Un champ édité se compare comme texte. Comme cobc, une
 comparaison d'un champ DISPLAY avec un littéral trop long est résolue à la
 compilation (`S99 > -100` est FAUX, comme en natif). JUSTIFIED RIGHT, VALUE ALL
-et QUOTE sont pris en charge.
+et QUOTE sont pris en charge, ainsi que SIGN LEADING/TRAILING [SEPARATE] et
+SYNCHRONIZED lorsqu'il n'impose aucun octet de remplissage.
 
 ## Calcul décimal et limites explicites
 
