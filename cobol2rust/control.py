@@ -168,18 +168,35 @@ class ControlGraph:
             self.nodes[test] = Node("branch", (condition, after, entry), stmt)
             return entry if test_after else test
         if mode == "varying":
-            var, start, step, condition, test_after = control
-            if var.start is not None or self.program.fields[var.name].kind != "number":
-                self._error(stmt, "PERFORM VARYING requiert un contrôle numérique non édité")
-            if self._kind(step) != "number":
-                self._error(stmt, "BY requiert un nombre")
-            test = self._add("branch", (), stmt)
-            increment = self._add("varying_step", (), stmt)
-            # TEST AFTER checks before incrementing. A successful final test
-            # leaves the control value untouched, matching the native loop.
-            entry = self._body(body, test if test_after else increment, block)
-            self.nodes[test] = Node("branch", (condition, after, increment if test_after else entry), stmt)
-            self.nodes[increment] = Node("varying_step", (var, step, entry if test_after else test), stmt)
-            initialize = Stmt("assign", (start, [var], False), stmt.line)
-            return self._add("execute", (initialize, entry if test_after else test), stmt)
+            levels, test_after = control
+            for var, _, step, _ in levels:
+                if var.start is not None or self.program.fields[var.name].kind != "number":
+                    self._error(stmt, "PERFORM VARYING requiert un contrôle numérique non édité")
+                if self._kind(step) != "number":
+                    self._error(stmt, "BY requiert un nombre")
+
+            def initialize(level, continuation):
+                var, start, _, _ = levels[level]
+                return self._add("execute", (Stmt("assign", (start, [var], False), stmt.line), continuation), stmt)
+
+            # Mirror cobc's output_perform_until: each level is a loop whose
+            # head first resets the next variable; TEST BEFORE tests before
+            # the inner level, TEST AFTER after it; the step ends the level.
+            def level_loop(level, exit_node):
+                var, _, step, condition = levels[level]
+                head = self._add("jump", (), stmt)
+                test = self._add("branch", (), stmt)
+                increment = self._add("varying_step", (), stmt)
+                inner_exit = test if test_after else increment
+                if level + 1 < len(levels):
+                    inner = level_loop(level + 1, inner_exit)
+                else:
+                    inner = self._body(body, inner_exit, block)
+                first = test if not test_after else inner
+                self.nodes[head] = Node("jump", (initialize(level + 1, first) if level + 1 < len(levels) else first,), stmt)
+                self.nodes[test] = Node("branch", (condition, exit_node, increment if test_after else inner), stmt)
+                self.nodes[increment] = Node("varying_step", (var, step, head), stmt)
+                return head
+
+            return initialize(0, level_loop(0, after))
         self._error(stmt, f"mode PERFORM inconnu: {mode}")

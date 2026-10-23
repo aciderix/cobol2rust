@@ -1230,13 +1230,18 @@ class Parser:
             if self.accept("UNTIL"):
                 mode, control = "until", (self.condition(), test_after)
             elif self.accept("VARYING"):
-                var = self.variable()
-                self.expect("FROM")
-                start = self.expr()
-                self.expect("BY")
-                step = self.expr()
-                self.expect("UNTIL")
-                mode, control = "varying", (var, start, step, self.condition(), test_after)
+                # VARYING ... [AFTER ...]: one level per identifier, BY 1 by default.
+                levels = []
+                while True:
+                    var = self.variable()
+                    self.expect("FROM")
+                    start = self.expr()
+                    step = self.expr() if self.accept("BY") else Expr("number", ("1",))
+                    self.expect("UNTIL")
+                    levels.append((var, start, step, self.condition()))
+                    if not self.accept("AFTER"):
+                        break
+                mode, control = "varying", (levels, test_after)
             elif self.t.key not in BOUNDARIES:
                 count = self.expr()
                 self.expect("TIMES")
