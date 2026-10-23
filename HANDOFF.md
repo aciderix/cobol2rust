@@ -4,6 +4,20 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : NEXT SENTENCE, programmes frères, PICTURE P. Le parseur ajoute
+un marqueur `sentence_end` à chaque point séparateur du niveau paragraphe ; le
+graphe (construit à rebours) fait de NEXT SENTENCE un saut vers la suite du
+prochain marqueur. `Program.siblings` : programmes après `END PROGRAM` dans le
+même source, prioritaires sur le chemin d'appel (dlsym de l'exécutable par
+libcob), non compilés en modules par `verify`. PICTURE P comme `cb_build_picture`
+de tree.c : P final → échelle négative, P initial → V implicite, seuls les 9
+stockés ; `Kind::Numeric.scale` et `Number::units` sont signés (`i32`). DISPLAY
+suit `pretty_display_numeric`. Quirk reproduit : ADD/SUBTRACT d'un opérande
+`cb_fits_int` sans ROUNDED ni SIZE ERROR passe par `cob_add_int`, qui tronque
+l'opérande aux positions P du receveur (`ADD 15 TO S99P` ajoute 10, et rien si
+le quotient est nul). P limité à DISPLAY ; MOVE texte↔P et comparaisons mixtes
+refusés ou arrêtés.
+
 Dernière étape : CALL/CANCEL/LINKAGE. `cli.run_unit` découvre les appelés
 (`<nom>.CBL/.cob` du `--call-path`, PROGRAM-ID identique), `generate_unit` émet
 une structure par programme et un `RunUnit` (instance persistante par appelé,

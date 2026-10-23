@@ -55,6 +55,21 @@ class CallTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(CobolError):
                 Parser(text).parse()
 
+    def test_sibling_programs_resolve_before_call_path(self):
+        text = (program("01 n pic 9.", 'call "SIB" using n. stop run.').replace("\nprocedure", "\nprocedure", 1)
+                + "end program numeric-move-case.\n" + subprogram("SIB", "01 l pic 9.", "l", "add 1 to l. goback.")
+                + "end program SIB.\n")
+        with tempfile.TemporaryDirectory() as directory:
+            main = self.write(directory, "main.cob", text)
+            # A same-named source in the call path is not used: the sibling wins.
+            self.write(directory, "SIB.cob", "not cobol")
+            _, _, _, subprograms, rust, _ = emit_unit(main, "free", (), [directory])
+            self.assertEqual([(path, sub.entry_name) for path, sub, _, _ in subprograms], [(main, "SIB")])
+            self.assertIn("Program1", rust)
+        self.assertEqual([p.entry_name for p in Parser(text).parse().siblings], ["SIB"])
+        with self.assertRaises(CobolError):
+            Parser(text.replace("end program SIB.", "end program SIB.\n" + text.split("end program")[0])).parse()
+
     def test_main_program_with_using_is_refused(self):
         with self.assertRaises(CobolError):
             Emitter(Parser(subprogram("S", "01 a pic 9.", "a", "goback.")).parse()).generate()
@@ -79,6 +94,11 @@ class CallNativeTests(unittest.TestCase):
         self.assertIn("SUB 01 017 BETA  ", lines)
         self.assertIn("DYN MISSING", lines)
         self.assertNotIn("NEVER", lines)
+
+    def test_sibling_programs_match_gnucobol(self):
+        report = verify(FIXTURES / "sibling_programs.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertIn("after cancel 0040", report["cobol_stdout"].splitlines())
 
 
 if __name__ == "__main__":

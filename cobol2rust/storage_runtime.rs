@@ -12,8 +12,8 @@ pub enum Usage { Display, Packed, Binary, Index }
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
     Text,
-    Numeric { digits: u32, scale: u32, signed: bool, usage: Usage },
-    Edited { picture: &'static str, digits: u32, scale: u32 },
+    Numeric { digits: u32, scale: i32, signed: bool, usage: Usage },
+    Edited { picture: &'static str, digits: u32, scale: i32 },
 }
 #[derive(Clone, Debug)]
 pub struct Initializer {
@@ -147,7 +147,7 @@ impl View {
                 else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             },
         };
-        Ok(Value::Num(Number::new(coefficient, scale), Some((digits, scale, signed))))
+        Ok(Value::Num(Number::scaled(coefficient, scale), Some((digits, scale, signed))))
     }
     pub fn value(&self) -> Value {
         match self.kind {
@@ -184,6 +184,7 @@ impl View {
             _ => fail("numeric text operation requires a numeric source"),
         };
         if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
+        if scale < 0 || scale as u32 > digits { fail("alphanumeric view of a P-scaled item not modelled"); }
         if !comparison && scale != 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
         let bytes = match usage {
             Usage::Display => {
@@ -225,6 +226,9 @@ impl View {
             self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
             return;
         }
+        if let Kind::Numeric { scale, digits, .. } = self.kind {
+            if scale < 0 || scale as u32 > digits { fail("text MOVE to a P-scaled item not modelled"); }
+        }
         if let Kind::Numeric { digits, scale, signed, usage: Usage::Display } = self.kind {
             let (mut result, negative, _) = text_move_digits(&bytes, digits as usize, scale as usize);
             if signed && negative {
@@ -246,7 +250,7 @@ impl View {
             Kind::Numeric { digits, scale, signed, usage } => {
                 let magnitude = absolute(&number.units(scale, false)) % power(digits);
                 let units = if signed && negative { -magnitude } else { magnitude };
-                self.assign(&Value::Num(Number::new(units, scale), None), false);
+                self.assign(&Value::Num(Number::scaled(units, scale), None), false);
                 // BigInt has no negative zero, but a signed packed MOVE keeps
                 // its D nibble even when scaling or truncation leaves zero.
                 if signed && negative && matches!(usage, Usage::Packed) {
@@ -270,7 +274,7 @@ impl View {
         let negative = signed && units.sign() == Sign::Minus;
         let magnitude = absolute(&units) % power(digits);
         let zero = magnitude == BigInt::from(0);
-        self.assign(&Value::Num(Number::new(if negative { -magnitude } else { magnitude }, scale), None), false);
+        self.assign(&Value::Num(Number::scaled(if negative { -magnitude } else { magnitude }, scale), None), false);
         if negative && zero && !matches!(usage, Usage::Binary) {
             self.mark_negative_zero();
         }
@@ -381,7 +385,7 @@ impl View {
         if !matches!(usage, Usage::Index) && absolute(&units) >= power(digits) { return Err(SizeError); }
         // COBOL discards the sign for an unsigned receiver. This is not SIZE ERROR.
         if !signed { units = absolute(&units); }
-        self.assign(&Value::Num(Number::new(units, scale), None), false);
+        self.assign(&Value::Num(Number::scaled(units, scale), None), false);
         Ok(())
     }
     pub fn initialize(&mut self, with_filler: bool) {

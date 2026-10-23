@@ -76,6 +76,8 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
         modules = work / "modules"
         modules.mkdir()
         for sub in conversion["subprograms"]:
+            if sub["in_main_source"]:
+                continue
             commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + (".dll" if os.name == "nt" else ".so")))], cobc))
         for command, compiler in commands:
             result = subprocess.run(command, cwd=work, env=compiler_env(compiler), capture_output=True, timeout=60)

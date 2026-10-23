@@ -476,6 +476,16 @@ revérification complète donne **124/124 programmes conformes**, 2077 PASS,
 Obstacles IC restants : programmes imbriqués ou multiples par source, USAGE
 INDEX, NEXT SENTENCE, EXTERNAL/GLOBAL, PICTURE avec B/0.
 
+## Progression : NEXT SENTENCE, programmes frères et PICTURE P
+
+NEXT SENTENCE (saut après le prochain point séparateur, y compris hors d'une
+boucle inline), programmes frères dans un même source (résolus avant le chemin
+d'appel, comme le résolveur de libcob) et PICTURE P portent l'émission acceptée
+à **131/458**. Revérification complète : **129/129 programmes conformes**,
+2180 PASS, 0 FAIL (`build/nist-verify-p.json`). Les sources NC à P bloquent
+maintenant sur l'édition numérique générale (`/ , B 0 $ CR DB *`, P édité),
+QUOTE, SYNCHRONIZED, CORRESPONDING, BLANK WHEN ZERO et RENAMES.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

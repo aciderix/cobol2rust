@@ -18,6 +18,18 @@ pub struct SizeError;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Outcome { Return, Stop }
 
+/// cob_add_int on a receiver with trailing P positions: the int operand is
+/// first truncated to whole units of 10^positions, and a zero result leaves
+/// the receiver unstored. cob_sub_int adds the negated operand.
+pub fn cob_add_int_operand(operand: &Value, positions: u32, negate: bool) -> Option<Value> {
+    let n = operand.integer("ADD/SUBTRACT operand");
+    if n < i32::MIN as i128 || n > i32::MAX as i128 { fail("cob_add_int operand outside the C int range"); }
+    let mut units = if positions < 10 { n / 10i128.pow(positions) } else { 0 };
+    if negate { units = -units; }
+    if units == 0 { return None; }
+    Some(Value::Num(Number::new(BigInt::from(units) * power(positions), 0), None))
+}
+
 /// GnuCOBOL resolves a CALL name to a loaded or loadable module, a libcob
 /// system routine or any symbol of the process. Only a plain upper-case COBOL
 /// word that names no program of the call path is surely not found.
@@ -41,6 +53,10 @@ impl Number {
     pub(crate) fn new(n: BigInt, scale: u32) -> Self {
         if scale > 1024 || n.to_str_radix(10).len() > 4096 { fail("intermediate decimal capacity exceeded"); }
         Self { n, scale }
+    }
+    /// A stored coefficient at a signed PICTURE scale.
+    pub(crate) fn scaled(n: BigInt, scale: i32) -> Self {
+        if scale >= 0 { Self::new(n, scale as u32) } else { Self::new(n * power((-scale) as u32), 0) }
     }
     fn parse(text: &str) -> Self {
         let s = text.trim();
@@ -71,9 +87,13 @@ impl Number {
         let scale = 38 + self.scale.saturating_sub(other.scale);
         Self::new((self.n * power(shift)) / other.n, scale)
     }
-    pub(crate) fn units(&self, scale: u32, rounded: bool) -> BigInt {
-        if scale >= self.scale { return &self.n * power(scale - self.scale); }
-        let divisor = power(self.scale - scale);
+    /// The value at a PICTURE scale, as libcob's scale: negative for
+    /// trailing P positions (units of 10^-scale), above the digit count for
+    /// leading P positions. Excess digits are truncated or ROUNDED.
+    pub(crate) fn units(&self, scale: i32, rounded: bool) -> BigInt {
+        let own = self.scale as i32;
+        if scale >= own { return &self.n * power((scale - own) as u32); }
+        let divisor = power((own - scale) as u32);
         let q = &self.n / &divisor;
         let r = &self.n % &divisor;
         if rounded && absolute(&r) * 2 >= divisor {
@@ -84,7 +104,7 @@ impl Number {
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Num(Number, Option<(u32, u32, bool)>),
+    Num(Number, Option<(u32, i32, bool)>),
     Text(String),
     Bytes(Vec<u8>),
     View(crate::storage_runtime::View),
@@ -160,8 +180,8 @@ impl Value {
         if !text.is_ascii() { fail("only ASCII text is supported"); }
         Self::Text(text.to_string())
     }
-    pub fn numeric_field(digits: u32, scale: u32, signed: bool, initial: &str) -> Self {
-        let mut result = Self::Num(Number::new(BigInt::from(0), scale), Some((digits, scale, signed)));
+    pub fn numeric_field(digits: u32, scale: i32, signed: bool, initial: &str) -> Self {
+        let mut result = Self::Num(Number::scaled(BigInt::from(0), scale), Some((digits, scale, signed)));
         result.assign(&Self::number(initial), false);
         result
     }
@@ -209,7 +229,7 @@ impl Value {
                 if absolute(&units) >= power(*digits) || (!*signed && units.sign() == Sign::Minus) {
                     fail("destination PICTURE overflow or negative unsigned value");
                 }
-                *n = Number::new(units, *scale);
+                *n = Number::scaled(units, *scale);
             },
             Self::Text(current) => {
                 let source = match source { Self::Text(s) => s, _ => fail("numeric/text MOVE unsupported") };
@@ -268,15 +288,18 @@ impl Value {
             Self::Bytes(b) => String::from_utf8(b.clone()).unwrap_or_else(|_| fail("binary group requires raw byte output")),
             Self::Text(s) => s.clone(),
             Self::Num(n, Some((digits, scale, signed))) => {
-                let units = n.units(*scale, false);
-                let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = *digits as usize);
+                // pretty_display_numeric: trailing P positions print as zero
+                // digits; leading ones widen the fraction (PIC PP9 -> .ddd).
+                let (units, width) = if *scale < 0 { (n.units(0, false), (*digits as i32 - *scale) as usize) }
+                                     else { (n.units(*scale, false), (*digits).max(*scale as u32) as usize) };
+                let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = width);
                 if *scale > 0 { s.insert(s.len() - *scale as usize, '.'); }
                 if *signed { s.insert(0, if units.sign() == Sign::Minus { '-' } else { '+' }); }
                 s
             },
             Self::Num(n, None) => {
                 let scale = n.scale;
-                let units = n.units(scale, false);
+                let units = n.units(scale as i32, false);
                 let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = scale as usize + 1);
                 if scale > 0 { s.insert(s.len() - scale as usize, '.'); }
                 if units.sign() == Sign::Minus { s.insert(0, '-'); }

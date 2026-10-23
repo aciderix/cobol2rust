@@ -383,6 +383,9 @@ class Program:
     using: list[str] = field(default_factory=list)
     # PROGRAM-ID as written: the entry point name a CALL literal must match.
     entry_name: str = ""
+    # Programs following this one in the same source (END PROGRAM then a new
+    # IDENTIFICATION DIVISION); nested programs are refused.
+    siblings: list = field(default_factory=list)
 
     def procedure_range(self, name: str) -> tuple[int, int]:
         if name in self.sections:
@@ -397,7 +400,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT".split())
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
@@ -605,7 +608,11 @@ class Parser:
         if declaratives:
             self.expect(".")
         while not self.at("<EOF>"):
-            if self.accept("."):
+            if self.at("."):
+                # The separator period ends a sentence: the target of NEXT SENTENCE.
+                line = self.take().line
+                if current_body and current_body[-1].op != "sentence_end":
+                    current_body.append(Stmt("sentence_end", (), line))
                 continue
             if declaratives and self.at("END") and self.tokens[self.i + 1].key == "DECLARATIVES":
                 self.take(); self.take(); self.expect(".")
@@ -622,7 +629,8 @@ class Parser:
                 if self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
-                self.expect("<EOF>")
+                if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID")):
+                    self.expect("<EOF>")
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
                 section = self.name()
@@ -668,6 +676,16 @@ class Parser:
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
         self.validate_calls(program)
+        if not self.at("<EOF>"):
+            # A sibling program after END PROGRAM: same source, separate names.
+            sibling = Parser.__new__(Parser)
+            sibling.__init__("")
+            sibling.tokens, sibling.i = self.tokens, self.i
+            following = sibling.parse()
+            program.siblings = [following, *following.siblings]
+            following.siblings = []
+            if any(other.entry_name == entry_name for other in program.siblings):
+                raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
         return program
 
     def use_statement(self, section, by_file, by_mode):
@@ -1250,7 +1268,16 @@ class Parser:
             shared = operand if len(values) > 1 else None
             term = Expr("shared", ()) if shared else operand
             items = [(ref, Expr(op, (Expr("var", (ref,)), term)), rounded) for ref, rounded in receivers]
-            return self.arithmetic(verb, shared, items, line)
+            stmt = self.arithmetic(verb, shared, items, line)
+            if stmt.op == "compute" and verb in {"ADD", "SUBTRACT"} and shared is None and self.fits_int(operand):
+                # cb_build_optim_add: without ROUNDED or SIZE ERROR an int
+                # operand goes through cob_add_int, which first truncates it
+                # to the receiver's trailing P positions (15 TO 99P adds 10).
+                stmt = Stmt("compute", (None, [
+                    (ref, Expr("p_int_add", (ref, operand, -self.fields[ref.name].scale, verb == "SUBTRACT")), rounded)
+                    if not rounded and self.fields[ref.name].kind == "number" and self.fields[ref.name].scale < 0
+                    else (ref, expr, rounded) for ref, expr, rounded in items]), line)
+            return stmt
         if verb == "IF":
             cond = self.condition()
             self.accept("THEN")
@@ -1412,6 +1439,9 @@ class Parser:
             return Stmt("cancel", (targets,), line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
+        if verb == "NEXT":
+            self.expect("SENTENCE")
+            return Stmt("next_sentence", (), line)
         if verb == "EXIT":
             if self.accept("PARAGRAPH"):
                 return Stmt("exit_paragraph", (), line)
@@ -1452,6 +1482,33 @@ class Parser:
         while not self.t.string and self.candidates(self.t.key):
             receivers.append((self.variable(), self.accept("ROUNDED")))
         return receivers
+
+    def fits_int(self, e):
+        """cobc's cb_fits_int for an ADD/SUBTRACT operand."""
+        if e.op in {"unary+", "unary-"}:
+            e = e.args[0]
+            if e.op != "number":
+                return False
+        if e.op == "number":
+            text = e.args[0]
+            if "." in text:
+                return False
+            digits = text.lstrip("0")
+            return len(digits) < 10 or (len(digits) == 10 and digits <= "2147483647")
+        if e.op != "var" or e.args[0].start is not None:
+            return False
+        field = self.fields[e.args[0].name]
+        if field.children or field.kind != "number":
+            return False
+        if field.usage == "INDEX":
+            return True
+        if field.scale > 0:
+            return False
+        if field.usage == "DISPLAY":
+            return field.digits < 10
+        if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+            return field.digits < 10
+        return field.digits <= 9
 
     def arithmetic(self, verb, shared, items, line):
         ending = "END-" + verb

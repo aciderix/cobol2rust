@@ -56,7 +56,12 @@ def run_unit(source: Path, fmt, includes, call_paths):
         raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
     directories = [Path(path) for path in call_paths]
     units = {}
+    # Programs after the main one in its source are in the executable itself:
+    # GnuCOBOL's resolver finds them before searching the call path.
+    local = {program.entry_name: program for program in main.siblings}
     pending, dynamic = call_targets(main)
+    if dynamic:
+        pending |= set(local)
     if dynamic:
         for directory in directories:
             for path in sorted(directory.iterdir()) if directory.is_dir() else []:
@@ -72,6 +77,14 @@ def run_unit(source: Path, fmt, includes, call_paths):
         if name in seen or name == main.entry_name:
             continue
         seen.add(name)
+        if name in local:
+            program = local[name]
+            literals, more = call_targets(program)
+            if more:
+                raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
+            units[name] = (source, program, expanded, copies)
+            pending |= literals
+            continue
         path = next((directory / (name + suffix) for directory in directories for suffix in SOURCE_SUFFIXES
                      if (directory / (name + suffix)).is_file()), None)
         if path is None:
@@ -83,6 +96,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
             if dynamic and name not in call_targets(main)[0]:
                 continue
             raise CobolError(f"programme appelé {path.name}: {exc}") from exc
+        if program.siblings:
+            raise CobolError(f"plusieurs programmes dans le source appelé non pris en charge: {path.name}")
         if program.entry_name != name:
             if program.entry_name.upper() == name.upper() or dynamic is False:
                 raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
@@ -136,6 +151,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=()):
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
               "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
+                               "in_main_source": sub in program.siblings,
                                "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                                "using": sub.using, "memory_size": sub.memory_size}
                               for path, sub, _, _ in subprograms],

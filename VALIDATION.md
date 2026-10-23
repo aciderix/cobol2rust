@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## NEXT SENTENCE, programmes frères, PICTURE P — 23 octobre 2026
+
+- **269 tests découverts : 268 réussis, un test PE Windows ignoré.**
+- **65/65 comparaisons locales conformes** ; nouvelles fixtures
+  `next_sentence.cob`, `sibling_programs.cob`, `p_scaling.cob`.
+- NIST : **131/458** ; **129/129 programmes acceptés conformes** (2180 PASS).
+
 ## CALL et programmes liés — 23 octobre 2026
 
 - **261 tests découverts : 260 réussis, un test PE Windows ignoré.**

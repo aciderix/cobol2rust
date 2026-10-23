@@ -40,6 +40,9 @@ class ControlGraph:
             self.nodes[checkpoint] = Node("checkpoint", (following,))
 
         for index, block in enumerate(blocks):
+            # NEXT SENTENCE goes to the statement after the next separator
+            # period; markers are seen in reverse, so this is the one ahead.
+            self._sentence = self.paragraph_checkpoints[index]
             body = self._body(block.body, self.paragraph_checkpoints[index], index)
             self.nodes[self.block_entries[index]] = Node("jump", (body,))
         self.entry = self._following(program.main_block)
@@ -82,6 +85,11 @@ class ControlGraph:
 
     def _statement(self, stmt: Stmt, after: int, block: int) -> int:
         op, args = stmt.op, stmt.args
+        if op == "sentence_end":
+            self._sentence = after
+            return after
+        if op == "next_sentence":
+            return self._add("jump", (self._sentence,), stmt)
         if op == "if":
             condition, yes, no = args
             return self._add("branch", (condition, self._body(yes, after, block),

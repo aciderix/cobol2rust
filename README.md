@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 260 tests Python, avec un test d'inspection du PE
-Windows ignoré (261 découverts), et les 62 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 268 tests Python, avec un test d'inspection du PE
+Windows ignoré (269 découverts), et les 65 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -214,10 +214,25 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   majuscule, ni routine système libcob (`SYSTEM`, `CBL_…`, `C$…`), ni source du
   chemin d'appel non convertie. Sinon la conversion ou l'exécution s'arrête.
 
-Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes imbriqués ou
-multiples dans un même source, EXTERNAL/GLOBAL, LINKAGE hors de USING, VALUE en
+Les programmes qui suivent `END PROGRAM` dans le même source sont des frères :
+ils sont dans l'exécutable et GnuCOBOL les trouve avant le chemin d'appel.
+
+Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes imbriqués,
+plusieurs programmes dans un source appelé, EXTERNAL/GLOBAL, LINKAGE hors de USING, VALUE en
 LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
+
+## NEXT SENTENCE et PICTURE P
+
+NEXT SENTENCE poursuit après le prochain point séparateur, y compris depuis un
+IF imbriqué, un EVALUATE ou une boucle PERFORM inline qu'il quitte.
+
+PICTURE P (`S99P`, `9(3)P(4)`, `PP99`, `SVP9`) suit l'analyse de cobc : seuls
+les 9 sont stockés ; un P final multiplie par 10, un P initial ajoute une
+position décimale implicite. MOVE, calcul, comparaison numérique et DISPLAY
+(`+990`, `.0012`) sont identiques au natif, y compris la troncature de
+l'opérande par `cob_add_int` (`ADD 15 TO S99P` ajoute 10). P est limité à USAGE
+DISPLAY ; les MOVE entre texte et champ P sont refusés.
 
 ## Calcul décimal et limites explicites
 

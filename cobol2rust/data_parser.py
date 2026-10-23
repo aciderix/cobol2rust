@@ -171,7 +171,7 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 257)
 
-    expanded = re.sub(r"([9XZA])\((\d+)\)", repeat, picture)
+    expanded = re.sub(r"([9XZAP])\((\d+)\)", repeat, picture)
     group_value = group_usage = None
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
@@ -198,6 +198,15 @@ def declaration(p, file_record=False):
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
         if digits > 18:
             p.error("PIC numérique limité à 18 chiffres")
+    elif re.fullmatch(r"S?9+P+V?|S?V?P+9+", expanded):
+        # Scaling positions, as cobc's picture analysis: trailing P give a
+        # negative scale (units of 10^n), leading P an implicit V before them.
+        # Only the 9 positions are stored; P is limited to USAGE DISPLAY.
+        kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
+        positions = expanded.count("P")
+        scale = -positions if expanded.lstrip("S").startswith("9") else positions + digits
+        if digits > 18 or usage != "DISPLAY":
+            p.error("PICTURE P limitée à 18 chiffres USAGE DISPLAY")
     elif (re.fullmatch(r"[+-]9+(?:\.9+)?", expanded) or
           re.fullmatch(r"[+-]?9*\.9+", expanded) or
           re.fullmatch(r"Z+9+(?:\.9+)?", expanded)):

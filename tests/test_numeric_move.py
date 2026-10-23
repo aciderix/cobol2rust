@@ -30,7 +30,7 @@ class NumericMoveTests(unittest.TestCase):
         parsed = Parser(program("01 output-a pic xxx.",
                                 "move zero to output-a move 0 to output-a "
                                 "move zeros to output-a move zeroes to output-a stop run.")).parse()
-        sources = [stmt.args[0] for stmt in parsed.entry[:-1]]
+        sources = [stmt.args[0] for stmt in parsed.entry if stmt.op == "move"]
         self.assertEqual([source.figurative_zero for source in sources], [True, False, True, True])
         self.assertEqual([source.args[0] for source in sources], ["0"] * 4)
 

@@ -409,6 +409,17 @@ class Emitter:
             # Each receiver is computed and stored in turn: its subscripts and
             # a single re-read operand see the receivers already stored.
             for ref, expr, rounded in items:
+                if expr.op == "p_int_add":
+                    _, operand, positions, negate = expr.args
+                    delta, shared = self.unique(), getattr(self, "shared", None)
+                    self.write(f"if let Some({delta}) = runtime::cob_add_int_operand(&{self.expression(operand)}, {positions}, {str(negate).lower()}) {{")
+                    self.indent += 1
+                    self.shared = delta
+                    self.assignment(Expr("+", (Expr("var", (ref,)), Expr("shared", ()))), [ref], rounded)
+                    self.shared = shared
+                    self.indent -= 1
+                    self.write("}")
+                    continue
                 self.assignment(expr, [ref], rounded)
         elif op == "accept":
             self.write(f"{self.reference(a[0])}.accept();")
