@@ -25,7 +25,7 @@ class CoverageTests(unittest.TestCase):
             root = Path(directory)
             good = root / "good.CBL"
             good.write_text(source(), encoding="utf-8")
-            (root / "bad.cob").write_text(source("call 'external'."), encoding="utf-8")
+            (root / "bad.cob").write_text(source("call 'external' returning x."), encoding="utf-8")
             (root / "record.cpy").write_text("01 x pic 9.", encoding="utf-8")
             before = {str(path): path.read_bytes() for path in root.iterdir()}
             first, code = measure(root, corpus_id="test-v1", corpus_source="local test")
@@ -164,8 +164,8 @@ class CoverageTests(unittest.TestCase):
     def test_diagnostic_groups_normalize_line_numbers_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "first.cob").write_text(source("call 'external'."), encoding="utf-8")
-            (root / "second.cob").write_text("\n\n" + source("call 'external'."), encoding="utf-8")
+            (root / "first.cob").write_text(source("call 'external' returning x."), encoding="utf-8")
+            (root / "second.cob").write_text("\n\n" + source("call 'external' returning x."), encoding="utf-8")
             report, code = measure(root)
             self.assertEqual(code, 1)
             self.assertEqual(len(report["diagnostic_groups"]), 1)
@@ -179,7 +179,7 @@ class CoverageTests(unittest.TestCase):
             root = Path(directory)
             (root / "good.cob").write_text(source(), encoding="utf-8")
             from cobol2rust.frontend import CobolError
-            with patch("tools.coverage.Emitter.generate", side_effect=CobolError("unsupported emission")):
+            with patch("tools.coverage.emit_unit", side_effect=CobolError("unsupported emission")):
                 report, code = measure(root)
             self.assertEqual(code, 1)
             self.assertEqual(report["counts"]["emission_blocked"], 1)

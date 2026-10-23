@@ -18,8 +18,14 @@ def quoted(text):
 
 
 class Emitter:
-    def __init__(self, program: Program):
+    def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=()):
         self.program = program
+        self.struct = struct
+        self.subprogram = subprogram
+        # CALL targets converted with this run unit (literal names).
+        self.called = set(called or ())
+        # Programs of the call path left unconverted: a CALL of one cannot be modelled.
+        self.present = sorted(set(present) - self.called)
         self.names = {name: f"f{i}" for i, name in enumerate(program.fields)}
         self.blocks = program.blocks or [ProcedureBlock(None, None, program.entry),
                                         *(ProcedureBlock(name, None, body) for name, body in program.paragraphs.items())]
@@ -416,6 +422,12 @@ class Emitter:
                     if self.variable_groups[ref.name].children or any(f.kind != "text" or (f.filler and not a[1]) for f in fields):
                         raise CobolError("INITIALIZE de groupe variable limité aux champs texte uniformes; initialiser les occurrences explicitement")
                 self.write(f"{self.reference(ref)}.initialize_with_filler({str(a[1]).lower()});")
+        elif op == "cancel":
+            for kind, target in a[0]:
+                if kind == "literal":
+                    self.write(f"unit.cancel({quoted(target)});")
+                else:
+                    self.write(f"unit.cancel(String::from_utf8_lossy(&{self.reference(target)}.bytes()).trim_end_matches(' '));")
         elif op == "continue":
             self.write("{}")
         else:
@@ -424,7 +436,43 @@ class Emitter:
     def control_node(self, index, node):
         op, a = node.op, node.args
         if op == "end":
-            self.write("break;")
+            # Falling off the end: STOP RUN in a main program, GOBACK in a subprogram.
+            self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
+        elif op == "stop_run":
+            self.write("return runtime::Outcome::Stop;")
+        elif op == "goback":
+            self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
+        elif op == "exit_program":
+            self.write("return runtime::Outcome::Return;" if self.subprogram else f"pc = {a[0]};")
+        elif op == "call_program":
+            target, arguments, continuation, exception, success = a
+            values = []
+            for mode, ref in arguments:
+                view = self.reference(ref) + ".clone()"
+                values.append(f"storage_runtime::content_copy(&{view})" if mode == "CONTENT" else view)
+            # A program not found raises EC-PROGRAM-NOT-FOUND, handled by
+            # ON EXCEPTION; without it GnuCOBOL stops the run unit.
+            not_found = (f"pc = {exception};" if exception is not None
+                         else "runtime::fail(\"CALL of a program not found, without ON EXCEPTION\");")
+            if target[0] == "literal" and target[1] not in self.called:
+                if not surely_absent(target[1], self.present):
+                    raise CobolError(f"CALL {target[1]}: programme non converti ou routine système non pris en charge")
+                self.write(not_found)
+                return
+            name = quoted(target[1]) if target[0] == "literal" else f"{self.reference(target[1])}.bytes()"
+            if target[0] == "dynamic":
+                self.write(f"let name = String::from_utf8_lossy(&{name}).trim_end_matches(' ').to_string();")
+                name = "&name"
+            self.write(f"match unit.call({name}, vec![{', '.join(values)}]) {{")
+            self.indent += 1
+            self.write("Some(runtime::Outcome::Stop) => return runtime::Outcome::Stop,")
+            self.write(f"Some(runtime::Outcome::Return) => pc = {success},")
+            if target[0] == "dynamic":
+                present = ", ".join(quoted(name) for name in [*self.present, *sorted(self.called)])
+                self.write(f"None if runtime::surely_absent(&name, &[{present}]) => {{ {not_found} }}")
+            self.write("None => runtime::fail(\"CALL of a program absent from the conversion or recursive; not modelled\"),")
+            self.indent -= 1
+            self.write("}")
         elif op == "jump":
             self.write(f"pc = {a[0]};")
         elif op == "checkpoint":
@@ -589,16 +637,14 @@ class Emitter:
             for leaf in items) + "]"
 
     def generate(self):
+        return generate_unit([self])
+
+    def program_lines(self):
+        """Struct and impl of this program; `generate_unit` adds the run unit."""
+        if self.program.using and not self.subprogram:
+            raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
         graph = ControlGraph(self.program, self.blocks)
-        self.write("// Generated by cobol2rust. Edit the COBOL input and regenerate.")
-        self.write("#![allow(unreachable_code, dead_code, unused_parens)]")
-        self.write("mod runtime;")
-        self.write("mod storage_runtime;")
-        if self.files:
-            self.write("mod file_runtime;")
-        self.write("use runtime::{Value, display};")
-        self.write("struct PerformFrame { through: usize, return_pc: usize }")
-        self.write("struct Program {")
+        self.write(f"struct {self.struct} {{")
         self.indent += 1
         for name in self.names:
             self.write(f"{self.names[name]}: Value, // {name} PIC {self.program.fields[name].picture}")
@@ -608,7 +654,7 @@ class Emitter:
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
         self.indent -= 1
         self.write("}")
-        self.write("impl Program {")
+        self.write(f"impl {self.struct} {{")
         self.indent += 1
         self.write("fn new() -> Self {")
         self.indent += 1
@@ -630,7 +676,7 @@ class Emitter:
         self.indent -= 1
         self.write("};")
         for name, field in self.program.fields.items():
-            if not field.picture or field.file_record:
+            if not field.picture or field.file_record or field.linkage:
                 continue
             cursor = field
             while cursor and not cursor.redefines:
@@ -654,7 +700,9 @@ class Emitter:
         self.write("result")
         self.indent -= 1
         self.write("}")
-        self.write("fn run(&mut self) {")
+        if self.subprogram:
+            self.call_method()
+        self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
         self.indent += 1
         self.write(f"let mut pc: usize = {graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
@@ -691,5 +739,89 @@ class Emitter:
         self.write("}")
         self.indent -= 1
         self.write("}")
-        self.write("fn main() { Program::new().run(); }")
-        return "\n".join(self.lines) + "\n", self.mapping
+        return self.lines, self.mapping
+
+    def call_method(self):
+        """Bind each USING item and its subordinates to the CALL arguments."""
+        self.write("fn call(&mut self, unit: &mut RunUnit, arguments: Vec<Value>) -> runtime::Outcome {")
+        self.indent += 1
+        using = self.program.using
+        if using:
+            self.write(f"if arguments.len() < {len(using)} {{ runtime::fail(\"CALL with fewer arguments than PROCEDURE DIVISION USING not modelled\"); }}")
+        fields = self.program.fields
+        for name, field in fields.items():
+            if not field.linkage:
+                continue
+            root = field
+            while root.parent:
+                root = fields[root.parent]
+            while root.redefines:
+                root = fields[root.redefines]
+            index = using.index(root.name)
+            rust = self.names[name]
+            self.write(f"self.{rust} = storage_runtime::rebind(&arguments[{index}], {field.offset - root.offset}, &self.{rust});")
+        self.write("self.run(unit)")
+        self.indent -= 1
+        self.write("}")
+
+
+def surely_absent(name, present):
+    """Same rule as runtime::surely_absent, for a CALL literal."""
+    return (bool(name) and all(c.isascii() and (c.isupper() or c.isdigit() or c == "-") for c in name)
+            and name not in {"SYSTEM", "EXTFH"} and name not in present)
+
+
+def generate_unit(emitters):
+    """One Rust program for a run unit: main program first, then subprograms.
+
+    A subprogram keeps its storage between CALLs (one instance per program)
+    until CANCEL, which closes its open files (dropping the instance) like
+    GnuCOBOL's cancel entry; an active program cannot be called or cancelled.
+    """
+    bodies = []
+    for emitter in emitters:
+        lines, mapping = emitter.program_lines()
+        bodies.append((emitter, lines, mapping))
+    head = ["// Generated by cobol2rust. Edit the COBOL input and regenerate.",
+            "#![allow(unreachable_code, dead_code, unused_parens, unused_variables, unused_mut)]",
+            "mod runtime;", "mod storage_runtime;"]
+    if any(emitter.files for emitter in emitters):
+        head.append("mod file_runtime;")
+    head += ["use runtime::{Value, display};", "struct PerformFrame { through: usize, return_pc: usize }"]
+    subprograms = emitters[1:]
+    unit = ["struct RunUnit {"]
+    for index, emitter in enumerate(subprograms, 1):
+        unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
+    unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {"]
+    for index, _ in enumerate(subprograms, 1):
+        unit.append(f"            p{index}: None, p{index}_active: false,")
+    unit += ["        }", "    }",
+             "    /// None: no such program was converted with this run unit.",
+             "    fn call(&mut self, name: &str, arguments: Vec<Value>) -> Option<runtime::Outcome> {",
+             "        match name {"]
+    for index, emitter in enumerate(subprograms, 1):
+        unit += [f"            {quoted(emitter.program.entry_name)} => {{",
+                 f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
+                 f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
+                 f"                self.p{index}_active = true;",
+                 "                let outcome = program.call(self, arguments);",
+                 f"                self.p{index}_active = false;",
+                 f"                self.p{index} = Some(program);",
+                 "                Some(outcome)",
+                 "            }"]
+    unit += ["            _ => None,", "        }", "    }",
+             "    /// CANCEL: the next CALL finds the program in its initial state.",
+             "    fn cancel(&mut self, name: &str) {",
+             "        match name {"]
+    for index, emitter in enumerate(subprograms, 1):
+        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ runtime::fail(\"CANCEL of an active program\"); }} self.p{index} = None; }},")
+    unit += ["            _ => {}", "        }", "    }", "}"]
+    lines = head + unit
+    main_mapping = []
+    for position, (emitter, body, mapping) in enumerate(bodies):
+        offset = len(lines)
+        if position == 0:
+            main_mapping = [{**item, "rust_line": item["rust_line"] + offset} for item in mapping]
+        lines += body
+    lines.append(f"fn main() {{ let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }}")
+    return "\n".join(lines) + "\n", main_mapping

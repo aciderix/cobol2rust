@@ -409,3 +409,33 @@ impl View {
         });
     }
 }
+
+/// Bind a LINKAGE item to a CALL argument: the item keeps its description and
+/// addresses the argument's storage `delta` bytes after the argument start.
+pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
+    let (source, template) = match (argument, item) {
+        (Value::View(source), Value::View(template)) => (source, template),
+        _ => crate::runtime::fail("CALL argument and LINKAGE item require storage"),
+    };
+    let offset = source.offset + delta;
+    let extent = template.dimensions.iter().map(|(stride, count)| stride * count.saturating_sub(1)).sum::<usize>() + template.size;
+    // GnuCOBOL passes only an address: a LINKAGE item longer than its
+    // argument would address the caller's neighbouring storage.
+    if delta + extent > source.size {
+        crate::runtime::fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
+    }
+    Value::View(View { memory: source.memory.clone(), offset, size: template.size, kind: template.kind,
+                       dimensions: template.dimensions.clone(), initializers: template.initializers.clone() })
+}
+
+/// BY CONTENT: the called program receives a copy of the argument's bytes.
+pub fn content_copy(argument: &Value) -> Value {
+    match argument {
+        Value::View(source) => {
+            let bytes = source.memory.borrow()[source.offset..source.offset + source.size].to_vec();
+            Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size: source.size, kind: source.kind,
+                               dimensions: vec![], initializers: source.initializers.clone() })
+        },
+        _ => crate::runtime::fail("BY CONTENT requires a data item"),
+    }
+}

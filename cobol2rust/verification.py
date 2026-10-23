@@ -44,7 +44,8 @@ def validate_file_paths(conversion):
                 raise CobolError(f"redirection de fichier par environnement non prise en charge: {key}")
 
 
-def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None):
+def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
+           call_paths=(), cobc_flags=()):
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -61,16 +62,21 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes)
+        conversion = convert(source, output, fmt, includes, call_paths)
         validate_file_paths(conversion)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
         fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
-        command = [cobc, "-x", "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
+        options = [*cobc_flags, "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
-            command.extend(["-I", str(Path(include).resolve())])
-        command.extend([str(source.resolve()), "-o", str(native)])
-        commands = [(command, cobc)]
+            options.extend(["-I", str(Path(include).resolve())])
+        commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
+        # Called programs become modules loaded by name, as GnuCOBOL's
+        # default dynamic CALL does; only the converted ones are provided.
+        modules = work / "modules"
+        modules.mkdir()
+        for sub in conversion["subprograms"]:
+            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + (".dll" if os.name == "nt" else ".so")))], cobc))
         for command, compiler in commands:
             result = subprocess.run(command, cwd=work, env=compiler_env(compiler), capture_output=True, timeout=60)
             if result.returncode:
@@ -91,6 +97,8 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 target.write_bytes(contents)
             environment = compiler_env(compiler)
             environment.update(runtime_env)
+            if name == "cobol":
+                environment["COB_LIBRARY_PATH"] = str(modules)
             result = subprocess.run([str(binary)], cwd=directory, env=environment,
                                     input=stdin, capture_output=True, timeout=15)
             results.append(result)

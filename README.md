@@ -56,7 +56,13 @@ des sources Rust fonctionne sans accès réseau et sans compilateur installé.
 python -m cobol2rust convert chemin/programme.cob -o build/programme-rust
 python -m cobol2rust convert examples/fixed.cob --format fixed -o build/fixe --build
 python -m cobol2rust convert examples/copybook.cob -I examples -o build/copies --run
+python -m cobol2rust convert principal.cob --call-path sousprogrammes -o build/unite
 ```
+
+`--call-path` désigne les dossiers des programmes appelés par CALL : comme le
+CALL dynamique de GnuCOBOL, un nom littéral `X` se résout en `X.cbl`/`X.cob`
+dont le PROGRAM-ID est `X`. Le programme principal et tous ses appelés
+(transitivement) forment une seule unité d'exécution Rust.
 
 Le projet produit contient :
 
@@ -72,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 254 tests Python, avec un test d'inspection du PE
-Windows ignoré (255 découverts), et les 61 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 260 tests Python, avec un test d'inspection du PE
+Windows ignoré (261 découverts), et les 62 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -190,6 +196,28 @@ Les erreurs de syntaxe non prise en charge donnent une position et empêchent
 la création du projet. Les lignes des diagnostics et de la correspondance
 Rust désignent le source **normalisé et développé** (`expanded.cob`), pas
 nécessairement la ligne d'origine avant expansion des copybooks.
+
+## Programmes appelés (CALL)
+
+CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT, ON EXCEPTION/
+OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
+(`output_call` de codegen.c, `cob_call_field`/`cob_cancel` de call.c) :
+
+- un appelé conserve sa WORKING-STORAGE entre deux CALL ; CANCEL la réinitialise
+  et ferme ses fichiers ouverts ; CALL ou CANCEL d'un programme actif s'arrête ;
+- les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
+  de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
+  son argument s'arrête au lieu de lire la mémoire voisine ;
+- EXIT PROGRAM est sans effet dans le programme principal, GOBACK y vaut STOP RUN ;
+  STOP RUN dans un appelé termine toute l'unité ;
+- un nom introuvable prend ON EXCEPTION seulement s'il est sûrement absent : mot
+  majuscule, ni routine système libcob (`SYSTEM`, `CBL_…`, `C$…`), ni source du
+  chemin d'appel non convertie. Sinon la conversion ou l'exécution s'arrête.
+
+Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes imbriqués ou
+multiples dans un même source, EXTERNAL/GLOBAL, LINKAGE hors de USING, VALUE en
+LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
+DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
 
 ## Calcul décimal et limites explicites
 

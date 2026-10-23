@@ -11,15 +11,105 @@ from pathlib import Path
 
 from . import __version__
 from .binary import inspect_binary
-from .emitter import Emitter
-from .frontend import CobolError, Parser, load_source
+from .emitter import Emitter, generate_unit
+from .frontend import CobolError, Parser, Stmt, load_source
 from .toolchain import compiler_env, find_tool
 
 
-def convert(source: Path, output: Path, fmt="auto", includes=()):
+SOURCE_SUFFIXES = (".CBL", ".cbl", ".COB", ".cob")
+
+
+def statements(program):
+    """Every statement of a program, nested bodies included."""
+    def walk(item):
+        if isinstance(item, Stmt):
+            yield item
+            yield from walk(item.args)
+        elif isinstance(item, (list, tuple)):
+            for element in item:
+                yield from walk(element)
+    for block in program.blocks:
+        yield from walk(block.body)
+
+
+def call_targets(program):
+    literals, dynamic = set(), False
+    for stmt in statements(program):
+        if stmt.op == "call_program":
+            if stmt.args[0][0] == "literal":
+                literals.add(stmt.args[0][1])
+            else:
+                dynamic = True
+    return literals, dynamic
+
+
+def run_unit(source: Path, fmt, includes, call_paths):
+    """Main program and every program it may CALL, found as <name>.CBL/.cob.
+
+    Like GnuCOBOL's dynamic CALL, a literal name resolves to a module of that
+    name in the call path. A name found nowhere raises EXCEPTION at run time.
+    A dynamic CALL brings in every program of the call path that converts.
+    """
     expanded, copies = load_source(source, list(includes), fmt)
-    program = Parser(expanded).parse()
-    rust, mapping = Emitter(program).generate()
+    main = Parser(expanded).parse()
+    if main.using:
+        raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
+    directories = [Path(path) for path in call_paths]
+    units = {}
+    pending, dynamic = call_targets(main)
+    if dynamic:
+        for directory in directories:
+            for path in sorted(directory.iterdir()) if directory.is_dir() else []:
+                if path.suffix in SOURCE_SUFFIXES:
+                    try:
+                        load_source(path, list(includes), fmt)
+                        pending.add(path.stem)
+                    except (CobolError, OSError):
+                        continue
+    seen = set()
+    while pending:
+        name = pending.pop()
+        if name in seen or name == main.entry_name:
+            continue
+        seen.add(name)
+        path = next((directory / (name + suffix) for directory in directories for suffix in SOURCE_SUFFIXES
+                     if (directory / (name + suffix)).is_file()), None)
+        if path is None:
+            continue
+        sub_expanded, sub_copies = load_source(path, list(includes), fmt)
+        try:
+            program = Parser(sub_expanded).parse()
+        except CobolError as exc:
+            if dynamic and name not in call_targets(main)[0]:
+                continue
+            raise CobolError(f"programme appelé {path.name}: {exc}") from exc
+        if program.entry_name != name:
+            if program.entry_name.upper() == name.upper() or dynamic is False:
+                raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
+            continue
+        units[name] = (path, program, sub_expanded, sub_copies)
+        literals, more = call_targets(program)
+        if more:
+            raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
+        pending |= literals
+    return main, expanded, copies, [units[name] for name in sorted(units)]
+
+
+def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
+    """Rust source of the run unit of `source`, with its parsed programs."""
+    main, expanded, copies, subprograms = run_unit(source, fmt, includes, call_paths)
+    called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
+    present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
+               for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
+    emitters = [Emitter(main, called=called, present=present)]
+    for index, (_, sub, _, _) in enumerate(subprograms, 1):
+        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present))
+    rust, mapping = generate_unit(emitters)
+    return main, expanded, copies, subprograms, rust, mapping
+
+
+def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=()):
+    program, expanded, copies, subprograms, rust, mapping = emit_unit(source, fmt, includes, call_paths)
     output = output.resolve()
     # Never replace an existing project or an unrelated directory implicitly.
     if output.exists() and any(output.iterdir()):
@@ -45,6 +135,11 @@ def convert(source: Path, output: Path, fmt="auto", includes=()):
               "files": [asdict(f) for f in program.files.values()],
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
+              "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
+                               "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                               "using": sub.using, "memory_size": sub.memory_size}
+                              for path, sub, _, _ in subprograms],
+              "call_paths": [str(Path(path).resolve()) for path in call_paths],
               "storage_profile": {"binary_size": "1-2-4-8", "binary_byteorder": "big-endian", "display_sign": "ASCII trailing overpunch"},
               "file_runtime": {"organization": organizations[0] if len(organizations) == 1 else "MIXED",
                                "organizations": organizations,
@@ -77,6 +172,7 @@ def main(argv=None):
     source.add_argument("-o", "--output", type=Path, required=True)
     source.add_argument("--format", choices=["auto", "free", "fixed"], default="auto")
     source.add_argument("-I", "--copybook-path", type=Path, action="append", default=[])
+    source.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     source.add_argument("--build", action="store_true", help="compiler le Rust généré")
     source.add_argument("--run", action="store_true", help="compiler et exécuter le Rust généré")
     binary = subs.add_parser("inspect", help="inspecter un exécutable COBOL potentiel (sans le lancer)")
@@ -87,6 +183,7 @@ def main(argv=None):
     verification.add_argument("source", type=Path)
     verification.add_argument("--format", choices=["auto", "free", "fixed"], default="auto")
     verification.add_argument("-I", "--copybook-path", type=Path, action="append", default=[])
+    verification.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
     verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED ou COB_LS_SPLIT identique pour les deux programmes")
@@ -123,7 +220,7 @@ def main(argv=None):
                 key, value = item.split("=", 1)
                 environment[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
-                            args.data_dir, environment)
+                            args.data_dir, environment, args.call_path)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():
@@ -146,7 +243,7 @@ def main(argv=None):
             cargo = find_tool("cargo") if args.build or args.run else None
             if (args.build or args.run) and not cargo:
                 raise CobolError("Cargo introuvable; installer Rust ou omettre --build/--run")
-            report = convert(args.source, args.output, args.format, args.copybook_path)
+            report = convert(args.source, args.output, args.format, args.copybook_path, args.call_path)
             print(f"{report['program']} -> {args.output.resolve()}", flush=True)
             if cargo:
                 command = [cargo, "run" if args.run else "build", "--quiet"]

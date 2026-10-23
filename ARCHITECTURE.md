@@ -108,6 +108,16 @@ conversions GnuCOBOL dépendent du stockage et peuvent réduire à 32 bits.
 EXIT SECTION hors section explicite, EXIT PERFORM, ALTER, noms de procédure
 qualifiés ou homonymes et segments numérotés ne sont pas encore modélisés.
 
+## Unité d'exécution et CALL
+
+`cli.run_unit` analyse le programme principal puis, transitivement, chaque cible
+CALL littérale trouvée dans `--call-path` (tous les programmes du chemin en cas
+de CALL dynamique). `emitter.generate_unit` écrit une structure Rust par
+programme (`Program`, `Program1`…) et un `RunUnit` qui garde une instance par
+appelé (`Option<Box<…>>` et un indicateur actif). `run` rend
+`runtime::Outcome::{Return, Stop}` ; un appelé lie ses articles LINKAGE aux
+arguments par `storage_runtime::rebind` dans sa méthode `call`.
+
 ## Runtime Rust
 
 Chaque programme possède un espace mémoire `Rc<RefCell<Vec<u8>>>` partagé par

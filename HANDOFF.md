@@ -1,8 +1,21 @@
 # Handoff — COBOL vers Rust
 
-État au 22 octobre 2026, après livraison de la version **0.4.0**.
+État au 23 octobre 2026, après livraison de la version **0.4.0**.
 
 ## Reprise cloud et objectif élargi
+
+Dernière étape : CALL/CANCEL/LINKAGE. `cli.run_unit` découvre les appelés
+(`<nom>.CBL/.cob` du `--call-path`, PROGRAM-ID identique), `generate_unit` émet
+une structure par programme et un `RunUnit` (instance persistante par appelé,
+CANCEL = abandon de l'instance, donc fermeture des fichiers comme le
+`P_cancel` de codegen.c). LINKAGE : `storage_runtime::rebind` sur la mémoire de
+l'argument, `content_copy` pour BY CONTENT. Nom introuvable : ON EXCEPTION
+seulement si `surely_absent` (majuscules, pas `SYSTEM`/`EXTFH`, pas de source
+non convertie du chemin). Piège natif sondé : dans `ON EXCEPTION DISPLAY ..
+NOT ON EXCEPTION ..`, GnuCOBOL donne NOT ON EXCEPTION au DISPLAY — refusé.
+`verify` compile les appelés en `cobc -m` dans `modules/` (COB_LIBRARY_PATH) ;
+`nist_verify` utilise `<module>/lib`, `coverage.py --call-path lib`.
+NIST **126/458**, 124/124 programmes acceptés conformes.
 
 Dernière étape : enregistrements variables, PERFORM VARYING AFTER, formes
 lexicales et MOVE ALL. Limites comme `finalize_file` de cobc (clause élargie par

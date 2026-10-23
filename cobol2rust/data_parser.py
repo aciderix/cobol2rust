@@ -207,6 +207,7 @@ def declaration(p, file_record=False):
             p.error("PIC éditée limitée à 18 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
+    explicit_value = initial is not None
     if initial is not None:
         if file_record or redefines:
             p.error("VALUE sur FD/REDEFINES non pris en charge")
@@ -214,8 +215,12 @@ def declaration(p, file_record=False):
             p.error("VALUE incompatible avec la PICTURE")
     else:
         initial = Token("" if kind == "text" else "0", p.t.line, kind == "text")
+    linkage = getattr(p, "in_linkage", False)
+    if linkage and (explicit_value or group_value is not None):
+        p.error("VALUE en LINKAGE SECTION non pris en charge")
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
+    descriptor.linkage = linkage
     descriptor.occurs_min, descriptor.depending = minimum, depending
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""

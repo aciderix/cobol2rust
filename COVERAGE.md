@@ -465,6 +465,17 @@ initial, PIC A/V, MOVE ALL et SET depuis un index portent l'émission acceptée 
 **115/458**. Toutes les nouvelles sources sont conformes au runner natif
 (`build/nist-verify-var.json` : 12/12, 643 PASS).
 
+## Progression : CALL et programmes liés
+
+CALL/CANCEL/LINKAGE (unité d'exécution multi-programmes, `--call-path lib` pour
+le module IC) portent l'émission acceptée à **126/458** (dont 2 modules de
+`IC/lib` vérifiés par leur appelant IC116M). Les 9 nouveaux programmes IC sont
+conformes au runner natif (51 PASS ; `build/nist-verify-ic.json`) et la
+revérification complète donne **124/124 programmes conformes**, 2077 PASS,
+4 DELETED et 1 INSPECT natifs, aucun FAIL (`build/nist-verify-call.json`).
+Obstacles IC restants : programmes imbriqués ou multiples par source, USAGE
+INDEX, NEXT SENTENCE, EXTERNAL/GLOBAL, PICTURE avec B/0.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

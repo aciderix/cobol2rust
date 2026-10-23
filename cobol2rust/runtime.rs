@@ -13,6 +13,19 @@ pub struct Number { n: BigInt, scale: u32 }
 #[derive(Clone, Copy, Debug)]
 pub struct SizeError;
 
+/// How a called program ends: GOBACK/EXIT PROGRAM return to the caller,
+/// STOP RUN ends the whole run unit.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Outcome { Return, Stop }
+
+/// GnuCOBOL resolves a CALL name to a loaded or loadable module, a libcob
+/// system routine or any symbol of the process. Only a plain upper-case COBOL
+/// word that names no program of the call path is surely not found.
+pub fn surely_absent(name: &str, present: &[&str]) -> bool {
+    !name.is_empty() && name.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'-')
+        && name != "SYSTEM" && name != "EXTFH" && !present.contains(&name)
+}
+
 pub fn fail(message: &str) -> ! {
     eprintln!("cobol2rust: COBOL line {}: {}", COBOL_LINE.load(Ordering::Relaxed), message);
     std::process::exit(70)

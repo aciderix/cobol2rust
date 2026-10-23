@@ -1,5 +1,13 @@
 # Validation — 22 octobre 2026
 
+## CALL et programmes liés — 23 octobre 2026
+
+- **261 tests découverts : 260 réussis, un test PE Windows ignoré.**
+- **62/62 comparaisons locales conformes** ; nouvelle fixture `call_main.cob`
+  (+ `calls/`), sous-programmes compilés en modules `cobc -m` côté natif.
+- NIST : **126/458** ; revérification de tous les programmes acceptés :
+  **124/124 conformes** (2077 PASS, 0 FAIL) ; 9 nouveaux programmes IC.
+
 ## Enregistrements variables — 23 octobre 2026
 
 - **255 tests découverts : 254 réussis, un test PE Windows ignoré.**

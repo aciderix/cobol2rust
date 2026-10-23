@@ -132,7 +132,15 @@ class ControlGraph:
                 self._error(stmt, "EXIT SECTION requiert une section explicite")
             return self._add("jump", (self.section_checkpoints[section],), stmt)
         if op == "stop":
-            return self._add("end", (), stmt)
+            return self._add("stop_run", (), stmt)
+        if op in {"goback", "exit_program"}:
+            # A main program ignores EXIT PROGRAM; GOBACK there is STOP RUN.
+            return self._add(op, (after,), stmt)
+        if op == "call_program":
+            target, arguments, exception, success = args
+            return self._add("call_program", (target, arguments, after,
+                                              self._body(exception, after, block) if exception else None,
+                                              self._body(success, after, block)), stmt)
         return self._add("execute", (stmt, after), stmt)
 
     def _declaratives(self, file_name: str, after: int):

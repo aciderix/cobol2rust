@@ -84,16 +84,18 @@ def runner_counts(native_logs: Path, name: str) -> dict | None:
 def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     copybooks = [corpus / "copy", corpus / "copyalt"]
     source, chain = predecessors(corpus, name)
+    # The runner compiles <module>/lib/*.CBL as modules beside the programs.
+    call_paths = [path for path in [corpus / name[:2] / "lib"] if path.is_dir()]
     work.mkdir(parents=True)
     if name in COMPILE_ONLY:
-        convert(source, work / "rust", fmt="fixed", includes=copybooks)
+        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths)
         build_rust(work / "rust")
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
                 "runner_counts": runner_counts(native_logs, name)}
     seed = native_seed(corpus, chain, copybooks, work) if chain else None
     stdin = source.with_suffix(".DAT")
     report = verify(source, fmt="fixed", includes=copybooks,
-                    stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed)
+                    stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed, call_paths=call_paths)
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}
@@ -120,7 +122,9 @@ def main(argv=None) -> int:
     names = list(args.programs)
     if args.accepted_from:
         results = json.loads(args.accepted_from.read_text(encoding="utf-8"))["results"]
-        names += [Path(r["source"]).stem for r in results if r["status"] == "emission_accepted"]
+        # <module>/lib holds called modules: they are checked through their callers.
+        names += [Path(r["source"]).stem for r in results
+                  if r["status"] == "emission_accepted" and Path(r["source"]).parent.name != "lib"]
     if not names:
         parser.error("aucun programme demandé")
     if args.work.exists() or args.output.exists():

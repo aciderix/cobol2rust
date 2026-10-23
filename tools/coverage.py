@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cobol2rust import __version__
 from cobol2rust.audit import SKIP
-from cobol2rust.emitter import Emitter
+from cobol2rust.cli import emit_unit
 from cobol2rust.frontend import CobolError, Parser, load_source, source_format
 from cobol2rust.toolchain import ROOT
 
@@ -56,7 +56,7 @@ def discover(root, extensions):
     return sorted(paths), sorted(errors), sorted(excluded)
 
 
-def inspect_source(path, fmt, includes):
+def inspect_source(path, fmt, includes, call_paths=()):
     result = {"source": str(path), "source_sha256": None, "verified": False,
               "copybooks": [], "copybooks_complete": False}
     stage = "preprocess"
@@ -77,7 +77,7 @@ def inspect_source(path, fmt, includes):
         program = Parser(expanded).parse()
         result["program"] = program.name
         stage = "emission"
-        Emitter(program).generate()
+        emit_unit(path, fmt, includes, [path.parent / relative for relative in call_paths])
         result["status"] = "emission_accepted"
     except CobolError as error:
         result.update(status=stage + "_blocked", diagnostic=str(error))
@@ -106,7 +106,8 @@ def implementation_hashes():
             for path in sorted(paths)}
 
 
-def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, include_subprograms=False):
+def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, include_subprograms=False,
+            call_paths=()):
     root = Path(root).absolute()
     includes = [Path(path).absolute() for path in includes]
     extensions = EXTENSIONS | ({".sub"} if include_subprograms else set())
@@ -116,7 +117,7 @@ def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, i
         paths, errors, excluded = [], [str(error)], []
     if not paths and not errors:
         errors.append(f"no source files found for extensions {sorted(extensions)}")
-    results = [inspect_source(path, fmt, includes) for path in paths]
+    results = [inspect_source(path, fmt, includes, call_paths) for path in paths]
     counts = {status: sum(row["status"] == status for row in results) for status in STATUSES}
     grouped = {}
     for row in results:
@@ -135,6 +136,7 @@ def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, i
         "tool": tool,
         "corpus": {"root": str(root), "id": corpus_id, "source": corpus_source},
         "format_requested": fmt, "copybook_paths": [str(path) for path in includes],
+        "call_paths_relative_to_source": [str(path) for path in call_paths],
         "static_only": True, "verified": False, "compiled": 0, "executed": 0, "compared": 0,
         "scope": "source preprocessing, parsing/layout and Rust emission only; no behavioral equivalence established",
         "denominator": {"sources": len(paths), "extensions": sorted(extensions),
@@ -159,13 +161,15 @@ def main(argv=None):
     parser.add_argument("--corpus-id", help="user-supplied corpus identity or revision")
     parser.add_argument("--corpus-source", help="user-supplied provenance URL or description")
     parser.add_argument("--include-subprograms", action="store_true", help="also inventory .SUB source files")
+    parser.add_argument("--call-path", action="append", default=[],
+                        help="directory of CALLed programs, relative to each source (e.g. lib for NIST IC)")
     parser.add_argument("--report", type=Path, help="new JSON report; default is standard output")
     args = parser.parse_args(argv)
     if args.report and (args.report.exists() or args.report.is_symlink()):
         print(f"coverage: report already exists: {args.report}", file=sys.stderr)
         return 2
     report, code = measure(args.corpus, args.format, args.copybook_path, args.corpus_id,
-                           args.corpus_source, args.include_subprograms)
+                           args.corpus_source, args.include_subprograms, args.call_path)
     encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     if args.report:
         try:

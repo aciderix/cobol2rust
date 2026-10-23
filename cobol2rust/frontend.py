@@ -296,6 +296,7 @@ class Field:
     redefines: str | None = None
     filler: bool = False
     file_record: bool = False
+    linkage: bool = False
     offset: int = 0
     size: int = 0
     dimensions: list[tuple[int, int]] = field(default_factory=list)
@@ -378,6 +379,10 @@ class Program:
     file_declaratives: dict[str, str] = field(default_factory=dict)
     mode_declaratives: dict[str, str] = field(default_factory=dict)
     main_block: int = 0
+    # PROCEDURE DIVISION USING: linkage 01/77 items bound to CALL arguments.
+    using: list[str] = field(default_factory=list)
+    # PROGRAM-ID as written: the entry point name a CALL literal must match.
+    entry_name: str = ""
 
     def procedure_range(self, name: str) -> tuple[int, int]:
         if name in self.sections:
@@ -392,8 +397,8 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO".split())
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START AT NOT ON INVALID . <EOF>".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -514,6 +519,7 @@ class Parser:
         self.expect(".")
         self.expect("PROGRAM-ID")
         self.expect(".")
+        entry_name = self.t.text
         name = self.name()
         self.expect(".")
         if self.accept("ENVIRONMENT"):
@@ -551,8 +557,16 @@ class Parser:
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
+                while not self.at("PROCEDURE") and not self.at("LINKAGE"):
+                    self.declaration()
+            if self.accept("LINKAGE"):
+                self.expect("SECTION")
+                self.expect(".")
+                self.data_stack = []
+                self.in_linkage = True
                 while not self.at("PROCEDURE"):
                     self.declaration()
+                self.in_linkage = False
         for label, owner in self.indexes.items():
             if self.candidates(label) or self.candidates(label, True):
                 self.error(f"index dupliqué avec une donnée: {label}")
@@ -566,6 +580,21 @@ class Parser:
         self.validate_files()
         self.expect("PROCEDURE")
         self.expect("DIVISION")
+        using = []
+        if self.accept("USING"):
+            while not self.at("."):
+                if self.accept("BY"):
+                    if not self.accept("REFERENCE"):
+                        self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
+                if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
+                    self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
+                key = self.resolve(self.name())
+                field = self.fields[key]
+                if not field.linkage or field.parent is not None or field.redefines or key in using:
+                    self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
+                using.append(key)
+            if not using:
+                self.error("USING requiert au moins un paramètre")
         self.expect(".")
         entry, paragraphs = [], {}
         blocks = [ProcedureBlock(None, None, entry)]
@@ -631,8 +660,13 @@ class Parser:
             self.error("END DECLARATIVES attendu")
         if current_section is not None:
             sections[current_section] = (sections[current_section][0], len(blocks))
+        unbound = [f.label for f in self.fields.values()
+                   if f.linkage and f.parent is None and not f.redefines and f.name not in using]
+        if unbound:
+            self.error(f"article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: {unbound[0]}")
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
-                          blocks, sections, file_declaratives, mode_declaratives, main_block)
+                          blocks, sections, file_declaratives, mode_declaratives, main_block, using)
+        program.entry_name = entry_name
         self.validate_calls(program)
         return program
 
@@ -1319,7 +1353,63 @@ class Parser:
             self.expect("RUN")
             return Stmt("stop", (), line)
         if verb == "GOBACK":
-            return Stmt("stop", (), line)
+            return Stmt("goback", (), line)
+        if verb == "CALL":
+            if self.t.string:
+                target = ("literal", self.take().text)
+            else:
+                ref = self.variable()
+                if self.fields[ref.name].kind != "text" and ref.start is None:
+                    self.error("CALL identifiant requiert un champ alphanumérique")
+                target = ("dynamic", ref)
+            arguments, mode = [], "REFERENCE"
+            if self.accept("USING"):
+                while True:
+                    if self.accept("BY"):
+                        if not (self.at("REFERENCE") or self.at("CONTENT")):
+                            self.error("CALL USING limité à BY REFERENCE et BY CONTENT")
+                    if self.accept("REFERENCE"):
+                        mode = "REFERENCE"
+                    elif self.accept("CONTENT"):
+                        mode = "CONTENT"
+                    if self.at("OMITTED") or self.at("VALUE") or self.t.string or (not self.t.string and self.t.text[:1].isdigit()):
+                        self.error("CALL USING limité aux identifiants BY REFERENCE/CONTENT")
+                    if self.t.string or not self.candidates(self.t.key):
+                        break
+                    arguments.append((mode, self.variable()))
+                if not arguments:
+                    self.error("CALL USING requiert au moins un argument")
+            if self.at("RETURNING") or self.at("GIVING"):
+                self.error("CALL RETURNING/GIVING non pris en charge")
+            exception, success = [], []
+            if self.accept("ON") or self.at("EXCEPTION") or self.at("OVERFLOW"):
+                if not (self.accept("EXCEPTION") or self.accept("OVERFLOW")):
+                    self.error("ON EXCEPTION ou ON OVERFLOW attendu")
+                exception = self.block({"NOT", "END-CALL"})
+            if self.at("NOT") and self.tokens[self.i + 1].key in {"ON", "EXCEPTION", "OVERFLOW"}:
+                # GnuCOBOL gives NOT ON EXCEPTION to the innermost open statement
+                # that takes one: a DISPLAY/ACCEPT/CALL ending ON EXCEPTION keeps it.
+                last = exception[-1] if exception and not self.tokens[self.i - 1].key.startswith("END-") else None
+                while last is not None and last.op in {"if", "evaluate"}:
+                    bodies = [last.args[1], last.args[2]] if last.op == "if" else [*(b for _, b in last.args[1]), last.args[2]]
+                    body = next((b for b in reversed(bodies) if b), None)
+                    last = body[-1] if body else None
+                if last is not None and last.op in {"display", "accept", "call_program"}:
+                    self.error("NOT ON EXCEPTION rattaché par GnuCOBOL au DISPLAY/ACCEPT/CALL de ON EXCEPTION; non pris en charge")
+                self.take()
+                self.accept("ON")
+                if not (self.accept("EXCEPTION") or self.accept("OVERFLOW")):
+                    self.error("NOT ON EXCEPTION attendu")
+                success = self.block({"END-CALL"})
+            self.accept("END-CALL")
+            return Stmt("call_program", (target, arguments, exception, success), line)
+        if verb == "CANCEL":
+            targets = []
+            while self.t.string or (self.t.key not in BOUNDARIES and self.candidates(self.t.key)):
+                targets.append(("literal", self.take().text) if self.t.string else ("dynamic", self.variable()))
+            if not targets:
+                self.error("CANCEL requiert un programme")
+            return Stmt("cancel", (targets,), line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
         if verb == "EXIT":
@@ -1327,6 +1417,8 @@ class Parser:
                 return Stmt("exit_paragraph", (), line)
             if self.accept("SECTION"):
                 return Stmt("exit_section", (), line)
+            if self.accept("PROGRAM"):
+                return Stmt("exit_program", (), line)
             if self.at("PERFORM") or self.at("CYCLE"):
                 self.error(f"EXIT {self.t.key} non pris en charge")
             if not self.t.string and self.t.key in BOUNDARIES:
@@ -1413,7 +1505,7 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
                     walk(s.args[2], section); walk(s.args[3], section)
-                elif s.op in {"write", "rewrite", "delete", "start"}:
+                elif s.op in {"write", "rewrite", "delete", "start", "call_program"}:
                     walk(s.args[-2], section); walk(s.args[-1], section)
         if program.blocks:
             for block in program.blocks:

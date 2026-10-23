@@ -16,7 +16,8 @@ def verify_fixture(source, fmt, stdin):
     options = source.with_suffix(".json")
     config = json.loads(options.read_text(encoding="utf-8")) if options.is_file() else {}
     data = source.with_suffix(".data")
-    result = compare(source, fmt, stdin, data_dir=data if data.is_dir() else None, runtime_env=config.get("runtime_env"))
+    result = compare(source, fmt, stdin, data_dir=data if data.is_dir() else None, runtime_env=config.get("runtime_env"),
+                     call_paths=[source.parent / path for path in config.get("call_paths", [])])
     result["fixture"] = source.name
     return result
 
