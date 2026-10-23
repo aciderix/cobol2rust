@@ -35,6 +35,9 @@ class FileFrontendTests(unittest.TestCase):
             file_program(storage="01 fs pic xxx."),
             file_program(storage="01 fs pic s99."),
             file_program(storage="01 fs pic 99 comp."),
+            file_program(storage="01 fs. 02 a pic x."),
+            file_program(storage="01 fs. 02 a pic x(3)."),
+            file_program(storage="01 g. 02 fs occurs 2. 03 a pic xx."),
             file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(8)."),
             file_program(select=select + 'select other-file assign to "data.txt" organization line sequential.',
                          fd="fd f. 01 rec pic x(8). fd other-file. 01 other-rec pic x(8)."),
@@ -42,6 +45,13 @@ class FileFrontendTests(unittest.TestCase):
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
                 Emitter(Parser(source).parse()).generate()
+
+    def test_two_byte_group_file_status_is_accepted(self):
+        for storage in ("01 fs. 02 a pic x. 02 b pic x.", "01 fs. 02 a pic 9. 02 b pic 9.",
+                        "01 fs. 02 a pic x occurs 2.", "01 fs. 02 a pic s9(4) comp.",
+                        "01 g. 02 fs. 03 a pic x. 03 b pic x."):
+            with self.subTest(storage=storage):
+                Parser(file_program(storage=storage)).parse()
 
     def test_reject_unsupported_operations_and_incomplete_input(self):
         cases = ["open f.", "open i-o f.", "open input.", "read.", "write fs.", "close.",
@@ -85,6 +95,18 @@ class FileRuntimeTests(unittest.TestCase):
 
 @unittest.skipUnless(find_tool("cargo") and find_tool("cobc"), "Cargo and GnuCOBOL required")
 class FileVerificationTests(unittest.TestCase):
+    def test_group_file_status_receives_raw_status_bytes(self):
+        body = ('open input f display "[" fs "]" open output f display "[" fs "]" '
+                'write rec from "AB" display "[" fs "]" close f display "[" fs "]" stop run.')
+        for storage in ("01 fs. 02 a pic x. 02 b pic x.", "01 fs. 02 a pic 9. 02 b pic 9.",
+                        "01 fs. 02 a pic s9(4) comp."):
+            with self.subTest(storage=storage), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "group-status.cob"
+                source.write_text(file_program(body, storage=storage), encoding="utf-8")
+                report = verify(source)
+                self.assertTrue(report["match"], report)
+                self.assertEqual(report["cobol_stdout"], "[35]\n[00]\n[00]\n[00]\n")
+
     def test_empty_input_directories_are_available_to_both_programs(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

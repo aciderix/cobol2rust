@@ -33,6 +33,12 @@ if [ ! -f .tools/corpora/manifest.json ]; then
         || echo "[session-start] AVERTISSEMENT : récupération des corpus échouée, voir $LOG"
 fi
 
+# Référence du runner NIST natif (~15 min) : en arrière-plan, sans bloquer la session.
+if [ ! -f .tools/nist-native-gnucobol-3.2/summary.log ] && [ -f .tools/nist-ccvs85/manifest.json ]; then
+    step "référence NIST native lancée en arrière-plan (build/nist-native.log)"
+    nohup tools/nist_native_reference.sh > build/nist-native.log 2>&1 &
+fi
+
 # Le premier build télécharge num-bigint ; le garder dans le cache Cargo.
 step "cache Cargo"
 WARM="$(mktemp -d)"

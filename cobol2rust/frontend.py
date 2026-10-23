@@ -59,6 +59,7 @@ def normalize(source: str, fmt: str = "auto") -> str:
     previous = None
     quotation = None
     consecutive = False
+    debugging_lines = False
     for number, line in enumerate(lines, 1):
         directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
         if directive:
@@ -79,6 +80,11 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 raise CobolError(f"ligne {number}: format fixe invalide (colonnes 1-7)")
             indicator = line[6]
             if indicator in "*/":
+                result.append("")
+                continue
+            if indicator in "Dd":
+                # Without DEBUGGING MODE, GnuCOBOL drops debugging lines.
+                debugging_lines = True
                 result.append("")
                 continue
             if indicator not in " -":
@@ -132,7 +138,11 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 previous = len(result) - 1
             continue
         result.append("" if documentary.is_comment(line, fmt, line=number) else line)
-    return "\n".join(result)
+    text = "\n".join(result)
+    # GnuCOBOL's preprocessor activates debugging lines on WITH DEBUGGING MODE.
+    if debugging_lines and re.search(r"\bDEBUGGING[\s,;]+MODE\b", text, re.I):
+        raise CobolError("lignes de débogage 'D' actives avec DEBUGGING MODE non prises en charge")
+    return text
 
 
 def lex(source: str) -> list[Token]:
@@ -287,6 +297,8 @@ class Field:
     depending: str | None = None
     index_for: str | None = None
     editing: str = ""
+    group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
+    group_usage: str | None = None
 
 
 @dataclass(frozen=True)
@@ -556,6 +568,7 @@ class Parser:
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
                 section = self.name()
+                self.procedure_name_check(section)
                 if section in sections or section in paragraphs:
                     self.error(f"nom de procédure dupliqué: {section}; les homonymes ne sont pas pris en charge")
                 self.expect("SECTION")
@@ -570,6 +583,7 @@ class Parser:
                 blocks.append(ProcedureBlock(None, section, current_body))
             elif self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
                 paragraph = self.name()
+                self.procedure_name_check(paragraph)
                 if paragraph in paragraphs or paragraph in sections:
                     self.error(f"nom de procédure dupliqué: {paragraph}; les homonymes ne sont pas pris en charge")
                 self.expect(".")
@@ -585,6 +599,12 @@ class Parser:
         self.validate_calls(program)
         return program
 
+    def procedure_name_check(self, name):
+        # A data name followed by a period is a receiver, not a header.
+        if (self.candidates(name) or self.candidates(name, True) or name in self.files
+                or name in self.indexes):
+            self.error(f"nom de procédure homonyme d'une donnée non pris en charge: {name}")
+
     def environment_division(self):
         self.expect("DIVISION")
         self.expect(".")
@@ -599,6 +619,20 @@ class Parser:
                 computers.add(paragraph)
                 self.expect(".")
                 self.name()
+                # GnuCOBOL 3.2 parses and ignores MEMORY SIZE and SEGMENT-LIMIT.
+                while paragraph == "OBJECT-COMPUTER" and not self.at("."):
+                    if self.accept("MEMORY"):
+                        self.accept("SIZE")
+                        self.accept("IS")
+                        self.integer_literal("MEMORY SIZE")
+                        if not any(self.accept(unit) for unit in ("WORDS", "CHARACTERS", "MODULES")):
+                            self.error("MEMORY SIZE requiert WORDS, CHARACTERS ou MODULES")
+                    elif self.accept("SEGMENT-LIMIT"):
+                        self.accept("IS")
+                        if not 1 <= self.integer_literal("SEGMENT-LIMIT") <= 49:
+                            self.error("SEGMENT-LIMIT limité à 1..49")
+                    else:
+                        break
                 if not self.accept("."):
                     self.error(f"clause {paragraph} non prise en charge; seul le nom de machine est accepté")
             if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
@@ -610,8 +644,43 @@ class Parser:
             self.expect(".")
             while self.at("SELECT"):
                 self.file_control()
+            if self.accept("I-O-CONTROL"):
+                self.expect(".")
+                self.io_control()
         if not (self.at("DATA") or self.at("PROCEDURE")):
             self.error("clause ENVIRONMENT DIVISION non prise en charge")
+
+    def integer_literal(self, clause):
+        if self.t.string or not re.fullmatch(r"\d{1,9}", self.t.text):
+            self.error(f"{clause} requiert un entier littéral non signé")
+        return int(self.take().text)
+
+    def io_control(self):
+        """Accept the I-O-CONTROL entries GnuCOBOL 3.2 parses without effect."""
+        while not self.at(".") and not self.at("DATA") and not self.at("PROCEDURE"):
+            if self.accept("MULTIPLE"):
+                self.accept("FILE")
+                self.accept("TAPE")
+                self.accept("CONTAINS")
+                self.file_name()
+                if self.accept("POSITION"):
+                    self.integer_literal("POSITION")
+                while not self.t.string and self.t.key in self.files:
+                    self.file_name()
+                    if self.accept("POSITION"):
+                        self.integer_literal("POSITION")
+            elif self.accept("SAME"):
+                if self.at("RECORD"):
+                    self.error("SAME RECORD AREA non pris en charge; enregistrements partagés non modélisés")
+                self.accept("SORT") or self.accept("SORT-MERGE")
+                self.accept("AREA")
+                self.accept("FOR")
+                self.file_name()
+                while not self.t.string and self.t.key in self.files:
+                    self.file_name()
+            else:
+                self.error("clause I-O-CONTROL non prise en charge")
+        self.expect(".")
 
     def file_name(self):
         name = self.name()
@@ -666,8 +735,12 @@ class Parser:
             if spec.status:
                 spec.status = self.resolve(spec.status)
                 status = self.fields.get(spec.status)
-                if not status or status.kind not in {"text", "number"} or status.digits != 2 or status.scale or status.signed or status.usage != "DISPLAY" or status.dimensions:
-                    self.error(f"FILE STATUS {spec.status} doit être PIC XX ou PIC 99 DISPLAY")
+                # A two-byte group receives the status characters as raw bytes.
+                group = status is not None and not status.picture and status.size == 2
+                if not status or status.dimensions or not group and (
+                        status.kind not in {"text", "number"} or status.digits != 2 or status.scale
+                        or status.signed or status.usage != "DISPLAY"):
+                    self.error(f"FILE STATUS {spec.status} doit être PIC XX, PIC 99 DISPLAY ou un groupe de 2 octets")
                 if status.file_record:
                     self.error("FILE STATUS ne peut pas être une donnée FD")
             from .layout import leaves
@@ -885,28 +958,44 @@ class Parser:
             targets = self.targets()
             return Stmt("move", (value, targets, False), line)
         if verb == "COMPUTE":
-            name = self.variable()
-            rounded = self.accept("ROUNDED")
-            self.expect("=")
-            value = self.expr()
-            return self.arithmetic(verb, value, [name], rounded, line)
+            receivers = self.rounded_receivers()
+            if not (self.accept("=") or self.accept("EQUAL")):
+                self.error("= attendu")
+            # The expression is evaluated once, before any receiver is stored.
+            items = [(ref, Expr("shared", ()), rounded) for ref, rounded in receivers]
+            return self.arithmetic(verb, self.expr(), items, line)
         if verb in {"ADD", "SUBTRACT", "MULTIPLY", "DIVIDE"}:
             values = [self.expr()]
             separator = {"ADD": "TO", "SUBTRACT": "FROM", "MULTIPLY": "BY", "DIVIDE": "INTO"}[verb]
             while verb in {"ADD", "SUBTRACT"} and not self.at(separator):
                 values.append(self.expr())
             self.expect(separator)
-            receiver = self.variable()
             op = {"ADD": "+", "SUBTRACT": "-", "MULTIPLY": "*", "DIVIDE": "/"}[verb]
-            value = values[0]
+            operand = values[0]
             for extra in values[1:]:
-                value = Expr("+", (value, extra))
-            value = Expr(op, (Expr("var", (receiver,)), value))
-            targets = [receiver]
-            if self.accept("GIVING"):
-                targets = [self.variable()]
-            rounded = self.accept("ROUNDED")
-            return self.arithmetic(verb, value, targets, rounded, line)
+                operand = Expr("+", (operand, extra))
+            if self.t.string or not self.candidates(self.t.key):
+                # Only a GIVING form can take a literal second operand.
+                second = self.expr()
+                self.expect("GIVING")
+                giving = True
+            else:
+                receivers = self.rounded_receivers()
+                giving = self.accept("GIVING")
+                if giving:
+                    if len(receivers) != 1 or receivers[0][1]:
+                        self.error(f"{verb} ... GIVING requiert un seul opérande sans ROUNDED avant GIVING")
+                    second = Expr("var", (receivers[0][0],))
+            if giving:
+                shared = Expr(op, (second, operand))
+                items = [(ref, Expr("shared", ()), rounded) for ref, rounded in self.rounded_receivers()]
+                return self.arithmetic(verb, shared, items, line)
+            # GnuCOBOL re-reads a single operand for each receiver, after the
+            # previous ones were stored; several operands are summed once.
+            shared = operand if len(values) > 1 else None
+            term = Expr("shared", ()) if shared else operand
+            items = [(ref, Expr(op, (Expr("var", (ref,)), term)), rounded) for ref, rounded in receivers]
+            return self.arithmetic(verb, shared, items, line)
         if verb == "IF":
             cond = self.condition()
             self.accept("THEN")
@@ -1019,7 +1108,13 @@ class Parser:
             self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")
         self.error(f"instruction non prise en charge: {verb}")
 
-    def arithmetic(self, verb, value, targets, rounded, line):
+    def rounded_receivers(self):
+        receivers = [(self.variable(), self.accept("ROUNDED"))]
+        while not self.t.string and self.candidates(self.t.key):
+            receivers.append((self.variable(), self.accept("ROUNDED")))
+        return receivers
+
+    def arithmetic(self, verb, shared, items, line):
         ending = "END-" + verb
         error, success, handled = [], [], False
         stops = {ending, "ELSE", "END-IF", "END-PERFORM", "WHEN", "END-EVALUATE"}
@@ -1036,7 +1131,9 @@ class Parser:
             if not success:
                 self.error("instruction attendue après NOT ON SIZE ERROR")
         self.accept(ending)
-        return Stmt("arithmetic", (value, targets, rounded, error, success), line) if handled else Stmt("assign", (value, targets, rounded), line)
+        if handled:
+            return Stmt("arithmetic", (shared, items, error, success), line)
+        return Stmt("compute", (shared, items), line)
 
     def targets(self):
         names = [self.variable()]
@@ -1068,7 +1165,7 @@ class Parser:
                 elif s.op == "read":
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
-                    walk(s.args[3], section); walk(s.args[4], section)
+                    walk(s.args[2], section); walk(s.args[3], section)
         if program.blocks:
             for block in program.blocks:
                 walk(block.body, block.section)

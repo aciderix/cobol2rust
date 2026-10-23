@@ -10,6 +10,13 @@ from cobol2rust.toolchain import find_tool
 from cobol2rust.verification import verify
 
 
+FILES = """input-output section. file-control.
+select first-file assign to "first.txt" organization line sequential.
+select second-file assign to "second.txt" organization line sequential.
+"""
+FILE_DATA = "data division. file section. fd first-file. 01 first-rec pic x. fd second-file. 01 second-rec pic x.\n"
+
+
 def program(configuration="", data="", body='display "CONFIG-OK" stop run.'):
     return ("identification division.\nprogram-id. configuration-case.\n"
             "environment division.\n" + configuration + "\n" + data +
@@ -47,9 +54,10 @@ select records-file assign to "records.txt" organization line sequential.
     def test_semantic_configuration_is_never_silently_ignored(self):
         cases = [
             "source-computer. GNU-Linux with debugging mode.",
-            "object-computer. GNU-Linux memory size 1024 words.",
+            "object-computer. GNU-Linux memory size 1024.",
             "object-computer. GNU-Linux program collating sequence is alphabet-a.",
-            "object-computer. GNU-Linux segment-limit is 20.",
+            "object-computer. GNU-Linux segment-limit is 50.",
+            "object-computer. GNU-Linux segment-limit is 0.",
             "special-names. decimal-point is comma.",
             "special-names. currency sign is '$'.",
             "special-names. alphabet alphabet-a is native.",
@@ -60,6 +68,34 @@ select records-file assign to "records.txt" organization line sequential.
         for configuration in cases:
             with self.subTest(configuration=configuration), self.assertRaises(CobolError):
                 Parser(program("configuration section. " + configuration)).parse()
+
+    def test_documentary_object_computer_and_io_control_clauses_are_ignored(self):
+        # GnuCOBOL 3.2 parses these clauses and gives them no effect.
+        def emitted(source):
+            return Emitter(Parser(source).parse()).generate()[0]
+        reference = emitted(program("configuration section. object-computer. GNU-Linux.\n" + FILES, FILE_DATA))
+        for configuration in ("object-computer. GNU-Linux memory size 1024 words.",
+                              "object-computer. GNU-Linux memory 10 characters segment-limit is 49.",
+                              "object-computer. GNU-Linux segment-limit 1."):
+            with self.subTest(configuration=configuration):
+                source = program("configuration section. " + configuration + "\n" + FILES, FILE_DATA)
+                self.assertEqual(emitted(source), reference)
+        reference = emitted(program(FILES + "\n", FILE_DATA))
+        for control in ("multiple file tape contains first-file, second-file.",
+                        "multiple file first-file position 1 second-file position 2.",
+                        "same area for first-file second-file.",
+                        "same sort area for first-file second-file same first-file second-file."):
+            with self.subTest(control=control):
+                source = program(FILES + "i-o-control. " + control + "\n", FILE_DATA)
+                self.assertEqual(emitted(source), reference)
+
+    def test_semantic_io_control_clauses_are_refused(self):
+        for control in ("same record area for first-file second-file.",
+                        "multiple file tape contains other-file.",
+                        "rerun on tape-a every 10 records of first-file.",
+                        "apply write-only on first-file.", "same area for first-file"):
+            with self.subTest(control=control), self.assertRaises(CobolError):
+                Parser(program(FILES + "i-o-control. " + control + "\n", FILE_DATA)).parse()
 
     def test_incomplete_and_misplaced_paragraphs_fail(self):
         for configuration in [

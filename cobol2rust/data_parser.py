@@ -80,6 +80,7 @@ def declaration(p, file_record=False):
     picture, usage, initial = "", "DISPLAY", None
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
+    figurative = None
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -132,6 +133,9 @@ def declaration(p, file_record=False):
             if initial is not None:
                 p.error("VALUE dupliqué")
             p.accept("IS")
+            # A group VALUE fills its whole area: keep ZERO distinct from 0.
+            figurative = None if p.t.string else (
+                "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"} else None)
             initial = literal(p)
         else:
             if has_usage:
@@ -143,6 +147,17 @@ def declaration(p, file_record=False):
                 p.error("USAGE/clause non pris en charge")
             usage = p.take().key
     p.expect(".")
+    # Group USAGE applies to subordinate elementary items without their own
+    # USAGE; GnuCOBOL lets an explicit subordinate USAGE take precedence.
+    ancestors = []
+    cursor = parent
+    while cursor:
+        ancestors.append(p.fields[cursor])
+        cursor = p.fields[cursor].parent
+    if not has_usage:
+        usage = next((a.group_usage for a in ancestors if a.group_usage), usage)
+    if any(a.group_value is not None for a in ancestors) and initial is not None:
+        p.error("VALUE subordonné à un VALUE de groupe non pris en charge")
     def repeat(match):
         count = int(match[2])
         if count < 1:
@@ -150,12 +165,21 @@ def declaration(p, file_record=False):
         return match[1] * min(count, 257)
 
     expanded = re.sub(r"([9XZ])\((\d+)\)", repeat, picture)
+    group_value = group_usage = None
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
-        if initial or has_usage:
-            p.error("VALUE/USAGE de groupe non pris en charge")
         if level == 77:
             p.error("niveau 77 requiert une PICTURE")
+        if initial is not None:
+            if not initial.string and figurative != "0":
+                p.error("VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE")
+            if file_record or redefines or any(a.redefines or a.file_record for a in ancestors):
+                p.error("VALUE de groupe sur FD/REDEFINES non pris en charge")
+            group_value = (initial.text, figurative)
+        if has_usage:
+            group_usage = usage
+            usage = "DISPLAY"
+        initial = None
     elif re.fullmatch(r"X+", expanded):
         kind, digits, scale, signed = "text", len(expanded), 0, False
         if digits > 256 or usage != "DISPLAY":
@@ -184,6 +208,7 @@ def declaration(p, file_record=False):
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.occurs_min, descriptor.depending = minimum, depending
+    descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
     p.fields[key] = descriptor
     if parent:

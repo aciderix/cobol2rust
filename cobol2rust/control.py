@@ -95,8 +95,8 @@ class ControlGraph:
             return self._add("read", (name, into, self._body(not_end, after, block),
                                       self._body(at_end, after, block), after), stmt)
         if op == "arithmetic":
-            expr, targets, rounded, error, success = args
-            return self._add("arithmetic", (expr, targets, rounded, self._body(error, after, block),
+            shared, items, error, success = args
+            return self._add("arithmetic", (shared, items, self._body(error, after, block),
                                             self._body(success, after, block)), stmt)
         if op == "loop":
             return self._loop(stmt, after, block)

@@ -24,7 +24,7 @@ class NumericMoveTests(unittest.TestCase):
         parsed = Parser(program("01 n pic 999. 01 output-a pic xxx.",
                                 "move n to output-a compute n = 1 stop run.")).parse()
         self.assertEqual(parsed.entry[0].op, "move")
-        self.assertEqual(parsed.entry[1].op, "assign")
+        self.assertEqual(parsed.entry[1].op, "compute")
 
     def test_figurative_zero_is_distinct_from_numeric_literal_zero(self):
         parsed = Parser(program("01 output-a pic xxx.",

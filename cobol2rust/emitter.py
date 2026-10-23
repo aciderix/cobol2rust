@@ -80,6 +80,8 @@ class Emitter:
         op, args = e.op, e.args
         if op == "var":
             return self.reference(args[0]) + ".snapshot()"
+        if op == "shared":
+            return f"{self.shared}.clone()"
         if op == "bool":
             return str(args[0]).lower()
         if op == "numeric_class":
@@ -249,6 +251,8 @@ class Emitter:
         if self.kind(expr) != "number":
             raise CobolError("calcul avec SIZE ERROR requiert des nombres")
         op, args = expr.op, expr.args
+        if op == "shared":
+            return f"{self.shared}.clone()"
         if op in {"+", "-", "*", "/"}:
             left, right = (f"({self.checked_expression(arg)}?)" for arg in args)
             if op == "/":
@@ -317,6 +321,17 @@ class Emitter:
             self.write(f"display(&[{', '.join(values)}], {str(a[1]).lower()});")
         elif op in {"assign", "move"}:
             self.assignment(*a, move=op == "move")
+        elif op == "compute":
+            shared, items = a
+            if shared is not None:
+                if self.kind(shared) != "number":
+                    raise CobolError("calcul arithmétique requiert des nombres")
+                self.shared = self.unique()
+                self.write(f"let {self.shared} = {self.expression(shared)};")
+            # Each receiver is computed and stored in turn: its subscripts and
+            # a single re-read operand see the receivers already stored.
+            for ref, expr, rounded in items:
+                self.assignment(expr, [ref], rounded)
         elif op == "accept":
             self.write(f"{self.reference(a[0])}.accept();")
         elif op == "initialize":
@@ -433,19 +448,24 @@ class Emitter:
             self.indent -= 1
             self.write(f"}} else {{ pc = {continuation}; }}")
         elif op == "arithmetic":
-            expr, targets, rounded, error, success = a
-            if any(ref.start is not None or self.program.fields[ref.name].kind != "number" for ref in targets):
+            shared, items, error, success = a
+            if any(ref.start is not None or self.program.fields[ref.name].kind != "number" for ref, _, _ in items):
                 raise CobolError("destination numérique requise pour SIZE ERROR")
-            result = self.unique()
-            self.write(f"let {result} = (|| -> Result<(), runtime::SizeError> {{")
-            self.indent += 1
-            self.write(f"let value: Value = {self.checked_expression(expr)}?;")
-            for ref in targets:
-                self.write(f"{self.reference(ref)}.checked_assign(&value, {str(rounded).lower()})?;")
-            self.write("Ok(())")
-            self.indent -= 1
-            self.write("})();")
-            self.write(f"pc = if {result}.is_err() {{ {error} }} else {{ {success} }};")
+            if shared is not None:
+                self.shared = self.unique()
+                self.write(f"let {self.shared}: Result<Value, runtime::SizeError> = (|| {self.checked_expression(shared)})();")
+            # A receiver in error keeps its value; the others are still stored,
+            # then the handler runs once, as GnuCOBOL does.
+            failed = self.unique()
+            self.write(f"let mut {failed} = false;")
+            for ref, expr, rounded in items:
+                self.write(f"if (|| -> Result<(), runtime::SizeError> {{")
+                self.indent += 1
+                self.write(f"let value: Value = {self.checked_expression(expr)}?;")
+                self.write(f"{self.reference(ref)}.checked_assign(&value, {str(rounded).lower()})")
+                self.indent -= 1
+                self.write(f"}})().is_err() {{ {failed} = true; }}")
+            self.write(f"pc = if {failed} {{ {error} }} else {{ {success} }};")
         else:
             raise CobolError(f"nœud de contrôle inconnu: {op}")
 
@@ -515,6 +535,17 @@ class Emitter:
                 continue
             constructor = "text" if field.initial.string else "number"
             self.write(f"result.{self.names[name]}.declare(&Value::{constructor}({quoted(field.initial.text)}));")
+        # A group VALUE fills the whole group as alphanumeric data after its
+        # leaves, on every occurrence: GnuCOBOL gives it precedence.
+        for name, field in self.program.fields.items():
+            if field.group_value is None:
+                continue
+            if any(other.depending for key, other in self.program.fields.items()
+                   if key == name or key.startswith(name + ".")):
+                raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
+            text, fill = field.group_value
+            text = fill * field.size if fill == "0" else text
+            self.write(f"result.{self.names[name]}.declare(&Value::text({quoted(text)}));")
         self.write("result")
         self.indent -= 1
         self.write("}")

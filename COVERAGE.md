@@ -416,6 +416,23 @@ conformes. Premiers diagnostics désormais : RELATIVE (32), INDEXED (26),
 FILE STATUS de groupe (25), VALUE/USAGE de groupe (24), OBJECT-COMPUTER (19).
 Rapport : `build/coverage-nist-data-records.json`.
 
+## Progression : groupes, configuration et receveurs multiples
+
+| Mesure sur les mêmes 458 sources | Avant | Après |
+| --- | ---: | ---: |
+| Blocage au prétraitement | 16 | 15 |
+| Blocage à l'analyse/disposition | 422 | 413 |
+| Émission Rust acceptée | 20 | 30 |
+| Erreur interne | 0 | 0 |
+
+FILE STATUS de groupe débloque 7 sources SQ, VALUE/USAGE de groupe NC245A, les
+clauses de configuration sans effet OBSQ4A et SQ303M. `tools/nist_verify.py`
+compare les **30** sources acceptées avec les entrées du runner officiel :
+**30/30 conformes**, REPORT identiques aux journaux natifs, 401 PASS et 1
+INSPECT. Cette vérification a révélé une perte silencieuse de receveur dans
+`ADD ... TO A, B.`, corrigée avant mesure. Rapports :
+`build/coverage-nist-multi.json` et `build/nist-verify-30.json`.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

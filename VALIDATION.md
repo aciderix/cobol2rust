@@ -1,5 +1,17 @@
 # Validation — 22 octobre 2026
 
+## Groupes, configuration et receveurs multiples — 23 octobre 2026
+
+- **226 tests découverts : 225 réussis, un test PE Windows ignoré.**
+- **54/54 comparaisons locales conformes**, dont `group_value.cob` et
+  `multi_receivers.cob` (22 lignes mesurées en natif avant implémentation).
+- NIST : **30/458 émissions acceptées** ; **30/30 comparaisons conformes** avec
+  les entrées reconstituées du runner, REPORT identiques aux journaux natifs :
+  401 PASS, 1 INSPECT, 0 FAIL (`build/nist-verify-30.json`).
+- La régénération de `.tools/nist-native-gnucobol-3.2` par
+  `tools/nist_native_reference.sh` reproduit le même résumé (9610 PASS) ; seul
+  NC214M diffère, par l'heure courante qu'il imprime.
+
 ## DATA RECORDS et MOVE numérique tronquant — 23 octobre 2026
 
 Environnement : Ubuntu 24.04 x86-64, Python 3.13, Rust 1.97, GnuCOBOL 3.2.0

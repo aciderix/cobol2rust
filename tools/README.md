@@ -97,6 +97,24 @@ Le 23 octobre 2026 sous Ubuntu 24.04 x86-64 (GnuCOBOL 3.2.0, BDB 5.3) :
 118 INSPECT**, sans écart avec le `summary.txt` attendu. Les journaux par
 programme sont copiés dans `.tools/nist-native-gnucobol-3.2`.
 
+## Vérification NIST avec les entrées du runner
+
+```bash
+python tools/nist_verify.py SQ143A ST121A --work build/nist-check -o build/nist-check.json
+python tools/nist_verify.py --accepted-from build/coverage-nist.json \
+  --work build/nist-all -o build/nist-all.json
+```
+
+Le runner exécute chaque module dans l'ordre alphabétique, dans un même
+dossier, et efface `XXXXX*` avant chaque `.CBL`. L'outil rejoue donc en natif
+les programmes situés depuis le dernier `.CBL`, avec `-std=cobol85 --debug`,
+la variable `REPORT` et le `.DAT` éventuel sur stdin, puis fournit les mêmes
+fichiers aux deux exécutions comparées. Un programme est conforme si stdout,
+codes et fichiers correspondent et si son REPORT est identique au journal de la
+référence native. Les programmes `comp_only` de `report.pl` sont seulement
+convertis et compilés. La référence native s'obtient avec
+`tools/nist_native_reference.sh` (environ 15 minutes).
+
 ## Consommateurs NIST avec données de tri officielles
 
 ST107A et ST126A attendent des fichiers produits respectivement par ST106A et

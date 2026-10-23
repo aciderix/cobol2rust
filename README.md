@@ -72,8 +72,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 211 tests Python, avec un test d'inspection du PE
-Windows ignoré (212 découverts), et les 52 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 225 tests Python, avec un test d'inspection du PE
+Windows ignoré (226 découverts), et les 54 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -90,7 +90,7 @@ Ces résultats portent sur les entrées testées.
 | Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON`, `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
 | Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` |
-| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, une destination `GIVING`, `ROUNDED`, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
+| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
 | MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ; groupe source copié brut vers numérique/édité |
 | Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |

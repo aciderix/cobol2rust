@@ -4,6 +4,36 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : receveurs multiples, groupes et configuration documentaire.
+**Bug silencieux corrigé** : `ADD 1 TO A, B.` ne gardait que A et faisait de
+`B.` un en-tête de paragraphe (NC245A). Les verbes arithmétiques lisent
+désormais tous leurs receveurs avec ROUNDED propre (`Stmt("compute")` et
+`Stmt("arithmetic")` portent `(partagé, [(réf, expr, rounded)])`). Mesures
+natives : un opérande unique est relu après chaque stockage (`ADD X TO X Y`
+donne Y=12), plusieurs opérandes sont sommés une fois, COMPUTE/GIVING évaluent
+une fois, les indices du receveur sont évalués à son stockage, SIZE ERROR garde
+seulement le receveur fautif. Un nom de paragraphe/section homonyme d'une donnée,
+condition, fichier ou index est refusé (`procedure_name_check`).
+
+FILE STATUS accepte un groupe de 2 octets (octets bruts, comme GnuCOBOL ; autres
+tailles refusées nativement). VALUE de groupe : littéral alphanumérique, ZERO ou
+SPACE, appliqué après les feuilles sur toutes les occurrences ; VALUE subordonné,
+numérique, ALL, HIGH-VALUES, REDEFINES/FD et ODO refusés. USAGE de groupe hérité
+par les feuilles sans USAGE ; un USAGE explicite subordonné l'emporte (natif).
+MEMORY SIZE, SEGMENT-LIMIT 1..49, MULTIPLE FILE [TAPE], SAME [SORT|SORT-MERGE]
+AREA sont ignorés comme dans `parser.y` ; SAME RECORD AREA, RERUN, PROGRAM
+COLLATING SEQUENCE et WITH DEBUGGING MODE restent refusés. Lignes `D`/`d` :
+commentaires, sauf si le texte contient DEBUGGING MODE (refus explicite).
+
+`tools/nist_verify.py` rejoue les prédécesseurs natifs du runner (tout depuis le
+dernier `.CBL`, `XXXXX*` effacés avant chaque `.CBL`), compare GnuCOBOL/Rust et
+exige un REPORT identique au journal natif ; les `comp_only` de `report.pl`
+sont seulement compilés. `tools/nist_native_reference.sh` régénère la référence
+(lancée en arrière-plan par le hook). NIST : **30/458**, et **30/30** conformes
+(401 PASS, 1 INSPECT SM106A) : `build/nist-verify-30.json`. Prochain blocage :
+DECLARATIVES `USE AFTER ERROR` (23), puis RELATIVE (32), INDEXED (26) et les
+fonctions intrinsèques du module IF.
+
 Dernière étape : FD DATA RECORDS et MOVE numérique tronquant. `file_parser.py`
 garde `DATA RECORD(S) [IS|ARE] nom...` en métadonnée `data_records` : GnuCOBOL
 n'en résout pas les noms (même inconnus) et la clause est sans effet. La liste
