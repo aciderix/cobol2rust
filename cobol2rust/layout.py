@@ -7,7 +7,7 @@ def layout_fields(fields):
         f = fields[key]
         if f.picture:
             if f.kind == "edited":
-                f.size = len(f.editing)
+                f.size = f.edit_size
             elif f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
                 f.size = (f.digits + 2) // 2
             elif f.usage != "DISPLAY":

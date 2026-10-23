@@ -13,7 +13,7 @@ pub enum Usage { Display, Packed, Binary, Index }
 pub enum Kind {
     Text,
     Numeric { digits: u32, scale: i32, signed: bool, usage: Usage },
-    Edited { picture: &'static str, digits: u32, scale: i32 },
+    Edited { symbols: &'static [(u8, u32)], digits: u32, scale: i32, blank_zero: bool },
 }
 #[derive(Clone, Debug)]
 pub struct Initializer {
@@ -78,6 +78,152 @@ fn text_move_digits(raw: &[u8], digits: usize, scale: usize) -> (Vec<u8>, bool, 
         }
     }
     (result, negative, true)
+}
+
+fn fetch(digits: &[u8], src: &mut i64) -> u8 {
+    let x = if *src >= 0 && (*src as usize) < digits.len() { digits[*src as usize] } else { b'0' };
+    *src += 1;
+    x
+}
+
+/// cob_move_display_to_edited (libcob move.c), symbol for symbol. `digits`
+/// are the sender's decimal digits, the last of weight 10^-scale; positions
+/// outside them read as '0', so high-order digits beyond the picture are
+/// dropped and missing ones are zeros, as with the native sender pointer.
+fn edit(symbols: &[(u8, u32)], size: usize, digits: &[u8], scale: i32, neg: bool, blank_zero: bool) -> Vec<u8> {
+    const CURRENCY: u8 = b'$';
+    const DEC_SYMBOL: u8 = b'.';
+    let mut out = vec![b' '; size];
+    let mut count: i64 = 0;
+    let (mut count_sign, mut count_curr, mut p_is_left) = (true, true, false);
+    for &(c, repeat) in symbols {
+        let repeat = repeat as i64;
+        if c == b'9' || c == b'Z' || c == b'*' {
+            count += repeat; count_sign = false; count_curr = false;
+        } else if count_curr && c == CURRENCY {
+            count += repeat;
+        } else if count_sign && (c == b'+' || c == b'-') {
+            count += repeat;
+        } else if c == b'P' {
+            if count == 0 { p_is_left = true; break; }
+            count += repeat; count_sign = false; count_curr = false;
+        } else if c == b'V' || c == DEC_SYMBOL {
+            break;
+        }
+    }
+    let mut src = digits.len() as i64 - scale as i64 - count;
+    let mut dst: i64 = 0;
+    let mut end = size as i64;
+    let mut decimal_point: Option<i64> = None;
+    let (mut is_zero, mut suppress_zero, mut trailing_sign, mut trailing_curr) = (true, true, false, false);
+    let (mut sign_first, mut has_b, mut floating_insertion) = (0, false, false);
+    let mut pad = b' ';
+    let (mut sign_symbol, mut curr_symbol) = (0u8, 0u8);
+    let mut last_fixed: Option<(usize, u8)> = None;
+    let put = |out: &mut Vec<u8>, at: i64, byte: u8| {
+        if at < 0 || at as usize >= out.len() { fail("invalid numeric-edited picture layout"); }
+        out[at as usize] = byte;
+    };
+    for &(c, repeat) in symbols {
+        for n in (1..=repeat).rev() {
+            match c {
+                b'9' => {
+                    let x = fetch(digits, &mut src);
+                    if x != b'0' { is_zero = false; }
+                    suppress_zero = false; trailing_sign = true; trailing_curr = true;
+                    put(&mut out, dst, x);
+                },
+                b'Z' | b'*' => {
+                    let x = fetch(digits, &mut src);
+                    if x != b'0' { is_zero = false; suppress_zero = false; }
+                    trailing_sign = true; trailing_curr = true;
+                    pad = if c == b'*' { b'*' } else { b' ' };
+                    put(&mut out, dst, if suppress_zero { pad } else { x });
+                },
+                b'+' | b'-' | CURRENCY => {
+                    let x = fetch(digits, &mut src);
+                    if x != b'0' { is_zero = false; suppress_zero = false; }
+                    let trailing = if c == CURRENCY { trailing_curr } else { trailing_sign };
+                    if trailing {
+                        put(&mut out, dst, if c == CURRENCY { CURRENCY } else if neg && !is_zero { b'-' } else if c == b'+' { b'+' } else { b' ' });
+                        end -= 1;
+                    } else if dst == 0 || suppress_zero {
+                        put(&mut out, dst, pad);
+                        if c == CURRENCY { curr_symbol = CURRENCY; }
+                        else { sign_symbol = c; if curr_symbol == 0 { sign_first += 1; } }
+                    } else {
+                        put(&mut out, dst, x);
+                    }
+                    if n > 1 || last_fixed.map(|(_, symbol)| symbol) == Some(c) {
+                        floating_insertion = true;
+                    } else if !trailing {
+                        if let Some((position, symbol)) = last_fixed { out[position] = symbol; }
+                        last_fixed = Some((dst as usize, c));
+                    }
+                },
+                b'.' | b',' => {
+                    if c == DEC_SYMBOL { put(&mut out, dst, DEC_SYMBOL); decimal_point = Some(dst); }
+                    else { put(&mut out, dst, if suppress_zero { pad } else { c }); }
+                },
+                b'V' => { dst -= 1; decimal_point = Some(dst); },
+                b'0' | b'/' => put(&mut out, dst, c),
+                b'B' => {
+                    if suppress_zero { put(&mut out, dst, pad); } else { put(&mut out, dst, b'B'); has_b = true; }
+                },
+                b'P' => { if p_is_left { src += 1; dst -= 1; } },
+                b'C' | b'D' => {
+                    end = dst;
+                    let text: &[u8; 2] = if neg && !is_zero { if c == b'C' { b"CR" } else { b"DB" } } else { b"  " };
+                    put(&mut out, dst, text[0]);
+                    dst += 1;
+                    put(&mut out, dst, text[1]);
+                },
+                _ => fail("unsupported numeric-edited picture symbol"),
+            }
+            dst += 1;
+        }
+    }
+    if sign_symbol != 0 {
+        sign_symbol = if neg && !is_zero { b'-' } else if sign_symbol != b'+' { b' ' } else { b'+' };
+    }
+    if suppress_zero || (is_zero && blank_zero) {
+        if pad == b' ' || blank_zero {
+            out.fill(b' ');
+        } else {
+            for byte in out.iter_mut() { if *byte != DEC_SYMBOL { *byte = pad; } }
+        }
+        return out;
+    }
+    if let Some(point) = decimal_point {
+        let mut position = point + 1;
+        while position < end {
+            let byte = out[position as usize];
+            if !(byte.is_ascii_digit() || matches!(byte, b',' | b'.' | b'+' | b'-' | b'/' | b'B')) {
+                out[position as usize] = b'0';
+            }
+            position += 1;
+        }
+    }
+    if sign_symbol != 0 || curr_symbol != 0 {
+        if floating_insertion {
+            let mut position = end - 1;
+            while position > 0 && out[position as usize] != b' ' { position -= 1; }
+            let symbol = if sign_symbol != 0 && curr_symbol != 0 {
+                if sign_first != 0 { curr_symbol } else { sign_symbol }
+            } else if sign_symbol != 0 { sign_symbol } else { curr_symbol };
+            put(&mut out, position, symbol);
+        } else if let Some((position, symbol)) = last_fixed {
+            out[position] = if symbol == CURRENCY { curr_symbol } else { sign_symbol };
+        }
+    }
+    if has_b {
+        let mut leading = true;
+        for position in 0..end.max(0) as usize {
+            if out[position] == b'B' { out[position] = if leading { pad } else { b' ' }; }
+            else { leading = false; }
+        }
+    }
+    out
 }
 
 impl View {
@@ -246,7 +392,7 @@ impl View {
         let negative = source_negative && valid;
         let number = Number::new(if negative { -coefficient } else { coefficient }, 38);
         match self.kind {
-            Kind::Edited { .. } => self.assign(&Value::Num(number, None), false),
+            Kind::Edited { .. } => self.move_edited(&Value::Num(number, None)),
             Kind::Numeric { digits, scale, signed, usage } => {
                 let magnitude = absolute(&number.units(scale, false)) % power(digits);
                 let units = if signed && negative { -magnitude } else { magnitude };
@@ -259,6 +405,19 @@ impl View {
             },
             _ => fail("text MOVE requires a numeric or edited receiver"),
         }
+    }
+    /// MOVE to a numeric-edited item: libcob edits the sender's own digits.
+    pub fn move_edited(&mut self, source: &Value) {
+        self.resolved();
+        let (symbols, blank_zero) = match self.kind {
+            Kind::Edited { symbols, blank_zero, .. } => (symbols, blank_zero),
+            _ => return self.move_number(source),
+        };
+        let number = source.num();
+        let negative = number.n.sign() == Sign::Minus;
+        let digits = absolute(&number.n).to_string();
+        let mut bytes = edit(symbols, self.size, digits.as_bytes(), number.scale as i32, negative, blank_zero);
+        self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
     /// Numeric MOVE: excess decimals are truncated, the magnitude is reduced
     /// modulo the PICTURE capacity (binary included) without SIZE ERROR, and an
@@ -314,33 +473,14 @@ impl View {
                 bytes.truncate(self.size);
                 bytes
             },
-            Kind::Edited { picture, digits, scale } => {
+            Kind::Edited { symbols, digits, scale, blank_zero } => {
                 if source.is_text() { fail("numeric-edited assignment requires a numeric source; de-editing is unsupported"); }
+                // cob_decimal_get_field: the result goes through a DISPLAY
+                // temporary of the edited item's digits and scale.
                 let units = source.num().units(scale, rounded);
-                // Determine the sign after scaling, before discarding excess high digits.
                 let negative = units.sign() == Sign::Minus;
                 let coefficient = absolute(&units) % power(digits);
-                let ascii = format!("{:0>width$}", coefficient.to_string(), width = digits as usize);
-                let mut positions = ascii.bytes();
-                let mut suppress = true;
-                let mut bytes = Vec::with_capacity(self.size);
-                for symbol in picture.bytes() {
-                    bytes.push(match symbol {
-                        b'+' => if negative { b'-' } else { b'+' },
-                        b'-' => if negative { b'-' } else { b' ' },
-                        b'.' => b'.',
-                        b'9' | b'Z' => {
-                            let digit = positions.next().unwrap_or_else(|| fail("invalid numeric-edited picture capacity"));
-                            if symbol == b'Z' && suppress && digit == b'0' { b' ' }
-                            else { suppress = false; digit }
-                        },
-                        _ => fail("unsupported numeric-edited picture symbol"),
-                    });
-                }
-                if bytes.len() != self.size || positions.next().is_some() {
-                    fail("invalid numeric-edited picture layout");
-                }
-                bytes
+                edit(symbols, self.size, coefficient.to_string().as_bytes(), scale, negative, blank_zero)
             },
             Kind::Numeric { digits, scale, signed, usage } => {
                 let units = source.num().units(scale, rounded);
@@ -409,7 +549,7 @@ impl View {
             if matches!(item.kind, Kind::Edited { .. }) && source.is_text() {
                 item.kind = Kind::Text;
             }
-            item.assign(source, false);
+            if matches!(item.kind, Kind::Edited { .. }) { item.move_edited(source); } else { item.assign(source, false); }
         });
     }
 }

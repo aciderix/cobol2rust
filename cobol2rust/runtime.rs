@@ -8,7 +8,7 @@ static COBOL_LINE: AtomicUsize = AtomicUsize::new(0);
 pub fn set_line(line: usize) { COBOL_LINE.store(line, Ordering::Relaxed); }
 
 #[derive(Clone, Debug)]
-pub struct Number { n: BigInt, scale: u32 }
+pub struct Number { pub(crate) n: BigInt, pub(crate) scale: u32 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct SizeError;
@@ -213,6 +213,12 @@ impl Value {
         match self {
             Self::View(view) => view.move_number(source),
             _ => self.assign(source, false),
+        }
+    }
+    pub fn move_edited(&mut self, source: &Self) {
+        match self {
+            Self::View(view) => view.move_edited(source),
+            _ => fail("numeric-edited MOVE requires storage"),
         }
     }
     pub fn move_binary_to_packed(&mut self, source: &Self) {

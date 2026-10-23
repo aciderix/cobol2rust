@@ -26,6 +26,166 @@ def literal(p):
     return token
 
 
+# cobc tree.c valid_char_order: PRECEDENCE[current][seen] allows the current
+# symbol type after a symbol type already seen (standard PICTURE precedence).
+PRECEDENCE = [list(map(int, row.split())) for row in """
+1 1 1 0 1 0 0 1 0 1 1 1 1 1 1 1 1 0 0 1 0 1 0 1 0
+1 1 1 0 1 0 0 1 0 1 1 1 1 1 1 1 0 0 0 1 0 1 0 0 0
+1 1 0 0 1 0 0 1 0 1 0 1 0 1 0 1 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+1 1 1 0 0 0 0 1 1 1 1 0 0 1 1 1 0 0 0 1 1 1 0 0 0
+1 1 1 0 0 0 0 1 1 1 1 0 0 1 1 1 0 0 0 1 1 1 0 0 0
+0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+1 1 1 0 1 0 0 0 0 1 1 0 0 0 0 1 0 0 0 1 1 1 0 0 0
+1 1 0 0 1 0 0 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+1 1 1 0 1 0 0 1 0 1 1 0 0 0 0 0 0 0 0 1 0 1 0 0 0
+1 1 0 0 0 0 0 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0
+1 1 1 0 0 0 0 1 0 0 0 1 1 0 0 0 0 0 0 1 0 0 0 0 0
+1 1 0 0 1 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0
+1 1 1 0 1 0 0 0 0 0 0 0 0 1 1 0 0 0 0 1 0 0 0 0 0
+1 1 1 1 1 0 0 1 0 1 0 1 0 1 0 1 1 1 1 1 0 1 0 0 1
+1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+1 1 0 0 1 0 0 1 0 1 0 1 0 1 0 1 0 0 1 0 1 0 0 0 0
+1 1 0 0 1 0 0 1 0 1 0 1 0 1 0 1 0 0 1 0 1 0 0 0 0
+0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 1 1 0 1 0 0 0
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0
+1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0
+1 1 1 0 1 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0
+""".strip().splitlines()]
+
+
+def valid_char_order(symbols):
+    """cobc's find_floating_insertion_str, char_to_precedence_idx and
+    valid_char_order for the default currency $, decimal point . and comma."""
+    simple = set("B0/,")
+    first = last = None
+    previous, floating = None, " "
+    index = 0
+    while index < len(symbols):
+        c, n = symbols[index]
+        if first is None and c in "+-$":
+            if previous is not None and symbols[previous][0] == c:
+                first, floating = previous, c
+                index += 1
+                continue
+            if n > 1:
+                first, floating = index, c
+                index += 1
+                continue
+        if first is None and c not in simple:
+            previous = index
+        elif first is not None and not (c in simple or c == floating):
+            last = index - 1
+            break
+        index += 1
+    if index == len(symbols) and first is not None:
+        last = index - 1
+    elif index < len(symbols) and symbols[index][0] in ".V":
+        if all(c in simple or c == floating for c, _ in symbols[index + 1:]):
+            last = len(symbols) - 1
+    seen, before_point, non_p = set(), True, False
+    for position, (c, n) in enumerate(symbols):
+        for _ in range(2 if n > 1 else 1):
+            floating_here = first is not None and last is not None and first <= position <= last
+            if c in "B0/":
+                kind = 0
+            elif c in ".,":
+                kind = 2 if c == "." else 1
+            elif c in "+-":
+                kind = (11 if before_point else 12) if floating_here else (5 if position == len(symbols) - 1 and position else 4)
+            elif c in "CD":
+                kind = 6
+            elif c in "Z*":
+                kind = 9 if before_point else 10
+            elif c == "9":
+                kind = 15
+            elif c == "V":
+                kind = 19
+            elif c == "P":
+                kind = 20 if non_p and before_point else 21
+            else:  # currency
+                if floating_here:
+                    kind = 13 if before_point else 14
+                else:
+                    kind = 7 if position <= 1 else 8 if position >= len(symbols) - 2 else 7
+            if 9 <= kind <= 15:
+                non_p = True
+            if any(not PRECEDENCE[kind][other] for other in seen):
+                return False
+            seen.add(kind)
+            if c in ".V":
+                before_point = False
+    return True
+
+
+def edited_picture(p, picture):
+    """Numeric-edited PICTURE as cobc's cb_build_picture: the symbol list
+    (identical consecutive symbols grouped, CR/DB as C/D), size, digits, scale.
+
+    The grouping matters at run time: libcob's editing tells a floating
+    insertion from a fixed one by the repetition count of each group.
+    """
+    symbols, i = [], 0
+    text = picture.upper()
+    while i < len(text):
+        c = text[i]
+        if c in "CD":
+            if text[i + 1:i + 2] != ("R" if c == "C" else "B"):
+                p.error(f"PICTURE éditée invalide: {picture}")
+            i += 1
+        n = 1
+        while i + 1 < len(text) and text[i + 1] == c and c not in "CD":
+            n += 1
+            i += 1
+        if i + 1 < len(text) and text[i + 1] == "(":
+            close = text.find(")", i + 2)
+            if close < 0 or not text[i + 2:close].isdigit() or int(text[i + 2:close]) < 1:
+                p.error(f"PICTURE éditée invalide: {picture}")
+            n += min(int(text[i + 2:close]), 257) - 1
+            i = close
+        symbols.append((c, n))
+        i += 1
+    if any(c not in "9Z*+-$.,VPB0/CD" for c, _ in symbols):
+        p.error(f"PICTURE non prise en charge: {picture}")
+    digits = scale = size = v_count = s_edit = c_count = 0
+    for index, (c, n) in enumerate(symbols):
+        if c in "9Z*":
+            digits += n
+            scale += n if v_count else 0
+        elif c in "+-":
+            digits += n - (1 if s_edit == 0 else 0)
+            if v_count:
+                scale += n - (1 if s_edit == 0 else 0)
+            s_edit += 1
+        elif c in "CD":
+            if n != 1 or index != len(symbols) - 1:
+                p.error(f"PICTURE éditée invalide: {picture}")
+            s_edit += 1
+        elif c == "$":
+            digits += n - 1 if c_count == 0 else n
+            c_count += n - 1 if c_count == 0 else n
+        elif c in ".V":
+            v_count += n
+        elif c == "P":
+            previous = "".join(symbol for symbol, _ in symbols[:index])
+            at_end = index == len(symbols) - 1 or (index == len(symbols) - 2 and symbols[-1][0] == "V")
+            if previous in {"", "V"}:
+                v_count += 1
+            elif at_end:
+                digits += n
+            else:
+                p.error(f"PICTURE éditée invalide: {picture}")
+            scale += n if v_count else -n
+        size += 0 if c in "VP" else 2 * n if c in "CD" else n
+    used = {c for c, _ in symbols}
+    if v_count > 1 or digits < 1 or {"Z", "*"} <= used or not valid_char_order(symbols):
+        p.error(f"PICTURE éditée invalide pour cobc: {picture}")
+    return symbols, size, digits, scale, s_edit > 0
+
+
 def declaration(p, file_record=False):
     if p.t.string or not p.t.key.isdigit():
         p.error("niveau de donnée attendu")
@@ -81,6 +241,7 @@ def declaration(p, file_record=False):
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
     figurative = None
+    blank_zero = False
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -144,6 +305,11 @@ def declaration(p, file_record=False):
             figurative = None if p.t.string else (
                 "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"} else None)
             initial = literal(p)
+        elif p.accept("BLANK"):
+            p.accept("WHEN")
+            if blank_zero or not (p.accept("ZERO") or p.accept("ZEROS") or p.accept("ZEROES")):
+                p.error("BLANK WHEN ZERO attendu")
+            blank_zero = True
         else:
             if has_usage:
                 p.error("clause de donnée non prise en charge")
@@ -207,15 +373,21 @@ def declaration(p, file_record=False):
         scale = -positions if expanded.lstrip("S").startswith("9") else positions + digits
         if digits > 18 or usage != "DISPLAY":
             p.error("PICTURE P limitée à 18 chiffres USAGE DISPLAY")
-    elif (re.fullmatch(r"[+-]9+(?:\.9+)?", expanded) or
-          re.fullmatch(r"[+-]?9*\.9+", expanded) or
-          re.fullmatch(r"Z+9+(?:\.9+)?", expanded)):
-        kind, digits, signed = "edited", expanded.count("9") + expanded.count("Z"), expanded.startswith(("+", "-"))
-        scale = len(expanded.split(".")[1]) if "." in expanded else 0
-        if digits > 18 or len(expanded) > 256 or usage != "DISPLAY":
+    elif (re.fullmatch(r"[9Z*+\-$.,VPB0/()0-9]*(?:CR|DB)?", picture.upper())
+          and set(re.sub(r"\(\d+\)", "", picture.upper())) - set("9VP")):
+        kind = "edited"
+        symbols, edit_size, digits, scale, signed = edited_picture(p, picture)
+        if digits > 18 or edit_size > 256 or usage != "DISPLAY":
             p.error("PIC éditée limitée à 18 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
+    if blank_zero:
+        # field.c: a numeric DISPLAY item with BLANK WHEN ZERO becomes
+        # numeric-edited with a reconstructed 9(n) picture.
+        if kind == "number" and usage == "DISPLAY" and not signed and scale == 0:
+            kind, symbols, edit_size = "edited", [("9", digits)], digits
+        elif kind != "edited" or any(c == "*" for c, _ in symbols):
+            p.error("BLANK WHEN ZERO limité aux PICTURE éditées sans * et aux entiers DISPLAY non signés")
     explicit_value = initial is not None
     if initial is not None:
         if file_record or redefines:
@@ -233,6 +405,9 @@ def declaration(p, file_record=False):
     descriptor.occurs_min, descriptor.depending = minimum, depending
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
+    if kind == "edited":
+        descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
+        descriptor.blank_zero = blank_zero
     p.fields[key] = descriptor
     if parent:
         p.fields[parent].children.append(key)

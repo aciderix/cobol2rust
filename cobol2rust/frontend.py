@@ -304,6 +304,10 @@ class Field:
     depending: str | None = None
     index_for: str | None = None
     editing: str = ""
+    # Numeric-edited: cobc's symbol groups and storage size.
+    edit_symbols: list = field(default_factory=list)
+    edit_size: int = 0
+    blank_zero: bool = False
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
 

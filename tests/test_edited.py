@@ -48,9 +48,11 @@ class EditedPictureTests(unittest.TestCase):
                          ("ZZ9.99", 5, 2, 6))
 
     def test_unsupported_editing_and_capacities_are_rejected(self):
-        for picture in ("---9", "+++9", "9(4)-", "9(4)+", "ZZZZ", "Z,ZZ9.99",
-                        "9,999.99", "$$$9", "***9", "ZZ9.9Z", "S9.99", "+9(19)",
-                        "-.9(19)", "Z(0)9", "Z9 comp"):
+        # Order errors follow cobc's precedence table; S, capacities and
+        # non-DISPLAY usages stay outside the edited subset.
+        for picture in ("ZZ9.9Z", "+9+", "9.Z9", "$9$", "+99CR", "PPZZ", "-.--", "9-9",
+                        "S9.99", "+9(19)", "-.9(19)", "Z(0)9", "Z9 comp", "**9 blank when zero",
+                        "s99 blank when zero", "9v9 blank when zero"):
             with self.subTest(picture=picture), self.assertRaises(CobolError):
                 Emitter(Parser(program(f"01 edited-a pic {picture}.")).parse()).generate()
 

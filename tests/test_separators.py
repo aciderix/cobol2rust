@@ -106,7 +106,8 @@ class SeparatorTests(unittest.TestCase):
                     Parser(program(data)).parse()
 
     def test_unsupported_comma_editing_is_not_silently_discarded(self):
-        for picture in ["9,999", "9,9", "9(3),", "X(3),"]:
+        # Comma insertion is numeric editing; it is never dropped from X.
+        for picture in ["X(3),", "X,X"]:
             with self.subTest(picture=picture), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic " + picture + ".")).parse()).generate()
 

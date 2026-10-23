@@ -259,7 +259,9 @@ class Emitter:
                          if conversion in {"group", "integer"} else
                          f"Value::text({quoted(self.move_literal_digits(expr))})" if conversion == "literal" else temp)
                 field = self.program.fields[ref.name]
-                if conversion is None and truncating and ref.start is None and field.kind == "number":
+                if conversion is None and truncating and ref.start is None and field.kind == "edited":
+                    self.write(f"{self.reference(ref)}.move_edited(&{value});")
+                elif conversion is None and truncating and ref.start is None and field.kind == "number":
                     method = "move_number"
                     if self.storage_usage(field) == "Packed":
                         self.check_packed_literal_move(expr, field)
@@ -634,7 +636,9 @@ class Emitter:
         if f.kind == "text":
             return "storage_runtime::Kind::Text"
         if f.kind == "edited":
-            return f"storage_runtime::Kind::Edited {{ picture: {quoted(f.editing)}, digits: {f.digits}, scale: {f.scale} }}"
+            symbols = ", ".join(f"(b'{c}', {n})" for c, n in f.edit_symbols)
+            return (f"storage_runtime::Kind::Edited {{ symbols: &[{symbols}], digits: {f.digits}, scale: {f.scale}, "
+                    f"blank_zero: {str(f.blank_zero).lower()} }}")
         usage = self.storage_usage(f)
         return f"storage_runtime::Kind::Numeric {{ digits: {f.digits}, scale: {f.scale}, signed: {str(f.signed).lower()}, usage: storage_runtime::Usage::{usage} }}"
 
