@@ -201,6 +201,13 @@ pour les divisions et une affectation numérique contrôlée. Le contrôle de
 PICTURE intervient avant l'écriture et après l'arrondi. Seuls le dépassement
 de destination et la division par zéro sont récupérables. Les erreurs de données
 restent des diagnostics nommés, sans interception de panique ou d'arrêt processus.
+Un MOVE numérique vers numérique utilise `View.move_number` : décimales
+tronquées, magnitude modulo 10^chiffres, signe perdu vers un non signé et zéro
+négatif conservé en DISPLAY/COMP-3. Il ne lève jamais SIZE ERROR, contrairement
+aux calculs sans gestionnaire, qui gardent l'arrêt conservateur. Vers COMP-3,
+cobc emploie `cob_set_packed_int` pour les sources binaires et petits littéraux
+entiers ; ce chemin remplit le quartet de tête d'une PICTURE paire. Ce cas est
+refusé à l'émission (littéral) ou arrêté à l'exécution (`move_binary_to_packed`).
 INITIALIZE de groupe ODO composé est refusé ; l'initialisation d'une occurrence
 résolue et le cas uniforme texte vérifié restent disponibles.
 

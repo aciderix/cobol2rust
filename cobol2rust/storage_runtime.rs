@@ -250,12 +250,54 @@ impl View {
                 // BigInt has no negative zero, but a signed packed MOVE keeps
                 // its D nibble even when scaling or truncation leaves zero.
                 if signed && negative && matches!(usage, Usage::Packed) {
-                    let mut memory = self.memory.borrow_mut();
-                    let last = &mut memory[self.offset + self.size - 1];
-                    *last = (*last & 0xf0) | 0x0d;
+                    self.mark_negative_zero();
                 }
             },
             _ => fail("text MOVE requires a numeric or edited receiver"),
+        }
+    }
+    /// Numeric MOVE: excess decimals are truncated, the magnitude is reduced
+    /// modulo the PICTURE capacity (binary included) without SIZE ERROR, and an
+    /// unsigned receiver drops the sign. A signed DISPLAY or packed receiver
+    /// keeps a negative zero, as GnuCOBOL does for -1000 TO S999.
+    pub fn move_number(&mut self, source: &Value) {
+        self.resolved();
+        let (digits, scale, signed, usage) = match self.kind {
+            Kind::Numeric { digits, scale, signed, usage } if !matches!(usage, Usage::Index) => (digits, scale, signed, usage),
+            _ => return self.assign(source, false),
+        };
+        let units = source.num().units(scale, false);
+        let negative = signed && units.sign() == Sign::Minus;
+        let magnitude = absolute(&units) % power(digits);
+        let zero = magnitude == BigInt::from(0);
+        self.assign(&Value::Num(Number::new(if negative { -magnitude } else { magnitude }, scale), None), false);
+        if negative && zero && !matches!(usage, Usage::Binary) {
+            self.mark_negative_zero();
+        }
+    }
+    /// Binary senders reach a packed receiver through cob_set_packed_int when
+    /// the scaled value fits 32 bits. It fills every physical nibble, so an
+    /// even-digit PICTURE would receive the next higher digit in its pad nibble.
+    /// Native reads of such a field disagree with each other: stop instead.
+    pub fn move_binary_to_packed(&mut self, source: &Value) {
+        self.resolved();
+        if let Kind::Numeric { digits, scale, usage: Usage::Packed, .. } = self.kind {
+            let units = source.num().units(scale, false);
+            let fits = units >= BigInt::from(i32::MIN) && units <= BigInt::from(i32::MAX);
+            if fits && digits % 2 == 0 && (absolute(&units) / power(digits)) % BigInt::from(10) != BigInt::from(0) {
+                fail("binary MOVE would fill the packed pad nibble; native semantics not modelled");
+            }
+        }
+        self.move_number(source)
+    }
+    fn mark_negative_zero(&mut self) {
+        let usage = match self.kind { Kind::Numeric { usage, .. } => usage, _ => return };
+        let mut memory = self.memory.borrow_mut();
+        let last = &mut memory[self.offset + self.size - 1];
+        match usage {
+            Usage::Display => *last = b'p' + (*last - b'0'),
+            Usage::Packed => *last = (*last & 0xf0) | 0x0d,
+            Usage::Binary | Usage::Index => {},
         }
     }
     pub fn assign(&mut self, source: &Value, rounded: bool) {

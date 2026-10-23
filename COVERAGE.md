@@ -386,6 +386,36 @@ indépendantes et **50 PASS** (49/1), sans FAIL/DELETED/INSPECT
 création/relecture de 750 records de 120 octets. Ces essais ciblés ne sont pas
 le runner NIST complet et ne démontrent pas la garantie universelle recherchée.
 
+## Progression : DATA RECORDS et MOVE numérique tronquant
+
+La clause FD `DATA RECORD(S) [IS|ARE] nom...` est acceptée comme métadonnée.
+GnuCOBOL 3.2 l'analyse sans résoudre ses noms et ne lui donne aucun effet ;
+ses doublons et sa forme sans nom restent refusés comme en natif.
+Un MOVE numérique vers numérique tronque désormais les chiffres de tête sans
+SIZE ERROR, comme la norme et GnuCOBOL ; les calculs sans gestionnaire gardent
+l'arrêt conservateur. Le seul cas natif non modélisé (chiffre déposé dans le
+quartet de tête d'un COMP-3 pair par une source binaire ou un littéral entier)
+est refusé ou arrêté avec un diagnostic nommé.
+
+| Mesure sur les mêmes 458 sources | Avant | Après |
+| --- | ---: | ---: |
+| Blocage au prétraitement | 16 | 16 |
+| Blocage à l'analyse/disposition | 430 | 422 |
+| Émission Rust acceptée | 12 | 20 |
+| Erreur interne | 0 | 0 |
+
+Les 36 sources dont DATA RECORD était le premier diagnostic changent de statut
+ou de diagnostic. Les 8 nouvelles sources acceptées SM102A, SM104A, SM204A,
+SQ128A, ST103A, ST104A, ST115A et ST121A ont **8/8 comparaisons natives
+conformes** ; leur REPORT est identique octet pour octet au journal du runner
+NIST officiel exécuté sous GnuCOBOL 3.2 : **44 PASS, 0 FAIL/DELETED/INSPECT**.
+Les cinq `.SUB` lisent les fichiers de leurs producteurs officiels (SM101A,
+SM103A, SM203A, ST101A/ST102A, ST119A/ST120A) exécutés en GnuCOBOL. ST115A
+dépendait du MOVE tronquant. Les 12 sources acceptées auparavant restent
+conformes. Premiers diagnostics désormais : RELATIVE (32), INDEXED (26),
+FILE STATUS de groupe (25), VALUE/USAGE de groupe (24), OBJECT-COMPUTER (19).
+Rapport : `build/coverage-nist-data-records.json`.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

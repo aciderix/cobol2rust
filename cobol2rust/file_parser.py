@@ -3,8 +3,16 @@
 LABEL and BLOCK clauses are retained as metadata. GnuCOBOL does not add labels
 or physical blocking for the supported disk files. RECORD is accepted only as
 a fixed length; the caller must validate it against every FD record after layout.
+DATA RECORDS is obsolete documentation: GnuCOBOL parses its names without
+resolving them and gives the clause no effect, so they are kept as metadata.
 """
 from __future__ import annotations
+
+
+# Mots réservés pouvant suivre une liste DATA RECORDS ; ils ne sont jamais des noms.
+FD_WORDS = {"LABEL", "BLOCK", "RECORD", "RECORDS", "RECORDING", "DATA", "VALUE",
+            "LINAGE", "CODE-SET", "EXTERNAL", "GLOBAL", "REPORT", "REPORTS",
+            "IS", "ARE", "OF", "IN", "WITH", "LINES", "FOOTING", "TOP", "BOTTOM"}
 
 
 def unsigned(parser, clause, minimum=0):
@@ -62,6 +70,16 @@ def parse_fd_clauses(parser, spec):
             if not parser.accept("F"):
                 parser.error("RECORDING MODE limité à F pour des enregistrements fixes")
             put("recording_mode", "F")
+        elif parser.accept("DATA"):
+            if not (parser.accept("RECORD") or parser.accept("RECORDS")):
+                parser.error("DATA requiert RECORD ou RECORDS")
+            parser.accept("IS") or parser.accept("ARE")
+            names = []
+            while not names or not (parser.at(".") or parser.t.string or parser.t.key in FD_WORDS):
+                if not parser.t.string and parser.t.key in FD_WORDS:
+                    parser.error("nom d'enregistrement DATA RECORDS attendu")
+                names.append(parser.name())
+            put("data_records", names)
         else:
             parser.error("clause FD non prise en charge")
     parser.expect(".")

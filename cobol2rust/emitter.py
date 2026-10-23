@@ -199,6 +199,10 @@ class Emitter:
                 continue
             if destination == "edited" or destination != source_kind:
                 raise CobolError(f"conversion implicite numérique/texte non prise en charge: {ref.name}")
+        # A numeric MOVE truncates instead of raising SIZE ERROR. Index senders
+        # keep the stricter assignment: their native transfer is not modelled.
+        truncating = (move and source_kind == "number" and not
+                      (expr.op == "var" and self.program.fields[expr.args[0].name].usage == "INDEX"))
         temp = self.unique()
         # COBOL resolves a variable's source address once, but each receiver reads
         # that storage again. This matters when group/redefine receivers overlap it.
@@ -216,7 +220,30 @@ class Emitter:
                 value = (f"{temp}.numeric_move_text({str(conversion == 'group').lower()})"
                          if conversion in {"group", "integer"} else
                          f"Value::text({quoted(self.move_literal_digits(expr))})" if conversion == "literal" else temp)
-                self.write(f"{self.reference(ref)}.assign(&{value}, {str(rounded).lower()});")
+                field = self.program.fields[ref.name]
+                if conversion is None and truncating and ref.start is None and field.kind == "number":
+                    method = "move_number"
+                    if self.storage_usage(field) == "Packed":
+                        self.check_packed_literal_move(expr, field)
+                        if (expr.op == "var" and
+                                self.storage_usage(self.program.fields[expr.args[0].name]) == "Binary"):
+                            method = "move_binary_to_packed"
+                    self.write(f"{self.reference(ref)}.{method}(&{value});")
+                else:
+                    self.write(f"{self.reference(ref)}.assign(&{value}, {str(rounded).lower()});")
+
+    def check_packed_literal_move(self, expr, field):
+        """cobc stores a small integer literal with cob_set_packed_int, which
+        fills every physical nibble. Refuse a digit landing in the pad nibble."""
+        digits = self.move_literal_digits(expr)
+        if digits is None:
+            return
+        number = expr if expr.op == "number" else expr.args[0]
+        if "." in number.args[0] or len(digits) + field.scale > 9 or field.digits % 2:
+            return
+        if (int(digits) * 10 ** field.scale // 10 ** field.digits) % 10:
+            raise CobolError("MOVE littéral vers COMP-3 à nombre pair de chiffres remplissant le quartet "
+                             "de tête natif non pris en charge")
 
     def checked_expression(self, expr):
         if self.kind(expr) != "number":
@@ -422,12 +449,18 @@ class Emitter:
         else:
             raise CobolError(f"nœud de contrôle inconnu: {op}")
 
+    @staticmethod
+    def storage_usage(f):
+        if f.usage in {"INDEX", "DISPLAY"}:
+            return f.usage.capitalize()
+        return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
+
     def storage_kind(self, f):
         if f.kind == "text":
             return "storage_runtime::Kind::Text"
         if f.kind == "edited":
             return f"storage_runtime::Kind::Edited {{ picture: {quoted(f.editing)}, digits: {f.digits}, scale: {f.scale} }}"
-        usage = "Index" if f.usage == "INDEX" else "Display" if f.usage == "DISPLAY" else "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
+        usage = self.storage_usage(f)
         return f"storage_runtime::Kind::Numeric {{ digits: {f.digits}, scale: {f.scale}, signed: {str(f.signed).lower()}, usage: storage_runtime::Usage::{usage} }}"
 
     def dimensions(self, dimensions):

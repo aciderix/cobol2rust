@@ -4,6 +4,33 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : FD DATA RECORDS et MOVE numérique tronquant. `file_parser.py`
+garde `DATA RECORD(S) [IS|ARE] nom...` en métadonnée `data_records` : GnuCOBOL
+n'en résout pas les noms (même inconnus) et la clause est sans effet. La liste
+s'arrête aux mots réservés FD (`FD_WORDS`) ; doublon et liste vide sont refusés.
+
+Le MOVE numérique vers numérique passe par `View.move_number` : troncature des
+décimales, magnitude modulo 10^chiffres (binaire compris), valeur absolue vers
+non signé, zéro négatif conservé en DISPLAY (`00p`) et COMP-3 (`D`), pas en
+binaire. COMPUTE/ADD sans SIZE ERROR gardent l'arrêt 70 ; ne pas les faire
+passer par ce chemin sans essai natif. Une source index reste stricte.
+
+Piège natif : vers COMP-3, cobc utilise `cob_set_packed_int` pour une source
+binaire dont la valeur mise à l'échelle tient sur 32 bits, et pour un littéral
+entier tenant dans un int avec chiffres + échelle ≤ 9. Ce chemin remplit tous
+les quartets physiques : `1234 → PIC 99 COMP-3` donne `234F`. Les relectures
+natives sont ensuite incohérentes (DISPLAY/comparaison voient 34, MOVE COMP-3
+vers COMP-3 voit 234). Le littéral est donc refusé à l'émission
+(`check_packed_literal_move`) et la source binaire arrêtée à l'exécution
+(`move_binary_to_packed`) lorsque le quartet de tête recevrait un chiffre non nul.
+
+NIST : **20/458** (`build/coverage-nist-data-records.json`). SM102A, SM104A,
+SM204A, SQ128A, ST103A, ST104A, ST115A et ST121A ont des REPORT identiques au
+runner natif officiel (44 PASS). Les `.SUB` lisent les fichiers de leurs
+producteurs (`*HEADER,COBOL,<producteur>,SUBPRG,<sub>` dans newcob.val),
+exécutés en GnuCOBOL dans l'ordre du runner. Priorités suivantes : RELATIVE
+(32), INDEXED (26), FILE STATUS de groupe (25), VALUE/USAGE de groupe (24).
+
 Environnement Linux du 23 octobre 2026 (Ubuntu 24.04) : GnuCOBOL 3.2.0
 compilé depuis les sources GNU signées avec BDB (`tools/install_gnucobol.sh`).
 La suite découvre **201 tests : 200 réussis, un PE Windows ignoré** ; les

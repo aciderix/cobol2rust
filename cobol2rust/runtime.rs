@@ -176,6 +176,18 @@ impl Value {
             _ => fail("checked arithmetic destination requires numeric storage"),
         }
     }
+    pub fn move_number(&mut self, source: &Self) {
+        match self {
+            Self::View(view) => view.move_number(source),
+            _ => self.assign(source, false),
+        }
+    }
+    pub fn move_binary_to_packed(&mut self, source: &Self) {
+        match self {
+            Self::View(view) => view.move_binary_to_packed(source),
+            _ => self.move_number(source),
+        }
+    }
     pub fn assign(&mut self, source: &Self, rounded: bool) {
         match self {
             Self::View(view) => view.assign(source, rounded),

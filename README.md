@@ -19,8 +19,9 @@ La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur
 mémoire et contrôles d'impression `WRITE ... ADVANCING`.
 Elle prend aussi en charge un premier sous-ensemble de PICTURE numériques
-éditées et les clauses FD LABEL/BLOCK, RECORD de taille exacte et RECORDING F
-du profil disque GnuCOBOL vérifié.
+éditées et les clauses FD LABEL/BLOCK, RECORD de taille exacte, RECORDING F et
+DATA RECORDS du profil disque GnuCOBOL vérifié. Un MOVE numérique tronque les
+chiffres de tête sans SIZE ERROR, comme en natif.
 Les séparateurs virgule/point-virgule et les paragraphes documentaires
 d'IDENTIFICATION sont également pris en charge dans le profil décrit ci-dessous.
 
@@ -71,8 +72,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 199 tests Python, avec un test d'inspection du PE
-Windows ignoré (200 découverts), et les 51 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 211 tests Python, avec un test d'inspection du PE
+Windows ignoré (212 découverts), et les 52 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -451,7 +452,9 @@ acceptées dans le profil disque GnuCOBOL vérifié. LABEL/BLOCK sont conservée
 dans les métadonnées sans ajouter de labels ni de blocage physique. Une clause
 `RECORD CONTAINS n CHARACTERS` exige que n égale la taille physique de chaque
 description FD ; sinon le compilateur natif pourrait sélectionner un format
-variable et la conversion est refusée.
+variable et la conversion est refusée. `DATA RECORD(S) [IS|ARE] nom...` est
+conservée comme métadonnée : GnuCOBOL n'en résout pas les noms et ne lui donne
+aucun effet ; la clause en double ou sans nom reste refusée.
 
 Les compteurs ADVANCING variables, LINAGE, les autres clauses FD,
 les formats variables, I-O/REWRITE et les fichiers relatifs/indexés restent

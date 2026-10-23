@@ -1,5 +1,26 @@
 # Validation — 22 octobre 2026
 
+## DATA RECORDS et MOVE numérique tronquant — 23 octobre 2026
+
+Environnement : Ubuntu 24.04 x86-64, Python 3.13, Rust 1.97, GnuCOBOL 3.2.0
+compilé depuis les sources GNU signées avec BDB (`tools/install_gnucobol.sh`).
+
+- **212 tests découverts : 211 réussis, un test PE Windows ignoré.** Les ajouts
+  couvrent DATA RECORDS (métadonnée, refus natifs, deux comparaisons de
+  fichiers), le MOVE tronquant, l'index source strict, les deux chemins COMP-3
+  de cobc et l'arrêt nommé du quartet de tête.
+- **52/52 comparaisons locales conformes** (`build/verification.json`). La
+  fixture `numeric_truncation.cob` couvre DISPLAY/COMP/COMP-3, signes, V,
+  littéraux et zéros négatifs `00p`/`000D`, mesurés en natif avant implémentation.
+- NIST statique : **20/458 émissions acceptées**, 16 blocages au prétraitement,
+  422 à l'analyse, aucun à l'émission et zéro erreur interne
+  (`build/coverage-nist-data-records.json`).
+- **8/8 nouvelles comparaisons NIST conformes** et **12/12 anciennes** sans
+  régression. Les REPORT des 8 nouvelles sources sont identiques aux journaux
+  du runner NIST natif : 44 PASS, sans FAIL/DELETED/INSPECT.
+- Runner NIST natif complet de référence : 426 programmes, 9748 tests,
+  9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT (`.tools/nist-native-gnucobol-3.2`).
+
 ## Séparateurs et paragraphes documentaires
 
 - **200 tests découverts : 199 réussis, un test PE Windows ignoré.** Les 37
