@@ -2,14 +2,14 @@
 
 ## SORT et MERGE — 24 octobre 2026
 
-- **290 tests découverts : 289 réussis, un test PE Windows ignoré.**
+- **289 tests découverts : 288 réussis, un test PE Windows ignoré.**
 - **76/76 comparaisons locales conformes** ; nouvelle fixture `sort_merge.cob`
   (USING/GIVING, procédures, MERGE ; octets des fichiers GIVING identiques).
 - NIST : **182/458** ; **180/180 programmes acceptés conformes** (4474 PASS).
 
 ## Formes arithmétiques, HIGH/LOW-VALUE — 23 octobre 2026
 
-- **287 tests découverts : 286 réussis, un test PE Windows ignoré.**
+- **286 tests découverts : 285 réussis, un test PE Windows ignoré.**
 - **75/75 comparaisons locales conformes** ; nouvelles fixtures
   `divide_remainder.cob`, `high_low_values.cob`, `relative_start_ge.cob`.
 - NIST : **166/458** ; **164/164 programmes acceptés conformes** (4296 PASS).
