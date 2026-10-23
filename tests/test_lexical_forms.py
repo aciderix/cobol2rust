@@ -46,3 +46,20 @@ class LexicalFormNativeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SetAndAllTests(unittest.TestCase):
+    def test_unmodelled_all_and_set_forms_are_refused(self):
+        data = "01 t. 02 e pic x occurs 2 indexed by ix. 01 n pic 99. 01 d pic 9v9. 01 x pic x(3)."
+        for body in ("move all 'A' to n.", "if x = all 'A' display 'y' end-if.", "set n to x.",
+                     "set d to ix.", "compute n = all 'A'."):
+            with self.subTest(body=body), self.assertRaises(CobolError):
+                Emitter(Parser(program(data, body + " stop run.")).parse()).generate()
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class SetAndAllNativeTests(unittest.TestCase):
+    def test_fixture_matches_native(self):
+        report = verify(ROOT / "tests" / "fixtures" / "set_all.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertEqual(report["cobol_stdout"], "[ABABABAB]\n[XXYZYZX]\n[QQQQQQQQQ]\n03 0003\n04\n")

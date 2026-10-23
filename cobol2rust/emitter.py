@@ -54,6 +54,8 @@ class Emitter:
             return "text" if e.args[0].start is not None else self.program.fields[e.args[0].name].kind
         if e.op in {"number", "text"}:
             return e.op
+        if e.op == "all":
+            return "text"
         if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class"}:
             return "bool"
         return "number"
@@ -89,6 +91,8 @@ class Emitter:
             return self.reference(args[0]) + ".snapshot()"
         if op == "shared":
             return f"{self.shared}.clone()"
+        if op == "all":
+            raise CobolError("ALL littéral limité au MOVE vers texte, groupe ou sous-chaîne")
         if op == "bool":
             return str(args[0]).lower()
         if op == "numeric_class":
@@ -193,6 +197,11 @@ class Emitter:
                              not self.program.fields[source_ref.name].picture)
                 conversions[-1] = "raw_text" if raw_group else "parsed_text"
                 continue
+            if expr.op == "all":
+                if not move or destination != "text":
+                    raise CobolError("ALL littéral limité au MOVE vers texte, groupe ou sous-chaîne")
+                conversions[-1] = "all"
+                continue
             if move and destination == "text" and source_kind == "number":
                 group = not field.picture and ref.start is None
                 if expr.figurative_zero:
@@ -223,11 +232,17 @@ class Emitter:
         temp = self.unique()
         # COBOL resolves a variable's source address once, but each receiver reads
         # that storage again. This matters when group/redefine receivers overlap it.
-        source = self.reference(expr.args[0]) + ".clone()" if expr.op == "var" else self.expression(expr)
-        self.write(f"let {temp} = {source};")
+        if expr.op != "all":
+            source = self.reference(expr.args[0]) + ".clone()" if expr.op == "var" else self.expression(expr)
+            self.write(f"let {temp} = {source};")
         for ref, conversion in zip(targets, conversions):
             if conversion in {"raw_text", "parsed_text"}:
                 self.write(f"{self.reference(ref)}.assign_text_move(&{temp}, {str(conversion == 'raw_text').lower()});")
+            elif conversion == "all":
+                receiver = self.unique()
+                self.write(f"let mut {receiver} = {self.reference(ref)}.clone();")
+                self.write(f"let all = Value::text(&{quoted(expr.args[0])}.chars().cycle().take({receiver}.text_size()).collect::<String>());")
+                self.write(f"{receiver}.assign(&all, false);")
             elif conversion == "zero":
                 receiver = self.unique()
                 self.write(f"let mut {receiver} = {self.reference(ref)}.clone();")

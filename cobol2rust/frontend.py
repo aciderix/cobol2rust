@@ -874,6 +874,9 @@ class Parser:
             left = Expr("number", ("0",), figurative_zero=True)
         elif t.key in {"SPACE", "SPACES"}:
             left = Expr("text", (" ",), figurative_space=True)
+        elif t.key == "ALL" and self.t.string:
+            # ALL "literal" repeats the literal over the receiver; MOVE only.
+            left = Expr("all", (self.take().text,))
         elif t.key in {"+", "-"}:
             left = Expr("unary" + t.key, (self.expr(30),))
         elif t.key == "(":
@@ -966,6 +969,16 @@ class Parser:
                 refs = [self.variable()]
                 while not self.at("TO") and not self.at("UP") and not self.at("DOWN"):
                     refs.append(self.variable())
+                if all(not self.fields[ref.name].index_for for ref in refs) and self.accept("TO"):
+                    # SET integer-items TO index-name stores the occurrence number.
+                    source = self.variable()
+                    if not self.fields[source.name].index_for:
+                        self.error("SET donnée TO requiert un index INDEXED BY")
+                    for ref in refs:
+                        field = self.fields[ref.name]
+                        if ref.start is not None or field.kind != "number" or field.scale or field.usage == "INDEX":
+                            self.error("SET donnée TO index requiert un entier numérique")
+                    return Stmt("compute", (None, [(ref, Expr("var", (source,)), False) for ref in refs]), line)
                 if any(not self.fields[ref.name].index_for for ref in refs):
                     self.error("SET numérique requiert des index INDEXED BY")
                 if self.accept("TO"):
