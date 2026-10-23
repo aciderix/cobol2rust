@@ -264,6 +264,12 @@ class Emitter:
             return value if op == "unary+" else f"Ok::<Value, runtime::SizeError>(({value}?).neg())"
         return f"Ok::<Value, runtime::SizeError>({self.expression(expr)})"
 
+    def relative_key(self, file_name, mutable):
+        key = self.program.files[file_name].relative_key
+        if key is None:
+            return "None"
+        return f"Some(&{'mut ' if mutable else ''}self.{self.names[key]})"
+
     def file_status(self, file_name, status, eof_handled=False):
         name = self.program.files[file_name].status
         destination = f"Some(&mut self.{self.names[name]})" if name else "None"
@@ -278,7 +284,8 @@ class Emitter:
                              for mode, target in sorted(handlers[1].items()))
             handler = f"match self.{self.files[file_name]}.last_open_mode() {{ {cases} _ => None }}"
         self.write(f"let handler: Option<usize> = {handler};")
-        self.write(f"file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, handler.is_some());")
+        invalid = str(getattr(self, "io_invalid", False)).lower()
+        self.write(f"file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some());")
 
     def statement(self, stmt):
         op, a = stmt.op, stmt.args
@@ -311,13 +318,23 @@ class Emitter:
                 self.write(f"let status = self.{self.files[name]}.close({str(lock).lower()});")
                 self.file_status(name, "status")
         elif op == "rewrite":
-            name, record, value = a
+            name, record, value, _, _ = a
             if value:
                 self.assignment(value, [record], False)
-            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.names[record]});")
+            key = f", {self.relative_key(name, False)}" if self.program.files[name].organization == "RELATIVE" else ""
+            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.names[record]}{key});")
+            self.file_status(name, "status")
+        elif op == "delete":
+            name = a[0]
+            self.write(f"let status = self.{self.files[name]}.delete({self.relative_key(name, False)});")
+            self.file_status(name, "status")
+        elif op == "start":
+            name, _, condition, _, _ = a
+            key = self.names[self.program.files[name].relative_key]
+            self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, &self.{key});")
             self.file_status(name, "status")
         elif op == "write":
-            name, record, value, advancing = a
+            name, record, value, advancing, _, _ = a
             if value:
                 self.assignment(value, [record], False)
             control = "None"
@@ -326,6 +343,8 @@ class Emitter:
                 variant = direction.title() + ("Page" if count is None else "Lines")
                 argument = "" if count is None else f"({count})"
                 control = f"Some(file_runtime::Advance::{variant}{argument})"
+            if self.program.files[name].organization == "RELATIVE":
+                control = self.relative_key(name, True)
             self.write(f"let status = self.{self.files[name]}.write(&self.{self.names[record]}, {control});")
             self.file_status(name, "status")
         elif op == "display":
@@ -384,11 +403,14 @@ class Emitter:
             self.statement(a[0])
             self.write(f"pc = {a[1]};")
         elif op == "io":
-            stmt, continuation, self.io_handlers = a
+            stmt, continuation, self.io_handlers, invalid, valid = a
+            self.io_invalid = invalid is not None
             self.statement(stmt)
-            self.io_handlers = None
-            # Any status outside 0x is an I/O exception: run its USE procedure.
-            self.write(f"pc = if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {continuation} }};")
+            self.io_handlers, self.io_invalid = None, False
+            success = continuation if valid is None else valid
+            # INVALID KEY takes 2x; any other status outside 0x runs its USE procedure.
+            prefix = f"if status / 10 == 2 {{ {invalid} }} else " if invalid is not None else ""
+            self.write(f"pc = {prefix}if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {success} }};")
         elif op == "branch":
             self.write(f"pc = if {self.expression(a[0])} {{ {a[1]} }} else {{ {a[2]} }};")
         elif op == "call":
@@ -451,24 +473,34 @@ class Emitter:
             self.write("}")
         elif op == "read":
             name, into, success, eof, continuation, self.io_handlers = a
-            record = self.names[self.program.files[name].record]
+            spec = self.program.files[name]
+            record = self.names[spec.record]
             status = self.unique()
-            at_end = bool(node.stmt.args[2])
-            self.write(f"let {status} = self.{self.files[name]}.read(&mut self.{record});")
-            self.file_status(name, status, at_end)
-            self.io_handlers = None
+            handled = bool(node.stmt.args[2])
+            random = node.stmt.args[4]
+            # AT END takes every 1x status of a sequential read, INVALID KEY every 2x.
+            exception_class = 2 if random else 1
+            if spec.organization != "RELATIVE":
+                self.write(f"let {status} = self.{self.files[name]}.read(&mut self.{record});")
+            elif random:
+                self.write(f"let {status} = self.{self.files[name]}.read_key(&mut self.{record}, &self.{self.names[spec.relative_key]});")
+            else:
+                self.write(f"let {status} = self.{self.files[name]}.read_next(&mut self.{record}, {self.relative_key(name, True)});")
+            self.io_invalid = handled and random
+            self.file_status(name, status, handled and not random)
+            self.io_handlers, self.io_invalid = None, False
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1
             if into:
-                if self.program.files[name].organization == "SEQUENTIAL":
+                if spec.organization == "SEQUENTIAL":
                     self.write(f"let record = Value::Bytes(self.{record}.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
                 else:
                     self.write(f"let record = self.{record}.snapshot();")
                 self.write(f"{self.reference(into)}.assign(&record, false);")
             self.write(f"pc = {success};")
             self.indent -= 1
-            if at_end:
-                self.write(f"}} else if {status} == 10 {{")
+            if handled:
+                self.write(f"}} else if {status} / 10 == {exception_class} {{")
                 self.indent += 1
                 self.write(f"pc = {eof};")
                 self.indent -= 1
@@ -533,7 +565,8 @@ class Emitter:
         for name in self.names:
             self.write(f"{self.names[name]}: Value, // {name} PIC {self.program.fields[name].picture}")
         for name, rust_name in self.files.items():
-            self.write(f"{rust_name}: file_runtime::CobolFile, // {name}")
+            kind = "RelativeFile" if self.program.files[name].organization == "RELATIVE" else "CobolFile"
+            self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
         self.indent -= 1
         self.write("}")
         self.write("impl Program {")
@@ -548,7 +581,11 @@ class Emitter:
             self.write(f"{self.names[name]}: {value},")
         for name, rust_name in self.files.items():
             spec = self.program.files[name]
-            self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}),")
+            if spec.organization == "RELATIVE":
+                size = self.program.fields[spec.record].size
+                self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {size}),")
+            else:
+                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}),")
         self.indent -= 1
         self.write("};")
         for name, field in self.program.fields.items():

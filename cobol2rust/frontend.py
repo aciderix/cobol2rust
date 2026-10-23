@@ -343,6 +343,8 @@ class FileSpec:
     organization: str = "LINE SEQUENTIAL"
     records: list[str] = field(default_factory=list)
     fd_clauses: dict = field(default_factory=dict)
+    access: str = "SEQUENTIAL"
+    relative_key: str | None = None
 
 
 @dataclass
@@ -381,8 +383,8 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE CLOSE SET GO".split())
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE AT NOT ON . <EOF>".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -530,8 +532,8 @@ class Parser:
                         if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
                             self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
-                            if spec.organization != "SEQUENTIAL":
-                                self.error("plusieurs enregistrements FD limités à SEQUENTIAL de taille fixe égale")
+                            if spec.organization not in {"SEQUENTIAL", "RELATIVE"}:
+                                self.error("plusieurs enregistrements FD limités à SEQUENTIAL/RELATIVE de taille fixe égale")
                             descriptor.redefines = spec.record
                         else:
                             spec.record = key
@@ -753,39 +755,79 @@ class Parser:
             self.error("ASSIGN requiert un chemin littéral entre guillemets")
         if not path.text or any(ord(c) < 32 for c in path.text):
             self.error("chemin ASSIGN vide ou invalide")
-        organization, organization_seen, status, access = "SEQUENTIAL", False, None, False
+        organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
+        relative_key = None
+
+        def organization_word():
+            # [ORGANIZATION [IS]] {LINE SEQUENTIAL | [RECORD] [BINARY] SEQUENTIAL | RELATIVE}
+            if self.accept("RELATIVE"):
+                return "RELATIVE"
+            if self.accept("LINE"):
+                self.expect("SEQUENTIAL")
+                return "LINE SEQUENTIAL"
+            self.accept("RECORD")
+            self.accept("BINARY")
+            self.expect("SEQUENTIAL")
+            return "SEQUENTIAL"
+
+        def reference():
+            # Data names are declared later: keep the qualifiers for resolution.
+            label, qualifiers = self.name(), []
+            while self.accept("OF") or self.accept("IN"):
+                qualifiers.append(self.name())
+            return label, tuple(qualifiers)
+
+        clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
+                        "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
         while not self.at("."):
             if self.accept("ORGANIZATION") and not organization_seen:
                 organization_seen = True
                 self.accept("IS")
-                organization = "LINE SEQUENTIAL" if self.accept("LINE") else "SEQUENTIAL"
-                self.expect("SEQUENTIAL")
-            elif self.accept("ACCESS") and not access:
-                access = True
+                organization = organization_word()
+            elif (not organization_seen and not self.t.string and (self.at("LINE") or self.at("SEQUENTIAL")
+                    or self.at("BINARY") or (self.at("RELATIVE") and self.tokens[self.i + 1].key in clause_words))):
+                organization_seen = True
+                organization = organization_word()
+            elif self.accept("ACCESS") and access is None:
                 self.accept("MODE")
                 self.accept("IS")
-                self.expect("SEQUENTIAL")
-            elif self.accept("FILE") and status is None:
+                if not any(self.at(word) for word in ("SEQUENTIAL", "RANDOM", "DYNAMIC")):
+                    self.error("ACCESS limité à SEQUENTIAL, RANDOM ou DYNAMIC")
+                access = self.take().key
+            elif self.accept("RELATIVE") and relative_key is None:
+                self.accept("KEY")
+                self.accept("IS")
+                relative_key = reference()
+            elif (self.at("FILE") or self.at("STATUS")) and status is None:
+                self.accept("FILE")
                 self.expect("STATUS")
                 self.accept("IS")
-                status = self.name()
+                status = reference()
+                if not self.t.string and self.t.key not in clause_words | {"RELATIVE", "SEQUENTIAL", "LINE", "BINARY", "INDEXED"}:
+                    self.error("statut VSAM supplémentaire de FILE STATUS non pris en charge")
+            elif self.accept("RESERVE"):
+                # GnuCOBOL 3.2 checks and ignores RESERVE {NO | integer} [AREA | AREAS].
+                if not self.accept("NO"):
+                    self.integer_literal("RESERVE")
+                self.accept("AREA") or self.accept("AREAS")
             else:
                 self.error("clause SELECT non prise en charge")
         self.expect(".")
-        self.files[name] = FileSpec(name, path, optional, status, organization=organization)
+        if organization != "RELATIVE" and (relative_key or access not in {None, "SEQUENTIAL"}):
+            self.error("RELATIVE KEY et ACCESS RANDOM/DYNAMIC requièrent ORGANIZATION RELATIVE")
+        if organization == "RELATIVE" and access in {"RANDOM", "DYNAMIC"} and not relative_key:
+            self.error("ACCESS RANDOM/DYNAMIC requiert RELATIVE KEY")
+        self.files[name] = FileSpec(name, path, optional, status, organization=organization,
+                                    access=access or "SEQUENTIAL", relative_key=relative_key)
 
     def validate_files(self):
-        paths = set()
         for spec in self.files.values():
-            if spec.path.text in paths:
-                self.error("plusieurs SELECT vers le même chemin ne sont pas pris en charge")
-            paths.add(spec.path.text)
             if not spec.record:
                 self.error(f"FD manquant pour {spec.name}")
             if spec.name in self.fields:
                 self.error(f"nom ambigu entre fichier et donnée: {spec.name}")
             if spec.status:
-                spec.status = self.resolve(spec.status)
+                spec.status = self.resolve(*spec.status)
                 status = self.fields.get(spec.status)
                 # A two-byte group receives the status characters as raw bytes.
                 group = status is not None and not status.picture and status.size == 2
@@ -795,6 +837,15 @@ class Parser:
                     self.error(f"FILE STATUS {spec.status} doit être PIC XX, PIC 99 DISPLAY ou un groupe de 2 octets")
                 if status.file_record:
                     self.error("FILE STATUS ne peut pas être une donnée FD")
+            if spec.relative_key:
+                spec.relative_key = self.resolve(*spec.relative_key)
+                key = self.fields.get(spec.relative_key)
+                # libcob reads it with cob_get_int: keep it an unsigned integer of 9 digits at most.
+                if (not key or key.kind != "number" or key.scale or key.signed or key.digits > 9
+                        or key.dimensions or key.usage == "INDEX"):
+                    self.error("RELATIVE KEY limitée à un entier non signé de 9 chiffres au plus")
+                if any(key.name == r or key.name.startswith(r + ".") for r in spec.records):
+                    self.error("RELATIVE KEY dans l'enregistrement de son propre fichier non prise en charge")
             from .layout import leaves
             if any(self.fields[key].size != self.fields[spec.record].size for key in spec.records):
                 self.error("enregistrements FD de tailles différentes non pris en charge; format variable requis")
@@ -937,7 +988,7 @@ class Parser:
                 elif not mode:
                     self.error("mode INPUT, OUTPUT, I-O ou EXTEND attendu avant le fichier")
                 name = self.file_name()
-                if mode == "I-O" and self.files[name].organization != "SEQUENTIAL":
+                if mode == "I-O" and self.files[name].organization == "LINE SEQUENTIAL":
                     self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
                 actions.append((mode, name))
             if not actions:
@@ -959,33 +1010,85 @@ class Parser:
         if verb == "READ":
             name = self.file_name()
             # GnuCOBOL: READ file [NEXT] [RECORD] [INTO x] [[AT] END] [NOT [AT] END].
-            self.accept("NEXT")
+            spec = self.files[name]
+            next_record = self.accept("NEXT")
+            if self.at("PREVIOUS"):
+                self.error("READ PREVIOUS non pris en charge")
             self.accept("RECORD")
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
                 self.error("READ INTO requiert un champ alphanumérique")
-            at_end, not_end = [], []
+            if self.at("KEY") or self.at("WITH"):
+                self.error("READ KEY/LOCK non pris en charge")
+            handler, exception, success = None, [], []
             if self.accept("AT") or self.at("END"):
                 self.expect("END")
-                at_end = self.block({"NOT", "END-READ"})
-            if self.accept("NOT"):
+                handler, exception = "end", self.block({"NOT", "END-READ"})
+            elif self.at("INVALID"):
+                handler, exception = "key", self.invalid_key({"NOT", "END-READ"})
+            if self.at("NOT") and self.tokens[self.i + 1].key == "INVALID":
+                self.take()
+                if handler == "end":
+                    self.error("AT END et INVALID KEY ne peuvent pas être mêlés")
+                handler, success = "key", self.invalid_key({"END-READ"})
+            elif self.accept("NOT"):
                 self.accept("AT")
                 self.expect("END")
-                not_end = self.block({"END-READ"})
+                if handler == "key":
+                    self.error("AT END et INVALID KEY ne peuvent pas être mêlés")
+                handler, success = "end", self.block({"END-READ"})
             self.accept("END-READ")
-            return Stmt("read", (name, into, at_end, not_end), line)
+            # cobc: NEXT, SEQUENTIAL access, or DYNAMIC with AT END read the next
+            # record; otherwise a RELATIVE KEY selects the record.
+            random = (spec.organization == "RELATIVE" and not next_record and spec.access != "SEQUENTIAL"
+                      and not (spec.access == "DYNAMIC" and handler == "end"))
+            if handler == ("end" if random else "key"):
+                self.error("READ " + ("direct requiert INVALID KEY, pas AT END" if random else "séquentiel requiert AT END, pas INVALID KEY"))
+            return Stmt("read", (name, into, exception, success, random), line)
         if verb == "REWRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
             if not files:
                 self.error(f"REWRITE requiert un enregistrement FD: {record}")
-            if self.files[files[0]].organization != "SEQUENTIAL":
-                self.error("REWRITE limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
+            if self.files[files[0]].organization == "LINE SEQUENTIAL":
+                self.error("REWRITE limité aux fichiers SEQUENTIAL/RELATIVE; réécriture LINE SEQUENTIAL non modélisée")
             value = self.expr() if self.accept("FROM") else None
-            if self.at("INVALID"):
-                self.error("REWRITE INVALID KEY non pris en charge pour SEQUENTIAL")
-            self.accept("END-REWRITE")
-            return Stmt("rewrite", (files[0], record.name, value), line)
+            invalid, valid = self.key_handlers(files[0], "END-REWRITE")
+            return Stmt("rewrite", (files[0], record.name, value, invalid, valid), line)
+        if verb == "DELETE":
+            name = self.file_name()
+            if self.files[name].organization != "RELATIVE":
+                self.error("DELETE limité aux fichiers RELATIVE")
+            self.accept("RECORD")
+            invalid, valid = self.key_handlers(name, "END-DELETE")
+            return Stmt("delete", (name, None, None, invalid, valid), line)
+        if verb == "START":
+            name = self.file_name()
+            spec = self.files[name]
+            if spec.organization != "RELATIVE" or spec.access == "RANDOM":
+                self.error("START limité aux fichiers RELATIVE en accès SEQUENTIAL ou DYNAMIC")
+            condition = "Equal"
+            if self.accept("KEY"):
+                self.accept("IS")
+                if self.accept("=") or (self.accept("EQUAL") and (self.accept("TO") or True)):
+                    condition = "Equal"
+                elif self.accept(">") or (self.accept("GREATER") and (self.accept("THAN") or True)):
+                    condition = "Greater"
+                    if self.at("OR") or self.at("="):
+                        self.error("START >= non pris en charge; utiliser NOT LESS")
+                elif self.accept("NOT"):
+                    if not (self.accept("<") or (self.accept("LESS") and (self.accept("THAN") or True))):
+                        self.error("START KEY NOT < attendu")
+                    condition = "NotLess"
+                else:
+                    self.error("START KEY limité à =, > ou NOT <")
+                key = self.variable()
+                if key.name != spec.relative_key or key.indices or key.start is not None:
+                    self.error("START KEY doit désigner la RELATIVE KEY du fichier")
+            elif not spec.relative_key:
+                self.error("START requiert une RELATIVE KEY")
+            invalid, valid = self.key_handlers(name, "END-START")
+            return Stmt("start", (name, None, condition, invalid, valid), line)
         if verb == "WRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
@@ -1006,8 +1109,8 @@ class Parser:
                 if self.files[files[0]].organization != "SEQUENTIAL":
                     self.error("WRITE ADVANCING limité à SEQUENTIAL dans le profil actuel")
                 advancing = (direction, count)
-            self.accept("END-WRITE")
-            return Stmt("write", (files[0], record.name, value, advancing), line)
+            invalid, valid = self.key_handlers(files[0], "END-WRITE")
+            return Stmt("write", (files[0], record.name, value, advancing, invalid, valid), line)
         if verb == "DISPLAY":
             values = []
             while self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}:
@@ -1183,6 +1286,27 @@ class Parser:
             self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")
         self.error(f"instruction non prise en charge: {verb}")
 
+    def invalid_key(self, stops):
+        self.expect("INVALID")
+        self.accept("KEY")
+        body = self.block(stops)
+        if not body:
+            self.error("instruction attendue après INVALID KEY")
+        return body
+
+    def key_handlers(self, file_name, ending):
+        """[INVALID KEY ...] [NOT INVALID KEY ...] [END-x], RELATIVE files only."""
+        invalid, valid = [], []
+        if self.at("INVALID"):
+            invalid = self.invalid_key({"NOT", ending})
+        if self.at("NOT") and self.tokens[self.i + 1].key == "INVALID":
+            self.take()
+            valid = self.invalid_key({ending})
+        if (invalid or valid) and self.files[file_name].organization != "RELATIVE":
+            self.error("INVALID KEY limité aux fichiers RELATIVE")
+        self.accept(ending)
+        return invalid, valid
+
     def rounded_receivers(self):
         receivers = [(self.variable(), self.accept("ROUNDED"))]
         while not self.t.string and self.candidates(self.t.key):
@@ -1241,6 +1365,8 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
                     walk(s.args[2], section); walk(s.args[3], section)
+                elif s.op in {"write", "rewrite", "delete", "start"}:
+                    walk(s.args[-2], section); walk(s.args[-1], section)
         if program.blocks:
             for block in program.blocks:
                 walk(block.body, block.section)

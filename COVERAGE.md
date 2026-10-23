@@ -449,6 +449,14 @@ conformes**, 539 PASS, 1 INSPECT (SM106A), aucun FAIL
 (`build/nist-verify-66.json`). Prochains obstacles : RELATIVE (32), INDEXED (26),
 fonctions intrinsèques, WITH DEBUGGING MODE et PROGRAM COLLATING SEQUENCE.
 
+## Progression : RELATIVE et clauses SELECT
+
+Les fichiers RELATIVE, au format disque exact de GnuCOBOL, et la grammaire
+SELECT complète portent l'émission acceptée à **95/458**. Les 29 nouvelles
+sources sont conformes au runner natif (762 PASS, 4 DELETED également natifs ;
+`build/nist-verify-rel.json`, `build/nist-verify-rel2.json`). Les `.SUB` lisent
+des fichiers RELATIVE écrits par les producteurs GnuCOBOL.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

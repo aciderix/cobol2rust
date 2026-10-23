@@ -1,4 +1,4 @@
-// GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL and fixed SEQUENTIAL.
+// GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL, fixed SEQUENTIAL and RELATIVE.
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use crate::runtime::{Value, fail};
@@ -23,6 +23,22 @@ pub struct CobolFile {
     last_read_size: usize,
     last_open_mode: &'static str,
     read_done: bool,
+}
+
+thread_local! {
+    static OPEN_PATHS: std::cell::RefCell<std::collections::HashSet<String>> = Default::default();
+}
+
+/// Several SELECTs may name one path, but sharing it while both are open
+/// depends on native locking and buffering: stop instead of guessing.
+fn claim_path(path: &str) {
+    if !OPEN_PATHS.with(|paths| paths.borrow_mut().insert(path.to_string())) {
+        fail("simultaneous OPEN of one path by several files not modelled");
+    }
+}
+
+fn release_path(path: &str) {
+    OPEN_PATHS.with(|paths| { paths.borrow_mut().remove(path); });
 }
 
 fn setting(name: &str, default: bool) -> bool {
@@ -81,6 +97,12 @@ impl CobolFile {
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
 
     pub fn open(&mut self, mode: &str) -> u8 {
+        let status = self.open_file(mode);
+        if status < 10 { claim_path(&self.path); }
+        status
+    }
+
+    fn open_file(&mut self, mode: &str) -> u8 {
         // CLOSE WITH LOCK forbids any later OPEN in the run unit.
         if matches!(self.state, State::Locked) { return 38; }
         if !matches!(self.state, State::Closed) { return 41; }
@@ -150,6 +172,7 @@ impl CobolFile {
             file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
         }
         self.state = if lock { State::Locked } else { State::Closed };
+        release_path(&self.path);
         self.eof = false;
         self.needs_nl = false;
         self.last_read_size = 0;
@@ -280,12 +303,358 @@ impl Drop for CobolFile {
 
 /// Store FILE STATUS. Without it, an exception (status 1x..9x) that no AT END
 /// phrase or USE procedure handles is fatal, like GnuCOBOL's standard handler.
-pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, declarative: bool) {
+/// AT END covers every 1x status and INVALID KEY every 2x, like cobc's handlers.
+pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool) {
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
         else { field.assign(&Value::number(&status), false); }
-    } else if !matches!(status, 0 | 5) && !(status == 10 && eof_handled) && !(status >= 10 && declarative) {
+    } else if status >= 10 && !(status / 10 == 1 && eof_handled) && !(status / 10 == 2 && invalid_handled) && !declarative {
         fail(&format!("unhandled file status {status:02}"));
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Access { Sequential, Random, Dynamic }
+
+#[derive(Clone, Copy)]
+pub enum StartCondition { Equal, Greater, NotLess }
+
+/// GnuCOBOL 3.2 RELATIVE file on Linux x86-64: each slot is a native size_t
+/// (8 bytes, little endian) holding the record size, then `record_max` bytes.
+/// A zero size, including a hole read as zeros, marks an empty slot.
+pub struct RelativeFile {
+    path: String,
+    optional: bool,
+    access: Access,
+    record_max: usize,
+    file: Option<File>,
+    open_mode: &'static str,
+    locked: bool,
+    last_open_mode: &'static str,
+    nonexistent: bool,
+    end_of_file: bool,
+    first_read: u8,
+    read_done: bool,
+}
+
+fn read_full(file: &mut File, buffer: &mut [u8]) -> usize {
+    let mut count = 0;
+    while count < buffer.len() {
+        match file.read(&mut buffer[count..]) {
+            Ok(0) => break,
+            Ok(read) => count += read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => fail(&format!("file read failed: {error}")),
+        }
+    }
+    count
+}
+
+fn seek(file: &mut File, position: SeekFrom) -> u64 {
+    file.seek(position).unwrap_or_else(|e| fail(&format!("file seek failed: {e}")))
+}
+
+fn put(file: &mut File, bytes: &[u8]) {
+    file.write_all(bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
+}
+
+/// cob_get_int on the RELATIVE KEY, limited by the frontend to 9 digits.
+fn key_number(key: &Value) -> i64 {
+    key.integer("RELATIVE KEY") as i64
+}
+
+impl RelativeFile {
+    pub fn new(path: &str, optional: bool, access: &str, record_max: usize) -> Self {
+        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH"] {
+            if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
+        }
+        for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
+            if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
+        }
+        let access = match access {
+            "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
+            _ => fail("unsupported RELATIVE access mode"),
+        };
+        Self { path: path.into(), optional, access, record_max, file: None, open_mode: "", locked: false,
+               last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
+    }
+
+    pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+
+    fn slot_size(&self) -> u64 { self.record_max as u64 + 8 }
+
+    pub fn open(&mut self, mode: &str) -> u8 {
+        let status = self.open_file(mode);
+        if status < 10 { claim_path(&self.path); }
+        status
+    }
+
+    fn open_file(&mut self, mode: &str) -> u8 {
+        if self.locked { return 38; }
+        if !self.open_mode.is_empty() { return 41; }
+        self.last_open_mode = match mode {
+            "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
+            _ => fail("unsupported file open mode"),
+        };
+        self.read_done = false;
+        self.nonexistent = false;
+        self.end_of_file = false;
+        self.first_read = 2;
+        let exists = std::path::Path::new(&self.path).exists();
+        if !exists && mode != "OUTPUT" && !self.optional { return 35; }
+        let mut options = OpenOptions::new();
+        match mode {
+            "INPUT" => { options.read(true); },
+            "OUTPUT" => { options.read(true).write(true).create(true).truncate(true); },
+            "I-O" => { options.read(true).write(true).create(!exists); },
+            _ => { options.read(true).append(true).create(true); },
+        }
+        if mode == "INPUT" && !exists {
+            // cob_fd_file_open: a missing OPTIONAL input is opened as nonexistent.
+            self.nonexistent = true;
+            self.open_mode = "INPUT";
+            return 5;
+        }
+        match options.open(&self.path) {
+            Ok(mut file) => {
+                if mode == "EXTEND" { seek(&mut file, SeekFrom::End(0)); }
+                self.file = Some(file);
+                self.open_mode = self.last_open_mode;
+                if !exists && mode != "OUTPUT" { 5 } else { 0 }
+            },
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => 37,
+            Err(error) => fail(&format!("unmodelled RELATIVE OPEN failure: {error}")),
+        }
+    }
+
+    pub fn close(&mut self, lock: bool) -> u8 {
+        self.read_done = false;
+        if self.open_mode.is_empty() {
+            if self.locked { fail("CLOSE of a file closed WITH LOCK not modelled"); }
+            return 42;
+        }
+        if let Some(file) = self.file.as_mut() {
+            file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+        }
+        self.file = None;
+        self.open_mode = "";
+        self.locked = lock;
+        release_path(&self.path);
+        0
+    }
+
+    /// cob_read_next followed by relative_read_next.
+    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+        self.read_done = false;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.nonexistent {
+            if self.first_read == 0 { return 46; }
+            self.first_read = 0;
+            return 10;
+        }
+        if self.end_of_file { return 46; }
+        let status = self.relative_read_next(record, key);
+        if status < 10 {
+            self.first_read = 0;
+            self.read_done = true;
+            self.end_of_file = false;
+        } else if status == 10 {
+            self.end_of_file = true;
+        }
+        status
+    }
+
+    fn relative_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+        let slot = self.slot_size();
+        let record_max = self.record_max;
+        let file = self.file.as_mut().unwrap();
+        let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
+        if length == 0 { return 10; }
+        if length < slot { return 30; }
+        let mut offset = seek(file, SeekFrom::Current(0));
+        loop {
+            let mut size = [0u8; 8];
+            let count = read_full(file, &mut size);
+            if count != 8 {
+                if count != 0 { return 30; }
+                return 10;
+            }
+            if u64::from_le_bytes(size) > 0 {
+                let mut data = vec![0u8; record_max];
+                if read_full(file, &mut data) != record_max { return 30; }
+                record.assign(&Value::Bytes(data), false);
+                if let Some(key) = key {
+                    let number = offset / slot + 1;
+                    key.move_number(&Value::number("0"));
+                    if key.checked_assign(&Value::number(&number.to_string()), false).is_err() {
+                        seek(file, SeekFrom::Start(offset));
+                        return 14;
+                    }
+                }
+                return 0;
+            }
+            offset = seek(file, SeekFrom::Current(record_max as i64));
+        }
+    }
+
+    /// cob_read with a key, then relative_read.
+    pub fn read_key(&mut self, record: &mut Value, key: &Value) -> u8 {
+        self.read_done = false;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.nonexistent {
+            if self.first_read == 0 { return 23; }
+            self.first_read = 0;
+            return 10;
+        }
+        let slot = self.slot_size();
+        let record_max = self.record_max;
+        let number = key_number(key) - 1;
+        if number < 0 { return 23; }
+        let file = self.file.as_mut().unwrap();
+        let offset = number as u64 * slot;
+        seek(file, SeekFrom::Start(offset));
+        let mut size = [0u8; 8];
+        if read_full(file, &mut size) != 8 { return 23; }
+        if u64::from_le_bytes(size) == 0 {
+            seek(file, SeekFrom::Start(offset));
+            return 23;
+        }
+        let mut data = vec![0u8; record_max];
+        if read_full(file, &mut data) != record_max { return 30; }
+        record.assign(&Value::Bytes(data), false);
+        self.first_read = 0;
+        self.read_done = true;
+        self.end_of_file = false;
+        0
+    }
+
+    /// cob_write then relative_write.
+    pub fn write(&mut self, record: &Value, key: Option<&mut Value>) -> u8 {
+        self.read_done = false;
+        let allowed = if self.access == Access::Sequential { ["OUTPUT", "EXTEND"] } else { ["OUTPUT", "I-O"] };
+        if !allowed.contains(&self.open_mode) { return 48; }
+        let bytes = record.bytes();
+        if bytes.len() != self.record_max { fail("RELATIVE record size differs from the file record"); }
+        let slot = self.slot_size();
+        let sequential = self.access == Access::Sequential;
+        let file = self.file.as_mut().unwrap();
+        let offset = if sequential {
+            seek(file, SeekFrom::Current(0))
+        } else {
+            let number = key_number(key.as_deref().unwrap_or_else(|| fail("RELATIVE KEY required"))) - 1;
+            if number < 0 { return 24; }
+            let offset = number as u64 * slot;
+            seek(file, SeekFrom::Start(offset));
+            let mut size = [0u8; 8];
+            if read_full(file, &mut size) > 0 && u64::from_le_bytes(size) > 0 { return 22; }
+            offset
+        };
+        seek(file, SeekFrom::Start(offset));
+        put(file, &(bytes.len() as u64).to_le_bytes());
+        put(file, &bytes);
+        if sequential {
+            if let Some(key) = key {
+                let number = (offset + slot) / slot;
+                key.move_number(&Value::number(&number.to_string()));
+            }
+        }
+        0
+    }
+
+    /// cob_rewrite then relative_rewrite. A random rewrite of an empty slot
+    /// inside the file writes the data, keeps the zero size and returns 00.
+    pub fn rewrite(&mut self, record: &Value, key: Option<&Value>) -> u8 {
+        let read_done = self.read_done;
+        self.read_done = false;
+        if self.open_mode != "I-O" { return 49; }
+        if self.access == Access::Sequential && !read_done { return 43; }
+        let bytes = record.bytes();
+        if bytes.len() != self.record_max { fail("RELATIVE record size differs from the file record"); }
+        let slot = self.slot_size();
+        let sequential = self.access == Access::Sequential;
+        let file = self.file.as_mut().unwrap();
+        if sequential {
+            seek(file, SeekFrom::Current(-(bytes.len() as i64)));
+        } else {
+            let number = key_number(key.unwrap_or_else(|| fail("RELATIVE KEY required"))) - 1;
+            if number < 0 { return 24; }
+            seek(file, SeekFrom::Start(number as u64 * slot));
+            let mut size = [0u8; 8];
+            if read_full(file, &mut size) != 8 { return 23; }
+        }
+        put(file, &bytes);
+        0
+    }
+
+    /// cob_delete then relative_delete; an already empty slot returns 00.
+    pub fn delete(&mut self, key: Option<&Value>) -> u8 {
+        let read_done = self.read_done;
+        self.read_done = false;
+        if self.open_mode != "I-O" { return 49; }
+        if self.access == Access::Sequential && !read_done { return 43; }
+        let slot = self.slot_size();
+        let record_max = self.record_max;
+        let number = key_number(key.unwrap_or_else(|| fail("DELETE without RELATIVE KEY not modelled"))) - 1;
+        if number < 0 { return 24; }
+        let file = self.file.as_mut().unwrap();
+        let offset = number as u64 * slot;
+        seek(file, SeekFrom::Start(offset));
+        let mut size = [0u8; 8];
+        if read_full(file, &mut size) != 8 { return 23; }
+        seek(file, SeekFrom::Start(offset));
+        put(file, &0u64.to_le_bytes());
+        seek(file, SeekFrom::Current(record_max as i64));
+        0
+    }
+
+    /// cob_start then relative_start for EQUAL, GREATER and NOT LESS.
+    pub fn start(&mut self, condition: StartCondition, key: &Value) -> u8 {
+        self.read_done = false;
+        self.first_read = 0;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.access == Access::Random { return 47; }
+        if self.nonexistent { return 23; }
+        let status = self.relative_start(condition, key);
+        self.end_of_file = status != 0;
+        self.first_read = 1;
+        status
+    }
+
+    fn relative_start(&mut self, condition: StartCondition, key: &Value) -> u8 {
+        let slot = self.slot_size();
+        let file = self.file.as_mut().unwrap();
+        let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
+        if length == 0 { return 23; }
+        let mut index = key_number(key) - 1;
+        if index < 0 {
+            index = match condition {
+                StartCondition::NotLess => 0,
+                StartCondition::Greater => -1,
+                StartCondition::Equal => return 23,
+            };
+        }
+        if matches!(condition, StartCondition::Greater) { index += 1; }
+        loop {
+            if index < 0 { return 23; }
+            let offset = index as u64 * slot;
+            if offset >= length { return 23; }
+            seek(file, SeekFrom::Start(offset));
+            let mut size = [0u8; 8];
+            if read_full(file, &mut size) == 8 && u64::from_le_bytes(size) > 0 {
+                seek(file, SeekFrom::Start(offset));
+                return 0;
+            }
+            match condition {
+                StartCondition::Equal => return 23,
+                _ => index += 1,
+            }
+        }
+    }
+}
+
+impl Drop for RelativeFile {
+    fn drop(&mut self) {
+        if !self.open_mode.is_empty() { self.close(false); }
     }
 }

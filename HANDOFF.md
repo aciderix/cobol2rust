@@ -4,6 +4,27 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : fichiers RELATIVE (`file_runtime::RelativeFile`). Format
+GnuCOBOL 3.2 Linux x86-64 : emplacement = `size_t` little endian (8 octets,
+taille d'enregistrement, 0 = vide, trou lu comme vide) puis `record_max`
+octets. Chaque méthode suit `cob_open`/`cob_read`/`cob_read_next`/`cob_write`/
+`cob_rewrite`/`cob_delete`/`cob_start` puis `relative_*` de `fileio.c`, y compris
+leurs écarts : REWRITE direct d'un emplacement vide écrit les données, garde
+la taille 0 et rend 00 ; DELETE d'un emplacement déjà vide rend 00 ; START en
+échec arme la fin de fichier (READ NEXT suivant 46) ; READ NEXT met la clé à
+0 puis rend 14 si le numéro dépasse sa PICTURE ; OPTIONAL absent : READ NEXT
+10 puis 46, READ direct 10 puis 23 (`flag_first_read` = 2 à l'OPEN).
+Choix de lecture comme `cb_emit_read` : NEXT, accès SEQUENTIAL ou DYNAMIC avec
+AT END lisent séquentiellement, sinon par RELATIVE KEY. AT END couvre toute la
+classe 1x, INVALID KEY la 2x (`file_status` reçoit les deux indicateurs).
+RELATIVE KEY : entier non signé de 9 chiffres au plus hors de l'enregistrement.
+START : =, >, NOT < (>= et LT/LE refusés). SELECT suit `parser.y` : `RELATIVE
+[KEY]`, `[FILE] STATUS` qualifié, organisation sans ORGANIZATION, RESERVE ignoré,
+statut VSAM refusé. Deux SELECT d'un même chemin sont permis ; leur ouverture
+simultanée s'arrête (`claim_path`). NIST **95/458** ; les 29 nouvelles sources
+RELATIVE/SELECT sont conformes (762 PASS, 4 DELETED natifs). Prochains :
+RECORD VARYING, NEXT SENTENCE, noms commençant par un chiffre, INDEXED.
+
 Dernière étape : OPEN I-O et REWRITE SEQUENTIAL. `State::InputOutput(File)`
 lit sans tampon pour que REWRITE recule exactement d'un enregistrement
 (`sequential_rewrite`). Mesures natives : I-O absent 35 ; OPTIONAL absent 05 et

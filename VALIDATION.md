@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## RELATIVE — 23 octobre 2026
+
+- **243 tests découverts : 242 réussis, un test PE Windows ignoré.**
+- **57/57 comparaisons locales conformes**, dont `relative.cob` : statuts,
+  clés, trous, START et octets d'emplacements identiques au natif.
+- NIST : **95/458** ; 29 nouvelles comparaisons conformes.
+
 ## OPEN I-O et REWRITE — 23 octobre 2026
 
 - **239 tests découverts : 238 réussis, un test PE Windows ignoré.**

@@ -72,8 +72,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 238 tests Python, avec un test d'inspection du PE
-Windows ignoré (239 découverts), et les 56 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 242 tests Python, avec un test d'inspection du PE
+Windows ignoré (243 découverts), et les 57 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -98,7 +98,7 @@ Ces résultats portent sur les entrées testées.
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
-| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` en SEQUENTIAL, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` en SEQUENTIAL, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à

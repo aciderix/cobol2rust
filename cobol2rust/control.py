@@ -91,9 +91,9 @@ class ControlGraph:
             destinations = [(value, self._body(body, after, block)) for value, body in branches]
             return self._add("evaluate", (subject, destinations, self._body(otherwise, after, block)), stmt)
         if op == "read":
-            name, into, at_end, not_end = args
-            return self._add("read", (name, into, self._body(not_end, after, block),
-                                      self._body(at_end, after, block), after,
+            name, into, exception, success, _ = args
+            return self._add("read", (name, into, self._body(success, after, block),
+                                      self._body(exception, after, block), after,
                                       self._declaratives(name, after)), stmt)
         if op in {"open", "close"} and len(args[0]) > 1:
             # cobc gives each file its own implicit statement and error check.
@@ -101,9 +101,14 @@ class ControlGraph:
             for part in reversed(args[0]):
                 position = self._statement(Stmt(op, ([part],), stmt.line), position, block)
             return position
-        if op in {"open", "close", "write", "rewrite"}:
+        if op in {"open", "close", "write", "rewrite", "delete", "start"}:
             name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
-            return self._add("io", (stmt, after, self._declaratives(name, after)), stmt)
+            invalid = valid = None
+            if op in {"write", "rewrite", "delete", "start"} and (args[-2] or args[-1]):
+                # INVALID KEY handles every 2x status; NOT INVALID KEY every 0x.
+                invalid = self._body(args[-2], after, block) if args[-2] else None
+                valid = self._body(args[-1], after, block)
+            return self._add("io", (stmt, after, self._declaratives(name, after), invalid, valid), stmt)
         if op == "arithmetic":
             shared, items, error, success = args
             return self._add("arithmetic", (shared, items, self._body(error, after, block),
