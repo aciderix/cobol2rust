@@ -4,6 +4,27 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : DECLARATIVES, READ souple et CLOSE WITH LOCK.
+`USE AFTER [STANDARD] {ERROR|EXCEPTION} PROCEDURE [ON] {fichiers|INPUT|OUTPUT|
+I-O|EXTEND}` est analysé dans `use_statement` ; `Program.file_declaratives`,
+`mode_declaratives` et `main_block` (exécution après END DECLARATIVES).
+`control.py` transforme OPEN/CLOSE/WRITE en nœuds `io` et ajoute aux READ la
+cible déclarative : comme `output_ferror_stmt`/`output_file_error` de cobc,
+tout statut 1x..9x non pris par AT END appelle la section USE du fichier, sinon
+celle du dernier mode d'OPEN (`last_open_mode`, conservé par un 41, pris sur
+toute autre tentative), comme un PERFORM, puis reprend après l'instruction.
+Un 46 après fin de fichier n'est pas AT END. Sans FILE STATUS, une exception
+sans gestionnaire reste fatale. OPEN/CLOSE à plusieurs fichiers sont découpés,
+chaque fichier ayant son contrôle (instructions implicites de cobc).
+USE GLOBAL et USE FOR DEBUGGING restent refusés.
+
+READ accepte `[NEXT] [RECORD]`, `[AT] END` et `NOT [AT] END` (scanner cobc).
+CLOSE WITH LOCK : OPEN suivant 38, READ 47 ; un second CLOSE d'un fichier
+verrouillé suit un chemin anormal de libcob (avertissement, 00) et s'arrête
+en Rust. NO REWIND, REEL et UNIT restent refusés.
+NIST : **59/458**, les 29 nouvelles sources conformes (117 PASS natifs). Prochain :
+OPEN I-O + REWRITE séquentiel (8), puis RELATIVE (32) et INDEXED (26).
+
 Dernière étape : receveurs multiples, groupes et configuration documentaire.
 **Bug silencieux corrigé** : `ADD 1 TO A, B.` ne gardait que A et faisait de
 `B.` un en-tête de paragraphe (NC245A). Les verbes arithmétiques lisent

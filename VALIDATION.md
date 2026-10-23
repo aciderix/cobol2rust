@@ -1,8 +1,16 @@
 # Validation — 22 octobre 2026
 
+## DECLARATIVES et fichiers — 23 octobre 2026
+
+- **235 tests découverts : 234 réussis, un test PE Windows ignoré.**
+- **55/55 comparaisons locales conformes**, dont `declaratives.cob` : USE par
+  fichier et par mode, 10/46/41/42/35, OPEN multiple, mode conservé par 41.
+- NIST : **59/458 émissions acceptées** ; 29 nouvelles comparaisons conformes,
+  117 PASS natifs identiques.
+
 ## Groupes, configuration et receveurs multiples — 23 octobre 2026
 
-- **226 tests découverts : 225 réussis, un test PE Windows ignoré.**
+- **231 tests découverts : 230 réussis, un test PE Windows ignoré.**
 - **54/54 comparaisons locales conformes**, dont `group_value.cob` et
   `multi_receivers.cob` (22 lignes mesurées en natif avant implémentation).
 - NIST : **30/458 émissions acceptées** ; **30/30 comparaisons conformes** avec

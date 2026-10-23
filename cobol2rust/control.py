@@ -42,7 +42,7 @@ class ControlGraph:
         for index, block in enumerate(blocks):
             body = self._body(block.body, self.paragraph_checkpoints[index], index)
             self.nodes[self.block_entries[index]] = Node("jump", (body,))
-        self.entry = self._following(0)
+        self.entry = self._following(program.main_block)
 
     def _add(self, op: str, args: tuple = (), stmt: Stmt | None = None) -> int:
         position = len(self.nodes)
@@ -93,7 +93,17 @@ class ControlGraph:
         if op == "read":
             name, into, at_end, not_end = args
             return self._add("read", (name, into, self._body(not_end, after, block),
-                                      self._body(at_end, after, block), after), stmt)
+                                      self._body(at_end, after, block), after,
+                                      self._declaratives(name, after)), stmt)
+        if op in {"open", "close"} and len(args[0]) > 1:
+            # cobc gives each file its own implicit statement and error check.
+            position = after
+            for part in reversed(args[0]):
+                position = self._statement(Stmt(op, ([part],), stmt.line), position, block)
+            return position
+        if op in {"open", "close", "write"}:
+            name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
+            return self._add("io", (stmt, after, self._declaratives(name, after)), stmt)
         if op == "arithmetic":
             shared, items, error, success = args
             return self._add("arithmetic", (shared, items, self._body(error, after, block),
@@ -119,6 +129,17 @@ class ControlGraph:
         if op == "stop":
             return self._add("end", (), stmt)
         return self._add("execute", (stmt, after), stmt)
+
+    def _declaratives(self, file_name: str, after: int):
+        """USE procedures run like a PERFORM of their section, then resume."""
+        def call(section):
+            entry, checkpoint = self._target(section)
+            return self._add("call", (entry, checkpoint, after))
+        if file_name in self.program.file_declaratives:
+            return ("file", call(self.program.file_declaratives[file_name]))
+        if self.program.mode_declaratives:
+            return ("modes", {mode: call(section) for mode, section in self.program.mode_declaratives.items()})
+        return None
 
     def _loop(self, stmt: Stmt, after: int, block: int) -> int:
         mode, control, body = stmt.args

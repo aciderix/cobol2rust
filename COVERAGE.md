@@ -433,6 +433,14 @@ INSPECT. Cette vérification a révélé une perte silencieuse de receveur dans
 `ADD ... TO A, B.`, corrigée avant mesure. Rapports :
 `build/coverage-nist-multi.json` et `build/nist-verify-30.json`.
 
+## Progression : DECLARATIVES et instructions de fichier
+
+DECLARATIVES `USE AFTER ERROR`, les mots facultatifs de READ et CLOSE WITH
+LOCK portent l'émission acceptée de **30 à 59/458**. Les 29 nouvelles sources
+sont conformes avec `tools/nist_verify.py`, REPORT identiques au runner natif,
+117 PASS sans FAIL (`build/nist-verify-decl.json`, `build/nist-verify-rc.json`).
+Rapport statique : `build/coverage-nist-read-close.json`.
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

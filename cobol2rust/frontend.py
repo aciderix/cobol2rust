@@ -363,6 +363,10 @@ class Program:
     memory_size: int = 0
     blocks: list[ProcedureBlock] = field(default_factory=list)
     sections: dict[str, tuple[int, int]] = field(default_factory=dict)
+    # USE AFTER ERROR sections: by file name, and by OPEN mode.
+    file_declaratives: dict[str, str] = field(default_factory=dict)
+    mode_declaratives: dict[str, str] = field(default_factory=dict)
+    main_block: int = 0
 
     def procedure_range(self, name: str) -> tuple[int, int]:
         if name in self.sections:
@@ -556,8 +560,22 @@ class Parser:
         blocks = [ProcedureBlock(None, None, entry)]
         sections = {}
         current_body, current_section = entry, None
+        file_declaratives, mode_declaratives = {}, {}
+        declaratives, main_block = self.accept("DECLARATIVES"), 0
+        if declaratives:
+            self.expect(".")
         while not self.at("<EOF>"):
             if self.accept("."):
+                continue
+            if declaratives and self.at("END") and self.tokens[self.i + 1].key == "DECLARATIVES":
+                self.take(); self.take(); self.expect(".")
+                if current_section is None:
+                    self.error("DECLARATIVES requiert au moins une section USE")
+                sections[current_section] = (sections[current_section][0], len(blocks))
+                # Execution starts after END DECLARATIVES, outside every section.
+                declaratives, current_section, current_body = False, None, []
+                main_block = len(blocks)
+                blocks.append(ProcedureBlock(None, None, current_body))
                 continue
             if self.accept("END"):
                 self.expect("PROGRAM")
@@ -581,6 +599,10 @@ class Parser:
                 sections[section] = (len(blocks), len(blocks) + 1)
                 current_body = []
                 blocks.append(ProcedureBlock(None, section, current_body))
+                if declaratives:
+                    self.use_statement(section, file_declaratives, mode_declaratives)
+                elif self.at("USE"):
+                    self.error("USE hors des DECLARATIVES")
             elif self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
                 paragraph = self.name()
                 self.procedure_name_check(paragraph)
@@ -591,13 +613,43 @@ class Parser:
                 paragraphs[paragraph] = current_body
                 blocks.append(ProcedureBlock(paragraph, current_section, current_body))
             else:
+                if declaratives and current_section is None:
+                    self.error("section USE attendue après DECLARATIVES")
                 current_body.append(self.statement())
+        if declaratives:
+            self.error("END DECLARATIVES attendu")
         if current_section is not None:
             sections[current_section] = (sections[current_section][0], len(blocks))
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
-                          blocks, sections)
+                          blocks, sections, file_declaratives, mode_declaratives, main_block)
         self.validate_calls(program)
         return program
+
+    def use_statement(self, section, by_file, by_mode):
+        """USE AFTER STANDARD ERROR/EXCEPTION PROCEDURE ON files or an OPEN mode."""
+        self.expect("USE")
+        if self.at("GLOBAL") or self.at("FOR"):
+            self.error("USE GLOBAL et USE FOR DEBUGGING non pris en charge")
+        self.expect("AFTER")
+        self.accept("STANDARD")
+        if not (self.accept("EXCEPTION") or self.accept("ERROR")):
+            self.error("USE AFTER requiert EXCEPTION ou ERROR")
+        self.expect("PROCEDURE")
+        self.accept("ON")
+        if self.t.key in {"INPUT", "OUTPUT", "I-O", "EXTEND"} and not self.t.string:
+            mode = self.take().key
+            if mode in by_mode:
+                self.error(f"USE dupliqué pour {mode}")
+            by_mode[mode] = section
+        else:
+            names = [self.file_name()]
+            while not self.t.string and self.t.key in self.files:
+                names.append(self.file_name())
+            for name in names:
+                if name in by_file:
+                    self.error(f"USE dupliqué pour le fichier {name}")
+                by_file[name] = section
+        self.expect(".")
 
     def procedure_name_check(self, name):
         # A data name followed by a period is a receiver, not a header.
@@ -890,23 +942,32 @@ class Parser:
                 self.error("OPEN requiert INPUT, OUTPUT ou EXTEND et un fichier déclaré")
             return Stmt("open", (actions,), line)
         if verb == "CLOSE":
-            names = [self.file_name()]
-            while self.t.key in self.files and not self.t.string:
-                names.append(self.file_name())
+            names = []
+            while not names or (self.t.key in self.files and not self.t.string):
+                name = self.file_name()
+                lock = False
+                if self.accept("WITH") or self.at("LOCK") or self.at("NO"):
+                    if not self.accept("LOCK"):
+                        self.error("CLOSE limité à WITH LOCK; NO REWIND, REEL et UNIT non pris en charge")
+                    lock = True
+                elif self.at("REEL") or self.at("UNIT"):
+                    self.error("CLOSE limité à WITH LOCK; NO REWIND, REEL et UNIT non pris en charge")
+                names.append((name, lock))
             return Stmt("close", (names,), line)
         if verb == "READ":
             name = self.file_name()
-            if self.accept("NEXT"):
-                self.accept("RECORD")
+            # GnuCOBOL: READ file [NEXT] [RECORD] [INTO x] [[AT] END] [NOT [AT] END].
+            self.accept("NEXT")
+            self.accept("RECORD")
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
                 self.error("READ INTO requiert un champ alphanumérique")
             at_end, not_end = [], []
-            if self.accept("AT"):
+            if self.accept("AT") or self.at("END"):
                 self.expect("END")
                 at_end = self.block({"NOT", "END-READ"})
             if self.accept("NOT"):
-                self.expect("AT")
+                self.accept("AT")
                 self.expect("END")
                 not_end = self.block({"END-READ"})
             self.accept("END-READ")

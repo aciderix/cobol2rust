@@ -95,6 +95,20 @@ class FileRuntimeTests(unittest.TestCase):
 
 @unittest.skipUnless(find_tool("cargo") and find_tool("cobc"), "Cargo and GnuCOBOL required")
 class FileVerificationTests(unittest.TestCase):
+    def test_close_with_lock_forbids_reopening(self):
+        # A second CLOSE of a locked file takes an abnormal libcob path (it
+        # warns and returns 00): the Rust runtime stops there instead.
+        body = ('open output f display "[" fs "]" close f with lock display "[" fs "]" '
+                'open input f display "[" fs "]" read f display "[" fs "]" stop run.')
+        for organization in ("line sequential", "sequential"):
+            with self.subTest(organization=organization), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "close-lock.cob"
+                select = f'select f assign to "data.txt" organization {organization} file status fs.'
+                source.write_text(file_program(body, select=select), encoding="utf-8")
+                report = verify(source)
+                self.assertTrue(report["match"], report)
+                self.assertEqual(report["cobol_stdout"], "[00]\n[00]\n[38]\n[47]\n")
+
     def test_group_file_status_receives_raw_status_bytes(self):
         body = ('open input f display "[" fs "]" open output f display "[" fs "]" '
                 'write rec from "AB" display "[" fs "]" close f display "[" fs "]" stop run.')

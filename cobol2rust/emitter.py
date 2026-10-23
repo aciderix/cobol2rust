@@ -267,7 +267,18 @@ class Emitter:
     def file_status(self, file_name, status, eof_handled=False):
         name = self.program.files[file_name].status
         destination = f"Some(&mut self.{self.names[name]})" if name else "None"
-        self.write(f"file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()});")
+        # The applicable USE procedure, chosen by file or by its last OPEN mode.
+        handlers = getattr(self, "io_handlers", None)
+        if handlers is None:
+            handler = "None"
+        elif handlers[0] == "file":
+            handler = f"Some({handlers[1]})"
+        else:
+            cases = " ".join(f"{quoted(mode)} => Some({target}),"
+                             for mode, target in sorted(handlers[1].items()))
+            handler = f"match self.{self.files[file_name]}.last_open_mode() {{ {cases} _ => None }}"
+        self.write(f"let handler: Option<usize> = {handler};")
+        self.write(f"file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, handler.is_some());")
 
     def statement(self, stmt):
         op, a = stmt.op, stmt.args
@@ -296,8 +307,8 @@ class Emitter:
                 self.write(f"let status = self.{self.files[name]}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
-            for name in a[0]:
-                self.write(f"let status = self.{self.files[name]}.close();")
+            for name, lock in a[0]:
+                self.write(f"let status = self.{self.files[name]}.close({str(lock).lower()});")
                 self.file_status(name, "status")
         elif op == "write":
             name, record, value, advancing = a
@@ -366,6 +377,12 @@ class Emitter:
         elif op == "execute":
             self.statement(a[0])
             self.write(f"pc = {a[1]};")
+        elif op == "io":
+            stmt, continuation, self.io_handlers = a
+            self.statement(stmt)
+            self.io_handlers = None
+            # Any status outside 0x is an I/O exception: run its USE procedure.
+            self.write(f"pc = if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {continuation} }};")
         elif op == "branch":
             self.write(f"pc = if {self.expression(a[0])} {{ {a[1]} }} else {{ {a[2]} }};")
         elif op == "call":
@@ -427,11 +444,13 @@ class Emitter:
             self.indent -= 1
             self.write("}")
         elif op == "read":
-            name, into, success, eof, continuation = a
+            name, into, success, eof, continuation, self.io_handlers = a
             record = self.names[self.program.files[name].record]
             status = self.unique()
+            at_end = bool(node.stmt.args[2])
             self.write(f"let {status} = self.{self.files[name]}.read(&mut self.{record});")
-            self.file_status(name, status, bool(node.stmt.args[2]))
+            self.file_status(name, status, at_end)
+            self.io_handlers = None
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1
             if into:
@@ -442,11 +461,12 @@ class Emitter:
                 self.write(f"{self.reference(into)}.assign(&record, false);")
             self.write(f"pc = {success};")
             self.indent -= 1
-            self.write(f"}} else if {status} == 10 {{")
-            self.indent += 1
-            self.write(f"pc = {eof};")
-            self.indent -= 1
-            self.write(f"}} else {{ pc = {continuation}; }}")
+            if at_end:
+                self.write(f"}} else if {status} == 10 {{")
+                self.indent += 1
+                self.write(f"pc = {eof};")
+                self.indent -= 1
+            self.write(f"}} else if {status} >= 10 {{ pc = handler.unwrap_or({continuation}); }} else {{ pc = {continuation}; }}")
         elif op == "arithmetic":
             shared, items, error, success = a
             if any(ref.start is not None or self.program.fields[ref.name].kind != "number" for ref, _, _ in items):

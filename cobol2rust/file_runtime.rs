@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use crate::runtime::{Value, fail};
 
-enum State { Closed, Input(BufReader<File>), Output(File), Missing }
+enum State { Closed, Locked, Input(BufReader<File>), Output(File), Missing }
 
 #[derive(Clone, Copy)]
 pub enum Advance { BeforeLines(u32), AfterLines(u32), BeforePage, AfterPage }
@@ -21,6 +21,7 @@ pub struct CobolFile {
     split: bool,
     needs_nl: bool,
     last_read_size: usize,
+    last_open_mode: &'static str,
 }
 
 fn setting(name: &str, default: bool) -> bool {
@@ -72,11 +73,20 @@ impl CobolFile {
         let line = organization == Organization::LineSequential;
         Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
-               needs_nl: false, last_read_size: 0 }
+               needs_nl: false, last_read_size: 0, last_open_mode: "" }
     }
 
+    /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
+    pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+
     pub fn open(&mut self, mode: &str) -> u8 {
+        // CLOSE WITH LOCK forbids any later OPEN in the run unit.
+        if matches!(self.state, State::Locked) { return 38; }
         if !matches!(self.state, State::Closed) { return 41; }
+        self.last_open_mode = match mode {
+            "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND",
+            _ => fail("unsupported file open mode"),
+        };
         self.needs_nl = false;
         self.last_read_size = 0;
         let result = match mode {
@@ -105,15 +115,16 @@ impl CobolFile {
         }
     }
 
-    pub fn close(&mut self) -> u8 {
+    pub fn close(&mut self, lock: bool) -> u8 {
         if matches!(self.state, State::Closed) { return 42; }
+        if matches!(self.state, State::Locked) { fail("CLOSE of a file closed WITH LOCK not modelled"); }
         if let State::Output(file) = &mut self.state {
             if self.needs_nl {
                 file.write_all(b"\n").unwrap_or_else(|e| fail(&format!("file closing newline failed: {e}")));
             }
             file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
         }
-        self.state = State::Closed;
+        self.state = if lock { State::Locked } else { State::Closed };
         self.eof = false;
         self.needs_nl = false;
         self.last_read_size = 0;
@@ -209,16 +220,18 @@ impl CobolFile {
 impl Drop for CobolFile {
     fn drop(&mut self) {
         // STOP RUN closes open files too, including a pending AFTER newline.
-        if !matches!(self.state, State::Closed) { self.close(); }
+        if !matches!(self.state, State::Closed | State::Locked) { self.close(false); }
     }
 }
 
-pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool) {
+/// Store FILE STATUS. Without it, an exception (status 1x..9x) that no AT END
+/// phrase or USE procedure handles is fatal, like GnuCOBOL's standard handler.
+pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, declarative: bool) {
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
         else { field.assign(&Value::number(&status), false); }
-    } else if !matches!(status, 0 | 5) && !(status == 10 && eof_handled) {
+    } else if !matches!(status, 0 | 5) && !(status == 10 && eof_handled) && !(status >= 10 && declarative) {
         fail(&format!("unhandled file status {status:02}"));
     }
 }
