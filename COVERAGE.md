@@ -588,6 +588,11 @@ revérification : **249/249 programmes conformes**, 5841 PASS, 0 FAIL
 Émission acceptée : **256/458** ; revérification : **254/254 programmes
 conformes**, 6104 PASS, 0 FAIL (`build/nist-verify-corresponding.json`).
 
+## Progression : COPY REPLACING
+
+Émission acceptée : **262/458** ; revérification : **260/260 programmes
+conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

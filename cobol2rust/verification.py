@@ -46,7 +46,7 @@ def validate_file_paths(conversion):
 
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
-           call_paths=(), cobc_flags=()):
+           call_paths=(), cobc_flags=(), debugging_lines=False):
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -63,12 +63,12 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines)
         validate_file_paths(conversion)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
         fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
-        options = [*cobc_flags, "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
+        options = [*cobc_flags, *(["-fdebugging-line"] if debugging_lines else []), "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
             options.extend(["-I", str(Path(include).resolve())])
         commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]

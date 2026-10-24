@@ -31,8 +31,13 @@ CORRESPONDING, COPY REPLACING, DEBUGGING MODE, INDEXED, LINAGE.
 
 Dernière étape : `Parser.corresponding_pairs` (Stmt `sequence` pour MOVE
 CORR), troncature DISPLAY dans `View::assign`, `View::move_deedited`.
-NIST **256/458**, 254/254 conformes. COPY REPLACING en cours (portage de
-replace.c).
+NIST **256/458**, 254/254 conformes.
+
+Dernière étape : `load_source` repère COPY par `lex`, la fin par
+`copy_replace.statement_end` (textes pplex, hors pseudo-texte) et applique
+`copy_replace.apply`. `frontend.DEBUGGING_LINES` (= -fdebugging-line, option
+`--debugging-lines`, `nist_verify.DEBUGGING_LINES`). NIST **262/458**,
+260/260 conformes. Prochain : fonctions intrinsèques (module IF).
 
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,

@@ -26,6 +26,8 @@ from cobol2rust.verification import verify
 
 
 RUNNER_FLAGS = ["-std=cobol85", "--debug"]
+# report.pl compiles these programs with -fdebugging-line ($cobc_flags).
+DEBUGGING_LINES = {"SM206A"}
 # report.pl sets these switches for every program.
 RUNNER_ENV = {"COB_SWITCH_1": "ON", "COB_SWITCH_2": "OFF"}
 # report.pl only compiles these programs: their execution is not part of the suite.
@@ -98,7 +100,7 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     stdin = source.with_suffix(".DAT")
     report = verify(source, fmt="fixed", includes=copybooks,
                     stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed, call_paths=call_paths,
-                    runtime_env=RUNNER_ENV)
+                    runtime_env=RUNNER_ENV, debugging_lines=name in DEBUGGING_LINES)
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}

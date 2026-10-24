@@ -49,6 +49,10 @@ def fixed_fragment(area: str, quotation=None):
     return text, quotation, consecutive
 
 
+# cobc -fdebugging-line: fixed-format 'D' lines are compiled as source lines.
+DEBUGGING_LINES = False
+
+
 def normalize(source: str, fmt: str = "auto") -> str:
     from .documentary import DocumentaryFilter
 
@@ -82,11 +86,13 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if indicator in "*/":
                 result.append("")
                 continue
-            if indicator in "Dd":
+            if indicator in "Dd" and not DEBUGGING_LINES:
                 # Without DEBUGGING MODE, GnuCOBOL drops debugging lines.
                 debugging_lines = True
                 result.append("")
                 continue
+            if indicator in "Dd":
+                indicator = " "
             if indicator not in " -":
                 raise CobolError(f"ligne {number}: indicateur fixe {indicator!r} non pris en charge")
             line = line[7:72]
@@ -239,49 +245,61 @@ def lex(source: str) -> list[Token]:
 
 
 def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> tuple[str, list[str]]:
+    from .copy_replace import apply, parse_replacing, statement_texts
     path = path.resolve()
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
     text = normalize(path.read_text(encoding="utf-8-sig"), fmt)
     # COPY is expanded at token boundaries; strings and comments cannot become directives.
     toks = lex(text)
-    lines = text.splitlines()
     copies = []
-    replacements = []
+    pieces, cursor = [], 0
     i = 0
     while i < len(toks) - 1:
-        if not toks[i].string and toks[i].key == "COPY":
-            start = toks[i].line
-            if i + 2 >= len(toks) or toks[i + 2].key != ".":
-                raise CobolError(f"ligne {start}: COPY REPLACING/multiligne non pris en charge")
-            name = toks[i + 1].text
-            end = toks[i + 2].line
-            if start != end or any(t.line == start for t in toks[:i]) or (toks[i + 3].key != "<EOF>" and toks[i + 3].line == end):
-                raise CobolError(f"ligne {start}: COPY doit occuper une ligne entière")
-            # The COPY preprocessor has its own separator grammar. Do not
-            # admit extra punctuation just because the ordinary lexer skips it.
-            declaration_line = lines[start - 1]
-            first, name_token, period = toks[i:i + 3]
-            line_start = text.rfind("\n", 0, first.start) + 1
-            pieces = [declaration_line[:first.start - line_start],
-                      text[first.end:name_token.start], text[name_token.end:period.start],
-                      declaration_line[period.end - line_start:].split("*>", 1)[0]]
-            if any("," in piece or ";" in piece for piece in pieces):
-                raise CobolError(f"ligne {start}: séparateurs supplémentaires dans COPY non pris en charge")
-            roots = [path.parent, *include_dirs]
-            candidates = [root / (name + ext) for root in roots for ext in ("", ".cpy", ".CPY", ".cob", ".cbl")]
-            found = next((p for p in candidates if p.is_file()), None)
-            if found is None:
-                raise CobolError(f"ligne {start}: copybook introuvable: {name}")
-            expanded, children = load_source(found, include_dirs, fmt, (*stack, path))
-            copies.extend([str(found.resolve()), *children])
-            replacements.append((start - 1, expanded))
-            i += 3
-        else:
+        if toks[i].string or toks[i].key != "COPY":
             i += 1
-    for index, expanded in reversed(replacements):
-        lines[index] = expanded
-    return "\n".join(lines), list(dict.fromkeys(copies))
+            continue
+        start = toks[i].line
+        # The statement ends at the first period outside pseudo-text.
+        from .copy_replace import statement_end
+        stop = statement_end(text, toks[i].end)
+        if stop < 0:
+            raise CobolError(f"ligne {start}: COPY sans point final")
+        words = statement_texts(text[toks[i].start:stop - 1])
+        if len(words) < 2:
+            raise CobolError(f"ligne {start}: nom de copybook attendu")
+        name = words[1]
+        if name[:1] in "\"'":
+            name = name[1:-1]
+        rest = words[2:]
+        if rest and rest[0].upper() in {"OF", "IN"}:
+            raise CobolError(f"ligne {start}: COPY OF/IN bibliothèque non pris en charge")
+        if rest and rest[0].upper() == "SUPPRESS":
+            rest = rest[1:]
+        replacements = []
+        if rest:
+            if rest[0].upper() != "REPLACING":
+                raise CobolError(f"ligne {start}: COPY: REPLACING ou point attendu")
+            replacements = parse_replacing(rest[1:], start)
+        roots = [path.parent, *include_dirs]
+        candidates = [root / (name + ext) for root in roots for ext in ("", ".cpy", ".CPY", ".cob", ".cbl")]
+        found = next((p for p in candidates if p.is_file()), None)
+        if found is None:
+            raise CobolError(f"ligne {start}: copybook introuvable: {name}")
+        expanded, children = load_source(found, include_dirs, fmt, (*stack, path))
+        if replacements:
+            if children:
+                # cobc applies the outer REPLACING with the inner list in one pass.
+                raise CobolError(f"ligne {start}: COPY REPLACING d'un copybook contenant COPY non pris en charge")
+            expanded = apply(expanded, replacements, start)
+        copies.extend([str(found.resolve()), *children])
+        pieces += [text[cursor:toks[i].start], "\n", expanded, "\n"]
+        cursor = stop
+        i += 1
+        while i < len(toks) and toks[i].start < stop:
+            i += 1
+    pieces.append(text[cursor:])
+    return "".join(pieces), list(dict.fromkeys(copies))
 
 
 @dataclass

@@ -79,7 +79,7 @@ Le projet produit contient :
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
 également validé sous Linux 304 tests Python, avec un test d'inspection du PE
-Windows ignoré (305 découverts), et les 94 comparaisons COBOL/Rust du corpus actuel.
+Windows ignoré (305 découverts), et les 95 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -117,7 +117,7 @@ de cette liste ne sont pas réputées prises en charge.
 Sont notamment refusés : tables variables à offsets ou strides variables,
 niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
-images éditées hors du sous-ensemble décrit ci-dessous, `COPY REPLACING`, conditions abrégées,
+images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
 fonctions intrinsèques, appels externes, `ALTER`, `GO TO` sans cible,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, noms de procédure qualifiés ou homonymes et
 segments SECTION numérotés,
@@ -318,6 +318,16 @@ garde les chiffres de poids faible (`cob_decimal_get_display`) ; les receveurs
 binaires ou packés, qui passent par d'autres routines de cobc, restent un arrêt
 nommé en cas de dépassement. Un MOVE d'un champ édité vers un numérique suit
 `cob_move_edited_to_display`.
+
+## COPY REPLACING
+
+`COPY` est développé où qu'il se trouve sur la ligne, et `REPLACING` suit le
+portage de `replace.c` (`cobol2rust/copy_replace.py`) : textes de pplex
+(mots, littéraux numériques et alphanumériques, autres caractères, espaces),
+pseudo-texte `==…==` comparé sans tenir compte de la casse ni des espaces,
+identifiants qualifiés ou indicés, littéraux. LEADING/TRAILING, COPY OF/IN et
+REPLACING d'un copybook qui contient lui-même un COPY restent refusés.
+`--debugging-lines` reproduit `cobc -fdebugging-line`.
 
 ## Calcul décimal et limites explicites
 

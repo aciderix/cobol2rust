@@ -1,0 +1,3 @@
+           MOVE ITEM-A TO TARGET
+           ADD 1, 2 TO COUNTER
+           DISPLAY "TEXT" TARGET COUNTER.

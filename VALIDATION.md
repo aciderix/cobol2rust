@@ -1,5 +1,16 @@
 # Validation — 22 octobre 2026
 
+## COPY REPLACING — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **95/95 comparaisons locales conformes** ; nouvelle fixture
+  `copy_replacing.cob` (copybooks `replacing_items.cpy`, `replacing_code.cpy`).
+- Séparateurs de COPY vérifiés contre cobc (`, COPY`, `COPY ;` acceptés ;
+  `COPY "x";.` refusé).
+- NIST : **262/458** ; **260/260 programmes acceptés conformes** (6156 PASS,
+  0 FAIL) : `build/nist-verify-copy-replacing.json`. SM206A est vérifié avec
+  `-fdebugging-line`, comme le compile report.pl.
+
 ## CORRESPONDING, troncature DISPLAY, dé-édition — 24 octobre 2026
 
 - **305 tests découverts : 304 réussis, un test PE Windows ignoré.**

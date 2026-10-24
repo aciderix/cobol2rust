@@ -117,16 +117,20 @@ class SeparatorTests(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic 99.", body)).parse()).generate()
 
-    def test_copy_extra_separators_are_conservatively_rejected(self):
-        directives = ['COPY ; "values.cpy".', 'COPY , "values.cpy".',
-                      'COPY ,; "values.cpy".', 'COPY "values.cpy";.',
-                      'COPY "values.cpy",.', 'COPY "values.cpy", ; .',
-                      ', COPY "values.cpy".', 'COPY "values.cpy". ;']
+    def test_copy_separators_follow_pplex(self):
+        # Checked against cobc 3.2: a separator must be followed by a space.
+        accepted = ['COPY ; "values.cpy".', 'COPY , "values.cpy".', 'COPY "values.cpy", ; .',
+                    ', COPY "values.cpy".', 'COPY "values.cpy". ;']
+        rejected = ['COPY ,; "values.cpy".', 'COPY "values.cpy";.', 'COPY "values.cpy",.']
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "values.cpy").write_text("01 n pic 9 value 2.\n", encoding="utf-8")
             source = root / "source.cob"
-            for directive in directives:
+            for directive in accepted:
+                source.write_text(directive + "\n", encoding="utf-8")
+                with self.subTest(directive=directive):
+                    self.assertIn("01 n pic 9 value 2.", load_source(source, [], "free")[0])
+            for directive in rejected:
                 source.write_text(directive + "\n", encoding="utf-8")
                 with self.subTest(directive=directive), self.assertRaises(CobolError):
                     load_source(source, [], "free")
@@ -142,16 +146,19 @@ class SeparatorTests(unittest.TestCase):
             self.assertIn("01 n pic 9 value 2.", expanded)
             self.assertEqual(copies, [str(copy.resolve())])
 
-    def test_copy_still_requires_a_whole_line(self):
+    def test_copy_may_share_a_line(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "values.cpy").write_text("01 n pic 9.\n", encoding="utf-8")
             source = root / "source.cob"
-            for directive in ['COPY "values.cpy". DISPLAY "BAD".',
-                              'DISPLAY "BAD". COPY "values.cpy".']:
+            # cobc expands a COPY anywhere on a line.
+            for directive in ['COPY "values.cpy". DISPLAY "OK".',
+                              'DISPLAY "OK". COPY "values.cpy".']:
                 source.write_text(directive + "\n", encoding="utf-8")
-                with self.subTest(directive=directive), self.assertRaises(CobolError):
-                    load_source(source, [], "free")
+                with self.subTest(directive=directive):
+                    expanded = load_source(source, [], "free")[0]
+                    self.assertIn("01 n pic 9.", expanded)
+                    self.assertIn('DISPLAY "OK".', expanded)
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

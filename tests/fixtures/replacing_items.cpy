@@ -1,0 +1,3 @@
+       05 ITEM-A PIC X(3) VALUE "AAA".
+       05 ITEM-B PIC 9(2) VALUE 12.
+       05 ITEM-C PIC X(4) VALUE "C, D".
