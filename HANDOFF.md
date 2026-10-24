@@ -85,7 +85,18 @@ rendu par `file_status`), `write_checked` ; `FileSpec.linage`,
 `Expr("linage", fichier)` pour LINAGE-COUNTER, `Parser.eop_handlers` (les
 corps END-OF-PAGE occupent les places INVALID KEY du nœud io). Aussi :
 `copy_replace.replace_statements` (REPLACE), `RESERVED_COBOL85`, `COPY OF`.
-NIST **407/458**, 382/383. Prochains blocages : programmes imbriqués,
+NIST **407/458**, 382/383.
+
+Dernière étape : `Emitter.receiver` (MOVE et INTO vers un groupe qui contient
+son contrôleur ODO : longueur maximale), `Emitter.record_size` (WRITE/REWRITE
+d'un enregistrement FD variable), `runtime::SymbolGuard`/`module_symbols`/
+`internal_symbols`/`module_text` (point décimal, séparateur, symbole monétaire
+du module), `lex(…, decimal_comma)` et `Parser.picture_symbols`,
+`Emitter.initialize_replacing` (occurrences déroulées, 4096 au plus) ;
+`Program.nested`/`parent`/`common`, `cli.check_nested_calls`,
+`Parser.global_items` (copies `^propriétaire^clé` marquées `global_owner`),
+`Emitter.shared_block`, `storage_runtime::external`/`owned_block`.
+NIST **426/458**, 401/402. Prochains blocages : programmes imbriqués,
 GLOBAL/EXTERNAL (IC226A-IC235A), INITIALIZE REPLACING, ODO hors WORKING-STORAGE,
 CURRENCY/DECIMAL-POINT, RANDOM, CODE-SET.
 

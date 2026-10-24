@@ -600,8 +600,8 @@ SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
 ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
 INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
 LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
-Restent refusées : RANDOM, CURRENT-DATE, WHEN-COMPILED et la modification de
-référence d'un résultat (SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS,
+Restent refusées : RANDOM et la modification de référence d'un résultat
+(CURRENT-DATE et WHEN-COMPILED sont portés depuis, voir plus bas) (SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS,
 ATAN, STANDARD-DEVIATION, PI et E sont portés depuis : voir plus bas).
 `tools/coverage.py` émet les sources à PROCEDURE DIVISION USING comme
 sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
@@ -696,3 +696,21 @@ séquence quelconque, `SET` à plusieurs groupes de commutateurs, terminateur de
 portée qui ferme les instructions conditionnelles englobées. Émission
 acceptée : **407/458** ; revérification : **382/383 programmes principaux conformes**, 8325 PASS, 0 FAIL
 (`build/nist-verify-linage.json`, `build/coverage-nist-linage.json`).
+
+## Progression : OCCURS DEPENDING, symboles du module, INITIALIZE REPLACING
+
+Contrôleur OCCURS DEPENDING interne au groupe (longueur maximale pour le
+récepteur d'un MOVE, `flag_receiving`), tables variables dans les
+enregistrements FD (taille courante à WRITE/REWRITE, `record_min` selon
+`occurs_min`), ELSE et WHEN qui ferment les instructions conditionnelles
+englobées ; CURRENCY SIGN et DECIMAL-POINT IS COMMA (scanner, PICTURE, édition,
+NUMVAL, affichage) ; MOVE de littéral alphanumérique vers numérique DISPLAY
+(`cb_build_move_literal`) et MOVE ALL vers alphanumérique édité ; INITIALIZE
+REPLACING (`output_initialize_one`) ; SORT USING/GIVING de fichiers SEQUENTIAL
+variables ; CODE-SET d'alphabet natif ignoré ; programmes contenus (visibilité
+directe ou COMMON), articles GLOBAL partagés avec les descendants, articles
+EXTERNAL par nom (`cob_external_addr`) ; FUNCTION CURRENT-DATE (horloge
+système, fuseau UTC seul modélisé) et WHEN-COMPILED (littéral de l'heure de
+conversion, comme `cb_set_intr_when_compiled`). Émission acceptée :
+**426/458** ; revérification : **401/402 programmes principaux conformes**, 9303 PASS, 0 FAIL
+(`build/nist-verify-odo.json`, `build/coverage-nist-odo.json`).

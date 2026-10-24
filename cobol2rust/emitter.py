@@ -28,6 +28,10 @@ def byte_pattern(text):
     return "[" + ", ".join(f"{ord(c)}u8" for c in text) + "]"
 
 
+def byte_pattern_bytes(text):
+    return [ord(c) for c in text]
+
+
 class Emitter:
     def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=()):
         self.program = program
@@ -109,6 +113,77 @@ class Emitter:
             length = f"Some(&({self.expression(ref.length)}))" if ref.length is not None else "None"
             result += f".slice(&({self.expression(ref.start)}), {length})"
         return result
+
+    def record_size(self, record):
+        """The record passed to cob_write/cob_rewrite: output_size gives a
+        record with OCCURS DEPENDING its current length."""
+        if record in self.variable_groups:
+            return f"storage_runtime::field_size(&{self.reference(DataRef(record))})"
+        return str(self.program.fields[record].size)
+
+    def category(self, f):
+        """CB_TREE_CATEGORY of an elementary item."""
+        if f.alnum_edit:
+            return "ALPHANUMERIC-EDITED"
+        if f.kind == "edited":
+            return "NUMERIC-EDITED"
+        if f.kind == "number":
+            return None if f.usage == "INDEX" else "NUMERIC"
+        return "ALPHABETIC" if self.is_alphabetic(f) else "ALPHANUMERIC"
+
+    def initialize_replacing(self, ref, with_filler, replacing):
+        """output_initialize_one with REPLACING and no DEFAULT: a MOVE of the
+        value to each elementary item of a listed category, occurrence by
+        occurrence; FILLER only WITH FILLER, REDEFINES below the item skipped."""
+        root = self.program.fields[ref.name]
+        if ref.start is not None or ref.name in self.variable_groups or ref.name in self.variable_dimensions:
+            raise CobolError("INITIALIZE REPLACING d'une sous-chaîne ou d'une table variable non pris en charge")
+        values = dict(replacing)
+        moves = []
+        # The item itself may be a REDEFINES (topfield); those below it are skipped.
+        items = [root] if root.picture else [leaf for child in root.children for leaf in leaves(self.program.fields, child)]
+        for leaf in items:
+            if (leaf.filler and not with_filler) or self.category(leaf) not in values:
+                continue
+            dims = leaf.dimensions[len(ref.indices):]
+            combos = [()]
+            for _, count in [(None, d[1]) for d in dims]:
+                combos = [c + (n,) for c in combos for n in range(1, count + 1)]
+            moves += [(leaf, combo) for combo in combos]
+        if len(moves) > 4096:
+            raise CobolError("INITIALIZE REPLACING de plus de 4096 occurrences non pris en charge")
+        for leaf, combo in moves:
+            indices = tuple(ref.indices) + tuple(Expr("number", (str(n),)) for n in combo)
+            self.assignment(values[self.category(leaf)], [DataRef(leaf.name, indices)], False, move=True)
+
+    def shared_block(self, name):
+        """(root item, block name, initialized here) of an item stored outside
+        the program: EXTERNAL (cob_external_addr) or GLOBAL in a program with
+        contained programs, which see the same storage."""
+        field = self.program.fields[name]
+        while field.parent:
+            field = self.program.fields[field.parent]
+        if field.external:
+            return field.name, field.label, False
+        owner = getattr(field, "global_owner", None)
+        if owner:
+            return field.name, f"GLOBAL {owner} {field.label}", False
+        if field.is_global and getattr(self.program, "nested", None):
+            return field.name, f"GLOBAL {self.program.entry_name} {field.label}", True
+        return None
+
+    def external_root(self, name):
+        """The item holding `name` when its storage is not initialized here."""
+        block = self.shared_block(name)
+        return None if block is None or block[2] else block[0]
+
+    def receiver(self, ref):
+        """A MOVE receiver (cb_build_move's flag_receiving): output_size takes
+        the maximum length of a variable group that contains its own
+        DEPENDING ON item, the current length otherwise."""
+        f = self.variable_groups.get(ref.name)
+        whole = f is not None and ref.start is None and f.depending.startswith(ref.name + ".")
+        return self.reference(ref, active=not whole)
 
     def literal(self, token):
         return Expr("text" if token.string else "number", (token.text,))
@@ -221,6 +296,8 @@ class Emitter:
         listed = {"SUM": "sum", "MEAN": "mean", "MEDIAN": "median", "MIDRANGE": "midrange", "RANGE": "range",
                   "VARIANCE": "variance", "ORD-MAX": "ord_max", "ORD-MIN": "ord_min", "MAX": "max", "MIN": "min",
                   "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation"}
+        if name == "CURRENT-DATE":
+            return "runtime::intrinsic::current_date()"
         if name in {"PI", "E"}:
             return f"runtime::intrinsic::{'pi_value' if name == 'PI' else 'e'}()"
         if name in rust:
@@ -377,15 +454,35 @@ class Emitter:
                 if destination == "number" and field.usage == "INDEX":
                     raise CobolError("MOVE texte vers index non pris en charge")
                 if destination == "number" and expr.op != "var":
-                    raise CobolError("MOVE littéral texte vers nombre non pris en charge; optimisations natives distinctes des champs PIC X")
+                    usage = self.storage_usage(field)
+                    if usage in {"Display", "SignLeading"} and field.scale == 0 and expr.op == "text":
+                        # cb_build_move_literal: the literal's bytes, right
+                        # aligned and zero filled, copied at compile time.
+                        data = expr.args[0].encode("latin-1")
+                        data = data[len(data) - field.size:] if len(data) >= field.size else b"0" * (field.size - len(data)) + data
+                        if field.blank_zero and set(data) == {ord("0")}:
+                            data = b" " * field.size
+                        conversions[-1] = ("bytes", data)
+                        continue
+                    if not usage.startswith(("Display", "Sign")) or expr.op != "text":
+                        raise CobolError("MOVE littéral texte vers nombre binaire ou packé non pris en charge; optimisations natives de cobc")
+                    # Otherwise cob_move, as from an alphanumeric item.
+                    conversions[-1] = "parsed_text"
+                    continue
                 source_ref = expr.args[0] if expr.op == "var" else None
                 raw_group = (source_ref is not None and source_ref.start is None and
                              not self.program.fields[source_ref.name].picture)
                 conversions[-1] = "raw_text" if raw_group else "parsed_text"
                 continue
             edited_text = ref.start is None and bool(field.alnum_edit)
-            if edited_text and expr.op == "all":
-                raise CobolError("MOVE ALL vers alphanumérique édité non pris en charge (remplissage natif brut)")
+            if edited_text and expr.op == "all" and expr.literal_all:
+                # cb_build_move_literal: memset/memcpy of the repeated literal,
+                # without editing; cob_move (editing) beyond 128 bytes.
+                pattern = byte_pattern_bytes(expr.args[0])
+                if field.size > 128 and len(set(pattern)) > 1:
+                    raise CobolError("MOVE ALL vers alphanumérique édité de plus de 128 octets non pris en charge")
+                conversions[-1] = ("bytes", bytes(pattern[i % len(pattern)] for i in range(field.size)))
+                continue
             if edited_text and expr.op == "var" and expr.args[0].start is None and not self.program.fields[expr.args[0].name].picture:
                 # A group sender is a group move: bytes are copied unedited.
                 conversions[-1] = "raw_text"
@@ -441,18 +538,20 @@ class Emitter:
             source = self.reference(expr.args[0]) + ".clone()" if expr.op == "var" else self.expression(expr)
             self.write(f"let {temp} = {source};")
         for ref, conversion in zip(targets, conversions):
-            if conversion == "deedit":
-                self.write(f"{self.reference(ref)}.move_deedited(&{temp});")
+            if isinstance(conversion, tuple):
+                self.write(f"{self.receiver(ref)}.assign_text_move(&Value::Bytes(vec![{', '.join(str(b) for b in conversion[1])}]), true);")
+            elif conversion == "deedit":
+                self.write(f"{self.receiver(ref)}.move_deedited(&{temp});")
             elif conversion in {"raw_text", "parsed_text"}:
-                self.write(f"{self.reference(ref)}.assign_text_move(&{temp}, {str(conversion == 'raw_text').lower()});")
+                self.write(f"{self.receiver(ref)}.assign_text_move(&{temp}, {str(conversion == 'raw_text').lower()});")
             elif conversion == "all":
                 receiver = self.unique()
-                self.write(f"let mut {receiver} = {self.reference(ref)}.clone();")
+                self.write(f"let mut {receiver} = {self.receiver(ref)}.clone();")
                 self.write(f"let all = Value::Bytes({byte_pattern(expr.args[0])}.iter().cycle().take({receiver}.text_size()).copied().collect());")
                 self.write(f"{receiver}.assign(&all, false);")
             elif conversion == "zero":
                 receiver = self.unique()
-                self.write(f"let mut {receiver} = {self.reference(ref)}.clone();")
+                self.write(f"let mut {receiver} = {self.receiver(ref)}.clone();")
                 self.write(f"let zeros = Value::Bytes(vec![b'0'; {receiver}.text_size()]);")
                 self.write(f"{receiver}.assign(&zeros, false);")
             else:
@@ -461,7 +560,7 @@ class Emitter:
                          f"Value::text({quoted(self.move_literal_digits(expr))})" if conversion == "literal" else temp)
                 field = self.program.fields[ref.name]
                 if conversion is None and truncating and ref.start is None and field.kind == "edited":
-                    self.write(f"{self.reference(ref)}.move_edited(&{value});")
+                    self.write(f"{self.receiver(ref)}.move_edited(&{value});")
                 elif conversion is None and truncating and ref.start is None and field.kind == "number":
                     method = "move_number"
                     if self.storage_usage(field) == "Packed":
@@ -469,11 +568,11 @@ class Emitter:
                         if (expr.op == "var" and
                                 self.storage_usage(self.program.fields[expr.args[0].name]) == "Binary"):
                             method = "move_binary_to_packed"
-                    self.write(f"{self.reference(ref)}.{method}(&{value});")
+                    self.write(f"{self.receiver(ref)}.{method}(&{value});")
                 else:
-                    self.write(f"{self.reference(ref)}.assign(&{value}, {str(rounded).lower()});")
+                    self.write(f"{self.receiver(ref)}.assign(&{value}, {str(rounded).lower()});")
             if ref in negative_zero:
-                self.write(f"{self.reference(ref)}.negative_zero();")
+                self.write(f"{self.receiver(ref)}.negative_zero();")
 
     def check_packed_literal_move(self, expr, field):
         """cobc stores a small integer literal with cob_set_packed_int, which
@@ -594,7 +693,7 @@ class Emitter:
                 self.assignment(value, [record], False)
             organization = self.program.files[name].organization
             key = f"{self.relative_key(name, False)}, " if organization == "RELATIVE" else ""
-            size = self.program.fields[record].size
+            size = self.record_size(record)
             self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "delete":
@@ -629,7 +728,7 @@ class Emitter:
             self.linage_values(name)
             if self.program.files[name].organization == "RELATIVE":
                 control = self.relative_key(name, True)
-            size = self.program.fields[record].size
+            size = self.record_size(record)
             if self.program.files[name].organization == "INDEXED":
                 if advancing is not None:
                     raise CobolError("WRITE ADVANCING sur un fichier INDEXED")
@@ -654,7 +753,11 @@ class Emitter:
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
                 # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
-                values.append(f"Value::text({quoted(e.args[0])})" if e.op == "number" else self.expression(e))
+                if e.op == "number":
+                    literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
+                    values.append(f"Value::text({quoted(literal)})")
+                else:
+                    values.append(self.expression(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
             self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
         elif op in {"assign", "move"}:
@@ -685,6 +788,9 @@ class Emitter:
             self.write(f"{self.reference(a[0])}.accept();")
         elif op == "accept_omitted":
             self.write("runtime::accept_omitted();")
+        elif op == "initialize" and a[2]:
+            for ref in a[0]:
+                self.initialize_replacing(ref, a[1], a[2])
         elif op == "initialize":
             for ref in a[0]:
                 if ref.name in self.variable_groups and ref.start is None:
@@ -973,7 +1079,12 @@ class Emitter:
                 self.write(f"if self.{rust}.open(\"INPUT\") < 10 {{")
                 self.indent += 1
                 self.write(f"while self.{rust}.read(&mut self.{rust}_area, None) < 10 {{")
-                self.write(f"    self.{sort}.release_from(&self.{rust}_area, &mut self.{sort}_area);")
+                if self.program.files[using].record_min != self.program.files[using].record_max:
+                    # The record's size is the size read (sequential_read).
+                    self.write(f"    let record = Value::Bytes(self.{rust}_area.bytes()[..self.{rust}.last_read_size()].to_vec());")
+                    self.write(f"    self.{sort}.release_from(&record, &mut self.{sort}_area);")
+                else:
+                    self.write(f"    self.{sort}.release_from(&self.{rust}_area, &mut self.{sort}_area);")
                 self.write("}")
                 self.write(f"self.{rust}.close(false);")
                 self.indent -= 1
@@ -1014,7 +1125,7 @@ class Emitter:
             if into:
                 record = self.names[self.program.files[name].record]
                 self.write(f"let record = self.{record}.snapshot();")
-                self.write(f"{self.reference(into)}.assign(&record, false);")
+                self.write(f"{self.receiver(into)}.assign(&record, false);")
             self.write(f"pc = {not_at_end};")
             self.indent -= 1
             self.write(f"}} else {{ pc = {at_end}; }}")
@@ -1176,7 +1287,7 @@ class Emitter:
                     self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
                 else:
                     self.write(f"let record = self.{record}.snapshot();")
-                self.write(f"{self.reference(into)}.assign(&record, false);")
+                self.write(f"{self.receiver(into)}.assign(&record, false);")
             self.write(f"pc = {success};")
             self.indent -= 1
             if handled:
@@ -1272,10 +1383,22 @@ class Emitter:
         self.write("fn new() -> Self {")
         self.indent += 1
         self.write(f"let memory = storage_runtime::memory({self.program.memory_size});")
+        # EXTERNAL items: cob_external_addr storage shared by name in the run unit.
+        externals = {}
+        for name, field in self.program.fields.items():
+            block = self.shared_block(name)
+            if block is not None and block[0] == name:
+                externals[name] = f"external{len(externals)}"
+                # The declaring program's instance starts from fresh storage.
+                function = "owned_block" if block[2] else "external"
+                self.write(f"let {externals[name]} = storage_runtime::{function}({quoted(block[1])}, {field.size});")
         self.write("let mut result = Self {")
         self.indent += 1
         for name, field in self.program.fields.items():
-            value = f"Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {field.offset}, size: {field.size}, kind: {self.storage_kind(field)}, dimensions: {self.dimensions(field.dimensions)}, initializers: {self.initializers(field)} }})"
+            root = (self.shared_block(name) or (None,))[0]
+            memory, offset = ("memory", field.offset) if root is None else \
+                (externals[root], field.offset - self.program.fields[root].offset)
+            value = f"Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {field.size}, kind: {self.storage_kind(field)}, dimensions: {self.dimensions(field.dimensions)}, initializers: {self.initializers(field)} }})"
             self.write(f"{self.names[name]}: {value},")
         for name, rust_name in self.files.items():
             spec = self.program.files[name]
@@ -1301,6 +1424,12 @@ class Emitter:
         for name, field in self.program.fields.items():
             if not field.picture or field.file_record or field.linkage:
                 continue
+            if self.external_root(name) is not None:
+                # cob_external_addr storage is not initialized (cob_malloc);
+                # an inherited GLOBAL item is initialized by its program.
+                if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
+                continue
             if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
                 continue
             cursor = field
@@ -1316,6 +1445,10 @@ class Emitter:
         # leaves, on every occurrence: GnuCOBOL gives it precedence.
         for name, field in self.program.fields.items():
             if field.group_value is None:
+                continue
+            if self.external_root(name) is not None:
+                if self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
                 continue
             if any(other.depending for key, other in self.program.fields.items()
                    if key == name or key.startswith(name + ".")):
@@ -1338,6 +1471,11 @@ class Emitter:
             # OBJECT-COMPUTER PROGRAM COLLATING SEQUENCE: the alphabet's weights.
             self.write(f"static COLLATING: [u8; 256] = [{', '.join(str(w) for w in collating)}];")
         self.write(f"let _collating = runtime::CollatingGuard::new({'Some(&COLLATING)' if collating else 'None'});")
+        decimal_comma, currency = getattr(self.program, "decimal_comma", False), getattr(self.program, "currency", "$")
+        if decimal_comma or currency != "$":
+            # COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol.
+            separators = "b',', b'.'" if decimal_comma else "b'.', b','"
+            self.write(f"let _symbols = runtime::SymbolGuard::new({separators}, {ord(currency)});")
         self.write(f"let mut pc: usize = {graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source

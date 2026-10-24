@@ -311,6 +311,7 @@ def declaration(p, file_record=False):
     sign_clause = None
     synchronized = False
     search_keys = []
+    external = is_global = False
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -329,7 +330,7 @@ def declaration(p, file_record=False):
             p.accept("IS")
             if p.t.string or p.t.key in {".", "<EOF>", "VALUE", "USAGE", "OCCURS", "INDEXED"} | USAGES:
                 p.error("mot PICTURE contigu attendu")
-            picture = p.take().key
+            picture = p.picture_symbols(p.take().key)
         elif p.accept("OCCURS"):
             if table or not p.t.key.isdigit():
                 p.error("nombre OCCURS attendu")
@@ -403,6 +404,22 @@ def declaration(p, file_record=False):
             if separate:
                 p.accept("CHARACTER")
             sign_clause = (position, separate)
+        elif p.at("EXTERNAL") or p.at("GLOBAL") or (p.at("IS") and p.tokens[p.i + 1].key in {"EXTERNAL", "GLOBAL"}):
+            # external_clause / global_clause: 01 or 77 data names only.
+            p.accept("IS")
+            clause = p.take().key
+            if level not in {1, 77} or filler:
+                p.error(f"{clause} only allowed at 01/77 level")
+            if clause == "EXTERNAL":
+                if file_record or getattr(p, "in_linkage", False):
+                    p.error("EXTERNAL not allowed here")
+                if redefines:
+                    p.error("EXTERNAL and REDEFINES are mutually exclusive")
+                if p.at("AS"):
+                    p.error("EXTERNAL AS non pris en charge")
+                external = True
+            else:
+                is_global = True
         elif p.accept("SYNCHRONIZED") or p.accept("SYNC"):
             p.accept("LEFT") or p.accept("RIGHT")
             synchronized = True
@@ -566,6 +583,7 @@ def declaration(p, file_record=False):
     descriptor.sign_leading = bool(sign_clause and sign_clause[0] == "LEADING")
     descriptor.sign_separate = bool(sign_clause and sign_clause[1])
     descriptor.justified = justified
+    descriptor.external, descriptor.is_global = external, is_global
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero

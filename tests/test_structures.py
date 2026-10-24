@@ -69,7 +69,7 @@ class LayoutTests(unittest.TestCase):
         cases = [
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 05 tail-a pic x.",
             "01 n pic 9. 01 a. 05 row-a occurs 2. 10 cell-a occurs 0 to 3 depending on n pic x.",
-            "01 a. 05 n pic 9. 05 cell-a occurs 0 to 3 depending on n pic x.",
+            "01 a. 05 cell-a occurs 0 to 3 depending on n. 10 n pic 9.",
             "01 n pic 9v9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x.",
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 01 alias-a redefines a pic x.",
             "01 n pic 9. 01 a. 05 alias-a redefines n pic x.",
@@ -79,6 +79,12 @@ class LayoutTests(unittest.TestCase):
         for data in cases:
             with self.subTest(data=data), self.assertRaises(CobolError):
                 Emitter(Parser(program("stop run.", data)).parse()).generate()
+
+    def test_controller_inside_the_group_gives_move_receivers_their_maximum(self):
+        data = "01 a. 05 n pic 9. 05 cell-a occurs 0 to 3 depending on n pic x. 01 b pic x(4)."
+        rust = Emitter(Parser(program("move b to a. move a to b. stop run.", data)).parse()).generate()[0]
+        # cb_build_move: the receiver containing its controller is not shortened.
+        self.assertEqual(rust.count(".active_size("), 1)
 
     def test_error_handlers_validate_calls_and_types(self):
         for body in [

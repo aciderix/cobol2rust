@@ -76,10 +76,17 @@ class MixedTypeTests(unittest.TestCase):
     def test_text_literals_to_numeric_and_index_receivers_remain_rejected(self):
         data = ("01 n pic s99v99. 01 t pic x(6). "
                 "01 table-a. 02 cell-a pic x occurs 2 indexed by idx.")
-        for body in ('move "123" to n.', 'move "12.30" to n.',
-                     "move spaces to n.", "move t to idx."):
+        for body in ("move spaces to n.", "move t to idx."):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 self.emit(data, body)
+
+    def test_text_literal_to_display_number_follows_cb_build_move_literal(self):
+        # Same scale: bytes copied at compile time; else cob_move at run time.
+        rust = self.emit("01 n pic 9(4). 01 s pic s99v99. 01 b pic 99 comp.", 'move "12" to n. move "1.5" to s.')[0]
+        self.assertIn("vec![48, 48, 49, 50]), true)", rust)
+        self.assertIn("assign_text_move(", rust)
+        with self.assertRaises(CobolError):
+            self.emit("01 b pic 99 comp.", 'move "12" to b.')
 
     def test_deediting_and_arithmetic_are_not_promoted_by_text_move(self):
         data = "01 n pic 999. 01 t pic xxx. 01 edited-a pic +999."

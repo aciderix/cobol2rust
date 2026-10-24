@@ -78,8 +78,32 @@ class SyntaxFormTests(unittest.TestCase):
             frontend.STD = previous
 
 
+class DecimalCommaTests(unittest.TestCase):
+    SPECIAL = ("identification division. program-id. dc.\nenvironment division.\nconfiguration section.\n"
+               "special-names. {}.\ndata division.\nworking-storage section.\n{}\nprocedure division.\n{}\n")
+
+    def test_literals_and_pictures_take_the_comma(self):
+        parsed = Parser(self.SPECIAL.format("decimal-point is comma", "01 e pic z.zz9,99. 01 n pic 9v9.",
+                                            "move 1,5 to n.")).parse()
+        self.assertEqual(parsed.entry[0].args[0].args[0], "1.5")
+        self.assertEqual(parsed.fields["E"].picture, "Z,ZZ9.99")
+
+    def test_currency_sign_replaces_the_dollar(self):
+        parsed = Parser(self.SPECIAL.format('currency sign is "W"', "01 c pic ww9.", "stop run.")).parse()
+        self.assertEqual(parsed.fields["C"].picture, "$$9")
+        for special, data in (('currency sign is "W"', "01 c pic $9."), ('currency sign is "AB"', "01 c pic 9."),
+                              ('currency sign is "Z"', "01 c pic 9."), ('currency "W" picture symbol "W"', "01 c pic 9.")):
+            with self.subTest(special=special), self.assertRaises(CobolError):
+                Parser(self.SPECIAL.format(special, data, "stop run.")).parse()
+
+
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
 class PreprocessingNativeTests(unittest.TestCase):
+    def test_decimal_comma_fixture_matches_native(self):
+        report = verify(ROOT / "tests" / "fixtures" / "decimal_comma.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertIn("[1.234,50]\n[W234,50]\n", report["cobol_stdout"])
+
     def test_fixture_matches_native(self):
         report = verify(ROOT / "tests" / "fixtures" / "preprocessing.cob", fmt="free")
         self.assertTrue(report["match"], report)

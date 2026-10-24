@@ -7,6 +7,30 @@ use crate::runtime::{Value, Number, SizeError, fail, absolute, power};
 pub type Memory = Rc<RefCell<Vec<u8>>>;
 pub fn memory(size: usize) -> Memory { Rc::new(RefCell::new(vec![0; size])) }
 
+thread_local! {
+    static EXTERNALS: RefCell<std::collections::HashMap<String, Memory>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// GLOBAL storage of a program with contained programs: shared with them by
+/// name, cleared when the declaring program gets a new instance (CANCEL).
+pub fn owned_block(name: &str, size: usize) -> Memory {
+    let block = external(name, size);
+    block.borrow_mut().fill(0);
+    block
+}
+
+/// cob_external_addr: the run unit's storage of an EXTERNAL item, created
+/// zero-filled by its first program; a different size is not modelled
+/// (libcob stops on a larger one and warns on a smaller one).
+pub fn external(name: &str, size: usize) -> Memory {
+    EXTERNALS.with(|externals| {
+        let mut externals = externals.borrow_mut();
+        let block = externals.entry(name.to_string()).or_insert_with(|| memory(size)).clone();
+        if block.borrow().len() != size { crate::runtime::fail(&format!("EXTERNAL item {name} declared with another size")); }
+        block
+    })
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Usage {
     Display, Packed, Binary, Index,
@@ -96,6 +120,8 @@ fn move_whitespace(byte: u8) -> bool {
 // Leading integer overflow is skipped before validation, and validation stops
 // as soon as the buffer is full. This differs from parsing a decimal string.
 fn text_move_digits(raw: &[u8], digits: usize, scale: usize) -> (Vec<u8>, bool, bool) {
+    // cob_move_alphanum_to_display: the module's decimal point and separator.
+    let raw = &crate::runtime::internal_symbols(raw, false)[..];
     let mut result = vec![b'0'; digits];
     let mut position = 0;
     while position < raw.len() && move_whitespace(raw[position]) { position += 1; }
@@ -140,6 +166,12 @@ fn fetch(digits: &[u8], src: &mut i64) -> u8 {
 /// outside them read as '0', so high-order digits beyond the picture are
 /// dropped and missing ones are zeros, as with the native sender pointer.
 fn edit(symbols: &[(u8, u32)], size: usize, digits: &[u8], scale: i32, neg: bool, blank_zero: bool) -> Vec<u8> {
+    // The picture symbols are internal ('.', ',', '$'); the output uses the
+    // module's decimal point, separator and currency sign.
+    crate::runtime::module_text(edit_internal(symbols, size, digits, scale, neg, blank_zero))
+}
+
+fn edit_internal(symbols: &[(u8, u32)], size: usize, digits: &[u8], scale: i32, neg: bool, blank_zero: bool) -> Vec<u8> {
     const CURRENCY: u8 = b'$';
     const DEC_SYMBOL: u8 = b'.';
     let mut out = vec![b' '; size];
@@ -611,6 +643,8 @@ impl View {
             _ => fail("de-editing MOVE requires a numeric-edited sender"),
         };
         let (mut digits, mut scale, mut count, mut point, mut negative) = (Vec::new(), 0i32, 0i32, false, false);
+        // cob_move_edited_to_display: the module's decimal point.
+        let bytes = crate::runtime::internal_symbols(&bytes, false);
         for &byte in &bytes {
             match byte {
                 b'0'..=b'9' => { digits.push(byte); if point { scale += 1; } },

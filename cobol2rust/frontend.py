@@ -163,7 +163,9 @@ def normalize(source: str, fmt: str = "auto") -> str:
     return "\n".join(result)
 
 
-def lex(source: str) -> list[Token]:
+def lex(source: str, decimal_comma: bool = False) -> list[Token]:
+    """With DECIMAL-POINT IS COMMA a numeric literal is written 1,5; its
+    token text keeps the internal form 1.5."""
     tokens = []
     i, line = 0, 1
     picture_pending = False
@@ -230,8 +232,9 @@ def lex(source: str) -> list[Token]:
         else:
             # A COBOL word may start with digits when it holds a letter (3-DIMENSION-TBL);
             # a numeric literal may start with its decimal point after a separator.
-            point = (c == "." and i + 1 < len(source) and source[i + 1].isdigit()
+            point = (not decimal_comma and c == "." and i + 1 < len(source) and source[i + 1].isdigit()
                      and (i == 0 or source[i - 1].isspace() or source[i - 1] in "(+-*/=<>,"))
+            dp = "," if decimal_comma else r"\."
             # cobc scans a sign followed by digits as a signed literal, so in
             # a list "(I +1)" holds two subscripts. After an operand that
             # matters only inside parentheses; elsewhere cobc rejects it.
@@ -239,12 +242,15 @@ def lex(source: str) -> list[Token]:
                       and (source[i + 1].isdigit() or source[i + 1] == "." and source[i + 2:i + 3].isdigit())
                       and (tokens[-1].string or tokens[-1].text == ")"
                            or re.fullmatch(r"[+-]?[A-Za-z0-9_.][A-Za-z0-9_.-]*", tokens[-1].text)))
-            match = re.match(r"[+-](?:\d+(?:\.\d+)?|\.\d+)" if signed else r"\.\d+" if point else
-                             r"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
+            match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
+                             rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
-            tokens.append(Token(match[0], line, False, i, i + len(match[0])))
+            text = match[0]
+            if decimal_comma and re.fullmatch(r"[+-]?\d+,\d+", text):
+                text = text.replace(",", ".")
+            tokens.append(Token(text, line, False, i, i + len(match[0])))
             i += len(match[0])
             if match[0].upper() in {"PIC", "PICTURE"} and not (len(tokens) > 1 and tokens[-2].key == "COPY"):
                 picture_pending = True
@@ -373,6 +379,9 @@ class Field:
     search_keys: list = field(default_factory=list)
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
+    # 01/77 EXTERNAL (run-unit storage by name) and GLOBAL items.
+    external: bool = False
+    is_global: bool = False
 
 
 @dataclass(frozen=True)
@@ -495,6 +504,13 @@ def source_format(source: str, fmt="auto"):
 class Parser:
     def __init__(self, source: str):
         self.tokens = lex(source)
+        # DECIMAL-POINT IS COMMA changes the scanner: read the source again.
+        keys = [None if t.string else t.key for t in self.tokens]
+        self.decimal_comma = any(keys[k:k + 3] == ["DECIMAL-POINT", "IS", "COMMA"] or keys[k:k + 2] == ["DECIMAL-POINT", "COMMA"]
+                                 for k in range(len(keys)))
+        if self.decimal_comma:
+            self.tokens = lex(source, True)
+        self.currency = "$"
         self.i = 0
         self.fields = {}
         self.files = {}
@@ -677,6 +693,10 @@ class Parser:
                     break
             else:
                 valid.append(key)
+        if len(valid) > 1:
+            # A name of the program hides the GLOBAL names of its containers.
+            own = [key for key in valid if not getattr(registry[key], "global_owner", None)]
+            valid = own if own else valid
         if len(valid) != 1:
             self.error(f"{'nom ambigu' if valid else 'nom inconnu'}: {label}; qualifier avec OF/IN si nécessaire")
         return valid[0]
@@ -723,6 +743,14 @@ class Parser:
         self.expect(".")
         entry_name = self.t.text
         name = self.name()
+        # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
+        common = False
+        if self.accept("IS") or self.at("COMMON") or self.at("INITIAL"):
+            while self.at("COMMON") or self.at("INITIAL"):
+                if self.take().key == "INITIAL":
+                    self.error("programme INITIAL non pris en charge")
+                common = True
+            self.accept("PROGRAM")
         self.expect(".")
         if self.accept("ENVIRONMENT"):
             self.environment_division()
@@ -799,6 +827,10 @@ class Parser:
         self.apply_renames()
         self.validate_files()
         memory_size = self.debug_item(memory_size)
+        # GLOBAL items of the containing programs (copies of their
+        # descriptions, storage owned by the declaring program).
+        for key, item in getattr(self, "inherited", {}).items():
+            self.fields[key] = item
         self.expect("PROCEDURE")
         self.expect("DIVISION")
         using = []
@@ -831,6 +863,7 @@ class Parser:
         # SECTION header, also when only a section was open.
         debug_sections, fall_through, labelled, paragraph_open = {}, set(), False, False
         self.in_debugging = False
+        nested_start = ended = False
         while not self.at("<EOF>"):
             if self.at("."):
                 # The separator period ends a sentence: the target of NEXT SENTENCE.
@@ -850,12 +883,17 @@ class Parser:
                 main_block = len(blocks)
                 blocks.append(ProcedureBlock(None, None, current_body))
                 continue
+            if (self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION":
+                # Contained programs end the PROCEDURE DIVISION.
+                nested_start = True
+                break
             if self.accept("END"):
                 self.expect("PROGRAM")
                 if self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
-                if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID")):
+                ended = True
+                if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
                     self.expect("<EOF>")
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
@@ -928,23 +966,78 @@ class Parser:
         program.entry_name = entry_name
         program.segments = segments
         program.collating = self.collating
+        program.decimal_comma, program.currency = self.decimal_comma, self.currency
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
         # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
         program.default_byte_init = STD != "cobol85"
         self.validate_calls(program)
         self.validate_alters(program)
-        if not self.at("<EOF>"):
+        program.common, program.parent, program.nested = common, None, []
+        if nested_start:
+            # Nested programs, then END PROGRAM of this one (parser.y nested_list).
+            if any(getattr(f, "is_global", False) for f in self.files.values()):
+                self.error("FD GLOBAL avec programmes contenus non pris en charge")
+            inherited = self.global_items(entry_name)
+            while self.at("IDENTIFICATION") or self.at("ID"):
+                child_parser = Parser.__new__(Parser)
+                child_parser.__init__("")
+                child_parser.tokens, child_parser.i = self.tokens, self.i
+                child_parser.decimal_comma = self.decimal_comma
+                child_parser.inherited = inherited
+                child = child_parser.parse()
+                self.i = child_parser.i
+                for item in [child, *child.siblings]:
+                    item.parent = entry_name
+                    program.nested.append(item)
+                child.siblings = []
+            self.expect("END")
+            self.expect("PROGRAM")
+            if self.name() != name:
+                self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
+            self.expect(".")
+            if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
+                self.expect("<EOF>")
+        if self.at("IDENTIFICATION") or self.at("ID"):
             # A sibling program after END PROGRAM: same source, separate names.
             sibling = Parser.__new__(Parser)
             sibling.__init__("")
             sibling.tokens, sibling.i = self.tokens, self.i
+            # Programs contained in the same program see the same GLOBAL items.
+            sibling.inherited = getattr(self, "inherited", {})
+            sibling.decimal_comma = self.decimal_comma
             following = sibling.parse()
+            self.i = sibling.i
             program.siblings = [following, *following.siblings]
             following.siblings = []
             if any(other.entry_name == entry_name for other in program.siblings):
                 raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
         return program
+
+    def global_items(self, owner):
+        """Descriptions of this program's GLOBAL items and of those it
+        inherits, as its contained programs see them."""
+        import copy
+        inherited = dict(getattr(self, "inherited", {}))
+        prefix = f"^{owner}^"
+        rename = lambda key: None if key is None else prefix + key
+        for key, item in self.fields.items():
+            root = item
+            while root.parent:
+                root = self.fields[root.parent]
+            if not root.is_global or getattr(item, "global_owner", None):
+                continue
+            if root.redefines or any(f.redefines == root.name for f in self.fields.values()):
+                self.error("REDEFINES d'un article GLOBAL non pris en charge")
+            clone = copy.copy(item)
+            clone.name, clone.parent, clone.redefines = rename(item.name), rename(item.parent), rename(item.redefines)
+            clone.children = [rename(child) for child in item.children]
+            clone.depending = rename(item.depending) if item.depending and item.depending.startswith(root.name) else None
+            if item.depending and clone.depending is None:
+                self.error("OCCURS DEPENDING d'un article GLOBAL hors de son groupe non pris en charge")
+            clone.global_owner, clone.global_root = owner, root.label
+            inherited[clone.name] = clone
+        return inherited
 
     def debug_item(self, memory_size):
         """cb_build_debug_item, at the first USE FOR DEBUGGING: DEBUG-ITEM in
@@ -1473,6 +1566,23 @@ class Parser:
                     self.symbolic.update(zip(names, values))
                 if self.accept("IN"):
                     self.check_identity_alphabet(self.t, self.name(), "SYMBOLIC CHARACTERS IN")
+            elif self.accept("CURRENCY"):
+                # currency_sign_clause / set_currency_picture_symbol.
+                self.accept("SIGN")
+                self.accept("IS")
+                if not self.t.string:
+                    self.error("CURRENCY SIGN requiert un littéral")
+                symbol = self.take().text
+                if self.at("WITH") or self.at("PICTURE"):
+                    self.error("CURRENCY ... PICTURE SYMBOL non pris en charge")
+                if len(symbol) != 1:
+                    self.error("currency symbol must be one character long")
+                if symbol in "0123456789ABCDENPRSVXZabcdenprsvxz+-,.*/;()='\" " or not symbol.isascii():
+                    self.error(f"invalid character '{symbol}' in currency symbol")
+                self.currency = symbol
+            elif self.accept("DECIMAL-POINT"):
+                self.accept("IS")
+                self.expect("COMMA")
             else:
                 self.error(f"entrée SPECIAL-NAMES non prise en charge: {key}")
         self.expect(".")
@@ -1722,6 +1832,14 @@ class Parser:
                 if high and size > high:
                     high = size
             low = low or sizes[0]
+            for key in spec.records:
+                # finalize_file: a record with OCCURS DEPENDING may be as short
+                # as its table at the minimum count.
+                for item in self.fields.values():
+                    if item.depending and item.name.startswith(key + "."):
+                        if spec.sort:
+                            self.error("SD avec OCCURS DEPENDING ON non pris en charge")
+                        low = min(low, item.offset - self.fields[key].offset + item.size * item.occurs_min)
             spec.record_min, spec.record_max = min([low, *sizes]), max([high, *sizes])
             if spec.record_min != spec.record_max and spec.organization == "LINE SEQUENTIAL":
                 self.error("enregistrements LINE SEQUENTIAL de tailles différentes non pris en charge")
@@ -1759,7 +1877,7 @@ class Parser:
             left = Expr("all", (self.low_value,))
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
-            left = Expr("all", (self.take().text,))
+            left = Expr("all", (self.take().text,), literal_all=True)
         elif t.key == "ALL" and not self.t.string and self.t.key in INSPECT_FIGURATIVES:
             # ALL with a figurative constant is that constant (parser.y literal).
             return self.expr(minimum, primary)
@@ -1803,6 +1921,17 @@ class Parser:
             left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
         return left
 
+    def picture_symbols(self, picture):
+        """A PICTURE in the internal symbols: '$' for the currency sign and
+        '.' for the decimal point (DECIMAL-POINT IS COMMA swaps . and ,)."""
+        if self.currency != "$":
+            if "$" in picture:
+                self.error(f"PICTURE invalide avec CURRENCY SIGN {self.currency}: {picture}")
+            picture = picture.replace(self.currency.upper(), "$")
+        if self.decimal_comma:
+            picture = picture.translate(str.maketrans(".,", ",."))
+        return picture
+
     def linage_file(self):
         """line_linage_page_counter: LINAGE-COUNTER [IN|OF file], the counter
         register cobc defines for each FD with LINAGE."""
@@ -1833,7 +1962,7 @@ class Parser:
         "SQRT": (1, "number"), "LOG": (1, "number"), "LOG10": (1, "number"), "EXP": (1, "number"),
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
-        "PI": (0, "number"), "E": (0, "number"),
+        "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
     }
 
     def function_call(self):
@@ -1854,6 +1983,20 @@ class Parser:
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
         if self.at("("):
             self.error("modification de référence d'une FUNCTION non prise en charge")
+        if name.key == "WHEN-COMPILED":
+            # cb_set_intr_when_compiled: a literal of the compilation time,
+            # hundredths and local UTC offset included.
+            if os.environ.get("COB_CURRENT_DATE") is not None:
+                self.error("COB_CURRENT_DATE à la compilation non pris en charge")
+            if not hasattr(Parser, "compile_time"):
+                import time
+                stamp = time.time()
+                now = time.localtime(stamp)
+                offset = now.tm_gmtoff // 60
+                hundredths = f"{int(stamp * 100) % 100:02d}"
+                Parser.compile_time = (time.strftime("%Y%m%d%H%M%S", now) + hundredths + ("-" if offset < 0 else "+")
+                                       + f"{abs(offset) // 60:02d}{abs(offset) % 60:02d}")
+            return Expr("text", (Parser.compile_time,))
         if name.key == "LENGTH":
             # cb_build_intrinsic: the length of a fixed item or literal is a literal.
             arg = args[0]
@@ -2007,7 +2150,8 @@ class Parser:
     def block(self, stops):
         # A scope terminator also ends the conditional statements it encloses
         # (END-PERFORM after READ ... AT END without END-READ).
-        stops = stops | {key for key in BOUNDARIES if key.startswith("END-")}
+        # ELSE and WHEN end them too, for the IF or EVALUATE around them.
+        stops = stops | {key for key in BOUNDARIES if key.startswith("END-")} | {"ELSE", "WHEN"}
         result = []
         while self.t.string or self.t.key not in stops | {".", "<EOF>"}:
             result.append(self.statement())
@@ -2561,7 +2705,24 @@ class Parser:
             if self.accept("WITH"):
                 self.expect("FILLER")
                 with_filler = True
-            return Stmt("initialize", (targets, with_filler), line)
+            # REPLACING {category [DATA] BY value} ...: without DEFAULT only
+            # the items of these categories change (cb_emit_initialize).
+            replacing = []
+            if self.accept("REPLACING"):
+                categories = {"ALPHABETIC", "ALPHANUMERIC", "NUMERIC", "ALPHANUMERIC-EDITED", "NUMERIC-EDITED"}
+                while not self.t.string and self.t.key in categories:
+                    category = self.take().key
+                    self.accept("DATA")
+                    self.expect("BY")
+                    if any(category == c for c, _ in replacing):
+                        self.error(f"INITIALIZE REPLACING {category} dupliqué")
+                    replacing.append((category, self.expr(primary=True)))
+                if not replacing:
+                    self.error("INITIALIZE REPLACING requiert une catégorie")
+            if self.at("DEFAULT") or self.at("ALL") or self.at("TO") or self.at("THEN"):
+                self.error("INITIALIZE VALUE/DEFAULT non pris en charge")
+            self.accept("END-INITIALIZE")
+            return Stmt("initialize", (targets, with_filler, replacing), line)
         if verb == "STOP":
             if self.t.string or re.fullmatch(r"[+-]?\d*\.?\d+", self.t.key) \
                     or self.t.key in {"SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES", "QUOTE", "QUOTES"}:
@@ -3171,8 +3332,10 @@ class Parser:
                 other = self.files[file_name]
                 if other.sort or other.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
                     self.error(f"{word} limité aux fichiers SEQUENTIAL et LINE SEQUENTIAL")
-                if other.record_min != other.record_max or other.depending:
-                    self.error(f"{word} limité aux fichiers à enregistrements fixes")
+                # A variable SEQUENTIAL file: cob_copy_check of the size read
+                # (USING) or of record_max (GIVING), as libcob does.
+                if other.depending or (other.record_min != other.record_max and other.organization != "SEQUENTIAL"):
+                    self.error(f"{word} limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING")
             return (word.lower(), names)
 
         if self.accept("INPUT"):

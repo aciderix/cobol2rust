@@ -1,5 +1,22 @@
 # Validation — 22 octobre 2026
 
+## OCCURS DEPENDING, symboles du module, programmes contenus — 24 octobre 2026
+
+- **336 tests découverts : 335 réussis, un test PE Windows ignoré.**
+- **116/116 comparaisons locales conformes** ; nouvelles fixtures
+  `odo_internal.cob` (contrôleur interne, READ INTO, enregistrements FD
+  variables), `decimal_comma.cob` (CURRENCY SIGN, DECIMAL-POINT IS COMMA),
+  `literal_numeric_move.cob`, `initialize_replacing.cob`,
+  `nested_programs.cob` (COMMON, GLOBAL, EXTERNAL, programme frère) et
+  `current_date.cob` (format de CURRENT-DATE et WHEN-COMPILED).
+- NIST : **426/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **401/402 programmes principaux conformes** (9303 PASS, 0 FAIL, 12 DELETED,
+  104 INSPECT) : `build/nist-verify-odo.json`, `build/coverage-nist-odo.json`.
+  19 programmes ajoutés : IC226A, IC228A, IC235A, IF107A, IF142A, IF401M,
+  NC105A, NC107A, NC108M, NC223A, NC247A, RL210A, RL211A, SM103A, SQ111A,
+  SQ214A, ST110A, ST123A, ST146A. Écart connu inchangé : OBNC1M (SIGINT ; libcob
+  perd alors les tampons stdio des fichiers ouverts).
+
 ## LINAGE, ADVANCING et formes de préprocesseur — 24 octobre 2026
 
 - **327 tests découverts : 326 réussis, un test PE Windows ignoré.**

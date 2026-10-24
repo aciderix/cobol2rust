@@ -139,6 +139,16 @@ def parse_fd_clauses(parser, spec):
                 while parser.accept("OF") or parser.accept("IN"):
                     parser.name()
             put("value_of", True)
+        elif parser.accept("CODE-SET"):
+            # code_set_clause: on an ASCII machine cobc ignores the native
+            # alphabets; EBCDIC and literal alphabets are not modelled.
+            parser.accept("IS")
+            token = parser.t
+            name = parser.name()
+            if parser.at("FOR"):
+                parser.error("CODE-SET FOR non pris en charge")
+            parser.check_identity_alphabet(token, name, "CODE-SET")
+            put("code_set", name)
         elif parser.accept("LINAGE"):
             # parser.y linage_clause: LINAGE [IS] x [LINES] then FOOTING, TOP
             # and BOTTOM in any order; the file becomes LINE SEQUENTIAL. The

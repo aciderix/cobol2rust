@@ -43,6 +43,31 @@ def call_targets(program):
     return literals, dynamic
 
 
+def check_nested_calls(main, local):
+    """A contained program is called by the program that directly contains
+    it or, when COMMON, by the other programs that this one contains; cobc
+    resolves other calls of its name dynamically, which cannot find it."""
+    programs = {main.entry_name: main, **local}
+
+    def ancestors(name):
+        chain, parent = [], programs[name].parent
+        while parent is not None:
+            chain.append(parent)
+            parent = programs[parent].parent
+        return chain
+
+    for caller, program in programs.items():
+        for target in call_targets(program)[0]:
+            callee = programs.get(target)
+            if callee is None or callee.parent is None:
+                continue
+            visible = callee.parent == caller or (
+                callee.common and callee.parent in ancestors(caller)
+                and target not in [caller, *ancestors(caller)])
+            if not visible:
+                raise CobolError(f"CALL {target} depuis {caller}: programme contenu non visible (non modélisé)")
+
+
 def run_unit(source: Path, fmt, includes, call_paths):
     """Main program and every program it may CALL, found as <name>.CBL/.cob.
 
@@ -58,7 +83,17 @@ def run_unit(source: Path, fmt, includes, call_paths):
     units = {}
     # Programs after the main one in its source are in the executable itself:
     # GnuCOBOL's resolver finds them before searching the call path.
-    local = {program.entry_name: program for program in main.siblings}
+    local = {}
+
+    def gather(program):
+        for child in [*program.nested]:
+            local[child.entry_name] = child
+            gather(child)
+    gather(main)
+    for program in main.siblings:
+        local[program.entry_name] = program
+        gather(program)
+    check_nested_calls(main, local)
     pending, dynamic = call_targets(main)
     if dynamic:
         pending |= set(local)
@@ -96,7 +131,7 @@ def run_unit(source: Path, fmt, includes, call_paths):
             if dynamic and name not in call_targets(main)[0]:
                 continue
             raise CobolError(f"programme appelé {path.name}: {exc}") from exc
-        if program.siblings:
+        if program.siblings or program.nested:
             raise CobolError(f"plusieurs programmes dans le source appelé non pris en charge: {path.name}")
         if program.entry_name != name:
             if program.entry_name.upper() == name.upper() or dynamic is False:
@@ -160,7 +195,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
               "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
-                               "in_main_source": sub in program.siblings,
+                               "in_main_source": Path(path).resolve() == Path(source).resolve(),
                                "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                                "using": sub.using, "memory_size": sub.memory_size}
                               for path, sub, _, _ in subprograms],

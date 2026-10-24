@@ -357,7 +357,7 @@ impl Value {
                 let (units, width) = if *scale < 0 { (n.units(0, false), (*digits as i32 - *scale) as usize) }
                                      else { (n.units(*scale, false), (*digits).max(*scale as u32) as usize) };
                 let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = width);
-                if *scale > 0 { s.insert(s.len() - *scale as usize, '.'); }
+                if *scale > 0 { s.insert(s.len() - *scale as usize, module_symbols().0 as char); }
                 if *signed {
                     let sign = if units.sign() == Sign::Minus { '-' } else { '+' };
                     if *trailing_sign { s.push(sign); } else { s.insert(0, sign); }
@@ -462,6 +462,40 @@ impl CollatingGuard {
 }
 impl Drop for CollatingGuard {
     fn drop(&mut self) { COLLATING.with(|c| c.set(self.0)); }
+}
+
+thread_local! {
+    static SYMBOLS: std::cell::Cell<(u8, u8, u8)> = const { std::cell::Cell::new((b'.', b',', b'$')) };
+}
+
+/// COB_MODULE_PTR->decimal_point, numeric_separator and currency_symbol of
+/// the running program (DECIMAL-POINT IS COMMA, CURRENCY SIGN).
+pub struct SymbolGuard((u8, u8, u8));
+impl SymbolGuard {
+    pub fn new(decimal_point: u8, separator: u8, currency: u8) -> Self {
+        SymbolGuard(SYMBOLS.with(|s| s.replace((decimal_point, separator, currency))))
+    }
+}
+impl Drop for SymbolGuard {
+    fn drop(&mut self) { SYMBOLS.with(|s| s.set(self.0)); }
+}
+
+/// (decimal point, numeric separator, currency sign) of the module.
+pub fn module_symbols() -> (u8, u8, u8) { SYMBOLS.with(|s| s.get()) }
+
+/// Bytes written with the module symbols, read in the internal ones:
+/// '.' decimal point, ',' separator, '$' currency (another '$' is no sign).
+pub fn internal_symbols(bytes: &[u8], currency: bool) -> Vec<u8> {
+    let (point, separator, sign) = module_symbols();
+    bytes.iter().map(|&b| if b == point { b'.' } else if b == separator { b',' }
+                          else if currency && b == sign { b'$' } else if currency && b == b'$' { 0 } else { b }).collect()
+}
+
+/// The inverse mapping, for edited output.
+pub fn module_text(bytes: Vec<u8>) -> Vec<u8> {
+    let (point, separator, sign) = module_symbols();
+    if (point, separator, sign) == (b'.', b',', b'$') { return bytes; }
+    bytes.into_iter().map(|b| match b { b'.' => point, b',' => separator, b'$' => sign, _ => b }).collect()
 }
 
 /// common_cmps: bytes compared by their weight in the program collating
@@ -854,6 +888,37 @@ pub mod intrinsic {
     }
     pub fn e() -> Value { result(exp(&Float::int(1))) }
     pub fn pi_value() -> Value { result(pi()) }
+
+    /// cob_intr_current_date: YYYYMMDDhhmmsscc and the UTC offset of the
+    /// local time zone, here only modelled for UTC.
+    pub fn current_date() -> Value {
+        if std::env::var_os("COB_CURRENT_DATE").is_some() { fail("COB_CURRENT_DATE not modelled"); }
+        let utc = match std::env::var("TZ") {
+            Ok(tz) => matches!(tz.trim_start_matches(':'), "UTC" | "UTC0" | "GMT" | "GMT0" | "Etc/UTC" | "Etc/GMT" | "UCT" | "Zulu" | ""),
+            Err(_) => match std::fs::read("/etc/localtime") {
+                Err(_) => true,
+                // A TZif file without transitions and with one offset 0 type.
+                Ok(data) => data.len() >= 50 && &data[..4] == b"TZif"
+                    && data[32..36] == [0, 0, 0, 0] && data[36..40] == [0, 0, 0, 1] && data[44..48] == [0, 0, 0, 0],
+            },
+        };
+        if !utc { fail("CURRENT-DATE in a local time zone other than UTC not modelled"); }
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));
+        let seconds = now.as_secs() as i64;
+        let (days, rest) = (seconds.div_euclid(86400), seconds.rem_euclid(86400));
+        // Civil date of a day count (days from 1970-01-01).
+        let z = days + 719468;
+        let era = z.div_euclid(146097);
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
+        Value::text(&format!("{year:04}{month:02}{day:02}{:02}{:02}{:02}{:02}+0000",
+                             rest / 3600, rest % 3600 / 60, rest % 60, now.subsec_nanos() / 10_000_000))
+    }
     pub fn sin(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).0) }
     pub fn cos(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).1) }
     pub fn tan(v: &Value) -> Value {
@@ -988,7 +1053,8 @@ pub mod intrinsic {
     /// numval: the digits, sign and decimal point of a NUMVAL/NUMVAL-C argument.
     pub fn length(v: &Value) -> Value { int_of(v.bytes().len() as i128) }
     pub fn numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
-        let data = v.bytes();
+        // cob_intr_numval: the module's decimal point and currency sign.
+        let data = crate::runtime::internal_symbols(&v.bytes(), currency_sign && currency.is_none());
         if data.is_empty() { return int_of(0); }
         let mut end = data.len() - 1;
         while end > 0 && (data[end] == b' ' || data[end] == 0) { end -= 1; }

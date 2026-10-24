@@ -93,8 +93,8 @@ def layout_fields(fields):
         controller = fields[f.depending]
         if controller.kind != "number" or controller.scale or controller.dimensions or controller.index_for:
             raise CobolError("DEPENDING ON requiert un entier scalaire avec PICTURE")
-        if f.file_record or f.parent is None:
-            raise CobolError("OCCURS DEPENDING ON limité à une table subordonnée WORKING-STORAGE")
+        if f.parent is None:
+            raise CobolError("OCCURS DEPENDING ON limité à une table subordonnée")
         cursor = f
         while cursor.parent:
             parent = fields[cursor.parent]
@@ -102,10 +102,12 @@ def layout_fields(fields):
                 raise CobolError("OCCURS DEPENDING ON doit terminer chaque groupe parent, sans OCCURS englobant")
             cursor = parent
         root = cursor
-        if controller.name == root.name or controller.name.startswith(root.name + "."):
-            raise CobolError("contrôleur DEPENDING ON requis hors du groupe variable")
+        if controller.name.startswith(f.name + "."):
+            raise CobolError("contrôleur DEPENDING ON dans sa propre table non pris en charge")
         subtree = [item for item in fields.values() if item.name == root.name or item.name.startswith(root.name + ".")]
-        if any(item.redefines for item in subtree) or any(item.redefines == root.name for item in fields.values()):
+        # The other 01 records of an FD share its area (an implicit REDEFINES).
+        if any(item.redefines for item in subtree if not (item is root and root.file_record)) or any(
+                item.redefines == root.name and not (item.file_record and item.parent is None) for item in fields.values()):
             raise CobolError("REDEFINES d'un groupe variable non pris en charge")
     return total
 

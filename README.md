@@ -98,14 +98,14 @@ Ces résultats portent sur les entrées testées.
 | Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` |
 | Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
-| MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ; groupe source copié brut vers numérique/édité |
+| MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ou numérique DISPLAY ; groupe source copié brut vers numérique/édité |
 | Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |
 | Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03, SIGINT pour libcob, est un arrêt nommé) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
 | Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
-| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
+| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
 **256 caractères ASCII par champ élémentaire**. Un groupe peut être plus grand.
@@ -118,15 +118,19 @@ Sont notamment refusés : tables variables à offsets ou strides variables,
 niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
-fonctions intrinsèques hors liste ci-dessous (RANDOM, CURRENT-DATE,
-WHEN-COMPILED), appels externes,
+fonctions intrinsèques hors liste ci-dessous (RANDOM, dont la graine sans
+argument dépend de l'heure et le générateur est celui de GMP), appels externes,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
-fichiers à enregistrements variables, SQL embarqué, CICS et
-plusieurs programmes liés. Les formats binaires autres que les enregistrements
+fichiers à enregistrements variables, SQL embarqué et CICS. Les formats binaires autres que les enregistrements
 SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
 La déédition, les calculs sur texte et les calculs vers PIC X restent refusés.
-Le MOVE d'un littéral texte vers un champ numérique ordinaire reste refusé :
-les optimisations natives diffèrent du transfert depuis un champ PIC X.
+Le MOVE d'un littéral texte vers un champ numérique DISPLAY suit
+`cb_build_move_literal` : à échelle égale et sans signe séparé, ses octets sont
+copiés à la compilation (cadrés à droite, complétés de zéros, BLANK WHEN ZERO
+appliqué) ; sinon `cob_move` le traite comme un champ PIC X. Vers un champ
+binaire ou packé il reste refusé (optimisations natives de cobc). `MOVE ALL
+"littéral"` vers un alphanumérique édité remplit sans édition, comme le
+`memset`/`memcpy` de cobc ; une constante figurative y est éditée.
 
 Pour `MOVE`, un entier numérique vers PIC X ou sous-chaîne fournit les chiffres
 de sa magnitude sur la largeur PICTURE, sans signe, puis tronque à droite ou
@@ -216,9 +220,18 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
 
 Les programmes qui suivent `END PROGRAM` dans le même source sont des frères :
 ils sont dans l'exécutable et GnuCOBOL les trouve avant le chemin d'appel.
+Les programmes contenus (IDENTIFICATION DIVISION à la fin de la PROCEDURE
+DIVISION, puis `END PROGRAM`) sont appelables par le programme qui les contient
+directement et, s'ils sont `COMMON`, par les autres programmes qu'il contient ;
+tout autre CALL de leur nom est refusé (cobc le résoudrait dynamiquement sans
+les trouver). Un article 01/77 `GLOBAL` d'un programme contenant est vu par ses
+descendants (un nom local le masque) et partage leur stockage ; un article
+`EXTERNAL` est un bloc de l'unité d'exécution désigné par son nom, comme
+`cob_external_addr` (alloué à zéro, sans VALUE, même taille exigée).
 
-Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes imbriqués,
-plusieurs programmes dans un source appelé, EXTERNAL/GLOBAL, LINKAGE hors de USING, VALUE en
+Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes INITIAL, FD
+EXTERNAL/GLOBAL et USE GLOBAL, plusieurs programmes dans un source appelé,
+EXTERNAL AS et VALUE d'un article EXTERNAL, LINKAGE hors de USING, VALUE en
 LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
 
@@ -248,8 +261,10 @@ SYNCHRONIZED lorsqu'il n'impose aucun octet de remplissage.
 ## SORT et MERGE
 
 SORT et MERGE (SD, clés ASCENDING/DESCENDING, USING/GIVING de fichiers
-séquentiels fixes, INPUT/OUTPUT PROCEDURE, RELEASE, RETURN) reproduisent le tri
-stable de libcob. COLLATING SEQUENCE et les fichiers USING/GIVING variables
+séquentiels fixes ou SEQUENTIAL variables sans DEPENDING, INPUT/OUTPUT
+PROCEDURE, RELEASE, RETURN) reproduisent le tri stable de libcob ; un USING
+variable copie la taille lue et un GIVING écrit `record_max`, comme
+`cob_copy_check`. SORT … COLLATING SEQUENCE littérale et SD à OCCURS DEPENDING
 restent refusés.
 
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
@@ -264,8 +279,15 @@ séquence de collation littérale suit `validate_alphabet` et
 `cb_validate_collating` de cobc : pondération de chaque octet, LOW-VALUE et
 HIGH-VALUE déduits de l'alphabet, comparaisons alphanumériques et SORT du
 module selon cette table ; deux littéraux comparés par `=` ou `<>` sont pliés
-sur leurs octets bruts, comme dans tree.c. CURRENCY SIGN, DECIMAL-POINT IS
-COMMA et SORT … COLLATING SEQUENCE avec un alphabet littéral restent refusés.
+sur leurs octets bruts, comme dans tree.c. `CURRENCY SIGN IS "c"` (un
+caractère, contrôles de `set_currency_picture_symbol`) et `DECIMAL-POINT IS
+COMMA` sont des réglages du module (`COB_MODULE_PTR`) : le scanner lit alors
+1,5 comme un littéral, les PICTURE échangent `.` et `,`, et l'édition, le MOVE
+alphanumérique vers numérique, la dé-édition, NUMVAL/NUMVAL-C et l'affichage
+d'un nombre à décimales utilisent ces symboles. `CURRENCY … PICTURE SYMBOL` et
+SORT … COLLATING SEQUENCE avec un alphabet littéral restent refusés. Une
+clause FD `CODE-SET` avec un alphabet natif est ignorée, comme cobc sur une
+machine ASCII ; les autres alphabets sont refusés.
 ACCEPT reproduit `cob_accept`.
 
 ## SEARCH, USAGE INDEX et INSPECT
@@ -458,7 +480,17 @@ Les niveaux 88 testent leur donnée parente ; ils n'ajoutent pas de mémoire.
 `SET condition TO TRUE` choisit la première valeur déclarée. `SET ... TO FALSE`
 requiert une clause `WHEN SET TO FALSE` explicite. `INITIALIZE` ignore les FILLER
 et les vues REDEFINES subordonnées ; `WITH FILLER` inclut les FILLER. Une vue
-REDEFINES nommée directement peut être initialisée.
+REDEFINES nommée directement peut être initialisée. `INITIALIZE … REPLACING
+{ALPHABETIC|ALPHANUMERIC|NUMERIC|ALPHANUMERIC-EDITED|NUMERIC-EDITED} [DATA] BY
+valeur` suit `output_initialize_one` : un MOVE vers chaque article élémentaire
+de la catégorie, occurrence par occurrence, les autres articles restant
+inchangés ; VALUE et DEFAULT (COBOL 2002) restent refusés.
+
+Un groupe OCCURS DEPENDING peut contenir son propre contrôleur, être un
+enregistrement FD ou le partager avec les autres 01 du FD. Comme le
+`flag_receiving` de `cb_build_move`, un récepteur de MOVE (READ/RETURN INTO
+compris) qui contient son contrôleur prend sa longueur maximale ; les autres
+usages, et WRITE/REWRITE de l'enregistrement, prennent la longueur courante.
 
 L'initialisation d'une occurrence variable précise, par exemple
 `INITIALIZE ligne(index)`, est prise en charge. L'initialisation du groupe
