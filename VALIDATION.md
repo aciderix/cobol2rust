@@ -1,5 +1,19 @@
 # Validation — 22 octobre 2026
 
+## PROGRAM COLLATING SEQUENCE et fonctions mathématiques — 24 octobre 2026
+
+- **311 tests découverts : 310 réussis, un test PE Windows ignoré.**
+- **108/108 comparaisons locales conformes** ; nouvelles fixtures
+  `collating_sequence.cob` (alphabet littéral THRU/ALSO, HIGH/LOW-VALUE,
+  comparaisons et SORT selon la table) et `math_functions.cob` (SQRT, LOG,
+  LOG10, EXP, trigonométrie, STANDARD-DEVIATION, PI, E).
+- NIST : **390/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **365/366 programmes principaux conformes** (8066 PASS, 0 FAIL, 8 DELETED,
+  14 INSPECT) : `build/nist-verify-math.json`, `build/coverage-nist-math.json`.
+  15 programmes ajoutés : IF101A, IF103A, IF104A, IF106A, IF116A, IF117A,
+  IF135A, IF136A, IF137A, IF139A, IX210A, IX214A, IX215A, NC215A, NC219A.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
 ## Organisation INDEXED — 24 octobre 2026
 
 - **310 tests découverts : 309 réussis, un test PE Windows ignoré.**

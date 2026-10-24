@@ -25,9 +25,9 @@ def literal(p):
     elif token.key in getattr(p, "symbolic", {}) and not p.candidates(token.key):
         token = Token(chr(p.symbolic[token.key]), token.line, True)
     elif token.key in {"HIGH-VALUE", "HIGH-VALUES"}:
-        token = Token("\xff", token.line, True)
+        token = Token(getattr(p, "high_value", "\xff"), token.line, True)
     elif token.key in {"LOW-VALUE", "LOW-VALUES"}:
-        token = Token("\x00", token.line, True)
+        token = Token(getattr(p, "low_value", "\x00"), token.line, True)
     elif not re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", token.text):
         p.error("littéral attendu")
     if negative:
@@ -371,8 +371,8 @@ def declaration(p, file_record=False):
             # A group VALUE fills its whole area: keep ZERO distinct from 0.
             figurative = None if p.t.string else (
                 "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"}
-                else '"' if p.t.key in {"QUOTE", "QUOTES"} else "\xff" if p.t.key in {"HIGH-VALUE", "HIGH-VALUES"}
-                else "\x00" if p.t.key in {"LOW-VALUE", "LOW-VALUES"}
+                else '"' if p.t.key in {"QUOTE", "QUOTES"} else getattr(p, "high_value", "\xff") if p.t.key in {"HIGH-VALUE", "HIGH-VALUES"}
+                else getattr(p, "low_value", "\x00") if p.t.key in {"LOW-VALUE", "LOW-VALUES"}
                 else chr(p.symbolic[p.t.key]) if p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key)
                 else None)
             initial = literal(p)

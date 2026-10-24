@@ -118,8 +118,8 @@ Sont notamment refusés : tables variables à offsets ou strides variables,
 niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
-fonctions intrinsèques hors liste ci-dessous (trigonométrie, LOG, SQRT,
-STANDARD-DEVIATION, RANDOM, CURRENT-DATE, WHEN-COMPILED), appels externes,
+fonctions intrinsèques hors liste ci-dessous (RANDOM, CURRENT-DATE,
+WHEN-COMPILED), appels externes,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
 fichiers à enregistrements variables, SQL embarqué, CICS et
 plusieurs programmes liés. Les formats binaires autres que les enregistrements
@@ -258,9 +258,15 @@ SPECIAL-NAMES accepte les noms mnémoniques de périphériques (DISPLAY UPON
 SYSOUT/CONSOLE/SYSERR, ACCEPT FROM SYSIN/CONSOLE), SWITCH-n avec conditions
 ON/OFF et SET … TO ON/OFF (état initial lu dans `COB_SWITCH_n`, comme libcob),
 les alphabets NATIVE, STANDARD-1, STANDARD-2 et ASCII (sans effet sur une
-machine ASCII, y compris en PROGRAM COLLATING SEQUENCE), les classes
-utilisateur et SYMBOLIC CHARACTERS. CURRENCY SIGN, DECIMAL-POINT IS COMMA et
-les alphabets non natifs restent refusés. ACCEPT reproduit `cob_accept`.
+machine ASCII), les alphabets littéraux (`THRU`, `ALSO`) comme PROGRAM
+COLLATING SEQUENCE, les classes utilisateur et SYMBOLIC CHARACTERS. Une
+séquence de collation littérale suit `validate_alphabet` et
+`cb_validate_collating` de cobc : pondération de chaque octet, LOW-VALUE et
+HIGH-VALUE déduits de l'alphabet, comparaisons alphanumériques et SORT du
+module selon cette table ; deux littéraux comparés par `=` ou `<>` sont pliés
+sur leurs octets bruts, comme dans tree.c. CURRENCY SIGN, DECIMAL-POINT IS
+COMMA et SORT … COLLATING SEQUENCE avec un alphabet littéral restent refusés.
+ACCEPT reproduit `cob_accept`.
 
 ## SEARCH, USAGE INDEX et INSPECT
 

@@ -70,6 +70,14 @@ Dernière étape : INDEXED. `file_runtime::IndexedFile` (état `key`/`data`/
 `nist_verify.rust_seed`. NIST **375/458**, 350/351. Prochain : PROGRAM
 COLLATING SEQUENCE (en cours), LINAGE, fonctions trigonométriques.
 
+Dernière étape : collation et mathématiques. `Parser.alphabet_table`
+(validate_alphabet), `Program.collating` + `high_value`/`low_value`,
+`runtime::CollatingGuard`/`collated_cmp` (comparaisons et SORT),
+`Emitter.folded_comparison` (= et <> entre deux littéraux) ; module
+`runtime::intrinsic` (`Float` décimal à 150 chiffres, `number()` arrondi à 96
+chiffres significatifs). NIST **390/458**, 365/366. Prochain : LINAGE (en
+cours), ADVANCING identifiant/mnémonique.
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

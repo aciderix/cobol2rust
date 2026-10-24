@@ -600,8 +600,9 @@ SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
 ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
 INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
 LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
-Restent refusées : trigonométrie, LOG/LOG10, SQRT, STANDARD-DEVIATION, RANDOM,
-CURRENT-DATE, WHEN-COMPILED et la modification de référence d'un résultat.
+Restent refusées : RANDOM, CURRENT-DATE, WHEN-COMPILED et la modification de
+référence d'un résultat (SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS,
+ATAN, STANDARD-DEVIATION, PI et E sont portés depuis : voir plus bas).
 `tools/coverage.py` émet les sources à PROCEDURE DIVISION USING comme
 sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
 revérification : **289/289 programmes principaux conformes**, 6608 PASS,
@@ -666,3 +667,17 @@ fichiers BDB de GnuCOBOL. Refusés : clés composées (SOURCE IS), SUPPRESS,
 READ PREVIOUS, LOCK. Émission acceptée : **375/458** ; revérification :
 **350/351 programmes principaux conformes** (`build/nist-verify-indexed.json`).
 
+## Progression : PROGRAM COLLATING SEQUENCE et fonctions mathématiques
+
+Alphabets littéraux (`validate_alphabet` : littéraux, `THRU`, `ALSO`, doublons
+refusés comme cobc) utilisés comme PROGRAM COLLATING SEQUENCE : la table de
+pondération remplace l'ordre natif dans `cob_cmp_alnum`/`cob_cmp_all` et dans
+le SORT du module ; LOW-VALUE est le premier caractère de l'alphabet et
+HIGH-VALUE suit `cb_validate_collating`. Deux littéraux comparés par `=` ou
+`<>` restent pliés sur leurs octets bruts (tree.c). Fonctions SQRT, LOG,
+LOG10, EXP, SIN, COS, TAN, ASIN, ACOS, ATAN, STANDARD-DEVIATION, PI et E :
+calcul en virgule flottante décimale à 150 chiffres, ramené à 96 chiffres
+significatifs arrondis au plus proche comme `cob_decimal_set_mpf`
+(COB_MAX_INTERMEDIATE_FLOATING_SIZE). Émission acceptée : **390/458** ;
+revérification : **365/366 programmes principaux conformes**, 8066 PASS,
+0 FAIL (`build/nist-verify-math.json`, `build/coverage-nist-math.json`).

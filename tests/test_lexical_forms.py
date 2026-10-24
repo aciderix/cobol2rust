@@ -29,10 +29,13 @@ class LexicalFormTests(unittest.TestCase):
         self.assertEqual((parsed.fields["C"].kind, parsed.fields["C"].digits), ("text", 3))
         self.assertEqual((parsed.fields["D"].digits, parsed.fields["D"].scale), (2, 0))
 
-    def test_alphabetic_numeric_mixes_are_refused(self):
-        for body in ("move 12 to c.", "move n to c.", "if c = n display 'x' end-if."):
+    def test_alphabetic_numeric_mixes_follow_cobc(self):
+        # cobc rejects a numeric MOVE to PIC A, but compares PIC A with a number.
+        declarations = "77 c pic a(3). 77 n pic 999."
+        for body in ("move 12 to c.", "move n to c."):
             with self.subTest(body=body), self.assertRaises(CobolError):
-                Emitter(Parser(program("77 c pic a(3). 77 n pic 999.", body + " stop run.")).parse()).generate()
+                Emitter(Parser(program(declarations, body + " stop run.")).parse()).generate()
+        Emitter(Parser(program(declarations, "if c = n display 'x' end-if. stop run.")).parse()).generate()
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

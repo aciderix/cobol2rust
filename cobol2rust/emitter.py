@@ -213,10 +213,14 @@ class Emitter:
         rust = {"INTEGER": "integer", "INTEGER-PART": "integer_part", "FACTORIAL": "factorial",
                 "CHAR": "char_of", "ORD": "ord", "UPPER-CASE": "upper_case", "LOWER-CASE": "lower_case",
                 "REVERSE": "reverse", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
-                "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer"}
+                "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer",
+                "SQRT": "sqrt_of", "LOG": "log", "LOG10": "log10", "EXP": "exp_of", "SIN": "sin",
+                "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of"}
         listed = {"SUM": "sum", "MEAN": "mean", "MEDIAN": "median", "MIDRANGE": "midrange", "RANGE": "range",
                   "VARIANCE": "variance", "ORD-MAX": "ord_max", "ORD-MIN": "ord_min", "MAX": "max", "MIN": "min",
-                  "PRESENT-VALUE": "present_value"}
+                  "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation"}
+        if name in {"PI", "E"}:
+            return f"runtime::intrinsic::{'pi_value' if name == 'PI' else 'e'}()"
         if name in rust:
             return f"runtime::intrinsic::{rust[name]}(&{values[0]})"
         if name in listed:
@@ -248,7 +252,14 @@ class Emitter:
         > and >= FALSE and < and <= TRUE, whatever the literal's sign.
         Alphanumeric items fold only when the literal is longer than the item,
         where a runtime comparison gives the same result.
+        Two alphanumeric literals fold for = and <> by their bytes, space
+        padded, even under a PROGRAM COLLATING SEQUENCE.
         """
+        if (left.op == "text" and right.op == "text" and op in {"=", "<>"}
+                and not left.figurative_space and not right.figurative_space):
+            size = max(len(left.args[0]), len(right.args[0]))
+            equal = left.args[0].ljust(size) == right.args[0].ljust(size)
+            return equal if op == "=" else not equal
         for swapped, field_expr, literal in ((True, right, left), (False, left, right)):
             if field_expr.op != "var" or field_expr.args[0].start is not None:
                 continue
@@ -284,10 +295,6 @@ class Emitter:
             return None
         return None
 
-    def alphabetic(self, expr):
-        return (expr.op == "var" and expr.args[0].start is None
-                and self.is_alphabetic(self.program.fields[expr.args[0].name]))
-
     @staticmethod
     def is_alphabetic(field):
         """PIC A only (with B for alphabetic-edited); mixed with X or 9 it is alphanumeric."""
@@ -298,6 +305,9 @@ class Emitter:
         # A numeric-edited item is not numeric for libcob's cob_cmp: it
         # compares as alphanumeric, by its edited bytes.
         kinds = tuple("text" if kind == "edited" else kind for kind in (self.kind(left), self.kind(right)))
+        # A number against SPACE is cob_cmp_all with the figurative, like ALL " ".
+        if "number" in kinds:
+            left, right = (Expr("all", (" ",)) if e.op == "text" and e.figurative_space else e for e in (left, right))
         if left.op == "all" or right.op == "all":
             # cob_cmp_all: each position against the repeated figurative.
             other, figurative = (right, left) if left.op == "all" else (left, right)
@@ -319,8 +329,8 @@ class Emitter:
         if set(kinds) != {"number", "text"}:
             raise CobolError("comparaison entre catégories non prise en charge")
         number, text = (left, right) if kinds[0] == "number" else (right, left)
-        if self.alphabetic(text):
-            raise CobolError("comparaison numérique/alphabétique (PIC A) non prise en charge")
+        # cob_cmp compares a PIC A item with a number like PIC X (checked
+        # against cobc 3.2, default and cobol85).
         # GnuCOBOL treats an empty alphanumeric literal as one SPACE.
         text_value = 'Value::text(" ")' if text.op == "text" and not text.args[0] else self.expression(text)
         if number.figurative_zero:
@@ -1280,6 +1290,11 @@ class Emitter:
             self.call_method()
         self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
         self.indent += 1
+        collating = getattr(self.program, "collating", None)
+        if collating:
+            # OBJECT-COMPUTER PROGRAM COLLATING SEQUENCE: the alphabet's weights.
+            self.write(f"static COLLATING: [u8; 256] = [{', '.join(str(w) for w in collating)}];")
+        self.write(f"let _collating = runtime::CollatingGuard::new({'Some(&COLLATING)' if collating else 'None'});")
         self.write(f"let mut pc: usize = {graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source

@@ -187,7 +187,7 @@ impl Value {
     pub fn compare_zero(&self) -> std::cmp::Ordering {
         if !self.is_text() { fail("figurative ZERO comparison requires text"); }
         let bytes = self.bytes();
-        bytes.cmp(&vec![b'0'; bytes.len()])
+        collated_cmp(&bytes, &vec![b'0'; bytes.len()])
     }
     pub fn assign_text_move(&mut self, source: &Self, raw_group: bool) {
         match self {
@@ -318,7 +318,7 @@ impl Value {
         if self.is_text() && other.is_text() {
             let mut a = self.bytes(); let mut b = other.bytes();
             let size = a.len().max(b.len()); a.resize(size, b' '); b.resize(size, b' ');
-            return a.cmp(&b);
+            return collated_cmp(&a, &b);
         }
         match (self, other) {
             (Self::Num(a, _), Self::Num(b, _)) => {
@@ -327,7 +327,7 @@ impl Value {
             },
             (Self::Text(a), Self::Text(b)) => {
                 let len = a.len().max(b.len());
-                format!("{a:<len$}").cmp(&format!("{b:<len$}"))
+                collated_cmp(format!("{a:<len$}").as_bytes(), format!("{b:<len$}").as_bytes())
             },
             _ => fail("mixed numeric/text comparison unsupported"),
         }
@@ -450,6 +450,29 @@ fn switches() -> std::sync::MutexGuard<'static, Option<[bool; 37]>> {
     }
     guard
 }
+thread_local! {
+    static COLLATING: std::cell::Cell<Option<&'static [u8; 256]>> = const { std::cell::Cell::new(None) };
+}
+
+/// COB_MODULE_PTR->collating_sequence of the running program, restored
+/// when it returns to its caller.
+pub struct CollatingGuard(Option<&'static [u8; 256]>);
+impl CollatingGuard {
+    pub fn new(table: Option<&'static [u8; 256]>) -> Self { CollatingGuard(COLLATING.with(|c| c.replace(table))) }
+}
+impl Drop for CollatingGuard {
+    fn drop(&mut self) { COLLATING.with(|c| c.set(self.0)); }
+}
+
+/// common_cmps: bytes compared by their weight in the program collating
+/// sequence, or as memcmp without one.
+pub fn collated_cmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    match COLLATING.with(|c| c.get()) {
+        None => a.cmp(b),
+        Some(table) => a.iter().map(|&x| table[x as usize]).cmp(b.iter().map(|&x| table[x as usize])),
+    }
+}
+
 /// cob_debugging_mode: COB_SET_DEBUG read once (ENV_BOOL, default off).
 pub fn debugging_mode() -> bool {
     static MODE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -601,6 +624,278 @@ pub mod intrinsic {
         value(sorted[i - 1].num().plus(sorted[i].num()).divide(Number::new(BigInt::from(2), 0)))
     }
     /// GET_VARIANCE: mean, then the mean of the squared differences.
+    /// GMP floats in libcob (2048 bits) are converted back with mpf_get_str
+    /// to 96 significant digits, rounded to nearest (cob_decimal_set_mpf).
+    /// The functions below compute with `PRECISION` decimal digits, far
+    /// beyond those 96, then round the same way.
+    const PRECISION: i64 = 150;
+    const DIGITS: i64 = 96;
+
+    /// m * 10^e, the mantissa kept to PRECISION significant digits.
+    #[derive(Clone)]
+    struct Float { m: BigInt, e: i64 }
+
+    fn digit_count(n: &BigInt) -> i64 { if n.sign() == Sign::NoSign { 0 } else { absolute(n).to_string().len() as i64 } }
+
+    impl Float {
+        fn int(n: i64) -> Float { Float { m: BigInt::from(n), e: 0 } }
+        fn of(n: &Number) -> Float { Float { m: n.n.clone(), e: -(n.scale as i64) }.norm() }
+        fn norm(mut self) -> Float {
+            let extra = digit_count(&self.m) - PRECISION;
+            if extra > 0 { self.m = &self.m / power(extra as u32); self.e += extra; }
+            self
+        }
+        fn is_zero(&self) -> bool { self.m.sign() == Sign::NoSign }
+        fn neg(&self) -> Float { Float { m: -self.m.clone(), e: self.e } }
+        fn add(&self, other: &Float) -> Float {
+            if self.is_zero() { return other.clone(); }
+            if other.is_zero() { return self.clone(); }
+            let e = self.e.min(other.e);
+            // Terms far below the precision of the larger one do not count.
+            let top = (self.e + digit_count(&self.m)).max(other.e + digit_count(&other.m));
+            let e = e.max(top - PRECISION - 10);
+            let align = |f: &Float| -> BigInt {
+                if f.e >= e { &f.m * power((f.e - e) as u32) } else { &f.m / power((e - f.e) as u32) }
+            };
+            Float { m: align(self) + align(other), e }.norm()
+        }
+        fn sub(&self, other: &Float) -> Float { self.add(&other.neg()) }
+        fn mul(&self, other: &Float) -> Float { Float { m: &self.m * &other.m, e: self.e + other.e }.norm() }
+        fn div(&self, other: &Float) -> Float {
+            if other.is_zero() { fail("division by zero in a mathematical function"); }
+            let shift = PRECISION + 5 + digit_count(&other.m) - digit_count(&self.m);
+            let shift = shift.max(0);
+            Float { m: (&self.m * power(shift as u32)) / &other.m, e: self.e - other.e - shift }.norm()
+        }
+        fn half(&self) -> Float { self.div(&Float::int(2)) }
+        /// The greatest integer not above the value.
+        fn floor(&self) -> BigInt {
+            if self.e >= 0 { return &self.m * power(self.e as u32); }
+            let divisor = power((-self.e) as u32);
+            let q = &self.m / &divisor;
+            if self.negative() && &q * &divisor != self.m { q - 1 } else { q }
+        }
+        fn round(&self) -> BigInt { self.add(&Float { m: BigInt::from(5), e: -1 }).floor() }
+        fn negative(&self) -> bool { self.m.sign() == Sign::Minus }
+        fn magnitude_below(&self, exponent: i64) -> bool { self.is_zero() || digit_count(&self.m) + self.e <= exponent }
+        /// cob_decimal_set_mpf: 96 significant digits, rounded to nearest.
+        fn number(&self) -> Number {
+            if self.is_zero() { return Number::new(BigInt::from(0), 0); }
+            let negative = self.negative();
+            let mut m = absolute(&self.m);
+            let mut e = self.e;
+            let extra = digit_count(&m) - DIGITS;
+            if extra > 0 {
+                let divisor = power(extra as u32);
+                let (q, r) = (&m / &divisor, &m % &divisor);
+                m = if r * 2 >= divisor { q + 1 } else { q };
+                e += extra;
+            }
+            if negative { m = -m; }
+            let n = if e >= 0 { Number::new(m * power(e as u32), 0) } else { Number::new(m, (-e) as u32) };
+            n.trimmed()
+        }
+    }
+
+    /// Series for atan(1/k) to PRECISION digits (Machin's formula for pi).
+    fn atan_inverse(k: i64) -> Float {
+        let x = Float::int(1).div(&Float::int(k));
+        let x2 = x.mul(&x);
+        let (mut term, mut sum, mut n) = (x.clone(), x, 1i64);
+        loop {
+            term = term.mul(&x2).neg();
+            n += 2;
+            let piece = term.div(&Float::int(n));
+            if piece.magnitude_below(-PRECISION - 5) { return sum; }
+            sum = sum.add(&piece);
+        }
+    }
+    fn pi() -> Float { atan_inverse(5).mul(&Float::int(16)).sub(&atan_inverse(239).mul(&Float::int(4))) }
+
+    /// 2 atanh(z) = ln((1+z)/(1-z)).
+    fn atanh2(z: &Float) -> Float {
+        let z2 = z.mul(z);
+        let (mut term, mut sum, mut n) = (z.clone(), z.clone(), 1i64);
+        loop {
+            term = term.mul(&z2);
+            n += 2;
+            let piece = term.div(&Float::int(n));
+            if piece.magnitude_below(-PRECISION - 5) { return sum.mul(&Float::int(2)); }
+            sum = sum.add(&piece);
+        }
+    }
+    fn ln2() -> Float { atanh2(&Float::int(1).div(&Float::int(3))) }
+    fn ln10() -> Float { ln2().mul(&Float::int(3)).add(&atanh2(&Float::int(1).div(&Float::int(9)))) }
+
+    fn ln(x: &Float) -> Float {
+        // x = y * 10^k with y in [1, 10), then y halved into [1, 2).
+        let k = digit_count(&x.m) - 1 + x.e;
+        let mut y = Float { m: x.m.clone(), e: x.e - k };
+        let mut halvings = 0i64;
+        while !y.sub(&Float::int(2)).negative() { y = y.half(); halvings += 1; }
+        let z = y.sub(&Float::int(1)).div(&y.add(&Float::int(1)));
+        atanh2(&z).add(&ln2().mul(&Float::int(halvings))).add(&ln10().mul(&Float::int(k)))
+    }
+
+    fn exp(x: &Float) -> Float {
+        if !x.magnitude_below(7) { fail("FUNCTION EXP of an argument beyond 10^6 not modelled"); }
+        let l2 = ln2();
+        let q: i64 = x.div(&l2).round().to_string().parse().unwrap();
+        let r = x.sub(&l2.mul(&Float::int(q)));
+        let (mut term, mut sum, mut n) = (Float::int(1), Float::int(1), 0i64);
+        loop {
+            n += 1;
+            term = term.mul(&r).div(&Float::int(n));
+            if term.magnitude_below(-PRECISION - 5) { break; }
+            sum = sum.add(&term);
+        }
+        let two = Float { m: BigInt::from(2).pow(q.unsigned_abs() as u32), e: 0 };
+        if q >= 0 { sum.mul(&two) } else { sum.div(&two) }
+    }
+
+    /// sin or cos of a reduced argument |r| <= pi/4.
+    fn sin_series(r: &Float) -> Float {
+        let r2 = r.mul(r);
+        let (mut term, mut sum, mut n) = (r.clone(), r.clone(), 1i64);
+        loop {
+            term = term.mul(&r2).div(&Float::int((n + 1) * (n + 2))).neg();
+            n += 2;
+            if term.magnitude_below(-PRECISION - 5) { return sum; }
+            sum = sum.add(&term);
+        }
+    }
+    fn cos_series(r: &Float) -> Float {
+        let r2 = r.mul(r);
+        let (mut term, mut sum, mut n) = (Float::int(1), Float::int(1), 0i64);
+        loop {
+            term = term.mul(&r2).div(&Float::int((n + 1) * (n + 2))).neg();
+            n += 2;
+            if term.magnitude_below(-PRECISION - 5) { return sum; }
+            sum = sum.add(&term);
+        }
+    }
+    /// (sin x, cos x) by reduction to an octant.
+    fn sin_cos(x: &Float) -> (Float, Float) {
+        if !x.magnitude_below(40) { fail("trigonometric argument beyond 10^40 not modelled"); }
+        let half_pi = pi().half();
+        // x = q pi/2 + r with |r| <= pi/4.
+        let q_int = x.div(&half_pi).round();
+        let r = x.sub(&half_pi.mul(&Float { m: q_int.clone(), e: 0 }));
+        let (s, c) = (sin_series(&r), cos_series(&r));
+        let octant = ((q_int % BigInt::from(4)) + BigInt::from(4)) % BigInt::from(4);
+        match octant.to_string().as_str() {
+            "0" => (s, c),
+            "1" => (c, s.neg()),
+            "2" => (s.neg(), c.neg()),
+            _ => (c.neg(), s),
+        }
+    }
+    /// atan for |x| <= 1: halve the angle until small, then the series.
+    fn atan_small(x: &Float) -> Float {
+        let mut y = x.clone();
+        let mut doublings = 0u32;
+        while !y.magnitude_below(-1) {
+            // atan(y) = 2 atan(y / (1 + sqrt(1 + y^2)))
+            y = y.div(&Float::int(1).add(&sqrt(&Float::int(1).add(&y.mul(&y)))));
+            doublings += 1;
+        }
+        let y2 = y.mul(&y);
+        let (mut term, mut sum, mut n) = (y.clone(), y.clone(), 1i64);
+        loop {
+            term = term.mul(&y2).neg();
+            n += 2;
+            let piece = term.div(&Float::int(n));
+            if piece.magnitude_below(-PRECISION - 5) { break; }
+            sum = sum.add(&piece);
+        }
+        sum.mul(&Float { m: BigInt::from(2).pow(doublings), e: 0 })
+    }
+    fn sqrt(x: &Float) -> Float {
+        if x.is_zero() { return x.clone(); }
+        // An even exponent and enough digits for PRECISION digits of root.
+        let mut m = x.m.clone();
+        let mut e = x.e;
+        let want = 2 * PRECISION + 10 - digit_count(&m);
+        let mut shift = want.max(0);
+        if (e - shift) % 2 != 0 { shift += 1; }
+        m *= power(shift as u32);
+        e -= shift;
+        Float { m: m.sqrt(), e: e / 2 }.norm()
+    }
+
+    fn result(f: Float) -> Value { value(f.number()) }
+
+    pub fn sqrt_of(v: &Value) -> Value {
+        let n = v.num();
+        if n.n.sign() == Sign::Minus { argument_error("SQRT"); }
+        result(sqrt(&Float::of(&n.trimmed())))
+    }
+    pub fn standard_deviation(args: &[Value]) -> Value {
+        let variance = variance(args).num();
+        if variance.n.sign() == Sign::NoSign { return value(Number::new(BigInt::from(0), 0)); }
+        result(sqrt(&Float::of(&variance.trimmed())))
+    }
+    pub fn log(v: &Value) -> Value {
+        let n = v.num().trimmed();
+        if n.n.sign() != Sign::Plus { argument_error("LOG"); }
+        if n.scale == 0 && n.n == BigInt::from(1) { return int_of(0); }
+        result(ln(&Float::of(&n)))
+    }
+    pub fn log10(v: &Value) -> Value {
+        let n = v.num().trimmed();
+        if n.n.sign() != Sign::Plus { argument_error("LOG10"); }
+        if n.scale == 0 && n.n == BigInt::from(1) { return int_of(0); }
+        result(ln(&Float::of(&n)).div(&ln10()))
+    }
+    pub fn exp_of(v: &Value) -> Value {
+        let n = v.num();
+        if n.n.sign() == Sign::NoSign { return int_of(1); }
+        result(exp(&Float::of(&n)))
+    }
+    pub fn e() -> Value { result(exp(&Float::int(1))) }
+    pub fn pi_value() -> Value { result(pi()) }
+    pub fn sin(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).0) }
+    pub fn cos(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).1) }
+    pub fn tan(v: &Value) -> Value {
+        let (s, c) = sin_cos(&Float::of(&v.num()));
+        result(s.div(&c))
+    }
+    fn unit_interval(v: &Value, name: &str) -> Float {
+        let x = Float::of(&v.num());
+        let one = Float::int(1);
+        if x.sub(&one).m.sign() == Sign::Plus || x.add(&one).negative() { argument_error(name); }
+        x
+    }
+    fn asin_of(x: &Float) -> Float {
+        let one = Float::int(1);
+        let rest = one.sub(&x.mul(x));
+        if rest.is_zero() { return if x.negative() { pi().half().neg() } else { pi().half() }; }
+        atan_small_or_large(&x.div(&sqrt(&rest)))
+    }
+    fn atan_small_or_large(x: &Float) -> Float {
+        let one = Float::int(1);
+        if x.sub(&one).m.sign() == Sign::Plus || x.add(&one).negative() {
+            let inner = atan_small(&one.div(x));
+            let quarter = pi().half();
+            return if x.negative() { quarter.neg().sub(&inner) } else { quarter.sub(&inner) };
+        }
+        atan_small(x)
+    }
+    pub fn asin(v: &Value) -> Value {
+        let x = unit_interval(v, "ASIN");
+        if x.is_zero() { return int_of(0); }
+        result(asin_of(&x))
+    }
+    pub fn acos(v: &Value) -> Value {
+        let x = unit_interval(v, "ACOS");
+        result(pi().half().sub(&asin_of(&x)))
+    }
+    pub fn atan_of(v: &Value) -> Value {
+        let x = Float::of(&v.num());
+        if x.is_zero() { return int_of(0); }
+        result(atan_small_or_large(&x))
+    }
+
     pub fn variance(args: &[Value]) -> Value {
         if args.len() == 1 { return value(Number::new(BigInt::from(0), 0)); }
         let n = Number::new(BigInt::from(args.len()), 0);

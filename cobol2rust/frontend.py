@@ -492,6 +492,10 @@ class Parser:
         self.renames = []
         # SOURCE-COMPUTER ... WITH DEBUGGING MODE (current_program->flag_debugging).
         self.debugging_mode = False
+        # PROGRAM COLLATING SEQUENCE with a literal alphabet: its weights, and
+        # the HIGH-VALUE/LOW-VALUE it implies (cb_validate_collating).
+        self.collating = None
+        self.high_value, self.low_value = "\xff", "\x00"
         self.in_debugging = False
 
     @property
@@ -896,6 +900,7 @@ class Parser:
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
         program.segments = segments
+        program.collating = self.collating
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
         # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
@@ -1196,7 +1201,18 @@ class Parser:
                 self.expect(".")
                 self.special_names()
             if collating:
-                self.check_identity_alphabet(*collating, "PROGRAM COLLATING SEQUENCE")
+                token, alphabet = collating
+                if isinstance(self.alphabets.get(alphabet), tuple):
+                    # cb_validate_collating: the module collating sequence and
+                    # its HIGH-VALUE / LOW-VALUE.
+                    weights, low, high = self.alphabets[alphabet]
+                    self.collating = weights
+                    if low:
+                        self.low_value = chr(low)
+                    if high != 255:
+                        self.high_value = chr(high)
+                else:
+                    self.check_identity_alphabet(token, alphabet, "PROGRAM COLLATING SEQUENCE")
             if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
                 self.error("paragraphe CONFIGURATION non pris en charge")
         if self.accept("INPUT-OUTPUT"):
@@ -1216,12 +1232,103 @@ class Parser:
                "SYSERR": "stderr", "PRINTER": "printer", "SYSPCH": "punch", "FORMFEED": "formfeed",
                **{f"C{n:02d}": "channel" for n in range(1, 13)}, "CSP": "channel", "TOP": "channel"}
 
+    def figurative_value(self, key):
+        """A figurative constant's byte; HIGH/LOW-VALUE follow the program
+        collating sequence (cb_high / cb_low)."""
+        if key.startswith("HIGH-VALUE"):
+            return self.high_value
+        if key.startswith("LOW-VALUE"):
+            return self.low_value
+        return INSPECT_FIGURATIVES[key]
+
+    @staticmethod
+    def alphabet_table(items, line):
+        """validate_alphabet for a literal alphabet: the weight of each byte
+        (listed characters first, ALSO sharing a weight, the others after in
+        native order), its LOW-VALUE and HIGH-VALUE characters."""
+        weights, seen = [-1] * 256, [False] * 256
+        charvals = [-1] * 256
+        tableval = count = lastval = 0
+        low, high = 0, 255
+        duplicates = False
+
+        def value(item):
+            # get_value: a literal's first byte, an ordinal minus one.
+            return ord(item[1][0]) if item[0] == "lit" else item[1]
+
+        def mark(n, weight, first=True):
+            nonlocal duplicates
+            if seen[n]:
+                duplicates = True
+            seen[n] = True
+            if first:
+                charvals[n] = n
+            weights[n] = weight
+
+        for item in items:
+            if item[0] == "pair":
+                lower, upper = value(item[1]), value(item[2])
+                lastval = upper
+                if not count:
+                    low = lower
+                if not (0 <= lower <= 255 and 0 <= upper <= 255):
+                    raise CobolError(f"ligne {line}: invalid character values in alphabet")
+                step = 1 if lower <= upper else -1
+                for n in range(lower, upper + step, step):
+                    mark(n, tableval)
+                    tableval += 1
+                    count += 1
+            elif item[0] == "also":
+                values = [value(v) for v in item[1]]
+                if not count:
+                    low = values[0]
+                lastval = values[-1]
+                for position, n in enumerate(values):
+                    if not 0 <= n <= 255:
+                        raise CobolError(f"ligne {line}: invalid character values in alphabet")
+                    mark(n, tableval, position == 0)
+                    count += 1
+                tableval += 1
+            elif item[0] == "lit":
+                data = item[1]
+                if not count:
+                    low = ord(data[0])
+                lastval = ord(data[-1])
+                for c in data:
+                    mark(ord(c), tableval)
+                    tableval += 1
+                    count += 1
+            else:
+                lastval = item[1]
+                if not count:
+                    low = lastval
+                if not 0 <= lastval <= 255:
+                    raise CobolError(f"ligne {line}: invalid character values in alphabet")
+                mark(lastval, tableval)
+                tableval += 1
+                count += 1
+        if duplicates:
+            raise CobolError(f"ligne {line}: duplicate character values in alphabet")
+        if count == 256:
+            high = lastval
+        elif seen[255]:
+            high = 0
+            for n in range(254, 0, -1):
+                if not seen[n]:
+                    high = n
+                    break
+        for n in range(256):
+            if weights[n] < 0:
+                weights[n] = tableval
+                tableval += 1
+        return weights, low, high
+
     def check_identity_alphabet(self, token, name, clause):
         """On an ASCII machine NATIVE, STANDARD-1, STANDARD-2 and ASCII give
         cobc's identity cob_native table; other alphabets are not modelled."""
         if name not in self.alphabets:
             raise CobolError(f"ligne {token.line}: alphabet inconnu pour {clause}: {name}")
-        if not self.alphabets[name]:
+        if self.alphabets[name] is not True:
             raise CobolError(f"ligne {token.line}: {clause} avec alphabet non natif non pris en charge")
 
     def special_names(self):
@@ -1259,7 +1366,7 @@ class Parser:
                     self.accept("IS")
                     self.switch_conditions[self.name()] = (number, on)
             elif self.accept("ALPHABET"):
-                name = self.name()
+                name = self.user_word(self.name())
                 if self.accept("FOR"):
                     self.expect("ALPHANUMERIC")
                 self.accept("IS")
@@ -1269,14 +1376,38 @@ class Parser:
                 elif self.accept("EBCDIC"):
                     self.alphabets[name] = False
                 else:
-                    # A literal alphabet: kept only for an unused definition.
-                    ordinal_or_text()
+                    # alphabet_literal_list: lits [THRU lits | ALSO lits ...].
+                    line = self.t.line
+
+                    def lits():
+                        if self.t.string:
+                            return ("lit", self.take().text)
+                        key = self.t.key
+                        if key in {"HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES", "QUOTE", "QUOTES",
+                                   "SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES"}:
+                            self.take()
+                            return ("val", 255 if key.startswith("HIGH") else 0 if key.startswith("LOW")
+                                    else 34 if key.startswith("QUOTE") else 32 if key.startswith("SPACE") else 48)
+                        return ("val", self.integer_literal("ordinal") - 1)
+
+                    items = []
                     while self.t.string or self.t.key[:1].isdigit() or self.t.key in {
-                            "THRU", "THROUGH", "ALSO", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES",
+                            "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES",
                             "QUOTE", "QUOTES", "SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES"}:
-                        if not (self.accept("THRU") or self.accept("THROUGH") or self.accept("ALSO")):
-                            ordinal_or_text()
-                    self.alphabets[name] = False
+                        first = lits()
+                        if self.accept("THRU") or self.accept("THROUGH"):
+                            items.append(("pair", first, lits()))
+                        elif self.at("ALSO"):
+                            group = [first]
+                            while self.accept("ALSO"):
+                                group.append(lits())
+                            items.append(("also", group))
+                        else:
+                            items.append(first)
+                        self.accept(",")
+                    if not items:
+                        self.error("ALPHABET requiert des littéraux")
+                    self.alphabets[name] = self.alphabet_table(items, line)
             elif self.accept("CLASS"):
                 name = self.name()
                 if self.accept("FOR"):
@@ -1579,9 +1710,9 @@ class Parser:
             # Like ALL '"': a figurative constant fills its receiver.
             left = Expr("all", ('"',))
         elif t.key in {"HIGH-VALUE", "HIGH-VALUES"}:
-            left = Expr("all", ("\xff",))
+            left = Expr("all", (self.high_value,))
         elif t.key in {"LOW-VALUE", "LOW-VALUES"}:
-            left = Expr("all", ("\x00",))
+            left = Expr("all", (self.low_value,))
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,))
@@ -1638,6 +1769,10 @@ class Parser:
         "REVERSE": (1, "text"), "INTEGER-OF-DATE": (1, "number"), "INTEGER-OF-DAY": (1, "number"),
         "DATE-OF-INTEGER": (1, "number"), "DAY-OF-INTEGER": (1, "number"),
         "NUMVAL": (1, "number"), "NUMVAL-C": (-1, "number"), "LENGTH": (1, "number"),
+        "SQRT": (1, "number"), "LOG": (1, "number"), "LOG10": (1, "number"), "EXP": (1, "number"),
+        "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
+        "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
+        "PI": (0, "number"), "E": (0, "number"),
     }
 
     def function_call(self):
@@ -2506,7 +2641,7 @@ class Parser:
         t = self.t
         if not t.string and t.key in INSPECT_FIGURATIVES:
             self.take()
-            return Expr("all", (INSPECT_FIGURATIVES[t.key],))
+            return Expr("all", (self.figurative_value(t.key),))
         if not t.string and t.key in self.symbolic and not self.candidates(t.key):
             self.take()
             return Expr("all", (chr(self.symbolic[t.key]),))
@@ -2634,7 +2769,7 @@ class Parser:
             return Expr("all", operand.args, literal_all=True) if operand.op == "text" else operand
         if t.key in INSPECT_FIGURATIVES:
             self.take()
-            return Expr("all", (INSPECT_FIGURATIVES[t.key],))
+            return Expr("all", (self.figurative_value(t.key),))
         if t.key in self.symbolic and not self.candidates(t.key):
             self.take()
             return Expr("all", (chr(self.symbolic[t.key]),))
