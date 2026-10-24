@@ -575,6 +575,14 @@ sont refusés comme noms (NC211A, que cobc rejette, n'est plus accepté).
 conformes**, 5497 PASS, 0 FAIL (`build/nist-verify-conditions.json`,
 `build/nist-verify-string.json`).
 
+## Progression : fichiers, RENAMES, exponentiation
+
+Ordre libre des clauses SELECT, PADDING, RECORD DELIMITER, VALUE OF, SAME
+RECORD AREA, RENAMES, REDEFINES 01 plus grand, `**`, ALL figuratif, MOVE -0,
+comparaisons numériques/figuratives. Émission acceptée : **251/458** ;
+revérification : **249/249 programmes conformes**, 5841 PASS, 0 FAIL
+(`build/nist-verify-files-renames.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

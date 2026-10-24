@@ -111,6 +111,19 @@ def parse_fd_clauses(parser, spec):
                     parser.error("nom d'enregistrement DATA RECORDS attendu")
                 names.append(parser.name())
             put("data_records", names)
+        elif parser.at("VALUE") and parser.tokens[parser.i + 1].key == "OF":
+            # VALUE OF is obsolete documentation in default.conf; FILE-ID
+            # would only name the file when ASSIGN is missing, and it is required.
+            parser.take(); parser.take()
+            parser.take()
+            parser.accept("IS")
+            if parser.t.string:
+                parser.take()
+            else:
+                parser.name()
+                while parser.accept("OF") or parser.accept("IN"):
+                    parser.name()
+            put("value_of", True)
         else:
             parser.error("clause FD non prise en charge")
     parser.expect(".")

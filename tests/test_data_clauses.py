@@ -27,8 +27,8 @@ class DataClauseTests(unittest.TestCase):
     def test_implicit_filler_and_negative_zero_literal(self):
         fields = Parser(program("01 g. 05 pic x value 'A'. 05 n pic 9.")).parse().fields
         self.assertTrue(any(f.filler for f in fields.values()))
-        with self.assertRaises(CobolError):
-            Emitter(Parser(program("01 n pic s9.", "move -0 to n. stop run.")).parse()).generate()
+        # The literal -0 leaves a negative zero in a signed DISPLAY item.
+        Emitter(Parser(program("01 n pic s9.", "move -0 to n. stop run.")).parse()).generate()
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

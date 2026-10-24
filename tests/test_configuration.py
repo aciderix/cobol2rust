@@ -91,8 +91,7 @@ select records-file assign to "records.txt" organization line sequential.
                 self.assertEqual(emitted(source), reference)
 
     def test_semantic_io_control_clauses_are_refused(self):
-        for control in ("same record area for first-file second-file.",
-                        "multiple file tape contains other-file.",
+        for control in ("multiple file tape contains other-file.",
                         "rerun on tape-a every 10 records of first-file.",
                         "apply write-only on first-file.", "same area for first-file"):
             with self.subTest(control=control), self.assertRaises(CobolError):

@@ -251,8 +251,32 @@ def declaration(p, file_record=False):
         p.expect(".")
         p.conditions[key] = Condition(key, label, p.last_data, values, false_value)
         return key
+    if level == 66:
+        # renames_entry: the item follows its record and aliases storage
+        # once the record is laid out (Parser.apply_renames).
+        if not p.data_stack or p.fields[p.data_stack[0]].level != 1:
+            p.error("66 RENAMES doit suivre un enregistrement 01")
+        founder = p.data_stack[0]
+        line = p.t.line
+        p.expect("RENAMES")
+
+        def target():
+            name, qualifiers = p.name(), []
+            while p.accept("OF") or p.accept("IN"):
+                qualifiers.append(p.name())
+            if p.candidates(name, True) and not p.candidates(name):
+                p.error("RENAMES may not reference a level 88")
+            return p.resolve(name, qualifiers)
+        first = target()
+        thru = target() if p.accept("THRU") or p.accept("THROUGH") else None
+        p.expect(".")
+        key = founder + "." + label
+        if key in p.fields or any(r[0] == key for r in p.renames):
+            p.error(f"nom de donnée dupliqué: {label}")
+        p.renames.append((key, label, first, thru, founder, line))
+        return key
     if level not in {1, 77} and not 2 <= level <= 49:
-        p.error("niveaux pris en charge: 01-49, 77 et 88")
+        p.error("niveaux pris en charge: 01-49, 66, 77 et 88")
     if level in {1, 77}:
         p.data_stack = []
     else:

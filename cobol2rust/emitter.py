@@ -155,10 +155,14 @@ class Emitter:
                 raise CobolError("opérateur numérique sur un champ texte")
             result = self.expression(args[0])
             return result if op == "unary+" else f"({result}).neg()"
-        if op in {"+", "-", "*", "/"}:
+        if op in {"+", "-", "*", "/", "**"}:
             if any(self.kind(x) != "number" for x in args):
                 raise CobolError("arithmétique sur champ texte non prise en charge")
-            method = {"+": "plus", "-": "minus", "*": "times", "/": "divide"}[op]
+            if op == "**" and args[1].op == "unary-" and args[1].args[0].op == "number":
+                # cob_decimal_pow overwrites a negative exponent with the power;
+                # cobc shares that decimal constant among uses of the literal.
+                raise CobolError("exposant littéral négatif non pris en charge (constante décimale de cobc modifiée par cob_decimal_pow)")
+            method = {"+": "plus", "-": "minus", "*": "times", "/": "divide", "**": "power"}[op]
             return f"({self.expression(args[0])}).{method}(&({self.expression(args[1])}))"
         if op in {"and", "or"}:
             return f"({self.expression(args[0])} {'&&' if op == 'and' else '||'} {self.expression(args[1])})"
@@ -241,9 +245,16 @@ class Emitter:
         if left.op == "all" or right.op == "all":
             # cob_cmp_all: each position against the repeated figurative.
             other, figurative = (right, left) if left.op == "all" else (left, right)
-            if other.op == "all" or self.kind(other) not in {"text", "edited"}:
+            raw_number = (other.op == "var" and other.args[0].start is None and self.kind(other) == "number"
+                          and self.program.fields[other.args[0].name].usage == "DISPLAY"
+                          and not self.program.fields[other.args[0].name].signed
+                          and self.program.fields[other.args[0].name].scale >= 0
+                          and figurative.args[0] != "0")
+            if other.op == "all" or (self.kind(other) not in {"text", "edited"} and not raw_number):
                 raise CobolError("comparaison avec ALL/figurative limitée aux champs alphanumériques")
-            value = self.expression(other)
+            # cob_cmp_all on an unsigned DISPLAY item compares its digit bytes.
+            value = (f"Value::Bytes(storage_runtime::Operand::of(&{self.reference(other.args[0])}).data)"
+                     if raw_number else self.expression(other))
             pattern = f"Value::Bytes({byte_pattern(figurative.args[0])}.iter().cycle().take(({value}).text_size()).copied().collect())"
             result = f"({value}).compare(&{pattern})"
             return result if left is other else result + ".reverse()"
@@ -337,12 +348,15 @@ class Emitter:
                 continue
             if destination == "edited" or destination != source_kind:
                 raise CobolError(f"conversion implicite numérique/texte non prise en charge: {ref.name}")
+        negative_zero = []
         if (move and expr.op == "unary-" and expr.args[0].op == "number"
-                and not expr.args[0].args[0].replace(".", "").strip("0")
-                and any(ref.start is None and self.program.fields[ref.name].kind == "number"
-                        and self.program.fields[ref.name].signed for ref in targets)):
-            # cobc keeps the literal's sign: a signed receiver gets a negative zero.
-            raise CobolError("MOVE d'un zéro négatif littéral vers un nombre signé non pris en charge")
+                and not expr.args[0].args[0].replace(".", "").strip("0")):
+            # cobc keeps the literal's sign: a signed DISPLAY receiver gets a
+            # negative zero; packed and binary receivers get a plain zero.
+            for ref in targets:
+                field = self.program.fields[ref.name]
+                if ref.start is None and field.kind == "number" and field.signed and field.usage == "DISPLAY":
+                    negative_zero.append(ref)
         # A numeric MOVE truncates instead of raising SIZE ERROR. Index senders
         # keep the stricter assignment: their native transfer is not modelled.
         truncating = (move and source_kind == "number" and not
@@ -383,6 +397,8 @@ class Emitter:
                     self.write(f"{self.reference(ref)}.{method}(&{value});")
                 else:
                     self.write(f"{self.reference(ref)}.assign(&{value}, {str(rounded).lower()});")
+            if ref in negative_zero:
+                self.write(f"{self.reference(ref)}.negative_zero();")
 
     def check_packed_literal_move(self, expr, field):
         """cobc stores a small integer literal with cob_set_packed_int, which
@@ -403,11 +419,13 @@ class Emitter:
         op, args = expr.op, expr.args
         if op == "shared":
             return f"{self.shared}.clone()"
-        if op in {"+", "-", "*", "/"}:
+        if op in {"+", "-", "*", "/", "**"}:
+            if op == "**" and args[1].op == "unary-" and args[1].args[0].op == "number":
+                raise CobolError("exposant littéral négatif non pris en charge (constante décimale de cobc modifiée par cob_decimal_pow)")
             left, right = (f"({self.checked_expression(arg)}?)" for arg in args)
             if op == "/":
                 return f"{left}.checked_divide(&{right})"
-            method = {"+": "plus", "-": "minus", "*": "times"}[op]
+            method = {"+": "plus", "-": "minus", "*": "times", "**": "power"}[op]
             return f"Ok::<Value, runtime::SizeError>({left}.{method}(&{right}))"
         if op == "remainder":
             dividend, divisor, scale = args

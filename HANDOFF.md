@@ -20,8 +20,14 @@ parser.y (un signe collé à des chiffres est un littéral signé). STRING/UNSTR
 (`storage_runtime::StringInto`/`Unstring`, nœuds `string`/`unstring`) ; une
 comparaison de délimiteur multiple qui lirait l'octet après la source (bogue
 libcob) est un arrêt nommé. `reserved.py` = mots réservés de cobc.
-NIST **233/458**, 231/231 conformes. Prochains : exponentiation `**`,
-CORRESPONDING, RENAMES, COPY REPLACING, DEBUGGING MODE, INDEXED.
+NIST **233/458**, 231/231 conformes.
+
+Dernière étape : `Parser.same_records` (SAME RECORD AREA via `redefines` du
+premier enregistrement), `Parser.renames` + `apply_renames` (champ 66 ajouté
+après `layout_fields`, `redefines` pour ne pas l'initialiser), REDEFINES 01
+plus grand dans `layout.py`, `Number::power` (= cob_decimal_pow entier),
+`Value::negative_zero`. NIST **251/458**, 249/249 conformes. Prochains :
+CORRESPONDING, COPY REPLACING, DEBUGGING MODE, INDEXED, LINAGE.
 
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,

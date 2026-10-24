@@ -508,7 +508,7 @@ impl View {
         }
         self.move_number(source)
     }
-    fn mark_negative_zero(&mut self) {
+    pub(crate) fn mark_negative_zero(&mut self) {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },

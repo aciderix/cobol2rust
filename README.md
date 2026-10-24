@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 303 tests Python, avec un test d'inspection du PE
-Windows ignoré (304 découverts), et les 87 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 304 tests Python, avec un test d'inspection du PE
+Windows ignoré (305 découverts), et les 91 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -294,6 +294,20 @@ et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
 [ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
 reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune
 exception levée). Les mots réservés de cobc sont refusés comme noms.
+
+## Fichiers, RENAMES, exponentiation
+
+Les clauses SELECT s'écrivent dans n'importe quel ordre ; PADDING CHARACTER
+(obsolète) et RECORD DELIMITER STANDARD-1 sont ignorés comme par cobc, VALUE OF
+du FD aussi. `SAME RECORD AREA` partage la zone d'enregistrement du premier FD
+du groupe (`finalize_file`). Le niveau 66 `RENAMES … [THRU …]` est un alias de
+la zone (alphanumérique pour une plage ou un groupe), un REDEFINES de niveau 01
+plus grand agrandit la zone (octets supplémentaires nuls). `**` suit
+`cob_decimal_pow` pour les exposants entiers (associatif à droite dans
+COMPUTE, à gauche dans les conditions) ; un exposant littéral négatif est
+refusé car cob_decimal_pow modifie la constante décimale partagée par cobc.
+`MOVE -0` laisse un zéro négatif dans un DISPLAY signé. Un champ DISPLAY non
+signé se compare octet par octet à QUOTE, HIGH/LOW-VALUE ou ALL littéral.
 
 ## Calcul décimal et limites explicites
 

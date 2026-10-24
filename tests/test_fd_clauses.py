@@ -63,7 +63,7 @@ class FdClauseTests(unittest.TestCase):
             "record contains 5 characters record contains 5 characters.",
             "recording mode f recording mode f.", "recording mode v.",
             "recording mode s.", "recording mode u.", "linage 66 lines.",
-            "code-set is custom-alphabet.", "value of file-id is 'other.bin'.",
+            "code-set is custom-alphabet.",
             "external.", "global.", "data rec.", "data record.", "data records are.",
             "data record is rec data record is rec.", "data record label records standard.",
             "data record is 'rec'.", "data record is rec of f.", "data record rec linage 60.",

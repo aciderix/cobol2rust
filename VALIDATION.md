@@ -1,5 +1,16 @@
 # Validation — 22 octobre 2026
 
+## Fichiers, RENAMES, exponentiation — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **91/91 comparaisons locales conformes** ; nouvelles fixtures `renames.cob`,
+  `exponentiation.cob`, `figurative_numeric.cob`, `negative_zero.cob`.
+- NIST : **251/458** ; **249/249 programmes acceptés conformes** (5841 PASS,
+  0 FAIL) : `build/nist-verify-files-renames.json`.
+- Sonde native : avec un exposant littéral négatif, `cob_decimal_pow` écrase la
+  constante décimale partagée (`3 ** -1` puis `3 ** -1` donne 0,3333 puis 27) ;
+  ce cas est refusé.
+
 ## Conditions cobc, STRING/UNSTRING — 24 octobre 2026
 
 - **304 tests découverts : 303 réussis, un test PE Windows ignoré.**

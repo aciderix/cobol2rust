@@ -222,7 +222,7 @@ def lex(source: str) -> list[Token]:
                       and (tokens[-1].string or tokens[-1].text == ")"
                            or re.fullmatch(r"[+-]?[A-Za-z0-9_.][A-Za-z0-9_.-]*", tokens[-1].text)))
             match = re.match(r"[+-](?:\d+(?:\.\d+)?|\.\d+)" if signed else r"\.\d+" if point else
-                             r"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|[.(),:+*/=<>-]",
+                             r"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
@@ -453,6 +453,8 @@ class Parser:
         self.alphabets = {}
         self.classes = {}
         self.symbolic = {}
+        self.same_records = []
+        self.renames = []
 
     @property
     def t(self):
@@ -617,8 +619,17 @@ class Parser:
         for descriptor in self.fields.values():
             if descriptor.depending:
                 descriptor.depending = self.resolve(descriptor.depending)
+        # SAME RECORD AREA (finalize_file): the records of the later FDs
+        # redefine the record area of the first FD of the group.
+        order = list(self.fields)
+        for group in self.same_records:
+            specs = sorted((self.files[name] for name in group if self.files[name].record),
+                           key=lambda spec: order.index(spec.record))
+            for spec in specs[1:]:
+                self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        self.apply_renames()
         self.validate_files()
         self.expect("PROCEDURE")
         self.expect("DIVISION")
@@ -756,6 +767,48 @@ class Parser:
                     self.error(f"USE dupliqué pour le fichier {name}")
                 by_file[name] = section
         self.expect(".")
+
+    def apply_renames(self):
+        """compute_size and cb_validate_renames_item for level 66 items."""
+        import dataclasses
+        founder = lambda key: key.split(".")[0]
+        order = list(self.fields)
+        for key, label, first, thru, record, line in self.renames:
+            def check(name):
+                f = self.fields[name]
+                if founder(name) != record:
+                    raise CobolError(f"ligne {line}: '{label}' must immediately follow the record '{founder(name)}'")
+                if f.dimensions:
+                    raise CobolError(f"ligne {line}: RENAMES d'un élément de table interdit: {f.label}")
+                return f
+            start = check(first)
+            if thru is not None:
+                end = check(thru)
+                if thru == first:
+                    raise CobolError(f"ligne {line}: THRU item must be different to '{start.label}'")
+                if order.index(thru) < order.index(first) or thru.startswith(first + "."):
+                    raise CobolError(f"ligne {line}: THRU {end.label} invalide pour {start.label}")
+                size = end.offset + end.size - start.offset
+            else:
+                size = start.size
+            last = thru or first
+            span = [name for name in order[order.index(first):] if name == last or order.index(name) <= order.index(last)
+                    or name.startswith(last + ".")]
+            if any(self.fields[name].depending for name in span if name in self.fields):
+                raise CobolError(f"ligne {line}: RENAMES may not contain an OCCURS DEPENDING table")
+            if thru is None and start.picture:
+                if start.usage != "DISPLAY":
+                    raise CobolError(f"ligne {line}: RENAMES d'un élément non DISPLAY non pris en charge")
+                alias = dataclasses.replace(start, name=key, label=label, level=66, parent=record, children=[],
+                                            occurs=1, table=False, redefines=first, filler=False, size=size,
+                                            dimensions=[], search_keys=[], group_value=None)
+            else:
+                # A THRU range or a renamed group is one alphanumeric item.
+                alias = Field(key, f"X({size})", "text", size, 0, False, Token("", line, True), "DISPLAY",
+                              label, 66, record, [], 1, False, first)
+                alias.offset, alias.size = start.offset, size
+            alias.offset = start.offset
+            self.fields[key] = alias
 
     def user_word(self, name):
         """cobc refuses a reserved word as a user-defined name."""
@@ -950,14 +1003,16 @@ class Parser:
                     if self.accept("POSITION"):
                         self.integer_literal("POSITION")
             elif self.accept("SAME"):
-                if self.at("RECORD"):
-                    self.error("SAME RECORD AREA non pris en charge; enregistrements partagés non modélisés")
-                self.accept("SORT") or self.accept("SORT-MERGE")
+                record = self.accept("RECORD")
+                if not record:
+                    self.accept("SORT") or self.accept("SORT-MERGE")
                 self.accept("AREA")
                 self.accept("FOR")
-                self.file_name()
+                group = [self.file_name()]
                 while not self.t.string and self.t.key in self.files:
-                    self.file_name()
+                    group.append(self.file_name())
+                if record:
+                    self.same_records.append(group)
             else:
                 self.error("clause I-O-CONTROL non prise en charge")
         self.expect(".")
@@ -974,13 +1029,7 @@ class Parser:
         name = self.user_word(self.name())
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
-        self.expect("ASSIGN")
-        self.accept("TO")
-        path = self.take()
-        if not path.string:
-            self.error("ASSIGN requiert un chemin littéral entre guillemets")
-        if not path.text or any(ord(c) < 32 for c in path.text):
-            self.error("chemin ASSIGN vide ou invalide")
+        path = None
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
         relative_key = None
 
@@ -1006,7 +1055,37 @@ class Parser:
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
         while not self.at("."):
-            if self.accept("ORGANIZATION") and not organization_seen:
+            if self.accept("ASSIGN") and path is None:
+                # SELECT clauses come in any order (file_control_entry).
+                self.accept("TO")
+                path = self.take()
+                if not path.string:
+                    self.error("ASSIGN requiert un chemin littéral entre guillemets")
+                if not path.text or any(ord(c) < 32 for c in path.text):
+                    self.error("chemin ASSIGN vide ou invalide")
+            elif self.accept("PADDING"):
+                # Obsolete in default.conf: cobc warns and ignores it.
+                self.accept("CHARACTER")
+                self.accept("IS")
+                if self.t.string:
+                    self.take()
+                else:
+                    reference()
+            elif self.at("RECORD") and self.tokens[self.i + 1].key == "DELIMITER":
+                self.take(); self.take()
+                self.accept("IS")
+                word = self.take()
+                if word.string:
+                    self.error("RECORD DELIMITER attend un mot")
+                if word.key == "LINE-SEQUENTIAL":
+                    if organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                        self.error("RECORD DELIMITER LINE-SEQUENTIAL only allowed with (LINE) SEQUENTIAL files")
+                    organization = "LINE SEQUENTIAL"
+                elif organization != "SEQUENTIAL" and (word.key in {"STANDARD-1", "BINARY-SEQUENTIAL"}
+                                                       or organization != "LINE SEQUENTIAL"):
+                    self.error("RECORD DELIMITER only allowed with SEQUENTIAL files")
+                # STANDARD-1 and other names are ignored, as by cobc.
+            elif self.accept("ORGANIZATION") and not organization_seen:
                 organization_seen = True
                 self.accept("IS")
                 organization = organization_word()
@@ -1038,6 +1117,8 @@ class Parser:
                 self.accept("AREA") or self.accept("AREAS")
             else:
                 self.error("clause SELECT non prise en charge")
+        if path is None:
+            self.error("ASSIGN attendu")
         self.expect(".")
         if organization != "RELATIVE" and (relative_key or access not in {None, "SEQUENTIAL"}):
             self.error("RELATIVE KEY et ACCESS RANDOM/DYNAMIC requièrent ORGANIZATION RELATIVE")
@@ -1125,8 +1206,12 @@ class Parser:
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,))
+        elif t.key == "ALL" and not self.t.string and self.t.key in INSPECT_FIGURATIVES:
+            # ALL with a figurative constant is that constant (parser.y literal).
+            return self.expr(minimum, primary)
         elif t.key in {"+", "-"}:
-            left = Expr("unary" + t.key, (self.expr(30),))
+            # exp_unary applies to an atom; ** binds the signed atom (parser.y).
+            left = Expr("unary" + t.key, (self.expr(50),))
         elif re.fullmatch(r"[+-](?:\d+(?:\.\d+)?|\.\d+)", t.text):
             # A signed literal token (see lex): the same as a unary sign.
             left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],)),))
@@ -1150,13 +1235,14 @@ class Parser:
             self.error(f"expression non prise en charge: {t.text}")
         if primary:
             return left
-        while not self.t.string and self.t.key in {"+", "-", "*", "/"}:
+        while not self.t.string and self.t.key in {"+", "-", "*", "/", "**"}:
             op = self.t.key
-            precedence = 20 if op in {"*", "/"} else 10
+            precedence = 40 if op == "**" else 20 if op in {"*", "/"} else 10
             if precedence < minimum:
                 break
             self.take()
-            left = Expr(op, (left, self.expr(precedence + 1)))
+            # exp_factor: exponentiation is right associative.
+            left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
         return left
 
     def operand_start(self):
@@ -1165,7 +1251,8 @@ class Parser:
         if t.string or re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", t.text):
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
-        return (k in INSPECT_FIGURATIVES or (k == "ALL" and self.tokens[self.i + 1].string)
+        following = self.tokens[self.i + 1] if k == "ALL" else None
+        return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
                 or k in self.switch_conditions or k in self.symbolic
                 or bool(self.candidates(k, True)) or bool(self.candidates(k)))
 

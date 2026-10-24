@@ -35,7 +35,8 @@ def layout_fields(fields):
                 if total > extent:
                     # Alternate FD records follow their first record and may be
                     # larger: the record area grows to the largest one.
-                    if not (f.file_record and target.file_record and f.parent is None):
+                    # A larger 01 REDEFINES grows the area (memory_size, field.c).
+                    if not (f.parent is None and target.parent is None and f.file_record == target.file_record):
                         raise CobolError(f"REDEFINES plus grand que sa zone non pris en charge: {key}")
                     cursor += total - extent
                     extents[target.name] = total

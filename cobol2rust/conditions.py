@@ -35,9 +35,7 @@ def binary(x, op, y):
         return Expr(COMPARISON[op], (x, y))
     if op in {"&", "|"}:
         return Expr("and" if op == "&" else "or", (x, y))
-    if op == "^":
-        raise CobolError("exponentiation non prise en charge")
-    return Expr(op, (x, y))
+    return Expr("**" if op == "^" else op, (x, y))
 
 
 def negation(x):
@@ -48,7 +46,7 @@ def expand(e):
     """build_expr_expand: drop the parentheses markers."""
     while e.op == "paren":
         e = e.args[0]
-    if e.op in {"and", "or", "not", "+", "-", "*", "/", "unary-", "unary+"} or e.op.startswith("cmp"):
+    if e.op in {"and", "or", "not", "+", "-", "*", "/", "**", "unary-", "unary+"} or e.op.startswith("cmp"):
         return Expr(e.op, tuple(expand(a) for a in e.args), e.figurative_zero, e.figurative_space, e.literal_all)
     return e
 

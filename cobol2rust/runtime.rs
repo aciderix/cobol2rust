@@ -80,6 +80,33 @@ impl Number {
     fn times(self, other: Self) -> Self {
         Self::new(self.n * other.n, self.scale + other.scale)
     }
+    /// cob_trim_decimal: drop trailing fractional zeros.
+    fn trimmed(mut self) -> Self {
+        if self.n == BigInt::from(0) { self.scale = 0; return self; }
+        while self.scale > 0 && (&self.n % 10u8) == BigInt::from(0) {
+            self.n /= 10u8;
+            self.scale -= 1;
+        }
+        self
+    }
+    /// cob_decimal_pow for integer exponents; a fractional exponent goes
+    /// through GMP floating point in libcob and is not modelled.
+    fn power(self, exponent: Self) -> Self {
+        if exponent.n == BigInt::from(0) {
+            if self.n == BigInt::from(0) { fail("0 ** 0 raises EC-SIZE-EXPONENTIATION; not modelled"); }
+            return Self::new(BigInt::from(1), 0);
+        }
+        if self.n == BigInt::from(0) { return Self::new(BigInt::from(0), 0); }
+        let exponent = exponent.trimmed();
+        if exponent.scale != 0 { fail("non-integer exponent (floating point in libcob) not modelled"); }
+        let base = self.trimmed();
+        if exponent.n == BigInt::from(1) { return base; }
+        let negative = exponent.n.sign() == Sign::Minus;
+        let n: u32 = absolute(&exponent.n).try_into().unwrap_or_else(|_| fail("exponent too large"));
+        if (base.n.bits() as u64) * (n as u64) > 16000 || base.scale as u64 * n as u64 > 1024 { fail("intermediate decimal capacity exceeded"); }
+        let raised = Self::new(base.n.pow(n), base.scale * n).trimmed();
+        if negative { Self::new(BigInt::from(1), 0).divide(raised).trimmed() } else { raised }
+    }
     fn divide(self, other: Self) -> Self {
         if other.n == BigInt::from(0) { fail("division by zero"); }
         if self.n == BigInt::from(0) { return Self::new(BigInt::from(0), 0); }
@@ -199,6 +226,7 @@ impl Value {
     pub fn minus(&self, b: &Self) -> Self { Self::Num(self.num().plus(b.num().neg()), None) }
     pub fn times(&self, b: &Self) -> Self { Self::Num(self.num().times(b.num()), None) }
     pub fn divide(&self, b: &Self) -> Self { Self::Num(self.num().divide(b.num()), None) }
+    pub fn power(&self, b: &Self) -> Self { Self::Num(self.num().power(b.num()), None) }
     pub fn checked_divide(&self, b: &Self) -> Result<Self, SizeError> {
         let left = self.num(); let right = b.num();
         if right.n == BigInt::from(0) { return Err(SizeError); }
@@ -242,7 +270,11 @@ impl Value {
         }
     }
     /// cob_decimal_get_field without COB_STORE_KEEP_ON_OVERFLOW (cob_add_int's opt 0).
-    pub fn store_truncated(&mut self, source: &Self) -> bool {
+    /// A signed DISPLAY receiver of the literal -0 keeps the minus sign.
+    pub fn negative_zero(&mut self) {
+        match self { Self::View(view) => view.mark_negative_zero(), _ => fail("negative zero requires storage") }
+    }
+        pub fn store_truncated(&mut self, source: &Self) -> bool {
         match self {
             Self::View(view) => view.store_truncated(source),
             _ => fail("store requires a storage destination"),

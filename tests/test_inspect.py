@@ -95,3 +95,13 @@ class EvaluateNativeTests(unittest.TestCase):
         for data in ("01 nothing pic 9.", "01 g. 05 test pic x."):
             with self.subTest(data=data), self.assertRaises(CobolError):
                 Parser(program(data)).parse()
+
+    def test_renames_larger_redefines_and_exponentiation(self):
+        for name in ("renames.cob", "exponentiation.cob", "figurative_numeric.cob", "negative_zero.cob"):
+            with self.subTest(name=name):
+                report = verify(ROOT / "tests" / "fixtures" / name, fmt="free")
+                self.assertTrue(report["match"], report)
+        from tests.test_numeric_move import program
+        from cobol2rust.emitter import Emitter
+        with self.assertRaises(CobolError):
+            Emitter(Parser(program("01 c pic 9v99.", "compute c = 3 ** -1.")).parse()).generate()
