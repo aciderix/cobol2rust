@@ -57,8 +57,8 @@ class NumericMoveTests(unittest.TestCase):
                                        "move n to group-a.")).parse()).generate()
 
     def test_unmodelled_sources_remain_rejected(self):
-        for body in ("move edited-a to n.",
-                     "move edited-a to edited-b.", "move n + 1 to output-a."):
+        for body in (
+                     "move n + 1 to output-a.",):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic 999. 01 output-a pic xxx. "
                                        "01 edited-a pic +999. 01 edited-b pic +999.", body)).parse()).generate()

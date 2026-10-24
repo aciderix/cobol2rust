@@ -1657,6 +1657,37 @@ class Parser:
                 self.error("ACCEPT vers une PICTURE éditée non pris en charge")
             self.accept("END-ACCEPT")
             return Stmt("accept", (name,), line)
+        if verb == "MOVE" and (self.at("CORRESPONDING") or self.at("CORR")):
+            # cb_emit_move_corresponding: one MOVE per matching pair.
+            self.take()
+            source = self.corresponding_group()
+            self.expect("TO")
+            moves = []
+            while True:
+                target = self.corresponding_group()
+                moves += [Stmt("move", (Expr("var", (a,)), [b], False), line)
+                          for a, b in self.corresponding_pairs(source, target, False)]
+                if self.t.string or not self.candidates(self.t.key):
+                    break
+            return Stmt("sequence", (moves,), line)
+        if verb in {"ADD", "SUBTRACT"} and (self.at("CORRESPONDING") or self.at("CORR")):
+            # cb_emit_corresponding: the receiver's items lead the pairing.
+            self.take()
+            source = self.corresponding_group()
+            self.expect("TO" if verb == "ADD" else "FROM")
+            target = self.corresponding_group()
+            rounded = self.accept("ROUNDED")
+            op = "+" if verb == "ADD" else "-"
+            pairs = self.corresponding_pairs(target, source, True)
+            items = [(t, Expr(op, (Expr("var", (t,)), Expr("var", (u,)))), rounded) for t, u in pairs]
+            stmt = self.arithmetic(verb, None, items, line)
+            if stmt.op == "compute":
+                # cb_build_optim_add for int operands without ROUNDED/SIZE ERROR.
+                stmt = Stmt("compute", (None, [
+                    (t, Expr("p_int_add", (t, Expr("var", (u,)), -self.fields[t.name].scale, verb == "SUBTRACT")), r)
+                    if not r and self.fields[t.name].scale < 0 and self.fits_int(Expr("var", (u,)))
+                    else (t, e, r) for (t, e, r), (_, u) in zip(items, pairs)]), line)
+            return stmt
         if verb == "MOVE":
             value = self.expr()
             self.expect("TO")
@@ -1950,6 +1981,34 @@ class Parser:
             self.error("INVALID KEY limité aux fichiers RELATIVE")
         self.accept(ending)
         return invalid, valid
+
+    def corresponding_group(self):
+        ref = self.variable()
+        f = self.fields[ref.name]
+        if ref.start is not None or f.picture or not f.children:
+            self.error(f"'{f.label}' is not a group name")
+        return ref
+
+    def corresponding_pairs(self, first, second, arithmetic):
+        """emit_corresponding / emit_move_corresponding: children of `first`
+        in order, matched by name with children of `second`; REDEFINES, OCCURS
+        and FILLER items never match."""
+        pairs = []
+        for c1 in self.fields[first.name].children:
+            f1 = self.fields[c1]
+            if f1.redefines or f1.table or f1.filler:
+                continue
+            for c2 in self.fields[second.name].children:
+                f2 = self.fields[c2]
+                if f2.redefines or f2.table or f2.filler or f1.label != f2.label:
+                    continue
+                r1, r2 = DataRef(c1, first.indices), DataRef(c2, second.indices)
+                if f1.children and f2.children:
+                    pairs += self.corresponding_pairs(r1, r2, arithmetic)
+                elif not arithmetic or (not f1.children and not f2.children
+                                        and f1.kind == "number" and f2.kind == "number"):
+                    pairs.append((r1, r2))
+        return pairs
 
     def rounded_receivers(self):
         receivers = [(self.variable(), self.accept("ROUNDED"))]
@@ -2516,6 +2575,8 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
                     walk(s.args[2], section); walk(s.args[3], section)
+                elif s.op == "sequence":
+                    walk(s.args[0], section)
                 elif s.op in {"string", "unstring"}:
                     walk(s.args[-2], section); walk(s.args[-1], section)
                 elif s.op in {"write", "rewrite", "delete", "start", "call_program", "return_sort"}:

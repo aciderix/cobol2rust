@@ -156,13 +156,15 @@ class RuntimeTests(unittest.TestCase):
 
     def test_divide_zero_overflow_and_invalid_input_abort(self):
         rustc = find_tool("rustc")
-        cases = [("compute n = 1 / 0 stop run.", b"", "division by zero"),
-                 ("compute n = 100 stop run.", b"", "overflow")]
-        for body, stdin, diagnostic in cases:
+        # A DISPLAY receiver truncates like cob_decimal_get_display; binary
+        # overflow depends on cobc's native add routines and stops.
+        cases = [("compute n = 1 / 0 stop run.", b"", "division by zero", "01 n pic 99."),
+                 ("compute n = 100 stop run.", b"", "overflow", "01 n pic 99 comp.")]
+        for body, stdin, diagnostic, data in cases:
             with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 source = root / "main.cob"
-                source.write_text(program(body, "01 n pic 99."), encoding="utf-8")
+                source.write_text(program(body, data), encoding="utf-8")
                 convert(source, root / "rust")
                 binary = build_rust(root / "rust")
                 p = subprocess.run([str(binary)], capture_output=True, input=stdin, timeout=10)

@@ -97,7 +97,8 @@ class EvaluateNativeTests(unittest.TestCase):
                 Parser(program(data)).parse()
 
     def test_renames_larger_redefines_and_exponentiation(self):
-        for name in ("renames.cob", "exponentiation.cob", "figurative_numeric.cob", "negative_zero.cob"):
+        for name in ("renames.cob", "exponentiation.cob", "figurative_numeric.cob", "negative_zero.cob",
+                     "corresponding.cob", "display_truncation.cob", "deediting.cob"):
             with self.subTest(name=name):
                 report = verify(ROOT / "tests" / "fixtures" / name, fmt="free")
                 self.assertTrue(report["match"], report)

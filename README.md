@@ -79,7 +79,7 @@ Le projet produit contient :
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
 également validé sous Linux 304 tests Python, avec un test d'inspection du PE
-Windows ignoré (305 découverts), et les 91 comparaisons COBOL/Rust du corpus actuel.
+Windows ignoré (305 découverts), et les 94 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -308,6 +308,16 @@ COMPUTE, à gauche dans les conditions) ; un exposant littéral négatif est
 refusé car cob_decimal_pow modifie la constante décimale partagée par cobc.
 `MOVE -0` laisse un zéro négatif dans un DISPLAY signé. Un champ DISPLAY non
 signé se compare octet par octet à QUOTE, HIGH/LOW-VALUE ou ALL littéral.
+
+## CORRESPONDING, troncature et dé-édition
+
+`MOVE`, `ADD` et `SUBTRACT CORRESPONDING` appariement par nom comme
+`emit_corresponding` (sans REDEFINES, OCCURS ni FILLER ; numériques
+élémentaires seulement pour le calcul). Sans SIZE ERROR, un receveur DISPLAY
+garde les chiffres de poids faible (`cob_decimal_get_display`) ; les receveurs
+binaires ou packés, qui passent par d'autres routines de cobc, restent un arrêt
+nommé en cas de dépassement. Un MOVE d'un champ édité vers un numérique suit
+`cob_move_edited_to_display`.
 
 ## Calcul décimal et limites explicites
 

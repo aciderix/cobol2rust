@@ -1,5 +1,13 @@
 # Validation — 22 octobre 2026
 
+## CORRESPONDING, troncature DISPLAY, dé-édition — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **94/94 comparaisons locales conformes** ; nouvelles fixtures
+  `corresponding.cob`, `display_truncation.cob`, `deediting.cob`.
+- NIST : **256/458** ; **254/254 programmes acceptés conformes** (6104 PASS,
+  0 FAIL) : `build/nist-verify-corresponding.json`.
+
 ## Fichiers, RENAMES, exponentiation — 24 octobre 2026
 
 - **305 tests découverts : 304 réussis, un test PE Windows ignoré.**

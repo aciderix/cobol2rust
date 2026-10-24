@@ -83,7 +83,7 @@ class MixedTypeTests(unittest.TestCase):
 
     def test_deediting_and_arithmetic_are_not_promoted_by_text_move(self):
         data = "01 n pic 999. 01 t pic xxx. 01 edited-a pic +999."
-        for body in ("move edited-a to n.", "move edited-a to edited-a.",
+        for body in (
                      "compute n = t + 1.", "compute t = 1.",
                      "add t to n.", "move spaces to edited-a."):
             with self.subTest(body=body), self.assertRaises(CobolError):

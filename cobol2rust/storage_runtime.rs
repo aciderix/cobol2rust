@@ -519,6 +519,7 @@ impl View {
     }
     pub fn assign(&mut self, source: &Value, rounded: bool) {
         self.resolved();
+        let mut truncated_negative_zero = false;
         let mut bytes = match self.kind {
             Kind::AlnumEdited { symbols } => {
                 if !source.is_text() { fail("numeric/text MOVE unsupported"); }
@@ -559,7 +560,15 @@ impl View {
                 if matches!(usage, Usage::Index) {
                     if units < BigInt::from(i32::MIN) || units > BigInt::from(i32::MAX) { fail("native index capacity exceeded"); }
                 } else if absolute(&units) >= power(digits) {
-                    fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled");
+                    // cob_decimal_get_display without SIZE ERROR keeps the
+                    // low-order digits and the sign of the whole result.
+                    // Binary and packed receivers reach native or BCD add
+                    // routines in cobc with other overflow rules.
+                    if !usage.is_display() { fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled"); }
+                    let negative = units.sign() == Sign::Minus;
+                    let kept = absolute(&units) % power(digits);
+                    truncated_negative_zero = negative && signed && kept == BigInt::from(0);
+                    units = if negative { -kept } else { kept };
                 }
                 let negative = units.sign() == Sign::Minus;
                 let ascii = format!("{:0>width$}", absolute(&units).to_string(), width = digits as usize).into_bytes();
@@ -588,6 +597,58 @@ impl View {
             },
         };
         self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+        if truncated_negative_zero { self.mark_negative_zero(); }
+    }
+    /// cob_move_edited_to_display: the digits of a numeric-edited sender,
+    /// its decimal point (or V/P positions) and a '-' or 'C' for the sign.
+    pub fn move_deedited(&mut self, source: &Value) {
+        self.resolved();
+        let (bytes, symbols) = match source {
+            Value::View(view) => match view.kind {
+                Kind::Edited { symbols, .. } => (view.raw(), symbols),
+                _ => fail("de-editing MOVE requires a numeric-edited sender"),
+            },
+            _ => fail("de-editing MOVE requires a numeric-edited sender"),
+        };
+        let (mut digits, mut scale, mut count, mut point, mut negative) = (Vec::new(), 0i32, 0i32, false, false);
+        for &byte in &bytes {
+            match byte {
+                b'0'..=b'9' => { digits.push(byte); if point { scale += 1; } },
+                b'.' => point = true,
+                b'-' | b'C' => negative = true,
+                _ => {},
+            }
+        }
+        if scale == 0 {
+            for &(symbol, n) in symbols {
+                let n = n as i32;
+                match symbol {
+                    b'9' | b'0' | b'Z' | b'*' => if point { scale += n } else { count += n },
+                    b'P' => if count == 0 { point = true; scale += n } else { scale -= n },
+                    b'V' => point = true,
+                    _ => {},
+                }
+            }
+        }
+        let coefficient = if digits.is_empty() { BigInt::from(0) } else { BigInt::parse_bytes(&digits, 10).unwrap() };
+        let value = Number::scaled(coefficient, scale);
+        match self.kind {
+            Kind::Numeric { digits: places, scale: target, signed, usage } if usage.is_display() => {
+                // store_common_region: align on the scales, drop what overflows.
+                let units = absolute(&value.units(target, false)) % power(places);
+                let ascii = format!("{:0>width$}", units.to_string(), width = places as usize).into_bytes();
+                let mut bytes = display_bytes(ascii, negative && signed, usage, signed);
+                if bytes.len() != self.size { fail("unsupported DISPLAY storage for de-editing MOVE"); }
+                self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+            },
+            _ => {
+                // indirect_move through a signed DISPLAY temporary of 76 digits, 38 decimals.
+                let units = absolute(&value.units(38, false)) % power(76);
+                if negative && units == BigInt::from(0) { fail("de-edited negative zero to a non-DISPLAY receiver not modelled"); }
+                let number = Value::Num(Number::new(if negative { -units } else { units }, 38), None);
+                if matches!(self.kind, Kind::Edited { .. }) { self.move_edited(&number) } else { self.move_number(&number) }
+            },
+        }
     }
     /// cob_decimal_get_display with opt 0: an overflow keeps the low-order
     /// digits (mpz_tdiv_r) and the sign of the full result.

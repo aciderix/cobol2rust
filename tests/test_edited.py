@@ -60,8 +60,6 @@ class EditedPictureTests(unittest.TestCase):
         data = "01 edited-a pic -9(3).99. 01 other-a pic +9(3).99. 01 number-a pic s9(4)v99."
         for body in (
             "move spaces to edited-a.",
-            "move edited-a to number-a.",
-            "move edited-a to other-a.",
             "compute number-a = edited-a + 1.",
             "add edited-a to number-a.",
             "add 1 to edited-a.",

@@ -117,6 +117,8 @@ class ControlGraph:
                 invalid = self._body(args[-2], after, block) if args[-2] else None
                 valid = self._body(args[-1], after, block)
             return self._add("io", (stmt, after, self._declaratives(name, after), invalid, valid), stmt)
+        if op == "sequence":
+            return self._body(args[0], after, block)
         if op == "string":
             return self._add("string", (self._body(args[3], after, block), self._body(args[4], after, block)), stmt)
         if op == "unstring":

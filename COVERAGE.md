@@ -583,6 +583,11 @@ comparaisons numériques/figuratives. Émission acceptée : **251/458** ;
 revérification : **249/249 programmes conformes**, 5841 PASS, 0 FAIL
 (`build/nist-verify-files-renames.json`).
 
+## Progression : CORRESPONDING, troncature DISPLAY, dé-édition
+
+Émission acceptée : **256/458** ; revérification : **254/254 programmes
+conformes**, 6104 PASS, 0 FAIL (`build/nist-verify-corresponding.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

@@ -344,6 +344,11 @@ class Emitter:
                 continue
             if destination == "edited" and source_kind == "number":
                 continue
+            if move and destination in {"number", "edited"} and source_kind == "edited" and expr.op == "var":
+                if field.usage == "INDEX":
+                    raise CobolError("MOVE édité vers index non pris en charge")
+                conversions[-1] = "deedit"
+                continue
             if destination == "text" and source_kind == "edited":
                 continue
             if destination == "edited" or destination != source_kind:
@@ -368,7 +373,9 @@ class Emitter:
             source = self.reference(expr.args[0]) + ".clone()" if expr.op == "var" else self.expression(expr)
             self.write(f"let {temp} = {source};")
         for ref, conversion in zip(targets, conversions):
-            if conversion in {"raw_text", "parsed_text"}:
+            if conversion == "deedit":
+                self.write(f"{self.reference(ref)}.move_deedited(&{temp});")
+            elif conversion in {"raw_text", "parsed_text"}:
                 self.write(f"{self.reference(ref)}.assign_text_move(&{temp}, {str(conversion == 'raw_text').lower()});")
             elif conversion == "all":
                 receiver = self.unique()

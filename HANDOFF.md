@@ -29,6 +29,11 @@ plus grand dans `layout.py`, `Number::power` (= cob_decimal_pow entier),
 `Value::negative_zero`. NIST **251/458**, 249/249 conformes. Prochains :
 CORRESPONDING, COPY REPLACING, DEBUGGING MODE, INDEXED, LINAGE.
 
+Dernière étape : `Parser.corresponding_pairs` (Stmt `sequence` pour MOVE
+CORR), troncature DISPLAY dans `View::assign`, `View::move_deedited`.
+NIST **256/458**, 254/254 conformes. COPY REPLACING en cours (portage de
+replace.c).
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

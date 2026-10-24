@@ -270,6 +270,9 @@ impl Value {
         }
     }
     /// cob_decimal_get_field without COB_STORE_KEEP_ON_OVERFLOW (cob_add_int's opt 0).
+    pub fn move_deedited(&mut self, source: &Self) {
+        match self { Self::View(view) => view.move_deedited(source), _ => fail("de-editing MOVE requires storage") }
+    }
     /// A signed DISPLAY receiver of the literal -0 keeps the minus sign.
     pub fn negative_zero(&mut self) {
         match self { Self::View(view) => view.mark_negative_zero(), _ => fail("negative zero requires storage") }
