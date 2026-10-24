@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 300 tests Python, avec un test d'inspection du PE
-Windows ignoré (301 découverts), et les 85 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 303 tests Python, avec un test d'inspection du PE
+Windows ignoré (304 découverts), et les 87 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -283,6 +283,17 @@ les mêmes instructions, et mêmes comparaisons qu'un `IF`. Sans `END-IF`, un
 compare la zone en alphanumérique. Comme le scanner de cobc, un signe collé à
 des chiffres après un opérande est un littéral signé : `T(I +1)` a deux
 sous-scripts.
+
+## Conditions, STRING et UNSTRING
+
+Les conditions sont construites par un portage de `cb_build_expr` (pile de
+priorités de typeck.c) : conditions abrégées (`A = 1 OR 2`,
+`A NOT = B AND > C`), place du NOT, conditions de signe POSITIVE/NEGATIVE/ZERO
+et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
+`STRING` (DELIMITED BY, POINTER, ON OVERFLOW) et `UNSTRING` (DELIMITED BY
+[ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
+reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune
+exception levée). Les mots réservés de cobc sont refusés comme noms.
 
 ## Calcul décimal et limites explicites
 

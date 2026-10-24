@@ -206,6 +206,8 @@ def declaration(p, file_record=False):
     if implicit_filler and p.t.key in {"PIC", "PICTURE"} and p.tokens[p.i + 1].key in {"PIC", "PICTURE"}:
         p.error("nom réservé: " + p.t.key)
     label = "FILLER" if implicit_filler else p.name()
+    if label != "FILLER":
+        p.user_word(label)
     if level == 88:
         if not p.last_data:
             p.error("niveau 88 requiert une donnée précédente")
@@ -333,6 +335,7 @@ def declaration(p, file_record=False):
                 p.accept(",")
                 names.append(p.name())
             for name in names:
+                p.user_word(name)
                 if name in p.indexes or name in VERBS:
                     p.error(f"index dupliqué ou réservé: {name}")
                 p.indexes[name] = key

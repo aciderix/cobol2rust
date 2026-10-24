@@ -117,6 +117,10 @@ class ControlGraph:
                 invalid = self._body(args[-2], after, block) if args[-2] else None
                 valid = self._body(args[-1], after, block)
             return self._add("io", (stmt, after, self._declaratives(name, after), invalid, valid), stmt)
+        if op == "string":
+            return self._add("string", (self._body(args[3], after, block), self._body(args[4], after, block)), stmt)
+        if op == "unstring":
+            return self._add("unstring", (self._body(args[5], after, block), self._body(args[6], after, block), after), stmt)
         if op == "arithmetic":
             shared, items, error, success = args
             return self._add("arithmetic", (shared, items, self._body(error, after, block),

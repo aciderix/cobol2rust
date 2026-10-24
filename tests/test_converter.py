@@ -35,7 +35,7 @@ class FrontendTests(unittest.TestCase):
             program("call 'external'."), program("alter finish to proceed to other."),
             program("open input file-a."), program("display function current-date."),
             program("exec sql select 1 end-exec."), program("alter p to proceed to q."),
-            program("perform missing stop run."), program("if n = 1 or 2 display 'bad' end-if.", "01 n pic 9."),
+            program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
             program("stop run.", "01 n pic 9(2) comp-5."),

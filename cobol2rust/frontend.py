@@ -424,11 +424,11 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -757,7 +757,15 @@ class Parser:
                 by_file[name] = section
         self.expect(".")
 
+    def user_word(self, name):
+        """cobc refuses a reserved word as a user-defined name."""
+        from .reserved import RESERVED
+        if name in RESERVED:
+            raise CobolError(f"ligne {self.tokens[self.i - 1].line}: mot réservé de GnuCOBOL utilisé comme nom: {name}")
+        return name
+
     def procedure_name_check(self, name):
+        self.user_word(name)
         # A data name followed by a period is a receiver, not a header.
         if (self.candidates(name) or self.candidates(name, True) or name in self.files
                 or name in self.indexes):
@@ -963,7 +971,7 @@ class Parser:
     def file_control(self):
         self.expect("SELECT")
         optional = self.accept("OPTIONAL")
-        name = self.name()
+        name = self.user_word(self.name())
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
         self.expect("ASSIGN")
@@ -1097,7 +1105,7 @@ class Parser:
         from .data_parser import declaration
         return declaration(self, file_record)
 
-    def expr(self, minimum=0):
+    def expr(self, minimum=0, primary=False):
         t = self.take()
         if t.string:
             left = Expr("text", (t.text,))
@@ -1140,6 +1148,8 @@ class Parser:
             left = Expr("var", (self.variable(),))
         else:
             self.error(f"expression non prise en charge: {t.text}")
+        if primary:
+            return left
         while not self.t.string and self.t.key in {"+", "-", "*", "/"}:
             op = self.t.key
             precedence = 20 if op in {"*", "/"} else 10
@@ -1149,81 +1159,112 @@ class Parser:
             left = Expr(op, (left, self.expr(precedence + 1)))
         return left
 
-    def condition(self):
-        return self.disjunction()
+    def operand_start(self):
+        """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
+        t = self.t
+        if t.string or re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", t.text):
+            return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
+        k = t.key
+        return (k in INSPECT_FIGURATIVES or (k == "ALL" and self.tokens[self.i + 1].string)
+                or k in self.switch_conditions or k in self.symbolic
+                or bool(self.candidates(k, True)) or bool(self.candidates(k)))
 
-    def disjunction(self):
-        left = self.conjunction()
-        while self.accept("OR"):
-            left = Expr("or", (left, self.conjunction()))
-        return left
-
-    def conjunction(self):
-        left = self.comparison()
-        while self.accept("AND"):
-            left = Expr("and", (left, self.comparison()))
-        return left
-
-    def comparison(self):
-        if self.accept("NOT"):
-            return Expr("not", (self.comparison(),))
-        # Parenthesized arithmetic is handled by expr; boolean grouping is explicit.
-        if self.at("("):
-            saved = self.i
-            try:
+    def expression_tokens(self):
+        """The token list of parser.y expr_tokens, for conditions.build."""
+        tokens, depth = [], 0
+        while True:
+            t = self.t
+            k = None if t.string else t.key
+            following = self.tokens[min(self.i + 1, len(self.tokens) - 1)]
+            if k in {"+", "-"} and not following.string and following.start == t.end \
+                    and re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", following.text):
+                # The scanner reads a sign touching digits as a signed literal.
+                self.take(); self.take()
+                tokens.append(("x", Expr("unary" + k, (Expr("number", (following.text,)),))))
+            elif t.string or (k not in {"+", "-"} and self.operand_start()):
+                tokens.append(("x", self.expr(primary=True)))
+            elif k == "IS":
                 self.take()
-                result = self.condition()
-                self.expect(")")
-                return result
-            except CobolError:
-                self.i = saved
-        left = self.expr()
-        if left.op in {"condition", "bool", "switch"}:
-            return left
-        self.accept("IS")
-        negate = self.accept("NOT")
-        if self.accept("NUMERIC"):
-            result = Expr("numeric_class", (left,))
-            return Expr("not", (result,)) if negate else result
-        if not self.t.string and self.t.key in self.classes:
-            # A user CLASS: every byte of the item belongs to the class.
-            members = self.classes[self.take().key]
-            if left.op != "var" or (self.fields[left.args[0].name].kind != "text" and left.args[0].start is None):
-                self.error("condition CLASS limitée aux champs alphanumériques")
-            result = Expr("user_class", (left, tuple(sorted(members))))
-            return Expr("not", (result,)) if negate else result
-        if self.t.key in {"=", "<>", "<", ">", "<=", ">="}:
-            op = self.take().key
-        elif self.accept("EQUAL"):
-            self.accept("TO")
-            op = "="
-        elif self.accept("GREATER"):
-            self.accept("THAN")
-            op = ">=" if self.accept("OR") and self.accept("EQUAL") else ">"
-            self.accept("TO")
-        elif self.accept("LESS"):
-            self.accept("THAN")
-            op = "<=" if self.accept("OR") and self.accept("EQUAL") else "<"
-            self.accept("TO")
-        else:
-            self.error("comparaison explicite attendue (conditions abrégées non prises en charge)")
-        result = Expr("cmp" + op, (left, self.expr()))
-        return Expr("not", (result,)) if negate else result
+            elif k == "NOT":
+                self.take()
+                tokens.append(("!", None))
+            elif k in {"=", "<", ">", "<=", ">=", "<>"}:
+                self.take()
+                tokens.append(({"=": "=", "<": "<", ">": ">", "<=": "[", ">=": "]", "<>": "~"}[k], None))
+            elif k in {"EQUAL", "EQUALS"}:
+                self.take()
+                self.accept("TO")
+                tokens.append(("=", None))
+            elif k in {"GREATER", "LESS"}:
+                self.take()
+                self.accept("THAN")
+                op = ">" if k == "GREATER" else "<"
+                # The scanner reads GREATER [THAN] OR EQUAL [TO] as one token.
+                if self.at("OR") and self.tokens[self.i + 1].key in {"EQUAL", "EQUALS"} and not self.tokens[self.i + 1].string:
+                    self.take(); self.take()
+                    self.accept("TO")
+                    op = "]" if k == "GREATER" else "["
+                tokens.append((op, None))
+            elif k == "NUMERIC":
+                self.take()
+                tokens.append(("class", lambda x: Expr("numeric_class", (x,))))
+            elif k in {"ALPHABETIC", "ALPHABETIC-LOWER", "ALPHABETIC-UPPER"}:
+                self.take()
+                tokens.append(("class", lambda x, k=k: self.alpha_class(x, k)))
+            elif k in {"POSITIVE", "NEGATIVE"}:
+                self.take()
+                tokens.append(("P" if k == "POSITIVE" else "N", None))
+            elif k in self.classes and not self.candidates(k):
+                members = tuple(sorted(self.classes[self.take().key]))
+                tokens.append(("class", lambda x, members=members: self.user_class(x, members)))
+            elif k == "(":
+                self.take()
+                depth += 1
+                tokens.append(("(", None))
+            elif k == ")" and depth:
+                self.take()
+                depth -= 1
+                tokens.append((")", None))
+            elif k in {"+", "-", "*", "/", "**"}:
+                self.take()
+                tokens.append(("^" if k == "**" else k, None))
+            elif k in {"AND", "OR"}:
+                self.take()
+                tokens.append(("&" if k == "AND" else "|", None))
+            else:
+                break
+        if not tokens:
+            self.error("expression attendue")
+        return tokens
 
-    BOOLEAN_OPS = {"and", "or", "not", "condition", "bool", "numeric_class", "user_class", "switch"}
+    def alpha_class(self, x, kind):
+        if x.op != "var" or (self.fields[x.args[0].name].kind != "text" and x.args[0].start is None):
+            self.error(f"condition {kind} limitée aux champs alphanumériques")
+        return Expr("alpha_class", (x, kind))
+
+    def user_class(self, x, members):
+        # A user CLASS: every byte of the item belongs to the class.
+        if x.op != "var" or (self.fields[x.args[0].name].kind != "text" and x.args[0].start is None):
+            self.error("condition CLASS limitée aux champs alphanumériques")
+        return Expr("user_class", (x, members))
+
+    def cobc_expression(self):
+        from .conditions import build
+        return build(self.expression_tokens(), self.error)
+
+    def condition(self):
+        from .conditions import is_boolean
+        result = self.cobc_expression()
+        if not is_boolean(result):
+            self.error("invalid expression: condition expected")
+        return result
 
     def evaluate_subject(self):
         if self.at("TRUE") or self.at("FALSE"):
             return ("truth", self.take().key == "TRUE")
-        saved = self.i
-        try:
-            condition = self.condition()
-            if condition.op in self.BOOLEAN_OPS or condition.op.startswith("cmp"):
-                return ("condition", condition)
-        except CobolError:
-            pass
-        self.i = saved
-        return ("value", self.expr())
+        from .conditions import is_boolean
+        result = self.cobc_expression()
+        return ("condition" if is_boolean(result) else "value", result)
 
     def evaluate_object(self, subject):
         """evaluate_test for one subject and one object."""
@@ -1779,6 +1820,10 @@ class Parser:
             return Stmt("cancel", (targets,), line)
         if verb == "INSPECT":
             return self.inspect_statement(line)
+        if verb == "STRING":
+            return self.string_statement(line)
+        if verb == "UNSTRING":
+            return self.unstring_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
         if verb == "NEXT":
@@ -1824,6 +1869,122 @@ class Parser:
         while not self.t.string and self.candidates(self.t.key):
             receivers.append((self.variable(), self.accept("ROUNDED")))
         return receivers
+
+    def string_operand(self, delimiter=False):
+        """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative."""
+        t = self.t
+        if not t.string and t.key in INSPECT_FIGURATIVES:
+            self.take()
+            return Expr("all", (INSPECT_FIGURATIVES[t.key],))
+        if not t.string and t.key in self.symbolic and not self.candidates(t.key):
+            self.take()
+            return Expr("all", (chr(self.symbolic[t.key]),))
+        if not t.string and t.key == "ALL" and self.tokens[self.i + 1].string:
+            self.take()
+            return Expr("all", (self.take().text,), literal_all=True)
+        if t.string:
+            self.take()
+            return Expr("text", (t.text,))
+        if re.fullmatch(r"\d+", t.text):
+            self.take()
+            return Expr("text", (t.text,))
+        if not self.candidates(t.key):
+            self.error("opérande STRING/UNSTRING attendu")
+        ref = self.variable()
+        f = self.fields[ref.name]
+        if ref.start is None and f.kind == "number" and f.usage != "DISPLAY":
+            self.error(f"'{f.label}' is not USAGE DISPLAY")
+        return Expr("var", (ref,))
+
+    def integer_item(self, clause):
+        ref = self.variable()
+        f = self.fields[ref.name]
+        if ref.start is not None or f.children or f.kind != "number" or f.scale != 0 or f.usage == "INDEX":
+            self.error(f"{clause} requiert un entier numérique élémentaire sans P")
+        return ref
+
+    def overflow_handlers(self, ending):
+        stops = {ending, "ELSE", "END-IF", "END-PERFORM", "WHEN", "END-EVALUATE"}
+        overflow, success = [], []
+        if self.at("ON") or self.at("OVERFLOW"):
+            self.accept("ON")
+            self.expect("OVERFLOW")
+            overflow = self.block(stops | {"NOT"})
+        if self.at("NOT"):
+            self.take()
+            self.accept("ON")
+            self.expect("OVERFLOW")
+            success = self.block(stops)
+        self.accept(ending)
+        return overflow, success
+
+    def string_statement(self, line):
+        groups, items = [], []
+        while not self.at("INTO"):
+            items.append(self.string_operand())
+            if self.accept("DELIMITED"):
+                self.accept("BY")
+                delimiter = None if self.accept("SIZE") else self.string_operand()
+                groups.append((tuple(items), delimiter))
+                items = []
+        if items:
+            groups.append((tuple(items), None))
+        if not groups:
+            self.error("STRING requiert des sources")
+        self.expect("INTO")
+        target = self.variable()
+        f = self.fields[target.name]
+        if target.start is not None or f.kind != "text" or f.alnum_edit or f.justified:
+            self.error("STRING INTO limité aux champs alphanumériques ou groupes")
+        pointer = None
+        if self.at("WITH") or self.at("POINTER"):
+            self.accept("WITH")
+            self.expect("POINTER")
+            pointer = self.integer_item("POINTER")
+        overflow, success = self.overflow_handlers("END-STRING")
+        return Stmt("string", (tuple(groups), target, pointer, overflow, success), line)
+
+    def unstring_statement(self, line):
+        if self.t.string or not self.candidates(self.t.key):
+            self.error("UNSTRING d'un littéral non pris en charge")
+        source = self.variable()
+        delimiters = []
+        if self.accept("DELIMITED"):
+            self.accept("BY")
+            while True:
+                all_flag = self.accept("ALL")
+                operand = self.string_operand()
+                if operand.op == "all" and operand.literal_all:
+                    self.error("ALL littéral non admis comme délimiteur")
+                delimiters.append((operand, all_flag))
+                if not self.accept("OR"):
+                    break
+        self.expect("INTO")
+        targets = []
+        while not self.t.string and self.candidates(self.t.key):
+            target = self.variable()
+            delimiter = count = None
+            if self.accept("DELIMITER"):
+                self.accept("IN")
+                delimiter = self.variable()
+            if self.accept("COUNT"):
+                self.accept("IN")
+                count = self.integer_item("COUNT")
+            targets.append((target, delimiter, count))
+        if not targets:
+            self.error("UNSTRING INTO requiert un receveur")
+        pointer = tallying = None
+        if self.at("WITH") or self.at("POINTER"):
+            self.accept("WITH")
+            self.expect("POINTER")
+            pointer = self.integer_item("POINTER")
+        if self.accept("TALLYING"):
+            self.accept("IN")
+            tallying = self.variable()
+            if self.fields[tallying.name].kind != "number":
+                self.error("TALLYING requiert un compteur numérique")
+        overflow, success = self.overflow_handlers("END-UNSTRING")
+        return Stmt("unstring", (source, tuple(delimiters), tuple(targets), pointer, tallying, overflow, success), line)
 
     def inspect_operand(self, all_allowed=False):
         """An INSPECT operand: a DISPLAY identifier, an alphanumeric literal or
@@ -2268,6 +2429,8 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op == "arithmetic":
                     walk(s.args[2], section); walk(s.args[3], section)
+                elif s.op in {"string", "unstring"}:
+                    walk(s.args[-2], section); walk(s.args[-1], section)
                 elif s.op in {"write", "rewrite", "delete", "start", "call_program", "return_sort"}:
                     walk(s.args[-2], section); walk(s.args[-1], section)
                 elif s.op == "search":

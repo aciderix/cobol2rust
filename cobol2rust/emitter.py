@@ -73,7 +73,7 @@ class Emitter:
             return e.op
         if e.op == "all":
             return "text"
-        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class"}:
+        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class"}:
             return "bool"
         return "number"
 
@@ -122,6 +122,14 @@ class Emitter:
             item, members = args
             table = "[" + ", ".join(f"{m}u8" for m in members) + "]"
             return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
+        if op == "alpha_class":
+            # cob_is_alpha/upper/lower: spaces and letters of the C library's
+            # classification; bytes above 127 depend on the locale.
+            item, kind = args
+            test = {"ALPHABETIC": "is_ascii_alphabetic", "ALPHABETIC-UPPER": "is_ascii_uppercase",
+                    "ALPHABETIC-LOWER": "is_ascii_lowercase"}[kind]
+            return (f"({self.expression(item)}).bytes().iter().all(|byte| if *byte >= 128 {{ runtime::fail(\"alphabetic test of a non-ASCII byte depends on the locale\") }} "
+                    f"else {{ *byte == b' ' || byte.{test}() }})")
         if op == "numeric_class":
             return f"({self.expression(args[0])}).is_numeric()" if args[0].op != "var" else self.reference(args[0].args[0]) + ".is_numeric()"
         if op == "condition":
@@ -571,6 +579,97 @@ class Emitter:
         else:
             raise CobolError(f"instruction inconnue: {op}")
 
+    def string_operand(self, e):
+        if e.op == "var":
+            return f"storage_runtime::Operand::of(&{self.reference(e.args[0])})"
+        data = "vec![" + ", ".join(f"{ord(c)}u8" for c in e.args[0]) + "]"
+        return f"storage_runtime::Operand::new({data}, {str(e.op == 'all').lower()})"
+
+    def set_int(self, ref, value):
+        """cob_set_int: a MOVE from a native int."""
+        field = self.program.fields[ref.name]
+        method = "move_binary_to_packed" if self.storage_usage(field) == "Packed" else "move_number"
+        self.write(f"{self.reference(ref)}.{method}(&Value::number(&{value}.to_string()));")
+
+    def alphanumeric_move(self, ref, bytes_expr):
+        """cob_str_memcpy: a MOVE from an alphanumeric temporary."""
+        field = self.program.fields[ref.name]
+        if ref.start is None and field.kind in {"number", "edited"}:
+            if field.usage == "INDEX":
+                raise CobolError("UNSTRING vers un index non pris en charge")
+            self.write(f"{self.reference(ref)}.assign_text_move(&Value::Bytes({bytes_expr}), false);")
+        else:
+            self.write(f"{self.reference(ref)}.assign(&Value::Bytes({bytes_expr}), false);")
+
+    def string_node(self, stmt, overflow, success):
+        groups, target, pointer, _, _ = stmt.args
+        pointer_value = f"Some({self.reference(pointer)}.snapshot().integer(\"POINTER\"))" if pointer else "None"
+        s = self.unique()
+        self.write(f"let mut {s} = storage_runtime::StringInto::init(&{self.reference(target)}, {pointer_value});")
+        for items, delimiter in groups:
+            self.write(f"{s}.delimited({'None' if delimiter is None else 'Some(' + self.string_operand(delimiter) + ')'});")
+            for item in items:
+                self.write(f"{s}.append(&{self.string_operand(item)});")
+        flag, position = self.unique(), self.unique()
+        self.write(f"let ({flag}, {position}) = {s}.finish();")
+        if pointer:
+            self.set_int(pointer, position)
+        self.write(f"pc = if {flag} {{ {overflow} }} else {{ {success} }};")
+
+    def unstring_node(self, stmt, overflow, success, after):
+        source, delimiters, targets, pointer, tallying, _, _ = stmt.args
+        pointer_value = f"Some({self.reference(pointer)}.snapshot().integer(\"POINTER\"))" if pointer else "None"
+        u = self.unique()
+        self.write(f"let mut {u} = storage_runtime::Unstring::init(&{self.reference(source)}, {pointer_value});")
+        for operand, all_flag in delimiters:
+            self.write(f"{u}.delimited({self.string_operand(operand)}, {str(all_flag).lower()});")
+        for target, delimiter, count in targets:
+            data, found, size = self.unique(), self.unique(), self.unique()
+            self.write(f"if let Some(({data}, {found}, {size})) = {u}.next_into(storage_runtime::field_size(&{self.reference(target)})) {{")
+            self.indent += 1
+            self.write(f"let _ = (&{found}, {size});")
+            self.alphanumeric_move(target, data)
+            if delimiter is not None:
+                f = self.program.fields[delimiter.name]
+                self.write(f"match {found} {{")
+                self.indent += 1
+                self.write("Some(found) => {")
+                self.indent += 1
+                self.alphanumeric_move(delimiter, "found")
+                self.indent -= 1
+                self.write("},")
+                if delimiter.start is None and f.kind == "number":
+                    self.write("None => {")
+                    self.indent += 1
+                    self.set_int(delimiter, "0")
+                    self.indent -= 1
+                    self.write("},")
+                else:
+                    self.write(f"None => storage_runtime::fill_spaces(&{self.reference(delimiter)}),")
+                self.indent -= 1
+                self.write("}")
+            if count is not None:
+                self.set_int(count, size)
+            self.indent -= 1
+            self.write("}")
+        size_exception = self.unique()
+        self.write(f"let mut {size_exception} = false;")
+        if tallying is not None:
+            positions = max(0, -self.program.fields[tallying.name].scale)
+            delta = self.unique()
+            self.write(f"if {u}.count() != 0 {{ if let Some({delta}) = runtime::cob_add_int_operand(&Value::number(&{u}.count().to_string()), {positions}, false) {{")
+            self.indent += 1
+            counter = self.reference(tallying)
+            self.write(f"let {delta} = {counter}.snapshot().plus(&{delta});")
+            self.write(f"{size_exception} = {counter}.store_truncated(&{delta});")
+            self.indent -= 1
+            self.write("} }")
+        flag, exception, position = self.unique(), self.unique(), self.unique()
+        self.write(f"let ({flag}, {exception}, {position}) = {u}.finish({size_exception});")
+        if pointer:
+            self.set_int(pointer, position)
+        self.write(f"pc = if {flag} {{ {overflow} }} else if !{exception} {{ {success} }} else {{ {after} }};")
+
     def inspect_operand(self, e):
         if e.op == "var":
             return f"storage_runtime::Operand::of(&{self.reference(e.args[0])})"
@@ -885,6 +984,10 @@ class Emitter:
                 self.write(f"pc = {eof};")
                 self.indent -= 1
             self.write(f"}} else if {status} >= 10 {{ pc = handler.unwrap_or({continuation}); }} else {{ pc = {continuation}; }}")
+        elif op == "string":
+            self.string_node(node.stmt, *a)
+        elif op == "unstring":
+            self.unstring_node(node.stmt, *a)
         elif op == "arithmetic":
             shared, items, error, success = a
             if any(ref.start is not None or self.program.fields[ref.name].kind not in {"number", "edited"} for ref, _, _ in items):

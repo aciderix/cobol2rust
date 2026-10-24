@@ -591,19 +591,20 @@ impl View {
     }
     /// cob_decimal_get_display with opt 0: an overflow keeps the low-order
     /// digits (mpz_tdiv_r) and the sign of the full result.
-    pub fn store_truncated(&mut self, source: &Value) {
+    pub fn store_truncated(&mut self, source: &Value) -> bool {
         self.resolved();
         match self.kind {
             Kind::Numeric { digits, scale, signed, usage } if usage.is_display() => {
                 let units = source.num().units(scale, false);
-                if absolute(&units) < power(digits) { return self.assign(source, false); }
+                if absolute(&units) < power(digits) { self.assign(source, false); return false; }
                 let negative = units.sign() == Sign::Minus;
                 let kept = absolute(&units) % power(digits);
                 let ascii = format!("{:0>width$}", kept.to_string(), width = digits as usize).into_bytes();
                 let mut bytes = display_bytes(ascii, negative && signed, usage, signed);
                 self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+                true
             },
-            _ => self.assign(source, false),
+            _ => { self.assign(source, false); false },
         }
     }
     pub fn checked_assign(&mut self, source: &Value, rounded: bool) -> Result<(), SizeError> {
@@ -1014,5 +1015,169 @@ impl Inspect {
             });
         }
         self.put_sign();
+    }
+}
+
+/// STRING (libcob cob_string_init/delimited/append/finish): bytes are copied
+/// into the receiver's storage; nothing is padded.
+pub struct StringInto { memory: Memory, offset: usize, size: usize, position: i64, overflow: bool, delimiter: Option<Vec<u8>> }
+impl StringInto {
+    pub fn init(target: &Value, pointer: Option<i128>) -> Self {
+        let view = match target { Value::View(view) => view, _ => fail("STRING INTO requires a data item") };
+        view.resolved();
+        let mut s = StringInto { memory: view.memory.clone(), offset: view.offset, size: view.size, position: 0, overflow: false, delimiter: None };
+        if let Some(p) = pointer {
+            if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
+            s.position = p as i64 - 1;
+            if s.position < 0 || s.position >= s.size as i64 { s.overflow = true; }
+        }
+        s
+    }
+    pub fn delimited(&mut self, delimiter: Option<Operand>) { self.delimiter = delimiter.map(|d| d.data); }
+    pub fn append(&mut self, source: &Operand) {
+        if self.overflow { return; }
+        let data = &source.data;
+        let mut size = data.len();
+        if size == 0 { return; }
+        if let Some(d) = &self.delimiter {
+            let limit = data.len() as i64 - d.len() as i64 + 1;
+            if let Some(i) = (0..limit.max(0) as usize).find(|&i| data[i..i + d.len()] == d[..]) { size = i; }
+        }
+        let room = self.size as i64 - self.position;
+        let mut memory = self.memory.borrow_mut();
+        let start = self.offset + self.position as usize;
+        if size as i64 <= room {
+            memory[start..start + size].copy_from_slice(&data[..size]);
+            self.position += size as i64;
+        } else {
+            memory[start..start + room as usize].copy_from_slice(&data[..room as usize]);
+            self.position += room;
+            self.overflow = true;
+        }
+    }
+    /// The overflow condition and the value cob_set_int stores in the POINTER.
+    pub fn finish(&self) -> (bool, i64) { (self.overflow, self.position + 1) }
+}
+
+/// UNSTRING (libcob cob_unstring_*). `into` returns what cob_unstring_into
+/// moves: the field bytes, the delimiter found and the count, or None when
+/// libcob returns early.
+pub struct Unstring { source: Value, position: i64, count: i64, exception: bool, delimiters: Vec<(Vec<u8>, bool)> }
+impl Unstring {
+    pub fn init(source: &Value, pointer: Option<i128>) -> Self {
+        let mut u = Unstring { source: source.clone(), position: 0, count: 0, exception: false, delimiters: vec![] };
+        if let Some(p) = pointer {
+            if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("UNSTRING POINTER outside the C int range"); }
+            u.position = p as i64 - 1;
+            if u.position < 0 || u.position >= u.data().len() as i64 { u.exception = true; }
+        }
+        u
+    }
+    fn data(&self) -> Vec<u8> {
+        match &self.source { Value::View(view) => { view.resolved(); view.raw() }, other => other.bytes() }
+    }
+    pub fn delimited(&mut self, delimiter: Operand, all: bool) { self.delimiters.push((delimiter.data, all)); }
+    pub fn next_into(&mut self, target_size: usize) -> Option<(Vec<u8>, Option<Vec<u8>>, i64)> {
+        if self.exception { return None; }
+        let data = self.data();
+        let srsize = data.len() as i64;
+        if self.position >= srsize { return None; }
+        let start = self.position as usize;
+        let mut found = None;
+        let mut match_size: i64 = 0;
+        if self.delimiters.is_empty() {
+            match_size = (target_size as i64).min(srsize - self.position);
+            self.position += match_size;
+        } else if self.delimiters.len() == 1 {
+            let (d, all) = &self.delimiters[0];
+            let dlsize = d.len() as i64;
+            let s = srsize - dlsize + 1;
+            let mut p = start as i64;
+            while p < s {
+                if data[p as usize..(p + dlsize) as usize] == d[..] {
+                    match_size = p - start as i64;
+                    self.position += match_size + dlsize;
+                    found = Some(d.clone());
+                    if *all {
+                        p += dlsize;
+                        while p < s {
+                            if data[p as usize..(p + dlsize) as usize] != d[..] { break; }
+                            self.position += dlsize;
+                            p += dlsize;
+                        }
+                    }
+                    break;
+                }
+                p += 1;
+            }
+        } else {
+            let mut p = start as i64;
+            'scan: while p < srsize {
+                for (d, all) in &self.delimiters {
+                    let dlsize = d.len() as i64;
+                    let s2 = srsize - dlsize + 1;
+                    if p > s2 { continue; }
+                    // libcob compares at p == s2 too, one byte past the item.
+                    if p == s2 {
+                        if dlsize > 1 && data[p as usize..] == d[..(dlsize - 1) as usize] {
+                            fail("UNSTRING: libcob 3.2 compares one byte past the sending item; not modelled");
+                        }
+                        continue;
+                    }
+                    if data[p as usize..(p + dlsize) as usize] == d[..] {
+                        match_size = p - start as i64;
+                        self.position += match_size + dlsize;
+                        found = Some(d.clone());
+                        if *all {
+                            p += dlsize;
+                            while p < s2 {
+                                if data[p as usize..(p + dlsize) as usize] != d[..] { break; }
+                                self.position += dlsize;
+                                p += dlsize;
+                            }
+                        }
+                        break 'scan;
+                    }
+                }
+                p += 1;
+            }
+        }
+        if !self.delimiters.is_empty() && found.is_none() {
+            match_size = srsize - self.position;
+            self.position = srsize;
+        }
+        self.count += 1;
+        Some((data[start..start + match_size as usize].to_vec(), found, match_size))
+    }
+    pub fn count(&self) -> i64 { self.count }
+    /// The overflow condition, whether any exception is set, and the POINTER value.
+    pub fn finish(&mut self, size_exception: bool) -> (bool, bool, i64) {
+        let overflow = self.exception || self.position < self.data().len() as i64;
+        (overflow, overflow || size_exception, self.position + 1)
+    }
+}
+
+/// COB_FIELD_SIZE: the storage size without a separate sign byte.
+pub fn field_size(item: &Value) -> usize {
+    match item {
+        Value::View(view) => {
+            view.resolved();
+            match view.kind {
+                Kind::Numeric { signed: true, usage: Usage::SignLeadingSeparate | Usage::SignTrailingSeparate, .. } => view.size - 1,
+                _ => view.size,
+            }
+        },
+        _ => fail("UNSTRING INTO requires a data item"),
+    }
+}
+
+/// memset of spaces over the item's storage (DELIMITER IN without a delimiter).
+pub fn fill_spaces(item: &Value) {
+    match item {
+        Value::View(view) => {
+            view.resolved();
+            view.memory.borrow_mut()[view.offset..view.offset + view.size].iter_mut().for_each(|b| *b = b' ');
+        },
+        _ => fail("DELIMITER IN requires a data item"),
     }
 }

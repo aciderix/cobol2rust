@@ -77,3 +77,21 @@ class EvaluateNativeTests(unittest.TestCase):
         report = verify(ROOT / "tests" / "fixtures" / "nested_conditions.cob", fmt="free")
         self.assertTrue(report["match"], report)
         self.assertEqual(report["cobol_stdout"].splitlines()[:3], ["a1", "b2", "c3"])
+
+    def test_abbreviated_sign_and_class_conditions(self):
+        # cb_build_expr: abbreviated relations, NOT placement, POSITIVE/NEGATIVE/ZERO.
+        report = verify(ROOT / "tests" / "fixtures" / "abbreviated_conditions.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        lines = report["cobol_stdout"].splitlines()
+        self.assertEqual((lines[2], lines[21]), ("3 no", "22 no"))
+
+    def test_string_and_unstring_match_libcob(self):
+        report = verify(ROOT / "tests" / "fixtures" / "string_unstring.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertIn("**XYZ12abAB* 12", report["cobol_stdout"].splitlines())
+
+    def test_reserved_words_are_refused_like_cobc(self):
+        from tests.test_numeric_move import program
+        for data in ("01 nothing pic 9.", "01 g. 05 test pic x."):
+            with self.subTest(data=data), self.assertRaises(CobolError):
+                Parser(program(data)).parse()

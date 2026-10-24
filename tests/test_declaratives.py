@@ -16,8 +16,8 @@ def declarative_program(declaratives: str, body: str = "main section. go-on. sto
 class DeclarativeTests(unittest.TestCase):
     def test_use_sections_by_file_and_mode(self):
         parsed = Parser(declarative_program(
-            "file-errors section. use after standard error procedure on f. handle. display 'F'. "
-            "input-errors section. use after exception procedure input. other. continue. "
+            "file-errors section. use after standard error procedure on f. handle-f. display 'F'. "
+            "input-errors section. use after exception procedure input. other-p. continue. "
             "extend-errors section. use after error procedure on extend.")).parse()
         self.assertEqual(parsed.file_declaratives, {"F": "FILE-ERRORS"})
         self.assertEqual(parsed.mode_declaratives, {"INPUT": "INPUT-ERRORS", "EXTEND": "EXTEND-ERRORS"})

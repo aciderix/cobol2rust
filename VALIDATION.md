@@ -1,5 +1,15 @@
 # Validation — 22 octobre 2026
 
+## Conditions cobc, STRING/UNSTRING — 24 octobre 2026
+
+- **304 tests découverts : 303 réussis, un test PE Windows ignoré.**
+- **87/87 comparaisons locales conformes** ; nouvelles fixtures
+  `abbreviated_conditions.cob` (23 formes de conditions), `string_unstring.cob`.
+- NIST : **233/458** ; **231/231 programmes acceptés conformes** (5497 PASS,
+  0 FAIL) : `build/nist-verify-conditions.json` (230, dont NC211A rejeté par
+  cobc car `NOTHING` est réservé, désormais refusé aussi) et
+  `build/nist-verify-string.json` (NC217A, NC218A).
+
 ## SEARCH, USAGE INDEX, INSPECT, EVALUATE — 24 octobre 2026
 
 - **301 tests découverts : 300 réussis, un test PE Windows ignoré.**

@@ -13,8 +13,15 @@ libcob ; accès hors tampon = arrêt nommé), `View::store_truncated`
 (`Parser.evaluate_subject`/`evaluate_object` = `evaluate_test`), ELSE
 imbriqués, 88 de groupe, SET mixte, littéraux signés dans `lex` (seulement
 après un opérande entre parenthèses). NIST **229/458**, 227/227 conformes.
-Prochain chantier : porter `cb_build_expr` (conditions abrégées, POSITIVE/
-NEGATIVE/ZERO, NOT des relations) au lieu de `Parser.comparison`.
+
+Dernière étape : `conditions.py` = `build_expr_shift/reduce/finish` de
+typeck.c ; `Parser.expression_tokens` produit la liste `expr_tokens` de
+parser.y (un signe collé à des chiffres est un littéral signé). STRING/UNSTRING
+(`storage_runtime::StringInto`/`Unstring`, nœuds `string`/`unstring`) ; une
+comparaison de délimiteur multiple qui lirait l'octet après la source (bogue
+libcob) est un arrêt nommé. `reserved.py` = mots réservés de cobc.
+NIST **233/458**, 231/231 conformes. Prochains : exponentiation `**`,
+CORRESPONDING, RENAMES, COPY REPLACING, DEBUGGING MODE, INDEXED.
 
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,

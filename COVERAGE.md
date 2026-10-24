@@ -566,6 +566,15 @@ REFERENCE de l'allocation entière d'un groupe ODO (IC207A). Émission acceptée
 **229/458** ; revérification : **227/227 programmes conformes**, 5269 PASS,
 0 FAIL (`build/nist-verify-inspect.json`, `build/nist-verify-subscripts.json`).
 
+## Progression : conditions cobc, STRING/UNSTRING
+
+`conditions.py` porte `cb_build_expr` (conditions abrégées, NOT, signe,
+classes) ; STRING et UNSTRING suivent `strings.c` ; les mots réservés de cobc
+sont refusés comme noms (NC211A, que cobc rejette, n'est plus accepté).
+Émission acceptée : **233/458** ; revérification : **231/231 programmes
+conformes**, 5497 PASS, 0 FAIL (`build/nist-verify-conditions.json`,
+`build/nist-verify-string.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

@@ -242,7 +242,7 @@ impl Value {
         }
     }
     /// cob_decimal_get_field without COB_STORE_KEEP_ON_OVERFLOW (cob_add_int's opt 0).
-    pub fn store_truncated(&mut self, source: &Self) {
+    pub fn store_truncated(&mut self, source: &Self) -> bool {
         match self {
             Self::View(view) => view.store_truncated(source),
             _ => fail("store requires a storage destination"),
