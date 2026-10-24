@@ -22,9 +22,9 @@ class FixedContinuationTests(unittest.TestCase):
         text = normalize('000100D    display "debug".\n000200     display "kept".', "fixed")
         self.assertEqual(text.splitlines(), ["", '    display "kept".'])
         self.assertEqual(normalize('000100d    display "debug".', "fixed"), "")
-        # GnuCOBOL activates them on WITH DEBUGGING MODE: not modelled.
-        with self.assertRaises(CobolError):
-            normalize('       source-computer. x with debugging mode.\n000100D    display "x".', "fixed")
+        # GnuCOBOL activates them on WITH DEBUGGING MODE (pplex.l).
+        active = normalize('       source-computer. x with debugging mode.\n000100D    display "x".', "fixed")
+        self.assertEqual(active.splitlines()[1], '    display "x".')
 
     def test_words_numbers_and_pictures_continue_without_spaces(self):
         text = normalize("       DISPL   \n      -    AY 12\n      -    34.", "fixed")

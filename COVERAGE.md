@@ -638,3 +638,18 @@ programmes principaux conformes**, 6980 PASS, 0 FAIL
 Les refus explicites restent en place jusqu'à validation de leur remplacement.
 Le nombre de programmes acceptés ne doit pas augmenter au prix d'une perte de
 fidélité sémantique.
+
+## Progression : DEBUGGING MODE
+
+`SOURCE-COMPUTER ... WITH DEBUGGING MODE` active les lignes D qui suivent
+(pplex.l) ; `USE FOR DEBUGGING` sur procédures, `ALL PROCEDURES` et fichiers
+(OPEN, CLOSE, READ, DELETE, START) ; DEBUG-ITEM construit comme
+`cb_build_debug_item` ; DEBUG-LINE de la dernière instruction commencée,
+DEBUG-NAME dans l'orthographe de la première occurrence du mot,
+DEBUG-CONTENTS (START PROGRAM, PERFORM LOOP, FALL THROUGH, USE PROCEDURE,
+SORT INPUT/OUTPUT, MERGE OUTPUT, cible d'ALTER, enregistrement lu) ;
+sections de débogage actives selon `COB_SET_DEBUG`. Les identifiants surveillés
+(`ON identifiant`, `ALL REFERENCES OF`) restent refusés. Émission acceptée :
+**336/458** ; revérification : **311/312 programmes principaux conformes**,
+7275 PASS, 0 FAIL (`build/nist-verify-debugging.json`).
+

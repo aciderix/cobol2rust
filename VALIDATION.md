@@ -1,5 +1,19 @@
 # Validation — 22 octobre 2026
 
+## DEBUGGING MODE et USE FOR DEBUGGING — 24 octobre 2026
+
+- **310 tests découverts : 309 réussis, un test PE Windows ignoré.**
+- **105/105 comparaisons locales conformes** ; nouvelle fixture
+  `debugging_procedures.cob` (dialectes `default` et `cobol85`,
+  `COB_SET_DEBUG=Y`, et sans le commutateur dans les tests).
+- NIST : **336/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **311/312 programmes principaux conformes** (7275 PASS, 0 FAIL, 7 DELETED,
+  14 INSPECT) : `build/nist-verify-debugging.json`,
+  `build/coverage-nist-debugging.json`. Neuf programmes DB ajoutés (DB101A,
+  DB102A, DB103M, DB104A, DB105A, DB204A, DB301M, DB302M, DB305M), avec
+  `COB_SET_DEBUG` réglé comme report.pl (Y pour DB sauf DB102A). Écart connu
+  inchangé : OBNC1M (SIGINT).
+
 ## ALTER, noms de procédure, dialecte cobol85 — 24 octobre 2026
 
 - **307 tests découverts : 306 réussis, un test PE Windows ignoré.**

@@ -450,6 +450,19 @@ fn switches() -> std::sync::MutexGuard<'static, Option<[bool; 37]>> {
     }
     guard
 }
+/// cob_debugging_mode: COB_SET_DEBUG read once (ENV_BOOL, default off).
+pub fn debugging_mode() -> bool {
+    static MODE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| match std::env::var("COB_SET_DEBUG") {
+        Err(_) => false,
+        Ok(value) => match value.to_ascii_lowercase().as_str() {
+            "1" | "true" | "t" | "on" | "yes" | "y" => true,
+            "0" | "false" | "f" | "off" | "no" | "n" => false,
+            _ => fail("COB_SET_DEBUG value outside true/false not modelled"),
+        },
+    })
+}
+
 pub fn switch_on(n: usize) -> bool { switches().unwrap()[n] }
 pub fn set_switch(n: usize, on: bool) { switches().as_mut().unwrap()[n] = on; }
 

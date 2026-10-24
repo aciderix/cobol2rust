@@ -75,6 +75,26 @@ class FrontendTests(unittest.TestCase):
         with self.assertRaises(CobolError):
             normalize("000100- continuation", "fixed")
 
+    def test_debugging_lines_follow_debugging_mode(self):
+        # pplex.l: D lines are source once "WITH DEBUGGING MODE" has been read.
+        source = ("000100 IDENTIFICATION DIVISION.\n000200D    DISPLAY 'BEFORE'.\n"
+                  "000300 SOURCE-COMPUTER. X WITH DEBUGGING MODE.\n000400D    DISPLAY 'AFTER'.\n")
+        text = normalize(source, "fixed")
+        self.assertNotIn("BEFORE", text)
+        self.assertIn("AFTER", text)
+        self.assertNotIn("AFTER", normalize(source.replace("WITH DEBUGGING MODE", ""), "fixed"))
+
+    def test_debugging_targets_outside_the_model_are_rejected(self):
+        declaratives = ("declaratives. d section. use for debugging on {}. p. display debug-name. "
+                        "end declaratives. m section. a. stop run.")
+        data = "01 x pic x. 01 t. 02 e pic x occurs 2."
+        for target in ("x", "all references of x", "p", "d", "missing", "all procedures a"):
+            source = ("identification division.\nprogram-id. t.\nenvironment division.\nconfiguration section.\n"
+                      "source-computer. c with debugging mode.\ndata division. working-storage section.\n"
+                      + data + "\nprocedure division.\n" + declaratives.format(target))
+            with self.subTest(target=target), self.assertRaises(CobolError):
+                Emitter(Parser(source).parse()).generate()
+
     def test_copy_expansion_cycle_and_missing(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

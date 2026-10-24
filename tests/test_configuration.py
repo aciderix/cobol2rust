@@ -53,7 +53,6 @@ select records-file assign to "records.txt" organization line sequential.
 
     def test_semantic_configuration_is_never_silently_ignored(self):
         cases = [
-            "source-computer. GNU-Linux with debugging mode.",
             "object-computer. GNU-Linux memory size 1024.",
             "object-computer. GNU-Linux program collating sequence is alphabet-a.",
             "object-computer. GNU-Linux segment-limit is 50.",

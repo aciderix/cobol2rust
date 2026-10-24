@@ -105,6 +105,15 @@ class EvaluateNativeTests(unittest.TestCase):
                 report = verify(ROOT / "tests" / "fixtures" / name, fmt="free")
                 self.assertTrue(report["match"], report)
 
+    def test_debugging_procedures_with_runtime_switch(self):
+        # USE FOR DEBUGGING runs only with COB_SET_DEBUG on (cob_debugging_mode).
+        for switch in ("Y", "N"):
+            with self.subTest(switch=switch):
+                report = verify(ROOT / "tests" / "fixtures" / "debugging_procedures.cob", fmt="free",
+                                runtime_env={"COB_SET_DEBUG": switch})
+                self.assertTrue(report["match"], report)
+                self.assertEqual("[" in report["rust_stdout"], switch == "Y")
+
     def test_dialect_options_under_both_standards(self):
         # section-segments ignore/obsolete and defaultbyte init/none.
         for std in ("default", "cobol85"):

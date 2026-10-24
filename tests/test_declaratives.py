@@ -28,7 +28,7 @@ class DeclarativeTests(unittest.TestCase):
 
     def test_unmodelled_or_malformed_declaratives_are_refused(self):
         cases = [
-            "s section. use for debugging on all procedures.",
+            "s section. use for debugging.",
             "s section. use global after error procedure on f.",
             "s section. use after error procedure on f. t section. use after error procedure on f.",
             "s section. use after error procedure input. t section. use after error procedure input.",

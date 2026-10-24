@@ -27,6 +27,11 @@ class ControlGraph:
         # cobc's static label_N of each paragraph modified by ALTER.
         self.alter_slots = {name: slot for slot, name in enumerate(program.alters)}
         self._fall_entries = {}
+        # USE FOR DEBUGGING (cobc flag_gen_debug): blocks of the debugging
+        # sections, whose statements and labels trigger no debugging.
+        self.debug = getattr(program, "gen_debug", False)
+        self.debug_blocks = {index for section in getattr(program, "debug_sections", {})
+                             for index in range(*program.sections[section])}
 
         # Allocate all procedure positions before lowering any forward calls.
         self.block_entries = [self._add("jump", (self._end,)) for _ in blocks]
@@ -49,29 +54,65 @@ class ControlGraph:
             body = self._body(block.body, self.paragraph_checkpoints[index], index)
             if block.name in self.alter_slots:
                 # output_alter_check: an ALTERed label goes to its target.
-                self.nodes[self.block_entries[index]] = Node("alter_check", (self.alter_slots[block.name], body))
-            else:
-                self.nodes[self.block_entries[index]] = Node("jump", (body,))
-        self.entry = self._following(program.main_block)
+                body = self._add("alter_check", (self.alter_slots[block.name], body))
+            label = block.name if block.name is not None else block.section if block.section is not None else None
+            if self.debug and block.name is None and block.section in program.debug_sections:
+                # A debugging section runs only with the runtime switch on.
+                body = self._add("debug_gate", (body, self.section_checkpoints[block.section]))
+            elif label is not None and self._monitored(label):
+                # output_label: DEBUG-NAME, then PERFORM of the debugging section.
+                body = self._debug_call(label, index, body)
+                body = self._add("debug_name", (self._label_text(label), body))
+            self.nodes[self.block_entries[index]] = Node("jump", (body,))
+        self.entry = self._following(program.main_block, fall=False)
+        if self.debug:
+            self.entry = self._add("debug_contents", ("START PROGRAM", self.entry))
 
     def _add(self, op: str, args: tuple = (), stmt: Stmt | None = None) -> int:
         position = len(self.nodes)
         self.nodes.append(Node(op, args, stmt))
         return position
 
-    def _following(self, block: int) -> int:
+    def _following(self, block: int, fall: bool = True) -> int:
         """Fall-through into a block. Falling into a SECTION header (and only
-        that: GO TO and PERFORM go past it) zaps its independent labels."""
+        that: GO TO and PERFORM go past it) zaps its independent labels; with
+        DEBUGGING MODE it first sets DEBUG-CONTENTS to "FALL THROUGH"."""
         if block >= len(self.block_entries):
             return self._end
+        if (block, fall) in self._fall_entries:
+            return self._fall_entries[(block, fall)]
+        position = self.block_entries[block]
         header = self.blocks[block]
         if header.name is None and header.section is not None:
             slots = self._independent(header.section)
             if slots:
-                if block not in self._fall_entries:
-                    self._fall_entries[block] = self._add("alter_zap", (slots, self.block_entries[block]))
-                return self._fall_entries[block]
-        return self.block_entries[block]
+                position = self._add("alter_zap", (slots, position))
+        if fall and block in getattr(self.program, "fall_through", ()):
+            position = self._add("debug_contents", ("FALL THROUGH", position))
+        self._fall_entries[(block, fall)] = position
+        return position
+
+    def _monitored(self, name: str) -> str | None:
+        """The debugging section a real label triggers, if any."""
+        if not self.debug:
+            return None
+        if name in self.program.debug_sections:
+            return None
+        index = self.program.procedure_range(name)[0]
+        if index in self.debug_blocks:
+            return None
+        return self.program.all_procedure or self.program.debug_labels.get(name)
+
+    def _label_text(self, name: str) -> str:
+        if name not in self.program.sections:
+            name = self.blocks[self.program.procedure_range(name)[0]].label or name
+        return self.program.spelling.get(name, name)
+
+    def _debug_call(self, name: str, block: int, after: int) -> int:
+        """PERFORM of the debugging section for the label `name`."""
+        section = self._monitored(name)
+        entry, checkpoint = self._target(section)
+        return self._perform(section, entry, checkpoint, after, block)
 
     def _independent(self, section: str | None) -> list[int]:
         """Slots of the ALTERed paragraphs of an independent segment (> 49)."""
@@ -90,8 +131,12 @@ class ControlGraph:
 
     def _goto(self, name: str, block: int) -> int:
         """output_goto_1: a GO TO into another segment zaps the target
-        section's independent labels."""
+        section's independent labels; a debugged target gets DEBUG-NAME and
+        a blank DEBUG-CONTENTS."""
         entry = self._target(name)[0]
+        if self._monitored(name):
+            entry = self._add("debug_contents", (None, entry))
+            entry = self._add("debug_name", (self._label_text(name), entry))
         there = self._section_of(name)
         slots = self._independent(there)
         if slots and self._segment(self.blocks[block].section) != self._segment(there):
@@ -114,6 +159,9 @@ class ControlGraph:
                 after_nodes.append(("alter_zap", self._independent(there)))
         if segment(here) != segment(there) and self._independent(there):
             before_nodes.append(("alter_zap", self._independent(there)))
+        if self._monitored(target):
+            # "Update debugging name" before entering the procedure.
+            before_nodes.append(("debug_name", self._label_text(target)))
         position = after
         for op, slots in reversed(after_nodes):
             position = self._add(op, (slots, position))
@@ -151,7 +199,27 @@ class ControlGraph:
         return position
 
     def _statement(self, stmt: Stmt, after: int, block: int) -> int:
+        position = self._lower(stmt, after, block)
+        # The "call" of a PERFORM or SORT procedure belongs to that statement.
+        if self.debug and block not in self.debug_blocks and stmt.op not in {"sentence_end", "debug_contents", "call"}:
+            # output_stmt: DEBUG-LINE takes the line of each statement begun.
+            position = self._add("debug_line", (stmt.line, position))
+        return position
+
+    def _file_debug(self, name: str, block: int, after: int, contents=None) -> int | None:
+        """DEBUG-NAME (the file), DEBUG-CONTENTS and its debugging section."""
+        section = getattr(self.program, "debug_files", {}).get(name) if self.debug else None
+        if section is None or block in self.debug_blocks:
+            return None
+        entry, checkpoint = self._target(section)
+        position = self._perform(section, entry, checkpoint, after, block)
+        position = self._add("debug_contents", (contents, position))
+        return self._add("debug_name", (self.program.spelling.get(name, name), position))
+
+    def _lower(self, stmt: Stmt, after: int, block: int) -> int:
         op, args = stmt.op, stmt.args
+        if op == "debug_contents":
+            return self._add("debug_contents", (args[0], after), stmt) if self.debug else after
         if op == "sentence_end":
             self._sentence = after
             return after
@@ -167,7 +235,10 @@ class ControlGraph:
             return self._add("evaluate", (subject, destinations, self._body(otherwise, after, block)), stmt)
         if op == "read":
             name, into, exception, success, _ = args
-            return self._add("read", (name, into, self._body(success, after, block),
+            success_body = self._body(success, after, block)
+            # cb_emit_read: on success, after INTO, the record as DEBUG-CONTENTS.
+            success_body = self._file_debug(name, block, success_body, ("record", name)) or success_body
+            return self._add("read", (name, into, success_body,
                                       self._body(exception, after, block), after,
                                       self._declaratives(name, after, block)), stmt)
         if op in {"open", "close"} and len(args[0]) > 1:
@@ -183,7 +254,13 @@ class ControlGraph:
                 # INVALID KEY handles every 2x status; NOT INVALID KEY every 0x.
                 invalid = self._body(args[-2], after, block) if args[-2] else None
                 valid = self._body(args[-1], after, block)
-            return self._add("io", (stmt, after, self._declaratives(name, after, block), invalid, valid), stmt)
+            debug = None
+            if op in {"open", "close", "delete", "start"} and isinstance(name, str):
+                # OPEN/CLOSE debug in the statement body, DELETE/START in the
+                # callback after the I/O: both before the status handling.
+                resume = self._add("debug_resume", ())
+                debug = self._file_debug(name, block, resume)
+            return self._add("io", (stmt, after, self._declaratives(name, after, block), invalid, valid, debug), stmt)
         if op == "sequence":
             return self._body(args[0], after, block)
         if op == "string":
@@ -201,12 +278,18 @@ class ControlGraph:
             # PERFORM), then cob_file_sort_close.
             name, keys, source, target, merge = args
             position = self._add("sort_close", (name, after), stmt)
+            debugged = self.debug and block not in self.debug_blocks
             if target[0] == "procedure":
                 position = self._statement(Stmt("call", (target[1],), stmt.line), position, block)
+                if debugged:
+                    # cb_emit_sort_output: DEBUG-CONTENTS before the procedure.
+                    position = self._add("debug_contents", ("MERGE OUTPUT" if merge else "SORT OUTPUT", position))
             else:
                 position = self._add("sort_giving", (name, target[1], position), stmt)
             if source[0] == "procedure":
                 position = self._statement(Stmt("call", (source[1],), stmt.line), position, block)
+                if debugged:
+                    position = self._add("debug_contents", ("SORT INPUT", position))
             else:
                 position = self._add("sort_using", (name, source[1], position), stmt)
             return self._add("sort_init", (name, keys, position), stmt)
@@ -248,6 +331,11 @@ class ControlGraph:
             return self._add("goto", ([self._goto(name, block) for name in targets], controller, after), stmt)
         if op == "alter":
             source, target = args
+            if self._monitored(source):
+                # output_alter: DEBUG-NAME the altered label, DEBUG-CONTENTS its target.
+                after = self._debug_call(source, block, after)
+                after = self._add("debug_contents", (self._label_text(target), after))
+                after = self._add("debug_name", (self._label_text(source), after))
             return self._add("alter", (self.alter_slots[source], self._target(target)[0], after), stmt)
         if op == "exit_paragraph":
             return self._add("jump", (self.paragraph_checkpoints[block],), stmt)
@@ -272,7 +360,11 @@ class ControlGraph:
         """USE procedures run like a PERFORM of their section, then resume."""
         def call(section):
             entry, checkpoint = self._target(section)
-            return self._perform(section, entry, checkpoint, after, block)
+            position = self._perform(section, entry, checkpoint, after, block)
+            if self.debug:
+                # output_file_error: DEBUG-CONTENTS "USE PROCEDURE".
+                position = self._add("debug_contents", ("USE PROCEDURE", position))
+            return position
         if file_name in self.program.file_declaratives:
             return ("file", call(self.program.file_declaratives[file_name]))
         if self.program.mode_declaratives:

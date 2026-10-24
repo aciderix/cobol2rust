@@ -674,6 +674,16 @@ class Emitter:
         method = "move_binary_to_packed" if self.storage_usage(field) == "Packed" else "move_number"
         self.write(f"{self.reference(ref)}.{method}(&Value::number(&{value}.to_string()));")
 
+    def debug_item(self, label):
+        """A DEBUG-ITEM subfield built by Parser.debug_item."""
+        key = next(key for key, f in self.program.fields.items()
+                   if f.label == label and key.split(".")[0] == "DEBUG-ITEM")
+        return DataRef(key)
+
+    @staticmethod
+    def byte_vector(text):
+        return "vec![" + ", ".join(str(b) for b in text.encode("latin-1")) + "]"
+
     def alphanumeric_move(self, ref, bytes_expr):
         """cob_str_memcpy: a MOVE from an alphanumeric temporary."""
         field = self.program.fields[ref.name]
@@ -980,14 +990,39 @@ class Emitter:
             self.statement(a[0])
             self.write(f"pc = {a[1]};")
         elif op == "io":
-            stmt, continuation, self.io_handlers, invalid, valid = a
+            stmt, continuation, self.io_handlers, invalid, valid, debug = a
             self.io_invalid = invalid is not None
             self.statement(stmt)
             self.io_handlers, self.io_invalid = None, False
             success = continuation if valid is None else valid
             # INVALID KEY takes 2x; any other status outside 0x runs its USE procedure.
             prefix = f"if status / 10 == 2 {{ {invalid} }} else " if invalid is not None else ""
-            self.write(f"pc = {prefix}if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {success} }};")
+            dispatch = f"{prefix}if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {success} }}"
+            if debug is None:
+                self.write(f"pc = {dispatch};")
+            else:
+                # The file's debugging section runs before the status handling.
+                self.write(f"debug_resume = {dispatch};")
+                self.write(f"pc = {debug};")
+        elif op == "debug_resume":
+            self.write("pc = debug_resume;")
+        elif op == "debug_gate":
+            self.write(f"pc = if runtime::debugging_mode() {{ {a[0]} }} else {{ {a[1]} }};")
+        elif op == "debug_name":
+            self.alphanumeric_move(self.debug_item("DEBUG-NAME"), self.byte_vector(a[0]))
+            self.write(f"pc = {a[1]};")
+        elif op == "debug_line":
+            self.alphanumeric_move(self.debug_item("DEBUG-LINE"), self.byte_vector(f"{a[0]:6d}"[-6:]))
+            self.write(f"pc = {a[1]};")
+        elif op == "debug_contents":
+            contents, continuation = a
+            if isinstance(contents, tuple):
+                record = self.names[self.program.files[contents[1]].record]
+                source = f"self.{record}.bytes()"
+            else:
+                source = self.byte_vector(contents or "")
+            self.alphanumeric_move(self.debug_item("DEBUG-CONTENTS"), source)
+            self.write(f"pc = {continuation};")
         elif op == "branch":
             self.write(f"pc = if {self.expression(a[0])} {{ {a[1]} }} else {{ {a[2]} }};")
         elif op == "call":
@@ -1227,6 +1262,8 @@ class Emitter:
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source
         # site, including when PERFORM re-enters that site recursively.
         self.write(f"let mut times = vec![0i128; {graph.times_slots}];")
+        # Status handling resumed after a file's debugging section.
+        self.write("let mut debug_resume: usize = 0;")
         self.write("loop {")
         self.indent += 1
         self.write("match pc {")

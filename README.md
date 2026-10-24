@@ -328,6 +328,10 @@ pseudo-texte `==…==` comparé sans tenir compte de la casse ni des espaces,
 identifiants qualifiés ou indicés, littéraux. LEADING/TRAILING, COPY OF/IN et
 REPLACING d'un copybook qui contient lui-même un COPY restent refusés.
 `--debugging-lines` reproduit `cobc -fdebugging-line`.
+`SOURCE-COMPUTER ... WITH DEBUGGING MODE` et `USE FOR DEBUGGING` (procédures,
+ALL PROCEDURES, fichiers) suivent cobc 3.2 ; les sections de débogage ne
+s'exécutent qu'avec `COB_SET_DEBUG` vrai à l'exécution, comme libcob. La
+surveillance d'identifiants est refusée.
 `--std {default,cobol85}` (convert, verify) choisit le dialecte cobc modélisé ;
 `verify --std cobol85` compile aussi l'original avec `-std=cobol85`. Seule
 différences modélisées à ce jour : `section-segments` (numéros de segment

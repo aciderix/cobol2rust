@@ -69,7 +69,10 @@ def normalize(source: str, fmt: str = "auto") -> str:
     previous = None
     quotation = None
     consecutive = False
-    debugging_lines = False
+    # pplex.l: "[WITH] DEBUGGING MODE" activates the debugging lines read
+    # after it, as -fdebugging-line does for the whole source.
+    debugging_lines = DEBUGGING_LINES
+    recent = []
     for number, line in enumerate(lines, 1):
         directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
         if directive:
@@ -92,9 +95,8 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if indicator in "*/":
                 result.append("")
                 continue
-            if indicator in "Dd" and not DEBUGGING_LINES:
+            if indicator in "Dd" and not debugging_lines:
                 # Without DEBUGGING MODE, GnuCOBOL drops debugging lines.
-                debugging_lines = True
                 result.append("")
                 continue
             if indicator in "Dd":
@@ -148,13 +150,13 @@ def normalize(source: str, fmt: str = "auto") -> str:
             result.append(fragment)
             if fragment.strip():
                 previous = len(result) - 1
+                # Literals cannot hold the pplex pattern; it may span lines.
+                recent = (recent + [re.sub(r"\"[^\"]*\"?|'[^']*'?", " ", fragment)])[-3:]
+                if not debugging_lines and re.search(r"(?<![\w-])DEBUGGING[\s,;]+MODE(?![\w-])", "\n".join(recent), re.I):
+                    debugging_lines = True
             continue
         result.append("" if documentary.is_comment(line, fmt, line=number) else line)
-    text = "\n".join(result)
-    # GnuCOBOL's preprocessor activates debugging lines on WITH DEBUGGING MODE.
-    if debugging_lines and re.search(r"\bDEBUGGING[\s,;]+MODE\b", text, re.I):
-        raise CobolError("lignes de débogage 'D' actives avec DEBUGGING MODE non prises en charge")
-    return text
+    return "\n".join(result)
 
 
 def lex(source: str) -> list[Token]:
@@ -485,6 +487,9 @@ class Parser:
         self.symbolic = {}
         self.same_records = []
         self.renames = []
+        # SOURCE-COMPUTER ... WITH DEBUGGING MODE (current_program->flag_debugging).
+        self.debugging_mode = False
+        self.in_debugging = False
 
     @property
     def t(self):
@@ -607,6 +612,7 @@ class Parser:
             rewrite(s.args, context)
 
         self.resolved_alters = []
+        self.resolve_procedure = lambda reference, line: resolve(reference, outside, line)
         for block in blocks:
             # Statements before any paragraph header have no section offset.
             context = outside if block.label is None and block.section is None else block.section
@@ -758,6 +764,7 @@ class Parser:
         memory_size = layout_fields(self.fields)
         self.apply_renames()
         self.validate_files()
+        memory_size = self.debug_item(memory_size)
         self.expect("PROCEDURE")
         self.expect("DIVISION")
         using = []
@@ -784,6 +791,12 @@ class Parser:
         declaratives, main_block = self.accept("DECLARATIVES"), 0
         if declaratives:
             self.expect(".")
+        # USE FOR DEBUGGING: debugging sections by name, and the blocks a
+        # fall-through enters after cobc's "FALL THROUGH" DEBUG-CONTENTS.
+        # cobc emits it when a paragraph ends (current_paragraph) and, at a
+        # SECTION header, also when only a section was open.
+        debug_sections, fall_through, labelled, paragraph_open = {}, set(), False, False
+        self.in_debugging = False
         while not self.at("<EOF>"):
             if self.at("."):
                 # The separator period ends a sentence: the target of NEXT SENTENCE.
@@ -798,6 +811,8 @@ class Parser:
                 sections[current_section] = (sections[current_section][0], len(blocks))
                 # Execution starts after END DECLARATIVES, outside every section.
                 declaratives, current_section, current_body = False, None, []
+                # The program starts here: no "FALL THROUGH" into what follows.
+                self.in_debugging, labelled, paragraph_open = False, False, False
                 main_block = len(blocks)
                 blocks.append(ProcedureBlock(None, None, current_body))
                 continue
@@ -825,12 +840,19 @@ class Parser:
                 self.expect(".")
                 if current_section is not None:
                     sections[current_section] = (sections[current_section][0], len(blocks))
+                if self.debugging_mode and not self.in_debugging and labelled:
+                    fall_through.add(len(blocks))
+                labelled, paragraph_open = True, False
                 current_section = section
                 sections[section] = (len(blocks), len(blocks) + 1)
                 current_body = []
                 blocks.append(ProcedureBlock(None, section, current_body))
                 if declaratives:
-                    self.use_statement(section, file_declaratives, mode_declaratives)
+                    targets = self.use_statement(section, file_declaratives, mode_declaratives)
+                    # use_statement resets in_debugging; USE FOR DEBUGGING sets it.
+                    self.in_debugging = targets is not None
+                    if targets is not None:
+                        debug_sections[section] = targets
                 elif self.at("USE"):
                     self.error("USE hors des DECLARATIVES")
             elif self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
@@ -840,6 +862,9 @@ class Parser:
                 if paragraph in sections:
                     self.error(f"nom de procédure dupliqué: {paragraph}")
                 self.expect(".")
+                if self.debugging_mode and not self.in_debugging and paragraph_open:
+                    fall_through.add(len(blocks))
+                labelled = paragraph_open = True
                 current_body = []
                 paragraphs.setdefault(paragraph, current_body)
                 blocks.append(ProcedureBlock(paragraph, current_section, current_body, paragraph))
@@ -855,11 +880,20 @@ class Parser:
                    if f.linkage and f.parent is None and not f.redefines and f.name not in using]
         if unbound:
             self.error(f"article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: {unbound[0]}")
+        if not self.debugging_mode:
+            # Without DEBUGGING MODE the USE FOR DEBUGGING sections are not
+            # compiled (skip_statements).
+            for section in debug_sections:
+                start, end = sections[section]
+                for block in blocks[start:end]:
+                    block.body[:] = []
+            debug_sections = {}
         paragraphs = self.resolve_procedures(blocks, sections)
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
         program.segments = segments
+        self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
         # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
         program.default_byte_init = STD != "cobol85"
@@ -877,11 +911,80 @@ class Parser:
                 raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
         return program
 
+    def debug_item(self, memory_size):
+        """cb_build_debug_item, at the first USE FOR DEBUGGING: DEBUG-ITEM in
+        WORKING-STORAGE after the other items, DEBUG-CONTENTS sized like
+        cb_resolve_debug_refs (30, or the largest file record or item)."""
+        tokens, uses = self.tokens, []
+        for k in range(self.i, len(tokens) - 2):
+            if tokens[k].key == "USE" and not tokens[k].string:
+                j = k + 1 + (tokens[k + 1].key == "FOR")
+                if tokens[j].key == "DEBUGGING" and not tokens[j].string:
+                    uses.append(j + 1)
+        if not uses:
+            return memory_size
+        size = 30
+        if self.debugging_mode:
+            for j in uses:
+                while tokens[j].key != "." or tokens[j].string:
+                    word = tokens[j].key
+                    if not tokens[j].string and word in self.files:
+                        size = max(size, self.files[word].record_max)
+                    elif not tokens[j].string and tokens[j - 1].key not in {"OF", "IN"}:
+                        keys = self.candidates(word)
+                        if len(keys) == 1:
+                            size = max(size, self.fields[keys[0]].size)
+                    j += 1
+        text = ("01 DEBUG-ITEM VALUE SPACE. 03 DEBUG-LINE PIC X(6). 03 FILLER PIC X."
+                " 03 DEBUG-NAME PIC X(30). 03 FILLER PIC X."
+                + "".join(f" 03 DEBUG-SUB-{n} PIC S9(4) SIGN LEADING SEPARATE. 03 FILLER PIC X." for n in (1, 2, 3))
+                + f" 03 DEBUG-CONTENTS PIC X({size}).")
+        if self.candidates("DEBUG-ITEM"):
+            self.error("DEBUG-ITEM est défini par USE FOR DEBUGGING")
+        before = set(self.fields)
+        self.tokens[self.i:self.i] = lex(text)[:-1]
+        self.data_stack, self.in_linkage = [], False
+        while not self.at("PROCEDURE"):
+            self.declaration()
+        from .layout import layout_fields
+        added = {key: f for key, f in self.fields.items() if key not in before}
+        extent = layout_fields(added)
+        for f in added.values():
+            f.offset += memory_size
+        return memory_size + extent
+
     def use_statement(self, section, by_file, by_mode):
-        """USE AFTER STANDARD ERROR/EXCEPTION PROCEDURE ON files or an OPEN mode."""
+        """USE AFTER STANDARD ERROR/EXCEPTION PROCEDURE ON files or an OPEN
+        mode, or USE FOR DEBUGGING ON targets (returned as a list)."""
         self.expect("USE")
-        if self.at("GLOBAL") or self.at("FOR"):
-            self.error("USE GLOBAL et USE FOR DEBUGGING non pris en charge")
+        if self.at("GLOBAL"):
+            self.error("USE GLOBAL non pris en charge")
+        if self.at("FOR") or self.at("DEBUGGING"):
+            self.accept("FOR")
+            self.expect("DEBUGGING")
+            self.accept("ON")
+            targets = []
+            while not self.at("."):
+                line = self.t.line
+                if self.accept("ALL"):
+                    if self.accept("PROCEDURES"):
+                        targets.append(("all", None, line))
+                        continue
+                    if self.accept("REFERENCES"):
+                        self.accept("OF")
+                    else:
+                        self.accept("OF")
+                    targets.append(("references", self.variable(), line))
+                elif not self.t.string and self.t.key in self.files:
+                    targets.append(("file", self.file_name(), line))
+                elif not self.t.string and self.candidates(self.t.key):
+                    targets.append(("item", self.variable(), line))
+                else:
+                    targets.append(("procedure", self.procedure_reference(), line))
+            self.expect(".")
+            if not targets:
+                self.error("USE FOR DEBUGGING requiert une cible")
+            return targets
         self.expect("AFTER")
         self.accept("STANDARD")
         if not (self.accept("EXCEPTION") or self.accept("ERROR")):
@@ -902,6 +1005,7 @@ class Parser:
                     self.error(f"USE dupliqué pour le fichier {name}")
                 by_file[name] = section
         self.expect(".")
+        return None
 
     def apply_renames(self):
         """compute_size and cb_validate_renames_item for level 66 items."""
@@ -976,6 +1080,49 @@ class Parser:
         self.procedure_name_check(name)
         return name
 
+    def debugging_program(self, program, debug_sections, fall_through):
+        """cb_validate_labels for DEBUGGING targets: procedures (real labels,
+        outside the debugging sections), ALL PROCEDURES and files."""
+        program.debugging_mode = self.debugging_mode
+        # cobc's word table keeps the spelling of a name's first occurrence:
+        # DEBUG-NAME shows labels and files that way.
+        program.spelling = {}
+        for token in self.tokens:
+            if not token.string:
+                program.spelling.setdefault(token.key, token.text)
+        program.debug_sections = debug_sections
+        program.gen_debug = bool(debug_sections)
+        program.fall_through = fall_through if program.gen_debug else set()
+        program.all_procedure, program.debug_labels, program.debug_files = None, {}, {}
+        inside = {block.name for section in debug_sections
+                  for block in program.blocks[program.sections[section][0]:program.sections[section][1]]
+                  if block.name}
+        for section, targets in debug_sections.items():
+            for kind, value, line in targets:
+                if kind == "all":
+                    if program.all_procedure:
+                        raise CobolError(f"ligne {line}: duplicate USE DEBUGGING ON ALL PROCEDURES")
+                    program.all_procedure = section
+                elif kind == "file":
+                    if value in program.debug_files:
+                        raise CobolError(f"ligne {line}: duplicate DEBUGGING target: '{value}'")
+                    program.debug_files[value] = section
+                elif kind in {"item", "references"}:
+                    raise CobolError(f"ligne {line}: USE FOR DEBUGGING sur un identifiant non pris en charge")
+        for section, targets in debug_sections.items():
+            for kind, value, line in targets:
+                if kind != "procedure":
+                    continue
+                key = self.resolve_procedure(value, line)
+                label = value.partition("\0")[0]
+                if key in inside or key in debug_sections:
+                    raise CobolError(f"ligne {line}: DEBUGGING target invalid: '{label}'")
+                if key in program.debug_labels:
+                    raise CobolError(f"ligne {line}: duplicate DEBUGGING target: '{label}'")
+                if program.all_procedure:
+                    raise CobolError(f"ligne {line}: DEBUGGING target already specified with ALL PROCEDURES: '{label}'")
+                program.debug_labels[key] = section
+
     def validate_alters(self, program):
         """typeck.c: the source of an ALTER must be a paragraph whose first
         statement is a GO TO; duplicate pairs are kept once."""
@@ -1014,7 +1161,13 @@ class Parser:
                     self.error(f"paragraphe {paragraph} dupliqué")
                 computers.add(paragraph)
                 self.expect(".")
-                self.name()
+                if not (paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING"))):
+                    self.name()
+                if paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING")):
+                    self.accept("WITH")
+                    self.expect("DEBUGGING")
+                    self.expect("MODE")
+                    self.debugging_mode = True
                 # GnuCOBOL 3.2 parses and ignores MEMORY SIZE and SEGMENT-LIMIT.
                 while paragraph == "OBJECT-COMPUTER" and not self.at("."):
                     if self.accept("MEMORY"):
@@ -2071,6 +2224,10 @@ class Parser:
                 self.error("WITH TEST requiert UNTIL ou VARYING")
             if target:
                 body = [Stmt("call", (target,), line)]
+                if self.debugging_mode and not self.in_debugging:
+                    # cb_emit_perform: DEBUG-CONTENTS for a PERFORM of procedures.
+                    return Stmt("sequence", ([Stmt("debug_contents", ("PERFORM LOOP",), line),
+                                              Stmt("loop", (mode, control, body), line)],), line)
             else:
                 # An inline PERFORM without TIMES/UNTIL/VARYING runs once.
                 body = self.block({"END-PERFORM"})

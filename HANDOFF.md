@@ -53,6 +53,15 @@ des homonymes), `frontend.STD` / `--std cobol85` (`Program.segments`,
 `nist_verify` compile avec `RUNNER_FLAGS` et `RAW_INPUT`. NIST **327/458**,
 302/303 conformes (OBNC1M : SIGINT). Prochain : DEBUGGING MODE (en cours).
 
+Dernière étape : DEBUGGING MODE. `normalize` active les lignes D après le
+motif pplex ; `Parser.debug_item` (DEBUG-ITEM ajouté après la mise en page),
+`use_statement` rend les cibles, `debugging_program` (cb_validate_labels) ;
+dans `control.py`, nœuds `debug_gate`, `debug_name`, `debug_contents`,
+`debug_line`, `debug_resume` (fichiers : section avant le traitement du
+statut), marques `fall_through` du frontend ; `runtime::debugging_mode`
+(COB_SET_DEBUG). NIST **336/458**, 311/312. Prochain : INDEXED (en cours :
+`tools/bdb_dump.c` pour comparer logiquement les fichiers BDB de cobc).
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

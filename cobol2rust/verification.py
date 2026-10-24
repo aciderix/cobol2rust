@@ -51,8 +51,9 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
     runtime_env = dict(runtime_env or {})
-    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT"} and not re.fullmatch(r"COB_SWITCH_\d+", key) for key in runtime_env):
-        raise CobolError("seuls COB_LS_FIXED, COB_LS_SPLIT et COB_SWITCH_n peuvent être définis par le vérificateur")
+    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT", "COB_SET_DEBUG"} and not re.fullmatch(r"COB_SWITCH_\d+", key)
+           for key in runtime_env):
+        raise CobolError("seuls COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG et COB_SWITCH_n peuvent être définis par le vérificateur")
     seed = {}
     seed_directories = []
     if data_dir:
