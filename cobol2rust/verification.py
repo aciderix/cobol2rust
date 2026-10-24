@@ -10,7 +10,40 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .cli import convert
 from .frontend import CobolError, source_format
-from .toolchain import build_rust, compiler_env, find_tool
+from .toolchain import CACHE_ROOT, build_rust, compiler_env, find_tool
+
+INDEXED_MAGIC = b"cobol2rust-btree-1\n"
+
+
+def bdb_dumper() -> Path:
+    """Compile bdb_dump.c (libdb) once: the logical content of cobc's files."""
+    target = CACHE_ROOT / "bdb_dump"
+    source = Path(__file__).with_name("bdb_dump.c")
+    if target.is_file() and target.stat().st_mtime >= source.stat().st_mtime:
+        return target
+    compiler = find_tool("gcc") or find_tool("cc")
+    if not compiler:
+        raise CobolError("compilateur C requis pour comparer les fichiers INDEXED (Berkeley DB)")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run([compiler, "-O1", "-o", str(target), str(source), "-ldb"], capture_output=True)
+    if result.returncode:
+        raise CobolError("bdb_dump: libdb introuvable pour comparer les fichiers INDEXED:\n"
+                         + result.stderr.decode(errors="replace"))
+    return target
+
+
+def indexed_contents(left, right, left_dir):
+    """Replace each INDEXED file pair (cobc: a Berkeley DB btree; Rust:
+    cobol2rust's own format) by its key/data pairs in btree order, as
+    bdb_dump writes them. Other files stay compared byte for byte."""
+    names = []
+    for name in sorted(left.keys() & right.keys()):
+        if left[name][12:16] == b"\x62\x31\x05\x00" and right[name].startswith(INDEXED_MAGIC):
+            dump = subprocess.run([str(bdb_dumper()), str(left_dir / name)], capture_output=True)
+            left[name] = dump.stdout if dump.returncode == 0 else b"<bdb_dump failed>" + dump.stderr
+            right[name] = right[name][len(INDEXED_MAGIC):]
+            names.append(name)
+    return names
 
 
 def snapshot(directory: Path):
@@ -46,7 +79,9 @@ def validate_file_paths(conversion):
 
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
-           call_paths=(), cobc_flags=(), debugging_lines=False, std="default"):
+           call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None):
+    """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
+    files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -61,6 +96,11 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             raise CobolError(f"dossier de données introuvable: {data_dir}")
         seed = snapshot(data_dir)
         seed_directories = [p.relative_to(data_dir).as_posix() for p in sorted(data_dir.rglob("*")) if p.is_dir()]
+    rust_seed = seed
+    if rust_data_dir:
+        if not rust_data_dir.is_dir() or not data_dir:
+            raise CobolError(f"dossier de données Rust introuvable: {rust_data_dir}")
+        rust_seed = snapshot(rust_data_dir)
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
@@ -99,7 +139,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             directory.mkdir()
             for relative in seed_directories:
                 (directory / relative).mkdir(parents=True, exist_ok=True)
-            for relative, contents in seed.items():
+            for relative, contents in (seed if name == "cobol" else rust_seed).items():
                 target = directory / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(contents)
@@ -113,6 +153,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             artifacts.append(snapshot(directory))
         a, b = results
         left, right = artifacts
+        indexed = indexed_contents(left, right, work / "run_cobol")
         differences = sorted(name for name in left.keys() | right.keys() if left.get(name) != right.get(name))
         return {"schema_version": 1, "source": conversion["source"], "source_sha256": conversion["source_sha256"],
                 "expanded_sha256": conversion["expanded_sha256"], "copybook_sha256": conversion["copybook_sha256"],
@@ -120,8 +161,9 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "stdin_sha256": hashlib.sha256(stdin).hexdigest(),
                 "std": std, "cobc_flags": list(cobc_flags),
                 "scope": "original COBOL vs generated Rust: stdout bytes, zero exit codes and final file bytes for these inputs",
-                "runtime_env": runtime_env, "input_files": manifest(seed), "input_directories": seed_directories,
+                "runtime_env": runtime_env, "input_files": manifest(seed), "rust_input_files": manifest(rust_seed), "input_directories": seed_directories,
                 "files_match": not differences, "file_differences": differences,
+                "indexed_files_compared_logically": indexed,
                 "cobol_files": manifest(left), "rust_files": manifest(right),
                 "match": a.stdout == b.stdout and a.returncode == b.returncode == 0 and not differences,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),

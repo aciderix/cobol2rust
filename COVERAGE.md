@@ -653,3 +653,16 @@ sections de débogage actives selon `COB_SET_DEBUG`. Les identifiants surveillé
 **336/458** ; revérification : **311/312 programmes principaux conformes**,
 7275 PASS, 0 FAIL (`build/nist-verify-debugging.json`).
 
+## Progression : INDEXED
+
+Port des fonctions Berkeley DB de fileio.c (`indexed_open`, `start_internal`,
+`read_next`, `write_internal`, `delete_internal`, `rewrite`, `check_alt_keys`,
+`get_dupno`) sur des btrees ordonnés comme BDB (memcmp, doublons dans l'ordre
+d'insertion, numéro de doublon natif). Comportements de libcob conservés : pas
+de statut 02 (écrasé par DB_PUT), REWRITE séquentiel à clé changée accepté,
+21 au lieu de 22 en écriture séquentielle OUTPUT. Format disque propre à
+cobol2rust (fichiers `nom`, `nom.1`, ...), non interchangeable avec les
+fichiers BDB de GnuCOBOL. Refusés : clés composées (SOURCE IS), SUPPRESS,
+READ PREVIOUS, LOCK. Émission acceptée : **375/458** ; revérification :
+**350/351 programmes principaux conformes** (`build/nist-verify-indexed.json`).
+

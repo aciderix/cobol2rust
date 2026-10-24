@@ -80,6 +80,31 @@ def native_seed(corpus: Path, chain: list[Path], copybooks: list[Path], work: Pa
     return seed
 
 
+def rust_seed(corpus: Path, chain: list[Path], copybooks: list[Path], call_paths: list[Path], work: Path) -> Path:
+    """The predecessors converted to Rust and run in turn: INDEXED files are
+    in cobol2rust's own format, not GnuCOBOL's Berkeley DB."""
+    run_dir, seed = work / "rust_native", work / "rust_seed"
+    run_dir.mkdir(parents=True)
+    seed.mkdir()
+    for program in chain:
+        project = work / f"rust_{program.stem}"
+        convert(program, project, fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
+        binary = build_rust(project)
+        stdin = program.with_suffix(".DAT")
+        with (stdin.open("rb") if stdin.exists() else open(os.devnull, "rb")) as stream:
+            subprocess.run([str(binary)], cwd=run_dir, stdin=stream, capture_output=True,
+                           env={**os.environ, **runner_env(program.stem)}, timeout=300)
+    for path in sorted(run_dir.glob("XXXXX*")):
+        shutil.copy2(path, seed / path.name)
+    return seed
+
+
+def has_berkeley_db(directory: Path) -> bool:
+    """A Berkeley DB btree: magic 0x053162 at offset 12 of its meta page."""
+    return any(path.read_bytes()[12:16] in {b"\x62\x31\x05\x00", b"\x00\x05\x31\x62"}
+               for path in directory.iterdir() if path.is_file())
+
+
 def runner_counts(native_logs: Path, name: str) -> dict | None:
     summary = native_logs / name[:2] / "report.txt"
     if not summary.exists():
@@ -104,10 +129,11 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
                 "runner_counts": runner_counts(native_logs, name)}
     seed = native_seed(corpus, chain, copybooks, work) if chain else None
+    rust_data = rust_seed(corpus, chain, copybooks, call_paths, work) if seed and has_berkeley_db(seed) else None
     stdin = source.with_suffix(".DAT")
     report = verify(source, fmt="fixed", includes=copybooks,
                     stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
-                    data_dir=seed, call_paths=call_paths,
+                    data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
                     runtime_env=runner_env(name), debugging_lines=name in DEBUGGING_LINES,
                     cobc_flags=RUNNER_FLAGS, std="cobol85")
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],

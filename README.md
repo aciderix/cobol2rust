@@ -121,7 +121,7 @@ images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées
 fonctions intrinsèques hors liste ci-dessous (trigonométrie, LOG, SQRT,
 STANDARD-DEVIATION, RANDOM, CURRENT-DATE, WHEN-COMPILED), appels externes,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
-fichiers à enregistrements variables, relatifs/indexés, SQL embarqué, CICS et
+fichiers à enregistrements variables, SQL embarqué, CICS et
 plusieurs programmes liés. Les formats binaires autres que les enregistrements
 SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
 La déédition, les calculs sur texte et les calculs vers PIC X restent refusés.
@@ -607,9 +607,13 @@ variable et la conversion est refusée. `DATA RECORD(S) [IS|ARE] nom...` est
 conservée comme métadonnée : GnuCOBOL n'en résout pas les noms et ne lui donne
 aucun effet ; la clause en double ou sans nom reste refusée.
 
-Les compteurs ADVANCING variables, LINAGE, les autres clauses FD,
-les formats variables, I-O/REWRITE et les fichiers relatifs/indexés restent
-refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
+Les fichiers INDEXED suivent le gestionnaire Berkeley DB de libcob 3.2
+(clé principale, clés alternées avec ou sans doublons, START, READ KEY,
+DELETE, REWRITE), dans un format disque propre à cobol2rust (`nom`, `nom.1`,
+...) qui n'est pas interchangeable avec les fichiers BDB de GnuCOBOL ; le
+vérificateur compare leur contenu logique (`cobol2rust/bdb_dump.c`, libdb).
+Les compteurs ADVANCING variables, LINAGE, les autres clauses FD et les clés
+INDEXED composées (SOURCE IS), SUPPRESS ou READ PREVIOUS restent refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
 modélisés (`COB_SEQ_CONCAT_NAME`, `COB_SEQ_CONCAT_SEP`). Les options `COB_LS_FIXED`
 et `COB_LS_SPLIT` s'appliquent seulement au runtime LINE SEQUENTIAL.
 

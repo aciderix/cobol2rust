@@ -405,6 +405,9 @@ class FileSpec:
     depending: str | None = None
     # SD: a sort/merge file, with no physical file of its own.
     sort: bool = False
+    # INDEXED: RECORD KEY, then ALTERNATE RECORD KEYs as (key, WITH DUPLICATES).
+    record_key: object = None
+    alternate_keys: list = field(default_factory=list)
 
 
 @dataclass
@@ -721,7 +724,7 @@ class Parser:
                         if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
                             self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
-                            if spec.organization not in {"SEQUENTIAL", "RELATIVE", "SORT"}:
+                            if spec.organization not in {"SEQUENTIAL", "RELATIVE", "INDEXED", "SORT"}:
                                 self.error("plusieurs enregistrements FD limités à SEQUENTIAL/RELATIVE de taille fixe égale")
                             descriptor.redefines = spec.record
                         else:
@@ -1360,12 +1363,14 @@ class Parser:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
         path = None
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
-        relative_key = None
+        relative_key, record_key, alternate_keys = None, None, []
 
         def organization_word():
-            # [ORGANIZATION [IS]] {LINE SEQUENTIAL | [RECORD] [BINARY] SEQUENTIAL | RELATIVE}
+            # [ORGANIZATION [IS]] {LINE SEQUENTIAL | [RECORD] [BINARY] SEQUENTIAL | RELATIVE | INDEXED}
             if self.accept("RELATIVE"):
                 return "RELATIVE"
+            if self.accept("INDEXED"):
+                return "INDEXED"
             if self.accept("LINE"):
                 self.expect("SEQUENTIAL")
                 return "LINE SEQUENTIAL"
@@ -1419,9 +1424,33 @@ class Parser:
                 self.accept("IS")
                 organization = organization_word()
             elif (not organization_seen and not self.t.string and (self.at("LINE") or self.at("SEQUENTIAL")
-                    or self.at("BINARY") or (self.at("RELATIVE") and self.tokens[self.i + 1].key in clause_words))):
+                    or self.at("BINARY") or self.at("INDEXED")
+                    or (self.at("RELATIVE") and self.tokens[self.i + 1].key in clause_words))):
                 organization_seen = True
                 organization = organization_word()
+            elif self.at("RECORD") and record_key is None:
+                # RECORD [KEY] [IS] data-name (SOURCE IS split keys are refused).
+                self.take()
+                self.accept("KEY")
+                self.accept("IS")
+                record_key = reference()
+                if self.at("SOURCE") or self.at("="):
+                    self.error("clé INDEXED composée (SOURCE IS) non prise en charge")
+            elif self.accept("ALTERNATE"):
+                self.expect("RECORD")
+                self.accept("KEY")
+                self.accept("IS")
+                key = reference()
+                if self.at("SOURCE") or self.at("="):
+                    self.error("clé INDEXED composée (SOURCE IS) non prise en charge")
+                duplicates = False
+                if self.at("WITH") or self.at("DUPLICATES"):
+                    self.accept("WITH")
+                    self.expect("DUPLICATES")
+                    duplicates = True
+                if self.at("SUPPRESS"):
+                    self.error("ALTERNATE KEY SUPPRESS non pris en charge")
+                alternate_keys.append((key, duplicates))
             elif self.accept("ACCESS") and access is None:
                 self.accept("MODE")
                 self.accept("IS")
@@ -1449,12 +1478,17 @@ class Parser:
         if path is None:
             self.error("ASSIGN attendu")
         self.expect(".")
-        if organization != "RELATIVE" and (relative_key or access not in {None, "SEQUENTIAL"}):
-            self.error("RELATIVE KEY et ACCESS RANDOM/DYNAMIC requièrent ORGANIZATION RELATIVE")
+        if organization != "RELATIVE" and relative_key:
+            self.error("RELATIVE KEY requiert ORGANIZATION RELATIVE")
+        if organization not in {"RELATIVE", "INDEXED"} and access not in {None, "SEQUENTIAL"}:
+            self.error("ACCESS RANDOM/DYNAMIC requiert ORGANIZATION RELATIVE ou INDEXED")
+        if (organization == "INDEXED") != (record_key is not None) or (alternate_keys and organization != "INDEXED"):
+            self.error("RECORD KEY requise par ORGANIZATION INDEXED, et réservée à elle")
         if organization == "RELATIVE" and access in {"RANDOM", "DYNAMIC"} and not relative_key:
             self.error("ACCESS RANDOM/DYNAMIC requiert RELATIVE KEY")
         self.files[name] = FileSpec(name, path, optional, status, organization=organization,
-                                    access=access or "SEQUENTIAL", relative_key=relative_key)
+                                    access=access or "SEQUENTIAL", relative_key=relative_key,
+                                    record_key=record_key, alternate_keys=alternate_keys)
 
     def validate_files(self):
         for spec in self.files.values():
@@ -1482,6 +1516,22 @@ class Parser:
                     self.error("RELATIVE KEY limitée à un entier non signé de 9 chiffres au plus")
                 if any(key.name == r or key.name.startswith(r + ".") for r in spec.records):
                     self.error("RELATIVE KEY dans l'enregistrement de son propre fichier non prise en charge")
+            if spec.record_key:
+                keys = [(spec.record_key, False), *spec.alternate_keys]
+                spec.record_key, spec.alternate_keys = None, []
+                resolved = []
+                for (label, qualifiers), duplicates in keys:
+                    name = self.resolve(label, qualifiers)
+                    root = name.split(".")[0]
+                    key = self.fields[name]
+                    if root not in spec.records or key.dimensions or key.depending:
+                        self.error(f"clé INDEXED {key.label} hors de l'enregistrement de {spec.name} ou dans une table")
+                    if key.size > 255:
+                        self.error(f"clé INDEXED {key.label} limitée à 255 octets")
+                    resolved.append((name, key.offset - self.fields[root].offset, key.size, duplicates))
+                if len({(offset, size) for _, offset, size, _ in resolved}) != len(resolved):
+                    self.error("clés INDEXED de même position non prises en charge")
+                spec.record_key, spec.alternate_keys = resolved[0], resolved[1:]
             from .layout import leaves
             sizes = [self.fields[key].size for key in spec.records]
             varying = spec.fd_clauses.get("record_varying")
@@ -1904,8 +1954,12 @@ class Parser:
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
                 self.error("READ INTO requiert un champ alphanumérique")
-            if self.at("KEY") or self.at("WITH"):
-                self.error("READ KEY/LOCK non pris en charge")
+            key_item = None
+            if self.accept("KEY"):
+                self.accept("IS")
+                key_item = self.variable()
+            if self.at("WITH"):
+                self.error("READ LOCK non pris en charge")
             handler, exception, success = None, [], []
             if self.accept("AT") or self.at("END"):
                 self.expect("END")
@@ -1926,8 +1980,13 @@ class Parser:
             self.accept("END-READ")
             # cobc: NEXT, SEQUENTIAL access, or DYNAMIC with AT END read the next
             # record; otherwise a RELATIVE KEY selects the record.
-            random = (spec.organization == "RELATIVE" and not next_record and spec.access != "SEQUENTIAL"
+            random = (spec.organization in {"RELATIVE", "INDEXED"} and not next_record and spec.access != "SEQUENTIAL"
                       and not (spec.access == "DYNAMIC" and handler == "end"))
+            if key_item is not None and spec.organization != "INDEXED":
+                self.error("READ KEY requiert un fichier INDEXED")
+            if random and spec.organization == "INDEXED":
+                # cob_read with KEY IS item, or the RECORD KEY (cob_findkey_attr).
+                random = self.index_key(spec, key_item) if key_item else (0, spec.record_key[2])
             if handler == ("end" if random else "key"):
                 self.error("READ " + ("direct requiert INVALID KEY, pas AT END" if random else "séquentiel requiert AT END, pas INVALID KEY"))
             return Stmt("read", (name, into, exception, success, random), line)
@@ -1937,22 +1996,22 @@ class Parser:
             if not files:
                 self.error(f"REWRITE requiert un enregistrement FD: {record}")
             if self.files[files[0]].organization == "LINE SEQUENTIAL":
-                self.error("REWRITE limité aux fichiers SEQUENTIAL/RELATIVE; réécriture LINE SEQUENTIAL non modélisée")
+                self.error("REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée")
             value = self.expr() if self.accept("FROM") else None
             invalid, valid = self.key_handlers(files[0], "END-REWRITE")
             return Stmt("rewrite", (files[0], record.name, value, invalid, valid), line)
         if verb == "DELETE":
             name = self.file_name()
-            if self.files[name].organization != "RELATIVE":
-                self.error("DELETE limité aux fichiers RELATIVE")
+            if self.files[name].organization not in {"RELATIVE", "INDEXED"}:
+                self.error("DELETE limité aux fichiers RELATIVE et INDEXED")
             self.accept("RECORD")
             invalid, valid = self.key_handlers(name, "END-DELETE")
             return Stmt("delete", (name, None, None, invalid, valid), line)
         if verb == "START":
             name = self.file_name()
             spec = self.files[name]
-            if spec.organization != "RELATIVE" or spec.access == "RANDOM":
-                self.error("START limité aux fichiers RELATIVE en accès SEQUENTIAL ou DYNAMIC")
+            if spec.organization not in {"RELATIVE", "INDEXED"} or spec.access == "RANDOM":
+                self.error("START limité aux fichiers RELATIVE/INDEXED en accès SEQUENTIAL ou DYNAMIC")
             condition = "Equal"
             if self.accept("KEY"):
                 self.accept("IS")
@@ -1976,12 +2035,16 @@ class Parser:
                 else:
                     self.error("START KEY limité à =, > ou NOT <")
                 key = self.variable()
-                if key.name != spec.relative_key or key.indices or key.start is not None:
+                if spec.organization == "INDEXED":
+                    index = self.index_key(spec, key)
+                elif key.name != spec.relative_key or key.indices or key.start is not None:
                     self.error("START KEY doit désigner la RELATIVE KEY du fichier")
+            elif spec.organization == "INDEXED":
+                index = (0, spec.record_key[2])
             elif not spec.relative_key:
                 self.error("START requiert une RELATIVE KEY")
             invalid, valid = self.key_handlers(name, "END-START")
-            return Stmt("start", (name, None, condition, invalid, valid), line)
+            return Stmt("start", (name, index if spec.organization == "INDEXED" else None, condition, invalid, valid), line)
         if verb == "WRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
@@ -2376,6 +2439,21 @@ class Parser:
             self.error("instruction attendue après INVALID KEY")
         return body
 
+    def index_key(self, spec, ref):
+        """cob_findkey_attr: the key whose field starts where the KEY item
+        starts; the item's size is the compared (partial) length."""
+        f = self.fields[ref.name]
+        root = ref.name.split(".")[0]
+        if ref.indices or ref.start is not None or f.dimensions or root not in spec.records:
+            self.error(f"KEY {f.label} doit être un champ de l'enregistrement de {spec.name}")
+        offset = f.offset - self.fields[root].offset
+        for index, (_, key_offset, size, _) in enumerate([spec.record_key, *spec.alternate_keys]):
+            if key_offset == offset:
+                if f.size > size:
+                    self.error(f"KEY {f.label} plus longue que la clé du fichier")
+                return index, f.size
+        self.error(f"KEY {f.label} ne désigne pas une clé de {spec.name}")
+
     def key_handlers(self, file_name, ending):
         """[INVALID KEY ...] [NOT INVALID KEY ...] [END-x], RELATIVE files only."""
         invalid, valid = [], []
@@ -2384,8 +2462,8 @@ class Parser:
         if self.at("NOT") and self.tokens[self.i + 1].key == "INVALID":
             self.take()
             valid = self.invalid_key({ending})
-        if (invalid or valid) and self.files[file_name].organization != "RELATIVE":
-            self.error("INVALID KEY limité aux fichiers RELATIVE")
+        if (invalid or valid) and self.files[file_name].organization not in {"RELATIVE", "INDEXED"}:
+            self.error("INVALID KEY limité aux fichiers RELATIVE et INDEXED")
         self.accept(ending)
         return invalid, valid
 

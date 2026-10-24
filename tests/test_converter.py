@@ -95,6 +95,20 @@ class FrontendTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(CobolError):
                 Emitter(Parser(source).parse()).generate()
 
+    def test_indexed_limits_are_refused(self):
+        def source(select, procedure="stop run."):
+            return ("identification division.\nprogram-id. t.\nenvironment division.\ninput-output section.\n"
+                    "file-control.\n    select f assign to \"IXF\" organization indexed access dynamic\n"
+                    f"    {select}.\ndata division.\nfile section.\nfd f.\n01 r.\n 02 k pic x(3).\n 02 a pic x(2).\n"
+                    "working-storage section.\n01 w pic x(3).\nprocedure division.\n" + procedure)
+        Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
+        for case in (source("record key is w"), source("alternate record key is a"),
+                     source("record key is k alternate record key is a suppress when space"),
+                     source("record key is k", "read f key is a. stop run."),
+                     source("record key is k", "start f key is = w. stop run.")):
+            with self.subTest(case=case), self.assertRaises(CobolError):
+                Emitter(Parser(case).parse()).generate()
+
     def test_copy_expansion_cycle_and_missing(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

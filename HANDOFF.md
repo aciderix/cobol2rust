@@ -62,6 +62,14 @@ statut), marques `fall_through` du frontend ; `runtime::debugging_mode`
 (COB_SET_DEBUG). NIST **336/458**, 311/312. Prochain : INDEXED (en cours :
 `tools/bdb_dump.c` pour comparer logiquement les fichiers BDB de cobc).
 
+Dernière étape : INDEXED. `file_runtime::IndexedFile` (état `key`/`data`/
+`last_readkey`/`last_dupno` de `struct indexed_file`), `Btree` (format
+`cobol2rust-btree-1`), `FileSpec.record_key`/`alternate_keys` résolues en
+(nom, décalage, taille, doublons), `Parser.index_key` (cob_findkey_attr),
+`verification.indexed_contents` + `cobol2rust/bdb_dump.c`,
+`nist_verify.rust_seed`. NIST **375/458**, 350/351. Prochain : PROGRAM
+COLLATING SEQUENCE (en cours), LINAGE, fonctions trigonométriques.
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

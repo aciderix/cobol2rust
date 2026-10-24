@@ -562,18 +562,25 @@ class Emitter:
             name, record, value, _, _ = a
             if value:
                 self.assignment(value, [record], False)
-            key = f"{self.relative_key(name, False)}, " if self.program.files[name].organization == "RELATIVE" else ""
+            organization = self.program.files[name].organization
+            key = f"{self.relative_key(name, False)}, " if organization == "RELATIVE" else ""
             size = self.program.fields[record].size
             self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "delete":
             name = a[0]
-            self.write(f"let status = self.{self.files[name]}.delete({self.relative_key(name, False)});")
+            if self.program.files[name].organization == "INDEXED":
+                self.write(f"let status = self.{self.files[name]}.delete(&self.{self.files[name]}_area);")
+            else:
+                self.write(f"let status = self.{self.files[name]}.delete({self.relative_key(name, False)});")
             self.file_status(name, "status")
         elif op == "start":
-            name, _, condition, _, _ = a
-            key = self.names[self.program.files[name].relative_key]
-            self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, &self.{key});")
+            name, index, condition, _, _ = a
+            if index is not None:
+                self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, {index[0]}, {index[1]}, &self.{self.files[name]}_area);")
+            else:
+                key = self.names[self.program.files[name].relative_key]
+                self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, &self.{key});")
             self.file_status(name, "status")
         elif op == "write":
             name, record, value, advancing, _, _ = a
@@ -588,7 +595,12 @@ class Emitter:
             if self.program.files[name].organization == "RELATIVE":
                 control = self.relative_key(name, True)
             size = self.program.fields[record].size
-            self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
+            if self.program.files[name].organization == "INDEXED":
+                if advancing is not None:
+                    raise CobolError("WRITE ADVANCING sur un fichier INDEXED")
+                self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {self.depending(name, False)});")
+            else:
+                self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "display":
             values = []
@@ -1085,22 +1097,29 @@ class Emitter:
             status = self.unique()
             handled = bool(node.stmt.args[2])
             random = node.stmt.args[4]
+            # INDEXED: (key index, compared length) of the keyed READ.
+            keyed = bool(random)
             # AT END takes every 1x status of a sequential read, INVALID KEY every 2x.
             exception_class = 2 if random else 1
             area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
-            if spec.organization != "RELATIVE":
+            if spec.organization == "INDEXED":
+                if random:
+                    self.write(f"let {status} = self.{self.files[name]}.read_key(&mut {area}, {random[0]}, {random[1]}, {depending});")
+                else:
+                    self.write(f"let {status} = self.{self.files[name]}.read_next(&mut {area}, {depending});")
+            elif spec.organization != "RELATIVE":
                 self.write(f"let {status} = self.{self.files[name]}.read(&mut {area}, {depending});")
             elif random:
                 self.write(f"let {status} = self.{self.files[name]}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
             else:
                 self.write(f"let {status} = self.{self.files[name]}.read_next(&mut {area}, {self.relative_key(name, True)}, {depending});")
-            self.io_invalid = handled and random
-            self.file_status(name, status, handled and not random)
+            self.io_invalid = handled and keyed
+            self.file_status(name, status, handled and not keyed)
             self.io_handlers, self.io_invalid = None, False
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1
             if into:
-                if spec.organization in {"SEQUENTIAL", "RELATIVE"}:
+                if spec.organization in {"SEQUENTIAL", "RELATIVE", "INDEXED"}:
                     # READ INTO moves the record as read: its size is the size read.
                     self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
                 else:
@@ -1187,7 +1206,7 @@ class Emitter:
             self.write(f"{self.names[name]}: Value, // {name} PIC {self.program.fields[name].picture}")
         for name, rust_name in self.files.items():
             organization = self.program.files[name].organization
-            kind = "RelativeFile" if organization == "RELATIVE" else "SortFile" if organization == "SORT" else "CobolFile"
+            kind = {"RELATIVE": "RelativeFile", "INDEXED": "IndexedFile", "SORT": "SortFile"}.get(organization, "CobolFile")
             self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
         # cobc's static label_N (and save_label_N) of the ALTERed paragraphs:
@@ -1213,6 +1232,10 @@ class Emitter:
                 self.write(f"{rust_name}: file_runtime::SortFile::new({spec.record_max}),")
             elif spec.organization == "RELATIVE":
                 self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}),")
+            elif spec.organization == "INDEXED":
+                keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()} }}"
+                                 for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
+                self.write(f"{rust_name}: file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]),")
             else:
                 self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}),")
             offset = self.program.fields[spec.record].offset

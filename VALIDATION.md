@@ -1,5 +1,21 @@
 # Validation — 22 octobre 2026
 
+## Organisation INDEXED — 24 octobre 2026
+
+- **310 tests découverts : 309 réussis, un test PE Windows ignoré.**
+- **106/106 comparaisons locales conformes** ; nouvelle fixture
+  `indexed_files.cob` (clés alternées avec et sans doublons, START partiel,
+  READ KEY, DELETE/REWRITE puis READ NEXT, statuts 21/22/23/43/46).
+- NIST : **375/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **350/351 programmes principaux conformes** (7671 PASS, 0 FAIL, 8 DELETED,
+  14 INSPECT) : `build/nist-verify-indexed.json`,
+  `build/coverage-nist-indexed.json`. 39 programmes IX ajoutés.
+- Les fichiers INDEXED sont comparés logiquement : `cobol2rust/bdb_dump.c`
+  (libdb 5.3) liste les paires clé/donnée des btrees Berkeley DB de cobc,
+  comparées à celles du format propre de cobol2rust. Les programmes chaînés
+  reçoivent côté Rust les fichiers écrits par leurs prédécesseurs convertis.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
 ## DEBUGGING MODE et USE FOR DEBUGGING — 24 octobre 2026
 
 - **310 tests découverts : 309 réussis, un test PE Windows ignoré.**

@@ -100,7 +100,7 @@ class EvaluateNativeTests(unittest.TestCase):
         for name in ("renames.cob", "exponentiation.cob", "figurative_numeric.cob", "negative_zero.cob",
                      "corresponding.cob", "display_truncation.cob", "deediting.cob", "copy_replacing.cob",
                      "intrinsic_functions.cob", "procedure_names.cob", "perform_backward_thru.cob",
-                     "perform_times_count.cob"):
+                     "perform_times_count.cob", "indexed_files.cob"):
             with self.subTest(name=name):
                 report = verify(ROOT / "tests" / "fixtures" / name, fmt="free")
                 self.assertTrue(report["match"], report)

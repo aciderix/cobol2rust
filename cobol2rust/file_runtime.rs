@@ -1,4 +1,4 @@
-// GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL, fixed SEQUENTIAL and RELATIVE.
+// GnuCOBOL 3.2 default file profile: LINE SEQUENTIAL, fixed SEQUENTIAL, RELATIVE and INDEXED.
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use crate::runtime::{Value, fail};
@@ -830,5 +830,570 @@ impl SortFile {
         self.records.clear();
         self.sorted = false;
         self.next = 0;
+    }
+}
+
+/// One INDEXED key: its place in the record and WITH DUPLICATES.
+pub struct IndexKey { pub offset: usize, pub size: usize, pub duplicates: bool }
+
+/// A Berkeley DB btree as libcob 3.2 uses it: keys in memcmp order (a
+/// shorter key first), duplicates of a key in insertion order (DB_DUP).
+#[derive(Default)]
+struct Btree { entries: std::collections::BTreeMap<Vec<u8>, Vec<Vec<u8>>> }
+
+/// A cursor position: key and duplicate index.
+type Position = (Vec<u8>, usize);
+
+impl Btree {
+    fn get(&self, key: &[u8]) -> Option<&Vec<u8>> { self.entries.get(key).and_then(|d| d.first()) }
+    fn at(&self, position: &Position) -> (Vec<u8>, Vec<u8>) {
+        (position.0.clone(), self.entries[&position.0][position.1].clone())
+    }
+    fn first(&self) -> Option<Position> { self.entries.keys().next().map(|k| (k.clone(), 0)) }
+    fn last(&self) -> Option<Position> { self.entries.iter().next_back().map(|(k, d)| (k.clone(), d.len() - 1)) }
+    fn set(&self, key: &[u8]) -> Option<Position> { self.entries.get(key).map(|_| (key.to_vec(), 0)) }
+    fn set_range(&self, key: &[u8]) -> Option<Position> {
+        self.entries.range(key.to_vec()..).next().map(|(k, _)| (k.clone(), 0))
+    }
+    fn next(&self, position: &Position) -> Option<Position> {
+        if position.1 + 1 < self.entries[&position.0].len() { return Some((position.0.clone(), position.1 + 1)); }
+        self.next_nodup(position)
+    }
+    fn next_nodup(&self, position: &Position) -> Option<Position> {
+        use std::ops::Bound::{Excluded, Unbounded};
+        self.entries.range::<Vec<u8>, _>((Excluded(&position.0), Unbounded)).next().map(|(k, _)| (k.clone(), 0))
+    }
+    fn prev(&self, position: &Position) -> Option<Position> {
+        if position.1 > 0 { return Some((position.0.clone(), position.1 - 1)); }
+        self.entries.range(..position.0.clone()).next_back().map(|(k, d)| (k.clone(), d.len() - 1))
+    }
+    /// DB->put: NOOVERWRITE fails on an existing key; with DB_DUP the new
+    /// duplicate goes after the existing ones.
+    fn put(&mut self, key: &[u8], data: &[u8], no_overwrite: bool, duplicates: bool) -> bool {
+        match self.entries.get_mut(key) {
+            Some(list) if no_overwrite => { let _ = list; false },
+            Some(list) if duplicates => { list.push(data.to_vec()); true },
+            Some(list) => { list[0] = data.to_vec(); true },
+            None => { self.entries.insert(key.to_vec(), vec![data.to_vec()]); true },
+        }
+    }
+    fn delete(&mut self, position: &Position) {
+        let list = self.entries.get_mut(&position.0).unwrap();
+        list.remove(position.1);
+        if list.is_empty() { self.entries.remove(&position.0); }
+    }
+    fn delete_key(&mut self, key: &[u8]) { self.entries.remove(key); }
+
+    const MAGIC: &'static [u8] = b"cobol2rust-btree-1\n";
+
+    /// cobol2rust's own INDEXED format (not Berkeley DB): the pairs in btree
+    /// order, each length a little-endian u32.
+    fn load(path: &str) -> Btree {
+        let bytes = std::fs::read(path).unwrap_or_else(|e| fail(&format!("INDEXED file read failed: {e}")));
+        if !bytes.starts_with(Self::MAGIC) {
+            fail("INDEXED file not in cobol2rust format (Berkeley DB files of GnuCOBOL are not read)");
+        }
+        let mut tree = Btree::default();
+        let mut at = Self::MAGIC.len();
+        let mut take = |at: &mut usize| -> Vec<u8> {
+            if *at + 4 > bytes.len() { fail("truncated INDEXED file"); }
+            let size = u32::from_le_bytes(bytes[*at..*at + 4].try_into().unwrap()) as usize;
+            if *at + 4 + size > bytes.len() { fail("truncated INDEXED file"); }
+            let value = bytes[*at + 4..*at + 4 + size].to_vec();
+            *at += 4 + size;
+            value
+        };
+        while at < bytes.len() {
+            let key = take(&mut at);
+            let data = take(&mut at);
+            tree.entries.entry(key).or_default().push(data);
+        }
+        tree
+    }
+    fn save(&self, path: &str) {
+        let mut bytes = Self::MAGIC.to_vec();
+        for (key, list) in &self.entries {
+            for data in list {
+                bytes.extend((key.len() as u32).to_le_bytes());
+                bytes.extend(key);
+                bytes.extend((data.len() as u32).to_le_bytes());
+                bytes.extend(data);
+            }
+        }
+        std::fs::write(path, bytes).unwrap_or_else(|e| fail(&format!("INDEXED file write failed: {e}")));
+    }
+}
+
+/// GnuCOBOL 3.2 INDEXED file with the Berkeley DB handler (fileio.c,
+/// WITH_DB): the primary btree maps the prime key to the record, each
+/// alternate btree ("name.N") its key to the prime key (and, WITH
+/// DUPLICATES, a native little-endian u32 duplicate number).
+pub struct IndexedFile {
+    path: String,
+    optional: bool,
+    access: Access,
+    record_min: usize,
+    record_max: usize,
+    keys: Vec<IndexKey>,
+    db: Vec<Btree>,
+    open_mode: &'static str,
+    last_open_mode: &'static str,
+    locked: bool,
+    nonexistent: bool,
+    end_of_file: bool,
+    begin_of_file: bool,
+    first_read: u8,
+    read_done: bool,
+    last_read_size: usize,
+    // struct indexed_file state
+    key: Vec<u8>,
+    data: Option<Vec<u8>>,
+    key_index: usize,
+    last_readkey: Vec<Vec<u8>>,
+    last_dupno: Vec<u32>,
+    rewrite_sec_key: Vec<bool>,
+    last_key: Option<Vec<u8>>,
+}
+
+impl IndexedFile {
+    pub fn new(path: &str, optional: bool, access: &str, record_min: usize, record_max: usize, keys: Vec<IndexKey>) -> Self {
+        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH", "DB_HOME", "COB_BDB_HOME"] {
+            if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
+        }
+        for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
+            if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
+        }
+        let access = match access {
+            "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
+            _ => fail("unsupported INDEXED access mode"),
+        };
+        let n = keys.len();
+        Self { path: path.into(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
+               last_open_mode: "", locked: false, nonexistent: false, end_of_file: false, begin_of_file: false,
+               first_read: 0, read_done: false, last_read_size: 0, key: Vec::new(), data: None, key_index: 0,
+               last_readkey: vec![Vec::new(); 2 * n], last_dupno: vec![0; n], rewrite_sec_key: vec![false; n],
+               last_key: None }
+    }
+
+    pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    pub fn last_read_size(&self) -> usize { self.last_read_size }
+
+    fn file_name(&self, index: usize) -> String {
+        if index == 0 { self.path.clone() } else { format!("{}.{}", self.path, index) }
+    }
+    fn primekeylen(&self) -> usize { self.keys[0].size }
+
+    /// bdb_savekey: the key of index `idx` in `record`.
+    fn savekey(&self, record: &[u8], idx: usize) -> Vec<u8> {
+        let k = &self.keys[idx];
+        record[k.offset..k.offset + k.size].to_vec()
+    }
+    /// bdb_cmpkey: compare the first `partlen` (0: whole key) bytes.
+    fn cmpkey(&self, keyarea: &[u8], record: &[u8], idx: usize, partlen: usize) -> std::cmp::Ordering {
+        let k = &self.keys[idx];
+        let length = if partlen == 0 { k.size } else { partlen.min(k.size) };
+        keyarea[..length.min(keyarea.len())].cmp(&record[k.offset..k.offset + length])
+    }
+    fn dupno(data: &[u8], primekeylen: usize) -> u32 {
+        u32::from_le_bytes(data[primekeylen..primekeylen + 4].try_into().unwrap())
+    }
+
+    pub fn open(&mut self, mode: &str) -> u8 {
+        if self.locked { return 38; }
+        if !self.open_mode.is_empty() { return 41; }
+        self.read_done = false;
+        self.last_open_mode = match mode {
+            "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
+            _ => fail("unsupported file open mode"),
+        };
+        self.nonexistent = false;
+        self.end_of_file = false;
+        self.begin_of_file = false;
+        self.first_read = 2;
+        let status = self.indexed_open(mode);
+        if status < 10 { claim_path(&self.path); }
+        status
+    }
+
+    fn indexed_open(&mut self, mode: &str) -> u8 {
+        let path = std::path::Path::new(&self.path);
+        if path.is_dir() { return 30; }
+        let nonexistent = !path.exists();
+        if nonexistent && mode != "OUTPUT" && !self.optional { return 35; }
+        let n = self.keys.len();
+        if nonexistent && mode == "INPUT" {
+            // DB_RDONLY on a missing OPTIONAL file: ENOENT.
+            self.open_mode = "INPUT";
+            self.nonexistent = true;
+            self.end_of_file = true;
+            self.begin_of_file = true;
+            return 5;
+        }
+        self.db = (0..n).map(|i| {
+            let name = self.file_name(i);
+            if mode == "OUTPUT" || !std::path::Path::new(&name).exists() { Btree::default() } else { Btree::load(&name) }
+        }).collect();
+        self.last_readkey = vec![Vec::new(); 2 * n];
+        self.last_dupno = vec![0; n];
+        self.rewrite_sec_key = vec![false; n];
+        self.key_index = 0;
+        self.last_key = None;
+        self.key = Vec::new();
+        self.data = None;
+        // DB_FIRST on the primary btree.
+        if let Some(position) = self.db[0].first() {
+            let (key, data) = self.db[0].at(&position);
+            self.last_readkey[0] = key.clone();
+            self.key = key;
+            self.data = Some(data);
+        }
+        self.open_mode = self.last_open_mode;
+        if self.optional && nonexistent && mode != "OUTPUT" { 5 } else { 0 }
+    }
+
+    pub fn close(&mut self, lock: bool) -> u8 {
+        self.read_done = false;
+        if self.open_mode.is_empty() {
+            if self.locked { fail("CLOSE of a file closed WITH LOCK not modelled"); }
+            return 42;
+        }
+        if !self.nonexistent && self.open_mode != "INPUT" {
+            for (i, tree) in self.db.iter().enumerate() { tree.save(&self.file_name(i)); }
+        }
+        self.db.clear();
+        self.open_mode = "";
+        self.locked = lock;
+        release_path(&self.path);
+        0
+    }
+
+    /// cob_start then indexed_start_internal. `key` is the key of index
+    /// `index` given by the START KEY item, `partlen` that item's size.
+    pub fn start(&mut self, condition: StartCondition, index: usize, partlen: usize, area: &Value) -> u8 {
+        self.read_done = false;
+        self.first_read = 0;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.access == Access::Random { return 47; }
+        if self.nonexistent { return 23; }
+        let status = self.start_internal(condition, index, partlen, &area.bytes());
+        self.end_of_file = status != 0;
+        self.begin_of_file = false;
+        self.first_read = 1;
+        status
+    }
+
+    fn start_internal(&mut self, condition: StartCondition, idx: usize, partlen: usize, record: &[u8]) -> u8 {
+        self.key_index = idx;
+        let primekeylen = self.primekeylen();
+        let mut key = self.savekey(record, idx);
+        key.truncate(partlen);
+        let tree = &self.db[idx];
+        let mut found = tree.set_range(&key);
+        match condition {
+            StartCondition::Equal => {
+                if let Some(p) = &found {
+                    if self.cmpkey(&p.0, record, idx, partlen) != std::cmp::Ordering::Equal { found = None; }
+                }
+            },
+            StartCondition::Greater => {
+                while let Some(p) = found.clone() {
+                    if self.cmpkey(&p.0, record, idx, partlen) != std::cmp::Ordering::Equal { break; }
+                    found = tree.next(&p);
+                }
+            },
+            StartCondition::NotLess => {},
+        }
+        let Some(position) = found else { return 23 };
+        let (found_key, found_data) = tree.at(&position);
+        let mut dupno = 0;
+        let mut prime = found_key.clone();
+        let mut record_data = found_data.clone();
+        if idx > 0 {
+            if self.keys[idx].duplicates { dupno = Self::dupno(&found_data, primekeylen); }
+            prime = found_data[..primekeylen].to_vec();
+            match self.db[0].get(&prime) {
+                Some(data) => record_data = data.clone(),
+                None => return 23,
+            }
+        }
+        self.key = prime.clone();
+        self.data = Some(record_data);
+        if idx == 0 {
+            self.last_readkey[0] = prime;
+        } else {
+            let n = self.keys.len();
+            self.last_readkey[idx] = found_key;
+            self.last_readkey[idx + n] = prime;
+            if self.keys[idx].duplicates { self.last_dupno[idx] = dupno; }
+        }
+        0
+    }
+
+    /// cob_read with a key (READ ... KEY IS, or the prime key) then indexed_read.
+    pub fn read_key(&mut self, area: &mut Value, index: usize, partlen: usize, depending: Option<&mut Value>) -> u8 {
+        self.read_done = false;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.nonexistent {
+            if self.first_read == 0 { return 23; }
+            self.first_read = 0;
+            return 10;
+        }
+        let record = area.bytes();
+        let status = self.start_internal(StartCondition::Equal, index, partlen, &record);
+        if status != 0 { return status; }
+        let status = self.store_record(area);
+        self.first_read = 0;
+        self.read_done = true;
+        self.end_of_file = false;
+        self.begin_of_file = false;
+        set_depending(depending, self.last_read_size);
+        status
+    }
+
+    fn store_record(&mut self, area: &mut Value) -> u8 {
+        let data = self.data.clone().unwrap_or_default();
+        let mut status = 0;
+        let mut size = data.len();
+        if size > self.record_max { size = self.record_max; status = 43; }
+        let mut bytes = area.bytes();
+        bytes[..size].copy_from_slice(&data[..size]);
+        area.assign(&Value::Bytes(bytes), false);
+        self.last_read_size = size;
+        status
+    }
+
+    /// cob_read_next then indexed_read_next (NEXT only).
+    pub fn read_next(&mut self, area: &mut Value, depending: Option<&mut Value>) -> u8 {
+        self.read_done = false;
+        if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
+        if self.nonexistent {
+            if self.first_read == 0 { return 46; }
+            self.first_read = 0;
+            return 10;
+        }
+        if self.end_of_file { return 46; }
+        let status = self.indexed_read_next(area);
+        if status < 10 {
+            self.first_read = 0;
+            self.read_done = true;
+            self.end_of_file = false;
+            self.begin_of_file = false;
+            set_depending(depending, self.last_read_size);
+        } else if status == 10 {
+            self.end_of_file = true;
+        }
+        status
+    }
+
+    fn indexed_read_next(&mut self, area: &mut Value) -> u8 {
+        let idx = self.key_index;
+        let n = self.keys.len();
+        let primekeylen = self.primekeylen();
+        let duplicates = idx > 0 && self.keys[idx].duplicates;
+        let first = self.begin_of_file;
+        let mut file_changed = false;
+        if self.first_read != 0 {
+            if self.data.is_none() { return 10; }
+            // Check that the record read by OPEN/START still exists.
+            let tree = &self.db[idx];
+            let mut position = tree.set(&self.last_readkey[idx]);
+            if position.is_some() && idx > 0 {
+                let mut ok = false;
+                if duplicates {
+                    let mut p = position.clone().unwrap();
+                    let mut dupno = Self::dupno(&tree.at(&p).1, primekeylen);
+                    let mut current = Some(p.clone());
+                    while current.is_some() && p.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
+                        current = tree.next(&p);
+                        if let Some(q) = &current { p = q.clone(); dupno = Self::dupno(&tree.at(&p).1, primekeylen); }
+                    }
+                    if current.is_some() && p.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx] {
+                        ok = tree.at(&p).1[..primekeylen] == self.last_readkey[idx + n][..];
+                    }
+                } else {
+                    ok = tree.at(position.as_ref().unwrap()).1[..primekeylen] == self.last_readkey[idx + n][..];
+                }
+                position = None;
+                if ok {
+                    match self.db[0].get(&self.last_readkey[idx + n]) {
+                        Some(data) => { self.key = self.last_readkey[idx + n].clone(); self.data = Some(data.clone()); position = Some((Vec::new(), 0)); },
+                        None => {},
+                    }
+                }
+            } else if let Some(p) = &position {
+                let (key, data) = tree.at(p);
+                self.key = key;
+                self.data = Some(data);
+            }
+            file_changed = position.is_none();
+        }
+        if self.first_read == 0 || file_changed {
+            let tree = &self.db[idx];
+            let target = if first {
+                tree.first()
+            } else {
+                let mut read_next = false;
+                let found = tree.set_range(&self.last_readkey[idx]);
+                let mut position = match found {
+                    None => return 10,
+                    Some(p) => p,
+                };
+                if position.0 == self.last_readkey[idx] {
+                    if duplicates {
+                        let mut dupno = Self::dupno(&tree.at(&position).1, primekeylen);
+                        let mut current = Some(position.clone());
+                        while current.is_some() && position.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
+                            current = tree.next(&position);
+                            if let Some(q) = &current { position = q.clone(); dupno = Self::dupno(&tree.at(&position).1, primekeylen); }
+                        }
+                        if current.is_none() { return 10; }
+                        read_next = position.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx];
+                    } else {
+                        read_next = true;
+                    }
+                }
+                if read_next { tree.next(&position) } else { Some(position) }
+            };
+            let Some(position) = target else { return 10 };
+            let (found_key, found_data) = tree.at(&position);
+            let mut dupno = 0;
+            if idx > 0 {
+                if duplicates { dupno = Self::dupno(&found_data, primekeylen); }
+                let prime = found_data[..primekeylen].to_vec();
+                match self.db[0].get(&prime) {
+                    Some(data) => { self.data = Some(data.clone()); },
+                    None => return 23,
+                }
+                self.key = prime.clone();
+                self.last_readkey[idx] = found_key;
+                self.last_readkey[idx + n] = prime;
+                if duplicates { self.last_dupno[idx] = dupno; }
+            } else {
+                self.key = found_key.clone();
+                self.data = Some(found_data);
+                self.last_readkey[0] = found_key;
+            }
+        }
+        self.store_record(area)
+    }
+
+    /// cob_write then indexed_write.
+    pub fn write(&mut self, area: &Value, size: usize, depending: Option<&Value>) -> u8 {
+        self.read_done = false;
+        let allowed = if self.access == Access::Sequential { ["OUTPUT", "EXTEND"] } else { ["OUTPUT", "I-O"] };
+        if !allowed.contains(&self.open_mode) { return 48; }
+        let size = record_size(size, depending);
+        if size < self.record_min || size > self.record_max { return 44; }
+        if self.nonexistent { return 48; }
+        let record = area.bytes()[..size].to_vec();
+        let full = area.bytes();
+        let key = self.savekey(&full, 0);
+        if let Some(last) = &self.last_key {
+            if self.access == Access::Sequential && last[..] > key[..] { return 21; }
+        }
+        self.last_key = Some(key.clone());
+        self.key = key;
+        let status = self.write_internal(&full, &record, false);
+        if self.access == Access::Sequential && self.open_mode == "OUTPUT" && status == 22 { return 21; }
+        status
+    }
+
+    /// check_alt_keys: an alternate key without DUPLICATES already used
+    /// (by another record, for a REWRITE).
+    fn check_alt_keys(&self, full: &[u8], rewrite: bool) -> bool {
+        (1..self.keys.len()).any(|i| !self.keys[i].duplicates && match self.db[i].get(&self.savekey(full, i)) {
+            Some(prime) => !rewrite || self.cmpkey(prime, full, 0, 0) != std::cmp::Ordering::Equal,
+            None => false,
+        })
+    }
+
+    fn write_internal(&mut self, full: &[u8], record: &[u8], rewrite: bool) -> u8 {
+        if self.keys.len() > 1 && !rewrite {
+            if self.check_alt_keys(full, false) { return 22; }
+            self.key = self.savekey(full, 0);
+        }
+        if self.db[0].set(&self.key).is_some() { return 22; }
+        let prime = self.key.clone();
+        self.db[0].put(&prime, record, false, false);
+        let primekeylen = self.primekeylen();
+        for i in 1..self.keys.len() {
+            if rewrite && !self.rewrite_sec_key[i] { continue; }
+            let altkey = self.savekey(full, i);
+            let mut data = self.savekey(full, 0);
+            let duplicates = self.keys[i].duplicates;
+            if duplicates {
+                // get_dupno: one more than the last duplicate of this key.
+                let last = self.db[i].entries.get(&altkey).and_then(|list| list.last())
+                    .map(|d| Self::dupno(d, primekeylen)).unwrap_or(0);
+                // libcob sets 02 for a duplicate, then overwrites it with the
+                // DB_PUT result: the BDB handler never returns 02.
+                let dupno = last + 1;
+                data.extend(dupno.to_le_bytes());
+            }
+            if !self.db[i].put(&altkey, &data, !duplicates, duplicates) { return 22; }
+        }
+        0
+    }
+
+    /// cob_delete then indexed_delete.
+    pub fn delete(&mut self, area: &Value) -> u8 {
+        let read_done = self.read_done;
+        self.read_done = false;
+        if self.open_mode != "I-O" { return 49; }
+        if self.access == Access::Sequential && !read_done { return 43; }
+        if self.nonexistent { return 49; }
+        self.delete_internal(&area.bytes(), false)
+    }
+
+    fn delete_internal(&mut self, full: &[u8], rewrite: bool) -> u8 {
+        if self.access != Access::Sequential { self.key = self.savekey(full, 0); }
+        let prime = self.key.clone();
+        let Some(position) = self.db[0].set(&prime) else {
+            if self.access != Access::Sequential { return 23; }
+            // A sequential DELETE whose record vanished: DB_CDEL fails silently.
+            return 0;
+        };
+        let saverec = self.db[0].at(&position).1;
+        let primekeylen = self.primekeylen();
+        for i in 1..self.keys.len() {
+            let key = self.savekey(&saverec, i);
+            if rewrite {
+                self.rewrite_sec_key[i] = self.cmpkey(&key, full, i, 0) != std::cmp::Ordering::Equal;
+                if !self.rewrite_sec_key[i] { continue; }
+            }
+            if !self.keys[i].duplicates {
+                self.db[i].delete_key(&key);
+            } else if let Some(list) = self.db[i].entries.get(&key) {
+                if let Some(at) = list.iter().position(|d| d[..primekeylen] == prime[..]) {
+                    self.db[i].delete(&(key.clone(), at));
+                }
+            }
+        }
+        self.db[0].delete(&position);
+        0
+    }
+
+    /// cob_rewrite then indexed_rewrite.
+    pub fn rewrite(&mut self, area: &Value, size: usize, depending: Option<&Value>) -> u8 {
+        let read_done = self.read_done;
+        self.read_done = false;
+        if self.open_mode != "I-O" { return 49; }
+        if self.access == Access::Sequential && !read_done { return 43; }
+        let size = record_size(size, depending);
+        if depending.is_some() && (size < self.record_min || size > self.record_max) { return 44; }
+        if self.nonexistent { return 49; }
+        let full = area.bytes();
+        let record = full[..size].to_vec();
+        if self.check_alt_keys(&full, true) { return 22; }
+        let status = self.delete_internal(&full, true);
+        if status != 0 { return if status == 23 { 21 } else { status }; }
+        self.key = self.savekey(&full, 0);
+        self.write_internal(&full, &record, true)
+    }
+}
+
+impl Drop for IndexedFile {
+    fn drop(&mut self) {
+        if !self.open_mode.is_empty() { self.close(false); }
     }
 }
