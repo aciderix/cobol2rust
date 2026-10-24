@@ -47,16 +47,19 @@ beta. stop run.
                 Parser(program("stop run.\narea-a section.\n" + body +
                                ".\nalpha. continue.", "01 n pic 9.")).parse()
 
-    def test_unsupported_goto_forms_and_qualification_are_rejected(self):
-        for body in ("go.", "go to.", "go alpha beta.",
-                     "go alpha of area-a.", "go alpha in area-a.",
-                     "go alpha beta of area-a depending on n.",
-                     "go alpha beta depending on n + 1.",
+    def test_goto_forms_follow_cobc(self):
+        # Checked against cobc 3.2: GO TO without target (obsolete) and
+        # section-qualified targets compile; the others are rejected.
+        procedures = "\narea-a section.\nalpha. continue.\nbeta. stop run."
+        for body in ("go.", "go to.", "go alpha of area-a.", "go alpha in area-a.",
+                     "go alpha beta of area-a depending on n."):
+            with self.subTest(body=body):
+                Emitter(Parser(program(body + procedures, "01 n pic 9.")).parse()).generate()
+        for body in ("go alpha beta.", "go alpha beta depending on n + 1.",
                      "go alpha beta depending on 1.",
                      "alter alpha to proceed to beta."):
             with self.subTest(body=body), self.assertRaises(CobolError):
-                Emitter(Parser(program(body + "\narea-a section.\nalpha. continue.\nbeta. stop run.",
-                                       "01 n pic 9.")).parse()).generate()
+                Emitter(Parser(program(body + procedures, "01 n pic 9.")).parse()).generate()
 
     def test_computed_goto_rejects_unmodelled_controllers(self):
         for declaration, controller in (("01 n pic 9v9.", "n"),

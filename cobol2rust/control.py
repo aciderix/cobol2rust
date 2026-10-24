@@ -24,6 +24,9 @@ class ControlGraph:
         self.nodes: list[Node] = []
         self.times_slots = 0
         self._end = self._add("end")
+        # cobc's static label_N of each paragraph modified by ALTER.
+        self.alter_slots = {name: slot for slot, name in enumerate(program.alters)}
+        self._fall_entries = {}
 
         # Allocate all procedure positions before lowering any forward calls.
         self.block_entries = [self._add("jump", (self._end,)) for _ in blocks]
@@ -44,7 +47,11 @@ class ControlGraph:
             # period; markers are seen in reverse, so this is the one ahead.
             self._sentence = self.paragraph_checkpoints[index]
             body = self._body(block.body, self.paragraph_checkpoints[index], index)
-            self.nodes[self.block_entries[index]] = Node("jump", (body,))
+            if block.name in self.alter_slots:
+                # output_alter_check: an ALTERed label goes to its target.
+                self.nodes[self.block_entries[index]] = Node("alter_check", (self.alter_slots[block.name], body))
+            else:
+                self.nodes[self.block_entries[index]] = Node("jump", (body,))
         self.entry = self._following(program.main_block)
 
     def _add(self, op: str, args: tuple = (), stmt: Stmt | None = None) -> int:
@@ -53,7 +60,67 @@ class ControlGraph:
         return position
 
     def _following(self, block: int) -> int:
-        return self.block_entries[block] if block < len(self.block_entries) else self._end
+        """Fall-through into a block. Falling into a SECTION header (and only
+        that: GO TO and PERFORM go past it) zaps its independent labels."""
+        if block >= len(self.block_entries):
+            return self._end
+        header = self.blocks[block]
+        if header.name is None and header.section is not None:
+            slots = self._independent(header.section)
+            if slots:
+                if block not in self._fall_entries:
+                    self._fall_entries[block] = self._add("alter_zap", (slots, self.block_entries[block]))
+                return self._fall_entries[block]
+        return self.block_entries[block]
+
+    def _independent(self, section: str | None) -> list[int]:
+        """Slots of the ALTERed paragraphs of an independent segment (> 49)."""
+        if section is None or self.program.segments.get(section, 0) <= 49:
+            return []
+        start, end = self.program.sections[section]
+        return [self.alter_slots[b.name] for b in self.blocks[start:end] if b.name in self.alter_slots]
+
+    def _section_of(self, name: str) -> str | None:
+        if name in self.program.sections:
+            return name
+        return self.blocks[self.program.procedure_range(name)[0]].section
+
+    def _segment(self, section: str | None) -> int:
+        return self.program.segments.get(section, 0) if section else 0
+
+    def _goto(self, name: str, block: int) -> int:
+        """output_goto_1: a GO TO into another segment zaps the target
+        section's independent labels."""
+        entry = self._target(name)[0]
+        there = self._section_of(name)
+        slots = self._independent(there)
+        if slots and self._segment(self.blocks[block].section) != self._segment(there):
+            return self._add("alter_zap", (slots, entry))
+        return entry
+
+    def _perform(self, target: str, entry: int, checkpoint: int, after: int, block: int) -> int:
+        """output_perform_call: around a PERFORM into another section, save and
+        restore the independent labels of the current one; entering another
+        segment zaps the target section's independent labels."""
+        here, there = self.blocks[block].section, self._section_of(target)
+        segment = self._segment
+        other_section = here != there
+        after_nodes, before_nodes = [], []
+        if other_section:
+            if self._independent(here):
+                before_nodes.append(("alter_save", self._independent(here)))
+                after_nodes.append(("alter_restore", self._independent(here)))
+            if self._independent(there):
+                after_nodes.append(("alter_zap", self._independent(there)))
+        if segment(here) != segment(there) and self._independent(there):
+            before_nodes.append(("alter_zap", self._independent(there)))
+        position = after
+        for op, slots in reversed(after_nodes):
+            position = self._add(op, (slots, position))
+        position = self._add("call", (entry, checkpoint, position))
+        for op, slots in reversed(before_nodes):
+            position = self._add(op, (slots, position))
+        return position
 
     def _target(self, name: str) -> tuple[int, int]:
         start, _ = self.program.procedure_range(name)
@@ -102,7 +169,7 @@ class ControlGraph:
             name, into, exception, success, _ = args
             return self._add("read", (name, into, self._body(success, after, block),
                                       self._body(exception, after, block), after,
-                                      self._declaratives(name, after)), stmt)
+                                      self._declaratives(name, after, block)), stmt)
         if op in {"open", "close"} and len(args[0]) > 1:
             # cobc gives each file its own implicit statement and error check.
             position = after
@@ -116,7 +183,7 @@ class ControlGraph:
                 # INVALID KEY handles every 2x status; NOT INVALID KEY every 0x.
                 invalid = self._body(args[-2], after, block) if args[-2] else None
                 valid = self._body(args[-1], after, block)
-            return self._add("io", (stmt, after, self._declaratives(name, after), invalid, valid), stmt)
+            return self._add("io", (stmt, after, self._declaratives(name, after, block), invalid, valid), stmt)
         if op == "sequence":
             return self._body(args[0], after, block)
         if op == "string":
@@ -168,10 +235,20 @@ class ControlGraph:
             entry, checkpoint = self._target(targets[0])
             if len(targets) == 2:
                 _, checkpoint = self._target(targets[1])
-            return self._add("call", (entry, checkpoint, after), stmt)
+            position = self._perform(targets[0], entry, checkpoint, after, block)
+            if self.nodes[position].op == "call":
+                self.nodes[position].stmt = stmt
+            else:
+                position = self._add("jump", (position,), stmt)
+            return position
         if op == "goto":
             targets, controller = args
-            return self._add("goto", ([self._target(name)[0] for name in targets], controller, after), stmt)
+            if not targets:
+                return after
+            return self._add("goto", ([self._goto(name, block) for name in targets], controller, after), stmt)
+        if op == "alter":
+            source, target = args
+            return self._add("alter", (self.alter_slots[source], self._target(target)[0], after), stmt)
         if op == "exit_paragraph":
             return self._add("jump", (self.paragraph_checkpoints[block],), stmt)
         if op == "exit_section":
@@ -191,11 +268,11 @@ class ControlGraph:
                                               self._body(success, after, block)), stmt)
         return self._add("execute", (stmt, after), stmt)
 
-    def _declaratives(self, file_name: str, after: int):
+    def _declaratives(self, file_name: str, after: int, block: int):
         """USE procedures run like a PERFORM of their section, then resume."""
         def call(section):
             entry, checkpoint = self._target(section)
-            return self._add("call", (entry, checkpoint, after))
+            return self._perform(section, entry, checkpoint, after, block)
         if file_name in self.program.file_declaratives:
             return ("file", call(self.program.file_declaratives[file_name]))
         if self.program.mode_declaratives:

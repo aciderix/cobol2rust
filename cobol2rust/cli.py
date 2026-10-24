@@ -123,13 +123,17 @@ def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
     return main, expanded, copies, subprograms, rust, mapping
 
 
-def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), debugging_lines=False):
+def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), debugging_lines=False,
+            std="default"):
     from . import frontend
-    previous, frontend.DEBUGGING_LINES = frontend.DEBUGGING_LINES, debugging_lines
+    if std not in frontend.STANDARDS:
+        raise CobolError(f"dialecte non modélisé: {std}; choisir parmi {', '.join(frontend.STANDARDS)}")
+    previous = frontend.DEBUGGING_LINES, frontend.STD
+    frontend.DEBUGGING_LINES, frontend.STD = debugging_lines, std
     try:
         program, expanded, copies, subprograms, rust, mapping = emit_unit(source, fmt, includes, call_paths)
     finally:
-        frontend.DEBUGGING_LINES = previous
+        frontend.DEBUGGING_LINES, frontend.STD = previous
     output = output.resolve()
     # Never replace an existing project or an unrelated directory implicitly.
     if output.exists() and any(output.iterdir()):
@@ -195,6 +199,7 @@ def main(argv=None):
     source.add_argument("-I", "--copybook-path", type=Path, action="append", default=[])
     source.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     source.add_argument("--debugging-lines", action="store_true", help="compiler les lignes D comme cobc -fdebugging-line")
+    source.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc modélisé (-std)")
     source.add_argument("--build", action="store_true", help="compiler le Rust généré")
     source.add_argument("--run", action="store_true", help="compiler et exécuter le Rust généré")
     binary = subs.add_parser("inspect", help="inspecter un exécutable COBOL potentiel (sans le lancer)")
@@ -210,6 +215,7 @@ def main(argv=None):
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
     verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT ou COB_SWITCH_n identique pour les deux programmes")
     verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
+    verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -243,7 +249,8 @@ def main(argv=None):
                 key, value = item.split("=", 1)
                 environment[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
-                            args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines)
+                            args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
+                            std=args.std)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():
@@ -267,7 +274,7 @@ def main(argv=None):
             if (args.build or args.run) and not cargo:
                 raise CobolError("Cargo introuvable; installer Rust ou omettre --build/--run")
             report = convert(args.source, args.output, args.format, args.copybook_path, args.call_path,
-                             args.debugging_lines)
+                             args.debugging_lines, args.std)
             print(f"{report['program']} -> {args.output.resolve()}", flush=True)
             if cargo:
                 command = [cargo, "run" if args.run else "build", "--quiet"]

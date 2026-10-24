@@ -55,6 +55,14 @@ class FrontendTests(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(body, declarations)).parse()).generate()
 
+    def test_times_requires_an_integer_like_cobc(self):
+        # cb_check_integer_value, checked against cobc 3.2.
+        for body in ("perform f times display 1 end-perform.", "perform 2.5 times display 1 end-perform.",
+                     "perform -1 times display 1 end-perform.", "perform n(1:1) times display 1 end-perform."):
+            with self.subTest(body=body), self.assertRaises(CobolError):
+                Parser(program(body, "01 f pic 9v9. 01 n pic 9.")).parse()
+        Parser(program("perform s times display 1 end-perform.", "01 s pic s9p.")).parse()
+
     def test_incomplete_input_has_diagnostic_not_traceback(self):
         for body in ["display", "compute", "if", "perform", "move", "compute n ="]:
             with self.subTest(body=body), self.assertRaises(CobolError):

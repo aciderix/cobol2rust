@@ -99,10 +99,20 @@ class EvaluateNativeTests(unittest.TestCase):
     def test_renames_larger_redefines_and_exponentiation(self):
         for name in ("renames.cob", "exponentiation.cob", "figurative_numeric.cob", "negative_zero.cob",
                      "corresponding.cob", "display_truncation.cob", "deediting.cob", "copy_replacing.cob",
-                     "intrinsic_functions.cob"):
+                     "intrinsic_functions.cob", "procedure_names.cob", "perform_backward_thru.cob",
+                     "perform_times_count.cob"):
             with self.subTest(name=name):
                 report = verify(ROOT / "tests" / "fixtures" / name, fmt="free")
                 self.assertTrue(report["match"], report)
+
+    def test_dialect_options_under_both_standards(self):
+        # section-segments ignore/obsolete and defaultbyte init/none.
+        for std in ("default", "cobol85"):
+            with self.subTest(std=std):
+                for name in ("alter_statement.cob", "default_byte.cob"):
+                    report = verify(ROOT / "tests" / "fixtures" / name, fmt="free", std=std)
+                    self.assertTrue(report["match"], report)
+                    self.assertEqual(report["std"], std)
         from tests.test_numeric_move import program
         from cobol2rust.emitter import Emitter
         with self.assertRaises(CobolError):

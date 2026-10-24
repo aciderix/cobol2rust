@@ -100,7 +100,7 @@ Ces résultats portent sur les entrées testées.
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
 | MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ; groupe source copié brut vers numérique/édité |
 | Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |
-| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus |
+| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03, SIGINT pour libcob, est un arrêt nommé) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
@@ -119,9 +119,8 @@ niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
 fonctions intrinsèques hors liste ci-dessous (trigonométrie, LOG, SQRT,
-STANDARD-DEVIATION, RANDOM, CURRENT-DATE, WHEN-COMPILED), appels externes, `ALTER`, `GO TO` sans cible,
-`EXIT SECTION` hors section explicite, `EXIT PERFORM`, noms de procédure qualifiés ou homonymes et
-segments SECTION numérotés,
+STANDARD-DEVIATION, RANDOM, CURRENT-DATE, WHEN-COMPILED), appels externes,
+`EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
 fichiers à enregistrements variables, relatifs/indexés, SQL embarqué, CICS et
 plusieurs programmes liés. Les formats binaires autres que les enregistrements
 SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
@@ -329,6 +328,15 @@ pseudo-texte `==…==` comparé sans tenir compte de la casse ni des espaces,
 identifiants qualifiés ou indicés, littéraux. LEADING/TRAILING, COPY OF/IN et
 REPLACING d'un copybook qui contient lui-même un COPY restent refusés.
 `--debugging-lines` reproduit `cobc -fdebugging-line`.
+`--std {default,cobol85}` (convert, verify) choisit le dialecte cobc modélisé ;
+`verify --std cobol85` compile aussi l'original avec `-std=cobol85`. Seule
+différences modélisées à ce jour : `section-segments` (numéros de segment
+ignorés par défaut, actifs en cobol85) et `defaultbyte` (`init` par défaut :
+données sans VALUE initialisées selon leur PICTURE, index INDEXED BY à 1 ;
+`none` en cobol85 : mémoire laissée à zéro binaire, index à 0). `tools/nist_verify.py` convertit en
+cobol85 et compile l'original avec les options de report.pl
+(`-std=cobol85 --debug`) ; `tools/verify.py` lit `standards` dans le JSON
+d'une fixture pour la vérifier sous plusieurs dialectes.
 
 ## Calcul décimal et limites explicites
 

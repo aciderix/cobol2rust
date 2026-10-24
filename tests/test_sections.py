@@ -68,18 +68,25 @@ area-b section.
 gamma. continue.
 ''')).parse()
 
-    def test_unknown_targets_and_reversed_ranges_are_rejected(self):
-        for target in ("missing", "area-a thru missing", "missing thru alpha",
-                       "beta thru alpha", "area-b thru area-a", "area-b thru beta",
-                       "gamma thru area-a"):
-            with self.subTest(target=target), self.assertRaises(CobolError):
-                Parser(program(f'''perform {target} stop run.
+    def test_unknown_targets_are_rejected_and_backward_ranges_accepted(self):
+        # cobc accepts a THRU end placed before its start: the PERFORM
+        # returns whenever control reaches the end of that procedure.
+        for target, accepted in (("missing", False), ("area-a thru missing", False), ("missing thru alpha", False),
+                                 ("beta thru alpha", True), ("area-b thru area-a", True),
+                                 ("area-b thru beta", True), ("gamma thru area-a", True)):
+            source = program(f'''perform {target} stop run.
 area-a section.
 alpha. continue.
 beta. continue.
 area-b section.
 gamma. continue.
-''')).parse()
+''')
+            with self.subTest(target=target):
+                if accepted:
+                    Parser(source).parse()
+                else:
+                    with self.assertRaises(CobolError):
+                        Parser(source).parse()
 
     def test_calls_are_validated_inside_section_preambles_and_nested_blocks(self):
         for statements in ("perform missing", "if 1 = 1 perform missing end-if",
@@ -89,21 +96,30 @@ gamma. continue.
                 with self.subTest(statements=statements, location=location), self.assertRaises(CobolError):
                     Parser(program("stop run.\narea-a section.\n" + location + statements + ".")).parse()
 
-    def test_duplicate_and_qualified_procedure_names_are_rejected(self):
+    def test_duplicate_and_qualified_procedure_names_follow_cobc(self):
+        # cb_build_section_name and cb_ref, checked against cobc 3.2.
+        homonyms = " area-a section. alpha. continue. area-b section. alpha. continue."
         for body in (
-            "area-a section. area-a section.",
-            "area-a section. area-a. continue.",
-            "area-a. continue. area-a section.",
             "area-a section. alpha. continue. area-b section. alpha. continue.",
             "perform alpha of area-a stop run. area-a section. alpha. continue.",
             "perform alpha in area-a stop run. area-a section. alpha. continue.",
             "perform alpha thru beta of area-a stop run. area-a section. alpha. continue. beta. continue.",
+            "perform alpha of area-b stop run." + homonyms,
+        ):
+            with self.subTest(body=body):
+                Parser(program(body)).parse()
+        for body in (
+            "area-a section. area-a section.",
+            "area-a section. area-a. continue.",
+            "area-a. continue. area-a section.",
+            "perform alpha stop run." + homonyms,
+            "perform area-a of area-b stop run." + homonyms,
         ):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Parser(program(body)).parse()
 
     def test_segmented_sections_and_unsupported_exit_variants_are_rejected(self):
-        # Segment numbers only matter with ALTER, which stays refused.
+        # Segment numbers only matter to independent ALTERed paragraphs.
         Parser(program("area-a section 1. continue. area-b section 50. continue.")).parse()
         for body in ("area-a section 100. continue.", "exit section.",
                      "perform 2 times exit perform end-perform.",

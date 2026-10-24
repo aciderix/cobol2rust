@@ -45,6 +45,14 @@ les fonctions texte reçoivent les octets bruts de `Operand::of`). `coverage.py`
 émet les sources USING comme sous-programmes. NIST **313/458**, 289/289
 conformes. Prochains : ALTER, DEBUGGING MODE, INDEXED, LINAGE.
 
+Dernière étape : ALTER (`Program.alters`, nœuds `alter_check`/`alter`/
+`alter_zap`/`alter_save`/`alter_restore` dans `control.py`, état `alter` du
+struct), `Parser.resolve_procedures` (règles `cb_ref`, noms internes uniques
+des homonymes), `frontend.STD` / `--std cobol85` (`Program.segments`,
+`Program.default_byte_init`), `tools/verify.py` lit `standards`,
+`nist_verify` compile avec `RUNNER_FLAGS` et `RAW_INPUT`. NIST **327/458**,
+302/303 conformes (OBNC1M : SIGINT). Prochain : DEBUGGING MODE (en cours).
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

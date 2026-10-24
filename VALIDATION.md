@@ -1,5 +1,22 @@
 # Validation — 22 octobre 2026
 
+## ALTER, noms de procédure, dialecte cobol85 — 24 octobre 2026
+
+- **307 tests découverts : 306 réussis, un test PE Windows ignoré.**
+- **103/103 comparaisons locales conformes** ; nouvelles fixtures
+  `alter_statement.cob` et `default_byte.cob` (vérifiées sous `default` et
+  `-std=cobol85`), `procedure_names.cob`, `perform_backward_thru.cob`,
+  `perform_times_count.cob`.
+- NIST : **327/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **302/303 programmes principaux conformes** (6980 PASS, 0 FAIL, 7 DELETED,
+  1 INSPECT) : `build/nist-verify-alter.json`, `build/coverage-nist-alter.json`.
+  L'original est désormais compilé avec les options de report.pl
+  (`-std=cobol85 --debug`) et le Rust converti en dialecte cobol85 ; les
+  entrées clavier `$raw_input` de report.pl sont fournies (NC302M, OBNC1M).
+- Écart connu : OBNC1M lit le caractère 03 au 9ᵉ `STOP littéral` ; libcob
+  lève SIGINT (processus tué), le Rust s'arrête par un arrêt nommé (code 70).
+  Le REPORT est identique au journal natif ; seul le mode de fin diffère.
+
 ## Fonctions intrinsèques — 24 octobre 2026
 
 - **305 tests découverts : 304 réussis, un test PE Windows ignoré.**

@@ -46,7 +46,7 @@ def validate_file_paths(conversion):
 
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
-           call_paths=(), cobc_flags=(), debugging_lines=False):
+           call_paths=(), cobc_flags=(), debugging_lines=False, std="default"):
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -63,11 +63,15 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std)
         validate_file_paths(conversion)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
         fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
+        if any(flag.startswith("-std") and flag != f"-std={std}" for flag in cobc_flags):
+            raise CobolError(f"options cobc incohérentes avec le dialecte converti: {std}")
+        if std != "default" and not any(flag.startswith("-std") for flag in cobc_flags):
+            cobc_flags = [f"-std={std}", *cobc_flags]
         options = [*cobc_flags, *(["-fdebugging-line"] if debugging_lines else []), "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
             options.extend(["-I", str(Path(include).resolve())])
@@ -113,6 +117,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "expanded_sha256": conversion["expanded_sha256"], "copybook_sha256": conversion["copybook_sha256"],
                 "storage_profile": conversion["storage_profile"],
                 "stdin_sha256": hashlib.sha256(stdin).hexdigest(),
+                "std": std, "cobc_flags": list(cobc_flags),
                 "scope": "original COBOL vs generated Rust: stdout bytes, zero exit codes and final file bytes for these inputs",
                 "runtime_env": runtime_env, "input_files": manifest(seed), "input_directories": seed_directories,
                 "files_match": not differences, "file_differences": differences,

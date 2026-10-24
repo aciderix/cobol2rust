@@ -28,6 +28,8 @@ from cobol2rust.verification import verify
 RUNNER_FLAGS = ["-std=cobol85", "--debug"]
 # report.pl compiles these programs with -fdebugging-line ($cobc_flags).
 DEBUGGING_LINES = {"SM206A"}
+# report.pl $raw_input, written with `echo "..." > $exe.inp` (so plus "\n").
+RAW_INPUT = {"OBNC1M": b"\n" * 8 + b"\x03\n", "NC302M": b"\n\n"}
 # report.pl sets these switches for every program.
 RUNNER_ENV = {"COB_SWITCH_1": "ON", "COB_SWITCH_2": "OFF"}
 # report.pl only compiles these programs: their execution is not part of the suite.
@@ -92,15 +94,17 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     call_paths = [path for path in [corpus / name[:2] / "lib"] if path.is_dir()]
     work.mkdir(parents=True)
     if name in COMPILE_ONLY:
-        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths)
+        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
         build_rust(work / "rust")
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
                 "runner_counts": runner_counts(native_logs, name)}
     seed = native_seed(corpus, chain, copybooks, work) if chain else None
     stdin = source.with_suffix(".DAT")
     report = verify(source, fmt="fixed", includes=copybooks,
-                    stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed, call_paths=call_paths,
-                    runtime_env=RUNNER_ENV, debugging_lines=name in DEBUGGING_LINES)
+                    stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
+                    data_dir=seed, call_paths=call_paths,
+                    runtime_env=RUNNER_ENV, debugging_lines=name in DEBUGGING_LINES,
+                    cobc_flags=RUNNER_FLAGS, std="cobol85")
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}

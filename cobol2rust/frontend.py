@@ -51,6 +51,12 @@ def fixed_fragment(area: str, quotation=None):
 
 # cobc -fdebugging-line: fixed-format 'D' lines are compiled as source lines.
 DEBUGGING_LINES = False
+# cobc -std: the dialect whose options this frontend models. "default"
+# ignores SECTION segment numbers (section-segments: ignore) and initializes
+# items without VALUE (defaultbyte: init); "cobol85" keeps segment numbers
+# and leaves such items as allocated (defaultbyte: none).
+STD = "default"
+STANDARDS = ("default", "cobol85")
 
 
 def normalize(source: str, fmt: str = "auto") -> str:
@@ -404,6 +410,8 @@ class ProcedureBlock:
     name: str | None
     section: str | None
     body: list[Stmt]
+    # The paragraph name as written; `name` is made unique for homonyms.
+    label: str | None = None
 
 
 @dataclass
@@ -428,6 +436,10 @@ class Program:
     # Programs following this one in the same source (END PROGRAM then a new
     # IDENTIFICATION DIVISION); nested programs are refused.
     siblings: list = field(default_factory=list)
+    # ALTER: alterable paragraph -> its possible targets (cobc alter_gotos),
+    # and SECTION segment numbers (independent segments are 50-99).
+    alters: dict[str, list[str]] = field(default_factory=dict)
+    segments: dict[str, int] = field(default_factory=dict)
 
     def procedure_range(self, name: str) -> tuple[int, int]:
         if name in self.sections:
@@ -442,7 +454,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
@@ -506,6 +518,100 @@ class Parser:
         if self.t.key in {"PIC", "PICTURE"}:
             self.error("nom réservé: " + self.t.key)
         return self.take().key
+
+    def procedure_reference(self):
+        """A procedure name in a statement, maybe qualified by its section
+        (encoded "NAME\0SECTION" until resolve_procedures); all-digit names
+        are words too."""
+        def word():
+            if not self.t.string and re.fullmatch(r"\d+", self.t.key):
+                return self.take().key
+            return self.name()
+        name = word()
+        if self.accept("OF") or self.accept("IN"):
+            qualifier = word()
+            # parser.y label: integer_label IN integer_label, or a word chain.
+            if name.isdigit() != qualifier.isdigit():
+                self.error("nom de procédure entier qualifié par un mot, ou l'inverse (syntaxe cobc)")
+            name += "\0" + qualifier
+            if self.at("OF") or self.at("IN"):
+                self.error("nom de procédure qualifié deux fois")
+        return name
+
+    def resolve_procedures(self, blocks, sections):
+        """cb_ref for labels: an unqualified paragraph name used inside its
+        own section is that paragraph; otherwise the name, or name IN/OF
+        section, must designate a single procedure. Homonym paragraphs get a
+        unique internal name. Returns the paragraphs by internal name."""
+        counts = {}
+        for block in blocks:
+            if block.label:
+                counts[block.label] = counts.get(block.label, 0) + 1
+        used = set()
+        for block in blocks:
+            if block.label and counts[block.label] > 1:
+                key = f"{block.label} OF {block.section or 'MAIN SECTION'}"
+                n = 1
+                while key in used:
+                    n += 1
+                    key = f"{block.label} OF {block.section or 'MAIN SECTION'} #{n}"
+                used.add(key)
+                block.name = key
+        outside = object()
+
+        def resolve(reference, context, line):
+            name, _, qualifier = reference.partition("\0")
+            if name in sections:
+                if qualifier:
+                    raise CobolError(f"ligne {line}: '{name} IN {qualifier}' is not defined")
+                return name
+            candidate, ambiguous = None, False
+            matches = [b for b in blocks if b.label == name]
+            for position, block in enumerate(matches):
+                if not qualifier and context is not outside and block.section == context:
+                    if any(other.section == context for other in matches[position + 1:]):
+                        raise CobolError(f"ligne {line}: '{name}' is ambiguous; needs qualification")
+                    return block.name
+                if not qualifier or qualifier == block.section:
+                    if candidate is None:
+                        candidate = block
+                    else:
+                        ambiguous = True
+            if candidate is None:
+                shown = f"{name} IN {qualifier}" if qualifier else name
+                raise CobolError(f"ligne {line}: procédure inconnue: {shown}")
+            if ambiguous:
+                raise CobolError(f"ligne {line}: '{name}' is ambiguous; needs qualification")
+            return candidate.name
+
+        def rewrite(item, context):
+            if isinstance(item, (list, tuple)):
+                for element in item:
+                    rewrite(element, context)
+                return
+            if not isinstance(item, Stmt):
+                return
+            s, line = item, item.line
+            if s.op in {"call", "goto"}:
+                s.args = ([resolve(n, context, line) for n in s.args[0]], *s.args[1:])
+            elif s.op == "alter":
+                s.args = tuple(resolve(n, context, line) for n in s.args)
+                self.resolved_alters.append((*s.args, line))
+            elif s.op == "sort":
+                args = list(s.args)
+                for index in (2, 3):
+                    kind, targets = args[index]
+                    if kind == "procedure":
+                        args[index] = (kind, [resolve(n, context, line) for n in targets])
+                s.args = tuple(args)
+            rewrite(s.args, context)
+
+        self.resolved_alters = []
+        for block in blocks:
+            # Statements before any paragraph header have no section offset.
+            context = outside if block.label is None and block.section is None else block.section
+            rewrite(block.body, context)
+        return {block.name: block.body for block in blocks if block.label}
 
     def variable(self):
         return self.reference()
@@ -634,6 +740,9 @@ class Parser:
                 self.error(f"index dupliqué avec une donnée: {label}")
             self.fields[label] = Field(label, "S9(9)", "number", 9, 0, True, Token("1", 0),
                                        "INDEX", label, 77, index_for=owner)
+            # cb_build_index: INDEXED BY starts at 1 only with defaultbyte init.
+            self.fields[label].explicit_value = STD != "cobol85"
+
         for descriptor in self.fields.values():
             if descriptor.depending:
                 descriptor.depending = self.resolve(descriptor.depending)
@@ -669,7 +778,7 @@ class Parser:
         self.expect(".")
         entry, paragraphs = [], {}
         blocks = [ProcedureBlock(None, None, entry)]
-        sections = {}
+        sections, segments = {}, {}
         current_body, current_section = entry, None
         file_declaratives, mode_declaratives = {}, {}
         declaratives, main_block = self.accept("DECLARATIVES"), 0
@@ -701,17 +810,18 @@ class Parser:
                     self.expect("<EOF>")
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
-                section = self.name()
-                self.procedure_name_check(section)
+                section = self.procedure_header()
                 if section in sections or section in paragraphs:
                     self.error(f"nom de procédure dupliqué: {section}; les homonymes ne sont pas pris en charge")
                 self.expect("SECTION")
                 if self.t.key.isdigit() and not self.t.string:
                     # Segment numbers only matter to paragraphs modified by
-                    # ALTER (codegen.c zaps their labels), and ALTER is refused.
+                    # ALTER: codegen.c zaps the labels of independent ones.
                     segment = int(self.take().text)
                     if segment > 99 or (declaratives and segment >= 50):
                         self.error("numéro de segment SECTION hors limites (0-99, moins de 50 en DECLARATIVES)")
+                    if not declaratives and STD == "cobol85":
+                        segments[section] = segment
                 self.expect(".")
                 if current_section is not None:
                     sections[current_section] = (sections[current_section][0], len(blocks))
@@ -724,14 +834,15 @@ class Parser:
                 elif self.at("USE"):
                     self.error("USE hors des DECLARATIVES")
             elif self.t.key not in VERBS and self.tokens[self.i + 1].key == ".":
-                paragraph = self.name()
-                self.procedure_name_check(paragraph)
-                if paragraph in paragraphs or paragraph in sections:
-                    self.error(f"nom de procédure dupliqué: {paragraph}; les homonymes ne sont pas pris en charge")
+                paragraph = self.procedure_header()
+                # cb_build_section_name: a paragraph may not reuse a section
+                # name; homonym paragraphs are allowed until referenced.
+                if paragraph in sections:
+                    self.error(f"nom de procédure dupliqué: {paragraph}")
                 self.expect(".")
                 current_body = []
-                paragraphs[paragraph] = current_body
-                blocks.append(ProcedureBlock(paragraph, current_section, current_body))
+                paragraphs.setdefault(paragraph, current_body)
+                blocks.append(ProcedureBlock(paragraph, current_section, current_body, paragraph))
             else:
                 if declaratives and current_section is None:
                     self.error("section USE attendue après DECLARATIVES")
@@ -744,10 +855,16 @@ class Parser:
                    if f.linkage and f.parent is None and not f.redefines and f.name not in using]
         if unbound:
             self.error(f"article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: {unbound[0]}")
+        paragraphs = self.resolve_procedures(blocks, sections)
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
+        program.segments = segments
+        # defaultbyte: init (default.conf) sets items without VALUE from
+        # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
+        program.default_byte_init = STD != "cobol85"
         self.validate_calls(program)
+        self.validate_alters(program)
         if not self.at("<EOF>"):
             # A sibling program after END PROGRAM: same source, separate names.
             sibling = Parser.__new__(Parser)
@@ -834,6 +951,47 @@ class Parser:
         if name in RESERVED:
             raise CobolError(f"ligne {self.tokens[self.i - 1].line}: mot réservé de GnuCOBOL utilisé comme nom: {name}")
         return name
+
+    def integer_value(self, x):
+        """cb_check_integer_value: a numeric item without decimal places, an
+        unsigned integer literal or ZERO; expressions are not checked."""
+        if x.op == "var":
+            ref = x.args[0]
+            f = self.fields[ref.name]
+            if ref.start is not None or f.kind != "number" or f.scale > 0:
+                self.error(f"'{f.label}' is not an integer")
+        elif x.op == "number" or (x.op in {"unary-", "unary+"} and x.args[0].op == "number"):
+            # A sign next to the digits makes one signed literal in cobc.
+            text = x.args[0] if x.op == "number" else x.args[0].args[0]
+            if x.op == "unary-" or text.startswith("-") or "." in text or "," in text:
+                self.error("positive numeric integer is required here")
+        elif x.op in {"text", "all"}:
+            self.error("valeur entière requise ici")
+
+    def procedure_header(self):
+        """A section or paragraph name; cobc accepts all-digit names."""
+        if not self.t.string and re.fullmatch(r"\d+", self.t.key):
+            return self.take().key
+        name = self.name()
+        self.procedure_name_check(name)
+        return name
+
+    def validate_alters(self, program):
+        """typeck.c: the source of an ALTER must be a paragraph whose first
+        statement is a GO TO; duplicate pairs are kept once."""
+        for source, target, line in self.resolved_alters:
+            for name in (source, target):
+                try:
+                    program.procedure_range(name)
+                except CobolError as error:
+                    raise CobolError(f"ligne {line}: {error}") from None
+            block = next((b for b in program.blocks if b.name == source), None)
+            first = next((s for s in block.body if s.op != "sentence_end"), None) if block else None
+            if first is None or first.op != "goto":
+                raise CobolError(f"ligne {line}: '{source}' is not an alterable paragraph")
+            targets = program.alters.setdefault(source, [])
+            if target not in targets:
+                targets.append(target)
 
     def procedure_name_check(self, name):
         self.user_word(name)
@@ -1833,16 +1991,32 @@ class Parser:
             if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
+        if verb == "ALTER":
+            # ALTER procedure-name TO [PROCEED TO] procedure-name, repeated.
+            pairs = []
+            while True:
+                source = self.procedure_reference()
+                self.expect("TO")
+                if self.accept("PROCEED"):
+                    self.expect("TO")
+                pairs.append((source, self.procedure_reference()))
+                self.accept(",")
+                if self.t.string or self.t.key in BOUNDARIES or self.t.key in VERBS \
+                        or not re.fullmatch(r"[A-Z0-9_][A-Z_0-9-]*", self.t.key):
+                    break
+            return Stmt("sequence", ([Stmt("alter", pair, line) for pair in pairs],), line)
         if verb == "GO":
             self.accept("TO")
             targets = []
             while not self.at("DEPENDING") and (self.t.string or self.t.key not in BOUNDARIES):
-                targets.append(self.name())
-                if self.at("OF") or self.at("IN"):
-                    self.error("nom de procédure qualifié non pris en charge")
-            if not targets:
-                self.error("GO TO requiert une cible; GO TO modifié par ALTER non pris en charge")
+                targets.append(self.procedure_reference())
             controller = None
+            if not targets:
+                # GO TO without procedure-name (obsolete): no code of its
+                # own, only the target an ALTER gives its paragraph.
+                if self.at("DEPENDING"):
+                    self.error("GO TO DEPENDING ON requiert des cibles")
+                return Stmt("goto", ([], None), line)
             if self.accept("DEPENDING"):
                 self.accept("ON")
                 controller = self.variable()
@@ -1856,14 +2030,15 @@ class Parser:
             return Stmt("goto", (targets, controller), line)
         if verb == "PERFORM":
             target = None
-            if self.t.key not in {"UNTIL", "VARYING", "WITH"} and not self.candidates(self.t.key) and re.fullmatch(r"[A-Z_][A-Z_0-9-]*", self.t.key):
-                target = [self.name()]
-                if self.at("OF") or self.at("IN"):
-                    self.error("nom de procédure qualifié non pris en charge")
+            # An all-digit word is a procedure name unless TIMES follows it.
+            numeric_name = (not self.t.string and re.fullmatch(r"\d+", self.t.key)
+                            and self.tokens[self.i + 1].key != "TIMES")
+            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH"} | VERBS and not self.t.string
+                                and not self.candidates(self.t.key)
+                                and re.fullmatch(r"[A-Z_][A-Z_0-9-]*|\d[A-Z0-9-]*[A-Z][A-Z_0-9-]*", self.t.key)):
+                target = [self.procedure_reference()]
                 if self.accept("THRU") or self.accept("THROUGH"):
-                    target.append(self.name())
-                    if self.at("OF") or self.at("IN"):
-                        self.error("nom de procédure qualifié non pris en charge")
+                    target.append(self.procedure_reference())
             test_after = False
             if self.accept("WITH"):
                 self.expect("TEST")
@@ -1890,14 +2065,14 @@ class Parser:
             elif self.t.key not in BOUNDARIES:
                 count = self.expr()
                 self.expect("TIMES")
+                self.integer_value(count)
                 mode, control = "times", (count,)
             elif test_after:
                 self.error("WITH TEST requiert UNTIL ou VARYING")
             if target:
                 body = [Stmt("call", (target,), line)]
             else:
-                if mode == "once":
-                    self.error("PERFORM inline requiert TIMES, UNTIL ou VARYING")
+                # An inline PERFORM without TIMES/UNTIL/VARYING runs once.
                 body = self.block({"END-PERFORM"})
                 self.expect("END-PERFORM")
             return Stmt("loop", (mode, control, body), line)
@@ -1944,6 +2119,13 @@ class Parser:
                 with_filler = True
             return Stmt("initialize", (targets, with_filler), line)
         if verb == "STOP":
+            if self.t.string or re.fullmatch(r"[+-]?\d*\.?\d+", self.t.key) \
+                    or self.t.key in {"SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES", "QUOTE", "QUOTES"}:
+                # STOP literal (obsolete): DISPLAY the literal, then ACCEPT
+                # OMITTED waits for a line, as cb_emit_display/cb_emit_accept.
+                value = self.expr()
+                return Stmt("sequence", ([Stmt("display", ([value], True, "stdout"), line),
+                                          Stmt("accept_omitted", (), line)],), line)
             self.expect("RUN")
             return Stmt("stop", (), line)
         if verb == "GOBACK":
@@ -2627,8 +2809,6 @@ class Parser:
                         ranges = [program.procedure_range(name) for name in targets]
                     except CobolError as error:
                         raise CobolError(f"ligne {s.line}: {error}") from None
-                    if s.op == "call" and len(ranges) == 2 and ranges[-1][1] <= ranges[0][0]:
-                        raise CobolError(f"ligne {s.line}: intervalle THRU inversé")
                 elif s.op == "exit_section" and section is None:
                     raise CobolError(f"ligne {s.line}: EXIT SECTION requiert une section de procédure")
                 elif s.op == "loop":

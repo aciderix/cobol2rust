@@ -548,6 +548,7 @@ def declaration(p, file_record=False):
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.linkage = linkage
+    descriptor.explicit_value = explicit_value
     descriptor.occurs_min, descriptor.depending = minimum, depending
     descriptor.search_keys = search_keys
     descriptor.group_value, descriptor.group_usage = group_value, group_usage

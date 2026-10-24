@@ -332,10 +332,12 @@ impl Value {
             _ => fail("mixed numeric/text comparison unsupported"),
         }
     }
+    /// cb_build_cast_llint for PERFORM TIMES: cob_get_llint truncates the
+    /// fraction; the loop `n > 0` runs a negative count zero times.
     pub fn count(&self) -> i128 {
-        let result = self.integer("PERFORM TIMES");
-        if result < 0 { fail("PERFORM TIMES requires a nonnegative integer"); }
-        result
+        let n = self.num();
+        let units = &n.n / power(n.scale);
+        units.to_string().parse::<i64>().unwrap_or_else(|_| fail("PERFORM TIMES count beyond 64 bits not modelled")) as i128
     }
     pub fn integer(&self, context: &str) -> i128 {
         let n = self.num();
@@ -405,6 +407,24 @@ impl Value {
     }
 }
 /// DISPLAY UPON SYSERR.
+/// cob_accept (NULL), the ACCEPT of STOP literal: input up to '\n' or end
+/// of input is discarded; character 03 raises SIGINT, which is not modelled.
+pub fn accept_omitted() {
+    io::stdout().flush().unwrap_or_else(|_| fail("stdout flush failed"));
+    let stdin = io::stdin();
+    let mut input = stdin.lock();
+    let mut byte = [0u8; 1];
+    loop {
+        match io::Read::read(&mut input, &mut byte) {
+            Ok(0) => break,
+            Ok(_) if byte[0] == b'\n' => break,
+            Ok(_) if byte[0] == 3 => fail("ACCEPT of STOP literal read character 03 (SIGINT) not modelled"),
+            Ok(_) => {},
+            Err(_) => fail("stdin read failed"),
+        }
+    }
+}
+
 pub fn display_error(values: &[Value], newline: bool) {
     let mut out = io::stderr().lock();
     for v in values { out.write_all(&v.bytes()).unwrap_or_else(|_| fail("stderr write failed")); }

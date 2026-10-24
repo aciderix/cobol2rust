@@ -607,6 +607,18 @@ sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
 revérification : **289/289 programmes principaux conformes**, 6608 PASS,
 0 FAIL (`build/nist-verify-intrinsics.json`).
 
+## Progression : ALTER, noms de procédure, dialecte cobol85
+
+ALTER (label_N de cobc, remise à zéro des paragraphes de segments
+indépendants à la chute dans la SECTION, au PERFORM et au GO TO d'un autre
+segment), GO TO sans cible, noms de procédure homonymes qualifiés IN/OF et
+entièrement numériques (`cb_ref`), PERFORM a THRU b inversé, PERFORM en ligne
+sans option, compteur TIMES selon `cob_get_llint` et `cb_check_integer_value`,
+STOP littéral. Option `--std cobol85` : `section-segments` et `defaultbyte:
+none`. Émission acceptée : **327/458** ; revérification : **302/303
+programmes principaux conformes**, 6980 PASS, 0 FAIL
+(`build/nist-verify-alter.json`) ; OBNC1M diverge sur SIGINT (non modélisé).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

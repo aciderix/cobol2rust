@@ -629,6 +629,8 @@ class Emitter:
                 self.assignment(expr, [ref], rounded)
         elif op == "accept":
             self.write(f"{self.reference(a[0])}.accept();")
+        elif op == "accept_omitted":
+            self.write("runtime::accept_omitted();")
         elif op == "initialize":
             for ref in a[0]:
                 if ref.name in self.variable_groups and ref.start is None:
@@ -954,6 +956,18 @@ class Emitter:
             self.write(f"}} else {{ pc = {at_end}; }}")
         elif op == "jump":
             self.write(f"pc = {a[0]};")
+        elif op == "alter_check":
+            # The ALTER target if one was executed, else the paragraph body.
+            self.write(f"pc = if self.alter[{a[0]}] != 0 {{ self.alter[{a[0]}] }} else {{ {a[1]} }};")
+        elif op == "alter":
+            self.write(f"self.alter[{a[0]}] = {a[1]};")
+            self.write(f"pc = {a[2]};")
+        elif op in {"alter_zap", "alter_save", "alter_restore"}:
+            for slot in a[0]:
+                self.write({"alter_zap": f"self.alter[{slot}] = 0;",
+                            "alter_save": f"self.alter_saved[{slot}] = self.alter[{slot}];",
+                            "alter_restore": f"self.alter[{slot}] = self.alter_saved[{slot}];"}[op])
+            self.write(f"pc = {a[1]};")
         elif op == "checkpoint":
             # A jump may leave PERFORM frames dormant. Only the top frame's
             # exact paragraph/section checkpoint can resume its continuation.
@@ -1141,6 +1155,10 @@ class Emitter:
             kind = "RelativeFile" if organization == "RELATIVE" else "SortFile" if organization == "SORT" else "CobolFile"
             self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
+        # cobc's static label_N (and save_label_N) of the ALTERed paragraphs:
+        # kept between CALLs, cleared by CANCEL with the program instance.
+        self.write("alter: Vec<usize>,")
+        self.write("alter_saved: Vec<usize>,")
         self.indent -= 1
         self.write("}")
         self.write(f"impl {self.struct} {{")
@@ -1164,10 +1182,15 @@ class Emitter:
                 self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}),")
             offset = self.program.fields[spec.record].offset
             self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
+        alters = len(self.program.alters)
+        self.write(f"alter: vec![0; {alters}],")
+        self.write(f"alter_saved: vec![0; {alters}],")
         self.indent -= 1
         self.write("};")
         for name, field in self.program.fields.items():
             if not field.picture or field.file_record or field.linkage:
+                continue
+            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
                 continue
             cursor = field
             while cursor and not cursor.redefines:

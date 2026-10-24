@@ -143,7 +143,7 @@ def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, i
         "schema_version": 1,
         "tool": tool,
         "corpus": {"root": str(root), "id": corpus_id, "source": corpus_source},
-        "format_requested": fmt, "copybook_paths": [str(path) for path in includes],
+        "format_requested": fmt, "std_requested": __import__("cobol2rust.frontend").frontend.STD, "copybook_paths": [str(path) for path in includes],
         "call_paths_relative_to_source": [str(path) for path in call_paths],
         "static_only": True, "verified": False, "compiled": 0, "executed": 0, "compared": 0,
         "scope": "source preprocessing, parsing/layout and Rust emission only; no behavioral equivalence established",
@@ -172,7 +172,10 @@ def main(argv=None):
     parser.add_argument("--call-path", action="append", default=[],
                         help="directory of CALLed programs, relative to each source (e.g. lib for NIST IC)")
     parser.add_argument("--report", type=Path, help="new JSON report; default is standard output")
+    parser.add_argument("--std", choices=["default", "cobol85"], default="default", help="cobc dialect modelled (-std)")
     args = parser.parse_args(argv)
+    from cobol2rust import frontend
+    frontend.STD = args.std
     if args.report and (args.report.exists() or args.report.is_symlink()):
         print(f"coverage: report already exists: {args.report}", file=sys.stderr)
         return 2
