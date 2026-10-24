@@ -100,6 +100,19 @@ NIST **426/458**, 401/402. Prochains blocages : programmes imbriqués,
 GLOBAL/EXTERNAL (IC226A-IC235A), INITIALIZE REPLACING, ODO hors WORKING-STORAGE,
 CURRENCY/DECIMAL-POINT, RANDOM, CODE-SET.
 
+Dernière étape : Report Writer. `report_parser.py` (RD, groupes, lignes et
+champs comme `output_report_define_lines`, `rcsz`, contrôles de
+`finalize_report`/`cob_report_initiate`), `Parser.report_section`,
+`Parser.hidden_item` (articles de rapport et enregistrement du fichier de
+rapport, renommés `^report^…`/`^record^…`), `Expr("report_counter")`,
+instructions `initiate`/`generate`/`terminate` ; `file_runtime::Report` (port de
+`reportio.c` sans contrôles) appelle le programme par `ReportEvent` : la méthode
+`reportN_event` fait le MOVE des SOURCE et le `write_report` du fichier pendant
+que le rapport est sorti du programme (`std::mem::take`). RW101A-RW104A
+conformes (REPORT et fichier de rapport identiques à cobc). Prochains blocages : USE FOR DEBUGGING sur identifiants (DB201A-203A,
+listes `debug_check` de cobc), FD GLOBAL/EXTERNAL et USE GLOBAL
+(IC227A/233A/234A).
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

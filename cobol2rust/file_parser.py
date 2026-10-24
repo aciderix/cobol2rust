@@ -180,7 +180,25 @@ def parse_fd_clauses(parser, spec):
                 linage[part] = linage_value(parser)
             put("linage", linage)
             spec.organization = "LINE SEQUENTIAL"
+        elif parser.at("REPORT") or parser.at("REPORTS"):
+            # report_clause: the file becomes LINE SEQUENTIAL with
+            # flag_line_adv; one report per file is modelled.
+            plural = parser.take().key == "REPORTS"
+            parser.accept("ARE" if plural else "IS")
+            if spec.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                parser.error("REPORT clause with wrong file type")
+            names = [parser.user_word(parser.name())]
+            while not parser.at(".") and not parser.t.string and parser.t.key not in FD_WORDS:
+                names.append(parser.user_word(parser.name()))
+            if len(names) > 1:
+                parser.error("plusieurs rapports dans un FD non pris en charge")
+            if "linage" in clauses:
+                parser.error("REPORT avec LINAGE non pris en charge")
+            put("reports", names)
+            spec.organization = "LINE SEQUENTIAL"
         else:
             parser.error("clause FD non prise en charge")
+    if "reports" in clauses and ("linage" in clauses or "code_set" in clauses or "record_varying" in clauses):
+        parser.error("REPORT avec LINAGE, CODE-SET ou RECORD VARYING non pris en charge")
     parser.expect(".")
     spec.fd_clauses = clauses

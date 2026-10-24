@@ -47,6 +47,10 @@ class Emitter:
         self.blocks = program.blocks or [ProcedureBlock(None, None, program.entry),
                                         *(ProcedureBlock(name, None, body) for name, body in program.paragraphs.items())]
         self.files = {name: f"file{i}" for i, name in enumerate(program.files)}
+        self.reports = {name: f"report{i}" for i, name in enumerate(getattr(program, "reports", {}))}
+        # The report whose ReportEvent is being answered: its counters are
+        # the event's arguments while the report is out of the program.
+        self.report_context = None
         self.lines = []
         self.mapping = []
         self.indent = 0
@@ -196,6 +200,11 @@ class Emitter:
             return f"{self.shared}.clone()"
         if op == "linage":
             return f"self.{self.files[args[0]]}.linage_counter()"
+        if op == "report_counter":
+            report, which = args
+            if report == self.report_context:
+                return f"Value::number(&{'line' if which == 'LINE-COUNTER' else 'page'}_counter.to_string())"
+            return f"self.{self.reports[report]}.counter({quoted(which)})"
         if op == "all":
             raise CobolError("ALL littéral limité au MOVE vers texte, groupe ou sous-chaîne")
         if op == "remainder":
@@ -440,6 +449,9 @@ class Emitter:
 
     def assignment(self, expr, targets, rounded, move=False):
         targets = [DataRef(r) if isinstance(r, str) else r for r in targets]
+        if expr.op == "report_counter" and any(self.program.fields[r.name].kind not in {"number", "edited"} or r.start is not None
+                                               for r in targets):
+            raise CobolError(f"{expr.args[1]} (entier binaire non signé) vers une donnée non numérique non pris en charge")
         source_kind = self.kind(expr)
         conversions = []
         for ref in targets:
@@ -750,6 +762,9 @@ class Emitter:
                 if e.op == "linage":
                     values.append(f"self.{self.files[e.args[0]]}.linage_display()")
                     continue
+                if e.op == "report_counter":
+                    values.append(f"self.{self.reports[e.args[0]]}.counter_display({quoted(e.args[1])})")
+                    continue
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
                 # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
@@ -809,6 +824,18 @@ class Emitter:
         elif op == "set_switch":
             for number in a[0]:
                 self.write(f"runtime::set_switch({number}, {str(a[1]).lower()});")
+        elif op == "initiate":
+            for name in a[0]:
+                self.write(f"self.{self.reports[name]}.initiate();")
+        elif op in {"generate", "terminate"}:
+            for name in ([a[0]] if op == "generate" else a[0]):
+                rust = self.reports[name]
+                # The report leaves the program while libcob's routine runs:
+                # its events reach the program's SOURCE items and file.
+                self.write(f"let mut report = std::mem::take(&mut self.{rust});")
+                group = "" if op == "terminate" else (f"Some({a[1]}), " if a[1] is not None else "None, ")
+                self.write(f"report.{op}({group}&mut |event| self.{rust}_event(event));")
+                self.write(f"self.{rust} = report;")
         elif op == "cancel":
             for kind, target in a[0]:
                 if kind == "literal":
@@ -1372,6 +1399,8 @@ class Emitter:
             kind = {"RELATIVE": "RelativeFile", "INDEXED": "IndexedFile", "SORT": "SortFile"}.get(organization, "CobolFile")
             self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
+        for name, rust_name in self.reports.items():
+            self.write(f"{rust_name}: file_runtime::Report, // RD {name}")
         # cobc's static label_N (and save_label_N) of the ALTERed paragraphs:
         # kept between CALLs, cleared by CANCEL with the program instance.
         self.write("alter: Vec<usize>,")
@@ -1416,6 +1445,8 @@ class Emitter:
                 self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage},")
             offset = self.program.fields[spec.record].offset
             self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
+        for name, rust_name in self.reports.items():
+            self.write(f"{rust_name}: {self.report_definition(self.program.reports[name])},")
         alters = len(self.program.alters)
         self.write(f"alter: vec![0; {alters}],")
         self.write(f"alter_saved: vec![0; {alters}],")
@@ -1464,6 +1495,8 @@ class Emitter:
         self.write("}")
         if self.subprogram:
             self.call_method()
+        for name in self.reports:
+            self.report_events(self.program.reports[name])
         self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
         self.indent += 1
         collating = getattr(self.program, "collating", None)
@@ -1514,6 +1547,68 @@ class Emitter:
         self.indent -= 1
         self.write("}")
         return self.lines, self.mapping
+
+    def report_definition(self, report):
+        """cob_report and its cob_report_line/cob_report_field tables."""
+        lines = []
+        sources = 0
+        for line in report.report_lines:
+            fields = []
+            for f in line.fields:
+                literal = "None" if f.literal is None else "Some(b" + quoted(f.literal.decode("latin-1")) + " as &[u8])"
+                source = "None"
+                if f.source is not None:
+                    source = f"Some({sources})"
+                    sources += 1
+                fields.append(f"file_runtime::ReportField {{ column: {f.column}, literal: {literal}, source: {source} }}")
+            option = lambda v: "None" if v is None else f"Some({v})"
+            lines.append(f"file_runtime::ReportLine {{ flags: {line.flags}, line: {line.line}, fields: vec![{', '.join(fields)}], "
+                         f"child: {option(line.child)}, sister: {option(line.sister)} }}")
+        limits = f"[{report.lines}, {report.heading}, {report.first_detail}, {report.last_detail}]"
+        return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}])"
+
+    def report_events(self, report):
+        """The program's answer to the report routines: cob_move of each
+        SOURCE into its report item, and cob_write on the report file."""
+        rust = self.reports[report.name]
+        self.write(f"fn {rust}_event(&mut self, event: file_runtime::ReportEvent) -> Vec<u8> {{")
+        self.indent += 1
+        self.write("match event {")
+        self.indent += 1
+        self.write("file_runtime::ReportEvent::Source(index, line_counter, page_counter) => match index {")
+        self.indent += 1
+        self.report_context = report.name
+        number = 0
+        for line in report.report_lines:
+            for f in line.fields:
+                if f.source is None:
+                    continue
+                self.write(f"{number} => {{")
+                self.indent += 1
+                self.assignment(f.source, [DataRef(f.item)], False, move=True)
+                self.write(f"{self.reference(DataRef(f.item))}.bytes().to_vec()")
+                self.indent -= 1
+                self.write("}")
+                number += 1
+        self.report_context = None
+        self.write('_ => unreachable!("report SOURCE"),')
+        self.indent -= 1
+        self.write("},")
+        self.write("file_runtime::ReportEvent::Write(bytes, lines) => {")
+        self.indent += 1
+        file = self.files[report.file]
+        self.write(f"let status = self.{file}.write_report(bytes, lines);")
+        self.write(f'if status != 0 {{ runtime::fail(&format!("report WRITE status {{status:02}} not modelled")); }}')
+        status = self.program.files[report.file].status
+        destination = f"Some(&mut self.{self.names[status]})" if status else "None"
+        self.write(f"file_runtime::file_status(status, {destination}, false, false, false);")
+        self.write("Vec::new()")
+        self.indent -= 1
+        self.write("}")
+        self.indent -= 1
+        self.write("}")
+        self.indent -= 1
+        self.write("}")
 
     def call_method(self):
         """Bind each USING item and its subordinates to the CALL arguments."""

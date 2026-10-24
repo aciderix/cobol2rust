@@ -490,7 +490,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
@@ -535,6 +535,8 @@ class Parser:
         self.collating = None
         self.high_value, self.low_value = "\xff", "\x00"
         self.in_debugging = False
+        # REPORT SECTION: RD name -> ReportSpec, in FD REPORT clause order.
+        self.reports = {}
 
     @property
     def t(self):
@@ -772,6 +774,17 @@ class Parser:
                         spec.sort, spec.organization = True, "SORT"
                     from .file_parser import parse_fd_clauses
                     parse_fd_clauses(self, spec)
+                    if "reports" in spec.fd_clauses:
+                        # parser.y file_description: the records of a report
+                        # file are not kept; finalize_report sizes its record.
+                        if self.t.key.isdigit() and not self.t.string:
+                            self.error("enregistrement dans un FD avec REPORT non pris en charge")
+                        from .report_parser import ReportSpec
+                        for report in spec.fd_clauses["reports"]:
+                            if report in self.reports or report in self.files:
+                                self.error(f"nom de rapport dupliqué: {report}")
+                            self.reports[report] = ReportSpec(report, file_name)
+                        continue
                     while not spec.records or (self.t.key.isdigit() and self.t.key in {"01", "1", "77"}):
                         self.data_stack = []
                         record = self.t
@@ -793,16 +806,19 @@ class Parser:
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
-                while not self.at("PROCEDURE") and not self.at("LINKAGE"):
+                while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT"):
                     self.declaration()
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
                 self.in_linkage = True
-                while not self.at("PROCEDURE"):
+                while not self.at("PROCEDURE") and not self.at("REPORT"):
                     self.declaration()
                 self.in_linkage = False
+            if self.accept("REPORT"):
+                self.report_section()
+        self.report_records()
         for label, owner in self.indexes.items():
             if self.candidates(label) or self.candidates(label, True):
                 self.error(f"index dupliqué avec une donnée: {label}")
@@ -967,6 +983,7 @@ class Parser:
         program.segments = segments
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
+        program.reports = self.reports
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
         # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
@@ -978,6 +995,8 @@ class Parser:
             # Nested programs, then END PROGRAM of this one (parser.y nested_list).
             if any(getattr(f, "is_global", False) for f in self.files.values()):
                 self.error("FD GLOBAL avec programmes contenus non pris en charge")
+            if self.reports:
+                self.error("REPORT SECTION avec programmes contenus non pris en charge")
             inherited = self.global_items(entry_name)
             while self.at("IDENTIFICATION") or self.at("ID"):
                 child_parser = Parser.__new__(Parser)
@@ -1901,6 +1920,8 @@ class Parser:
             left = Expr("all", (chr(self.symbolic[t.key]),))
         elif not t.string and t.key == "LINAGE-COUNTER":
             left = Expr("linage", (self.linage_file(),))
+        elif not t.string and t.key in {"LINE-COUNTER", "PAGE-COUNTER"}:
+            left = Expr("report_counter", (self.counter_report(t.key), t.key))
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -1931,6 +1952,76 @@ class Parser:
         if self.decimal_comma:
             picture = picture.translate(str.maketrans(".,", ",."))
         return picture
+
+    def counter_report(self, word):
+        """line_linage_page_counter: LINE-COUNTER/PAGE-COUNTER [IN|OF report];
+        unqualified, the only report, or inside an RD the report described."""
+        if self.accept("IN") or self.accept("OF"):
+            name = self.name()
+            if name not in self.reports:
+                self.error(f"'{name}' is not a report name")
+            return name
+        if len(self.reports) == 1:
+            return next(iter(self.reports))
+        if getattr(self, "current_report", None) is not None:
+            return self.current_report
+        self.error(f"{word} must be qualified here" if self.reports else f"invalid {word} usage")
+
+    def report_section(self):
+        """REPORT SECTION: an RD for each report named in an FD REPORT clause."""
+        from .report_parser import report_description
+        self.expect("SECTION")
+        self.expect(".")
+        while self.accept("RD"):
+            name = self.name()
+            if name not in self.reports:
+                self.error(f"RD {name} sans clause REPORT dans un FD")
+            report = self.reports[name]
+            if report.entries:
+                self.error(f"RD dupliqué: {name}")
+            self.current_report = name
+            report_description(self, report)
+        self.current_report = None
+        if not self.at("PROCEDURE"):
+            self.error("PROCEDURE DIVISION attendue après la REPORT SECTION")
+
+    def hidden_item(self, tokens, key, file_record=False):
+        """An item of cobc's own (report storage, report record) declared
+        from `tokens`, then renamed so that no source name reaches it."""
+        line = self.t.line
+        self.tokens[self.i:self.i] = [Token("01", line), Token("C2R-HIDDEN-ITEM", line), *tokens, Token(".", line)]
+        self.data_stack, self.last_data = [], None
+        self.building_register = True
+        try:
+            declared = self.declaration(file_record)
+        finally:
+            self.building_register = False
+        item = self.fields.pop(declared)
+        if item.children or declared in self.conditions:
+            self.error("article de rapport invalide")
+        item.name, item.label = key, key
+        self.fields[key] = item
+        # Its size is needed before the storage layout (finalize_report).
+        from .layout import layout_fields
+        layout_fields({key: item})
+        return key
+
+    def report_item(self, report, picture):
+        """The storage of a report item (CB_STORAGE_REPORT): its PICTURE."""
+        key = f"^report^{report.name}^{sum(1 for k in self.fields if k.startswith(f'^report^{report.name}^'))}"
+        return self.hidden_item(list(picture), key)
+
+    def report_records(self):
+        """finalize_report: the report file's record has the report's line
+        size (record_min = record_max = rcsz)."""
+        for report in self.reports.values():
+            if not report.entries:
+                self.error(f"RD manquant pour le rapport {report.name}")
+            if self.candidates(report.name):
+                self.error(f"nom de rapport également nom de donnée: {report.name}")
+            spec = self.files[report.file]
+            key = self.hidden_item([Token("PIC", 0), Token(f"X({report.size})", 0)], f"^record^{report.file}", True)
+            spec.record, spec.records = key, [key]
 
     def linage_file(self):
         """line_linage_page_counter: LINAGE-COUNTER [IN|OF file], the counter
@@ -2017,7 +2108,7 @@ class Parser:
         if t.string or re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", t.text):
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
-        if k in {"FUNCTION", "LINAGE-COUNTER"}:
+        if k in {"FUNCTION", "LINAGE-COUNTER", "LINE-COUNTER", "PAGE-COUNTER"}:
             return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
@@ -2290,6 +2381,8 @@ class Parser:
             return Stmt("return_sort", (name, into, at_end, not_at_end), line)
         if verb == "READ":
             name = self.file_name()
+            if "reports" in self.files[name].fd_clauses:
+                self.error("READ d'un fichier de rapport non pris en charge")
             # GnuCOBOL: READ file [NEXT] [RECORD] [INTO x] [[AT] END] [NOT [AT] END].
             spec = self.files[name]
             next_record = self.accept("NEXT")
@@ -2784,6 +2877,32 @@ class Parser:
                 success = self.block({"END-CALL"})
             self.accept("END-CALL")
             return Stmt("call_program", (target, arguments, exception, success), line)
+        if verb in {"INITIATE", "GENERATE", "TERMINATE"}:
+            # cb_emit_initiate/generate/terminate: report names, or for
+            # GENERATE one report name or DETAIL report group.
+            names = []
+            while not self.t.string and (self.t.key in self.reports or (verb == "GENERATE" and not names and any(
+                    self.t.key in report.groups for report in self.reports.values()))):
+                names.append(self.take().key)
+                if verb == "GENERATE":
+                    break
+            if not names:
+                self.error(f"{verb} requiert un nom de rapport" + (" ou de groupe DETAIL" if verb == "GENERATE" else ""))
+            if verb != "GENERATE":
+                return Stmt(verb.lower(), (names,), line)
+            name = names[0]
+            if self.accept("IN") or self.accept("OF"):
+                self.error("GENERATE de groupe qualifié non pris en charge")
+            if name in self.reports:
+                return Stmt("generate", (name, None), line)
+            owners = [report for report in self.reports.values() if name in report.groups]
+            if len(owners) != 1:
+                self.error(f"groupe de rapport ambigu: {name}")
+            index = owners[0].groups[name]
+            from .report_parser import DETAIL
+            if not owners[0].report_lines[index].flags & DETAIL:
+                self.error(f"GENERATE {name}: groupe de rapport qui n'est pas DETAIL")
+            return Stmt("generate", (owners[0].name, index), line)
         if verb == "CANCEL":
             targets = []
             while self.t.string or (self.t.key not in BOUNDARIES and self.candidates(self.t.key)):

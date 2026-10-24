@@ -104,7 +104,7 @@ Ces résultats portent sur les entrées testées.
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
-| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
@@ -659,6 +659,28 @@ affiché sur 10 chiffres) ; `AT END-OF-PAGE`/`NOT AT END-OF-PAGE` reproduisent
 ouvert sur un `FILE *` fermé : un nouvel OPEN rend 41, toute autre opération est
 un arrêt nommé. Une écriture dans LINAGE-COUNTER et l'OPEN INPUT d'un fichier
 LINAGE restent refusés.
+
+Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
+`REPORT [IS] r` (un seul rapport par fichier, sans enregistrement décrit) rend le
+fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
+ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
+(entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
+`finalize_report` et `cob_report_initiate`), puis des groupes 01 `TYPE` REPORT
+HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
+`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
+élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,
+LINE-COUNTER ou PAGE-COUNTER), soit `VALUE` alphanumérique. Les lignes et champs
+reprennent `output_report_define_lines` ; la taille d'enregistrement est le
+`rcsz` de cobc. `INITIATE`, `GENERATE` groupe DETAIL ou nom de rapport et
+`TERMINATE` reproduisent `do_page_heading`, `do_page_footing`, `report_line` et
+`report_line_type` (écritures BEFORE n LINES, lignes vides, sauts de page).
+`LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
+affichés sur 10 chiffres. Restent refusés : CONTROL, SUM, NEXT GROUP, GROUP
+INDICATE, PRESENT/ABSENT WHEN, OCCURS, COLUMN PLUS/LEFT/RIGHT/CENTER, LINE NEXT
+PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
+BEFORE REPORTING, plusieurs rapports par FD, READ/WRITE d'un fichier de
+rapport ; un INITIATE d'un rapport actif ou un GENERATE/TERMINATE sans
+INITIATE est un arrêt nommé.
 
 Les clauses FD `LABEL RECORDS OMITTED/STANDARD`, `BLOCK CONTAINS` (en records
 ou caractères, éventuellement sous forme de plage) et `RECORDING MODE F` sont

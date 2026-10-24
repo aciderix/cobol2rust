@@ -544,6 +544,12 @@ impl CobolFile {
         0
     }
 
+    /// write_rec of reportio.c: cob_write of the report record BEFORE
+    /// ADVANCING `lines` LINES.
+    pub fn write_report(&mut self, bytes: &[u8], lines: u32) -> u8 {
+        self.write(&Value::Bytes(bytes.to_vec()), bytes.len(), Some(Advance::BeforeLines(lines)), None)
+    }
+
     /// cob_file_write_opt: LINAGE pages, else newlines, CR for 0 lines, form feed.
     fn line_advance(&mut self, advance: Advance, check_eop: bool) -> u8 {
         if self.linage.is_some() { return self.linage_advance(advance, check_eop); }
@@ -1578,5 +1584,319 @@ impl IndexedFile {
 impl Drop for IndexedFile {
     fn drop(&mut self) {
         if !self.open_mode.is_empty() { self.close(false); }
+    }
+}
+
+// libcob common.h COB_REPORT_* flags of a report line.
+pub const REPORT_LINE: u32 = 1 << 0;
+pub const REPORT_LINE_PLUS: u32 = 1 << 1;
+pub const REPORT_HEADING: u32 = 1 << 4;
+pub const REPORT_FOOTING: u32 = 1 << 5;
+pub const REPORT_PAGE_HEADING: u32 = 1 << 6;
+pub const REPORT_PAGE_FOOTING: u32 = 1 << 7;
+pub const REPORT_DETAIL: u32 = 1 << 12;
+const NOT_DETAIL: u32 = REPORT_HEADING | REPORT_FOOTING | REPORT_PAGE_HEADING | REPORT_PAGE_FOOTING;
+/// reportio.c REPORT_MAX_COLS: def_cols when the RD gives no COLUMNS.
+const REPORT_MAX_COLS: usize = 999;
+
+/// cob_report_field: its COLUMN, then its alphanumeric VALUE or the number
+/// of its SOURCE, which the program moves into the item (ReportEvent::Source).
+pub struct ReportField { pub column: usize, pub literal: Option<&'static [u8]>, pub source: Option<usize> }
+
+/// cob_report_line: flags, LINE value, fields, then child and sister lines
+/// as indexes into the report's line table (line 0 is first_line).
+pub struct ReportLine { pub flags: u32, pub line: i64, pub fields: Vec<ReportField>, pub child: Option<usize>, pub sister: Option<usize> }
+
+/// What reportio.c asks of the program: the data of a SOURCE item after
+/// cob_move (with LINE-COUNTER and PAGE-COUNTER as they are then), or
+/// cob_write of the report record BEFORE ADVANCING n LINES.
+pub enum ReportEvent<'a> { Source(usize, i64, i64), Write(&'a [u8], u32) }
+
+/// cob_report of reportio.c without CONTROL, SUM, NEXT GROUP, GROUP
+/// INDICATE, PRESENT WHEN, declaratives and run-time PAGE LIMIT values,
+/// which the translator refuses.
+#[derive(Default)]
+pub struct Report {
+    name: &'static str,
+    lines: Vec<ReportLine>,
+    def_lines: i64,
+    def_cols: usize,
+    def_heading: i64,
+    def_first_detail: i64,
+    def_last_detail: i64,
+    record: Vec<u8>,
+    curr_page: i64,
+    curr_line: i64,
+    incr_line: bool,
+    first_detail: bool,
+    first_generate: bool,
+    in_page_heading: bool,
+    in_page_footing: bool,
+    in_report_footing: bool,
+    initiate_done: bool,
+    line_counter: i64,
+    page_counter: i64,
+}
+
+type Events<'e> = dyn FnMut(ReportEvent) -> Vec<u8> + 'e;
+
+impl Report {
+    /// PAGE LIMIT values as finalize_report leaves them: lines, heading,
+    /// first detail, last detail; `size` is the record size (rcsz).
+    pub fn new(name: &'static str, limits: [i64; 4], size: usize, lines: Vec<ReportLine>) -> Self {
+        let [def_lines, def_heading, def_first_detail, def_last_detail] = limits;
+        Self { name, lines, def_lines, def_cols: REPORT_MAX_COLS, def_heading, def_first_detail, def_last_detail,
+               record: vec![b' '; size], ..Default::default() }
+    }
+
+    /// LINE-COUNTER and PAGE-COUNTER: unsigned int items set by saveLineCounter.
+    pub fn counter(&self, which: &str) -> Value {
+        Value::number(&(if which == "LINE-COUNTER" { self.line_counter } else { self.page_counter }).to_string())
+    }
+
+    /// DISPLAY of the unsigned int item shows all 10 digits of its binary size.
+    pub fn counter_display(&self, which: &str) -> Value {
+        Value::text(&format!("{:010}", if which == "LINE-COUNTER" { self.line_counter } else { self.page_counter }))
+    }
+
+    fn save_line_counter(&mut self) {
+        let ln = if self.curr_line > self.def_lines || self.curr_line < 0 { 0 } else { self.curr_line };
+        self.page_counter = self.curr_page;
+        self.line_counter = ln;
+    }
+
+    fn blank(&mut self) { self.record.fill(b' '); }
+
+    fn write_rec(&mut self, lines: i64, events: &mut Events) {
+        let size = self.record.len().min(self.def_cols);
+        events(ReportEvent::Write(&self.record[..size], lines as u32));
+    }
+
+    /// cob_report_initiate; the PAGE LIMIT and LINE checks were made by the translator.
+    pub fn initiate(&mut self) {
+        if self.initiate_done { fail(&format!("INITIATE {} was already done (COB_EC_REPORT_ACTIVE) not modelled", self.name)); }
+        self.curr_page = 1;
+        self.curr_line = 0;
+        self.incr_line = true;
+        self.save_line_counter();
+        self.initiate_done = true;
+        self.first_detail = true;
+        self.first_generate = true;
+    }
+
+    /// do_page_footing.
+    fn page_footing(&mut self, events: &mut Events) {
+        if self.in_page_footing { return; }
+        self.in_page_footing = true;
+        self.report_line_type(Some(0), REPORT_PAGE_FOOTING, events);
+        self.blank();
+        if self.curr_line < self.def_lines {
+            self.write_rec(self.def_lines - self.curr_line, events);
+            self.curr_line = self.def_lines;
+            self.incr_line = false;
+        } else {
+            self.curr_line = 1;
+        }
+        self.save_line_counter();
+        self.first_detail = true;
+        self.in_page_footing = false;
+    }
+
+    /// do_page_heading.
+    fn page_heading(&mut self, events: &mut Events) {
+        if self.in_page_heading { return; }
+        self.blank();
+        if !self.first_generate && self.def_lines > 0 && self.def_heading > 0
+                && self.curr_line <= self.def_lines && self.curr_line > self.def_heading {
+            // Skip to end of page.
+            while self.curr_line <= self.def_lines {
+                self.write_rec(1, events);
+                self.curr_line += 1;
+            }
+            if self.curr_line > self.def_lines { self.curr_line = 1; }
+            self.save_line_counter();
+        }
+        self.in_page_heading = true;
+        if !self.first_generate { self.curr_page += 1; }
+        self.first_detail = false;
+        while self.curr_line < self.def_heading {
+            self.write_rec(1, events);
+            self.curr_line += 1;
+            self.save_line_counter();
+        }
+        self.report_line_type(Some(0), REPORT_PAGE_HEADING, events);
+        self.blank();
+        while self.curr_line < self.def_first_detail {
+            self.write_rec(1, events);
+            self.curr_line += 1;
+            self.save_line_counter();
+        }
+        self.in_page_heading = false;
+    }
+
+    /// report_line: position the line, then copy its fields (print_field:
+    /// the item's data without trailing spaces or NULs) and write it.
+    fn report_line(&mut self, index: usize, events: &mut Events) {
+        let (flags, line) = (self.lines[index].flags, self.lines[index].line);
+        self.blank();
+        if self.curr_line > self.def_last_detail && !self.in_report_footing && !self.in_page_footing {
+            self.page_footing(events);
+            self.page_heading(events);
+        }
+        let mut check_line_plus = false;
+        if flags & REPORT_LINE_PLUS == 0 && flags & REPORT_LINE != 0 {
+            if self.curr_line > line {
+                self.page_footing(events);
+                if self.in_report_footing {
+                    self.curr_page += 1;
+                    self.curr_line = 1;
+                } else {
+                    self.page_heading(events);
+                }
+                self.first_detail = false;
+            }
+            while self.curr_line < line {
+                self.write_rec(1, events);
+                self.curr_line += 1;
+            }
+        } else {
+            check_line_plus = true;
+        }
+        if check_line_plus && flags & REPORT_LINE_PLUS != 0 && line > 1
+                && (self.curr_line != self.def_first_detail || self.def_first_detail == 0) {
+            self.write_rec(line - 1, events);
+            self.curr_line += line - 1;
+        }
+        if self.curr_line > self.def_last_detail && !self.in_report_footing && !self.in_page_heading && !self.in_page_footing {
+            self.page_footing(events);
+            self.page_heading(events);
+        }
+        self.save_line_counter();
+        if self.lines[index].fields.is_empty() { return; }
+        for k in 0..self.lines[index].fields.len() {
+            let (column, literal, source) = {
+                let f = &self.lines[index].fields[k];
+                (f.column, f.literal, f.source)
+            };
+            let data = match (source, literal) {
+                (Some(source), _) => {
+                    let data = events(ReportEvent::Source(source, self.line_counter, self.page_counter));
+                    // cob_field_to_string: up to the last byte neither space nor NUL.
+                    let end = data.iter().rposition(|b| *b != b' ' && *b != 0).map_or(0, |last| last + 1);
+                    data[..end].to_vec()
+                }
+                (None, Some(literal)) => literal.to_vec(),
+                (None, None) => unreachable!("report field without SOURCE or VALUE"),
+            };
+            self.record[column - 1..column - 1 + data.len()].copy_from_slice(&data);
+        }
+        self.write_rec(1, events);
+        self.curr_line += 1;
+        self.save_line_counter();
+    }
+
+    /// report_line_type: the lines of `type` from `start` on, each with its
+    /// child lines, then its sisters of that type.
+    fn report_line_type(&mut self, start: Option<usize>, kind: u32, events: &mut Events) -> bool {
+        let Some(index) = start else { return false };
+        let (flags, child, sister) = (self.lines[index].flags, self.lines[index].child, self.lines[index].sister);
+        if flags & kind != 0 {
+            self.report_line(index, events);
+            if child.is_some() { self.report_line_type(child, REPORT_LINE, events); }
+            if sister.is_some() { self.report_line_type(sister, kind, events); }
+            return true;
+        }
+        if child.is_some() && self.report_line_type(child, kind, events) { return true; }
+        if sister.is_some() { return self.report_line_type(sister, kind, events); }
+        false
+    }
+
+    /// get_print_line: down the first children to the line with fields.
+    fn print_line(&self, mut index: usize) -> usize {
+        while self.lines[index].fields.is_empty() {
+            match self.lines[index].child { Some(child) => index = child, None => break }
+        }
+        index
+    }
+
+    /// cob_report_generate of a DETAIL group, or of the report (None).
+    pub fn generate(&mut self, group: Option<usize>, events: &mut Events) {
+        if !self.initiate_done { fail(&format!("GENERATE {} but no INITIATE was done", self.name)); }
+        if self.incr_line {
+            self.incr_line = false;
+            self.curr_line += 1;
+            self.save_line_counter();
+        }
+        if self.first_generate {
+            self.report_line_type(Some(0), REPORT_HEADING, events);
+            self.page_heading(events);
+        } else if self.curr_line > self.def_last_detail {
+            self.page_footing(events);
+            self.curr_line = 1;
+            self.page_heading(events);
+            self.first_detail = false;
+        } else if self.curr_line <= 1 || self.first_detail {
+            if self.first_detail { self.curr_line = 1; }
+            self.page_heading(events);
+            self.first_detail = false;
+        }
+        if let Some(mut l) = group {
+            let mut whole_group = false;
+            if let Some(child) = self.lines[l].child {
+                if self.lines[l].fields.is_empty() && self.lines[child].sister.is_some() {
+                    // Multiple detail lines in the group.
+                    l = child;
+                    whole_group = true;
+                }
+            }
+            let (mut num, mut ln) = (0, 0);
+            let mut pl = Some(l);
+            while let Some(index) = pl {
+                let line = &self.lines[index];
+                if line.flags & NOT_DETAIL != 0 { break; }
+                if line.flags & REPORT_LINE_PLUS != 0 && line.line > 1 { ln += line.line; }
+                num += 1;
+                if !whole_group { break; }
+                pl = line.sister;
+            }
+            if num > 1 && self.curr_line + ln > self.def_last_detail {
+                self.page_footing(events);
+                self.curr_line = 1;
+                self.page_heading(events);
+                self.first_detail = false;
+                self.save_line_counter();
+            }
+            let mut pl = Some(l);
+            while let Some(index) = pl {
+                if self.lines[index].flags & NOT_DETAIL != 0 { break; }
+                let print = self.print_line(index);
+                self.report_line(print, events);
+                if !whole_group { break; }
+                pl = self.lines[index].sister;
+            }
+        }
+        self.first_generate = false;
+        self.curr_line -= 1;
+        self.incr_line = true;
+        self.save_line_counter();
+    }
+
+    /// cob_report_terminate without control footings.
+    pub fn terminate(&mut self, events: &mut Events) {
+        if !self.initiate_done { fail(&format!("TERMINATE {} but no INITIATE was done", self.name)); }
+        if self.first_generate { return; }
+        self.page_footing(events);
+        if Self::find(&self.lines, Some(0), REPORT_FOOTING) {
+            self.in_report_footing = true;
+            self.report_line_type(Some(0), REPORT_FOOTING, events);
+            self.in_report_footing = false;
+        }
+        self.initiate_done = false;
+    }
+
+    /// get_line_type: whether a line of `kind` exists from `start` on.
+    fn find(lines: &[ReportLine], start: Option<usize>, kind: u32) -> bool {
+        let Some(index) = start else { return false };
+        lines[index].flags & kind != 0 || Self::find(lines, lines[index].child, kind) || Self::find(lines, lines[index].sister, kind)
     }
 }
