@@ -73,7 +73,7 @@ class ControlGraph:
             return "text" if ref.start is not None else self.program.fields[ref.name].kind
         if expr.op in {"number", "text"}:
             return expr.op
-        if expr.op.startswith("cmp") or expr.op in {"and", "or", "not", "condition", "bool", "numeric_class"}:
+        if expr.op.startswith("cmp") or expr.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class"}:
             return "bool"
         return "number"
 

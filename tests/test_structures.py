@@ -113,7 +113,8 @@ class StructureRuntimeTests(unittest.TestCase):
                 with self.subTest(stdin=stdin):
                     result = subprocess.run([str(binary)], input=stdin, capture_output=True, timeout=10)
                     self.assertEqual(result.returncode, 70)
-                    self.assertIn(b"native index capacity exceeded", result.stderr)
+                    # cob_accept moves the line as text: refused for an index.
+                    self.assertIn(b"index", result.stderr)
 
     def test_variable_count_and_active_subscripts_are_checked(self):
         with tempfile.TemporaryDirectory() as temp:

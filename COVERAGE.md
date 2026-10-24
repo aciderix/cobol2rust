@@ -539,6 +539,19 @@ fourni quand seul un sous-programme a des fichiers. Émission acceptée :
 **198/458** ; revérification : **196/196 programmes conformes**, 4566 PASS,
 0 FAIL (`build/nist-verify-close.json`).
 
+## Progression : SPECIAL-NAMES et ACCEPT
+
+SPECIAL-NAMES : noms mnémoniques (DISPLAY UPON SYSOUT/CONSOLE/SYSERR, ACCEPT
+FROM SYSIN/CONSOLE, comme `cb_build_display_mnemonic`), SWITCH-n et leurs
+conditions ON/OFF (`COB_SWITCH_n` lu comme `cob_init`, SET … TO ON/OFF),
+ALPHABET NATIVE/STANDARD-1/STANDARD-2/ASCII (table identité `cob_native`, d'où
+PROGRAM COLLATING SEQUENCE et SORT COLLATING acceptés pour ces alphabets),
+CLASS utilisateur et SYMBOLIC CHARACTERS. ACCEPT suit `cob_accept` (ligne
+jusqu'au LF, CR conservé, troncature des DISPLAY numériques, MOVE
+alphanumérique). `nist_verify` reproduit `COB_SWITCH_1=ON`/`COB_SWITCH_2=OFF`
+de report.pl. Émission acceptée : **205/458** ; revérification : **203/203
+programmes conformes**, 4650 PASS, 0 FAIL (`build/nist-verify-special.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

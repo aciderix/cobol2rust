@@ -73,7 +73,7 @@ class Emitter:
             return e.op
         if e.op == "all":
             return "text"
-        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class"}:
+        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class"}:
             return "bool"
         return "number"
 
@@ -115,6 +115,13 @@ class Emitter:
             return f"({self.expression(dividend)}).remainder_after(&({self.expression(divisor)}), {scale})"
         if op == "bool":
             return str(args[0]).lower()
+        if op == "switch":
+            number, on = args
+            return f"(runtime::switch_on({number}) == {str(on).lower()})"
+        if op == "user_class":
+            item, members = args
+            table = "[" + ", ".join(f"{m}u8" for m in members) + "]"
+            return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
         if op == "numeric_class":
             return f"({self.expression(args[0])}).is_numeric()" if args[0].op != "var" else self.reference(args[0].args[0]) + ".is_numeric()"
         if op == "condition":
@@ -492,11 +499,16 @@ class Emitter:
         elif op == "display":
             values = []
             for e in a[0]:
+                if e.op == "all":
+                    # DISPLAY shows an ALL literal or a figurative constant once.
+                    values.append("Value::Bytes(vec![" + ", ".join(str(ord(c)) for c in e.args[0]) + "])")
+                    continue
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
                 # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
                 values.append(f"Value::text({quoted(e.args[0])})" if e.op == "number" else self.expression(e))
-            self.write(f"display(&[{', '.join(values)}], {str(a[1]).lower()});")
+            function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
+            self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
         elif op in {"assign", "move"}:
             self.assignment(*a, move=op == "move")
         elif op == "compute":
@@ -538,6 +550,9 @@ class Emitter:
             if value is not None:
                 self.assignment(value, [record], False, move=True)
             self.write(f"self.{self.files[name]}.release(&self.{self.files[name]}_area);")
+        elif op == "set_switch":
+            for number in a[0]:
+                self.write(f"runtime::set_switch({number}, {str(a[1]).lower()});")
         elif op == "cancel":
             for kind, target in a[0]:
                 if kind == "literal":

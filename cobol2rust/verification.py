@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -50,8 +51,8 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
     runtime_env = dict(runtime_env or {})
-    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT"} for key in runtime_env):
-        raise CobolError("seuls COB_LS_FIXED et COB_LS_SPLIT peuvent être définis par le vérificateur")
+    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT"} and not re.fullmatch(r"COB_SWITCH_\d+", key) for key in runtime_env):
+        raise CobolError("seuls COB_LS_FIXED, COB_LS_SPLIT et COB_SWITCH_n peuvent être définis par le vérificateur")
     seed = {}
     seed_directories = []
     if data_dir:

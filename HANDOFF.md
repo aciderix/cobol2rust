@@ -4,6 +4,12 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
+`alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
+`display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte
+`COB_SWITCH_n` ; `nist_verify.RUNNER_ENV` = commutateurs de report.pl.
+NIST **205/458**, 203/203 conformes.
+
 Dernière étape : segments de SECTION acceptés (ALTER refusé, donc sans effet),
 `CobolFile::close_unit` pour CLOSE REEL/UNIT/NO REWIND, OPEN NO REWIND/REVERSED
 ignorés. NIST **198/458**, 196/196 conformes. Prochains blocages : INDEXED (34,

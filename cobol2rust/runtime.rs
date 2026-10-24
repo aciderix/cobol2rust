@@ -330,14 +330,67 @@ impl Value {
             }
         }
     }
+    /// cob_accept: a line up to '\n' (a CR is data), one space at end of
+    /// input; a DISPLAY numeric receiver keeps only its size of input; then
+    /// an alphanumeric MOVE of the line.
     pub fn accept(&mut self) {
-        let mut line = String::new();
-        io::stdin().read_line(&mut line).unwrap_or_else(|_| fail("stdin read failed"));
-        let line = line.trim_end_matches(['\r', '\n']);
-        let value = if self.is_text() { Self::text(line) } else { Self::number(line) };
-        self.assign(&value, false);
+        io::stdout().flush().unwrap_or_else(|_| fail("stdout flush failed"));
+        let mut line = Vec::new();
+        let stdin = io::stdin();
+        let mut input = stdin.lock();
+        let mut byte = [0u8; 1];
+        let mut end = false;
+        while line.len() < 8191 {
+            match io::Read::read(&mut input, &mut byte) {
+                Ok(0) => { end = true; break; },
+                Ok(_) if byte[0] == b'\n' => break,
+                Ok(_) => line.push(byte[0]),
+                Err(_) => fail("stdin read failed"),
+            }
+        }
+        if end && line.is_empty() { line.push(b' '); }
+        match self {
+            Self::View(view) => match view.kind {
+                crate::storage_runtime::Kind::Numeric { usage, .. } => {
+                    if usage.is_display() { line.truncate(view.size); }
+                    view.assign_text_move(&Self::Bytes(line), false);
+                },
+                crate::storage_runtime::Kind::Edited { .. } => view.assign_text_move(&Self::Bytes(line), false),
+                _ => view.assign(&Self::Bytes(line), false),
+            },
+            _ => fail("ACCEPT requires a storage receiver"),
+        }
     }
 }
+/// DISPLAY UPON SYSERR.
+pub fn display_error(values: &[Value], newline: bool) {
+    let mut out = io::stderr().lock();
+    for v in values { out.write_all(&v.bytes()).unwrap_or_else(|_| fail("stderr write failed")); }
+    if newline {
+        let ending = if cfg!(windows) { "\r\n" } else { "\n" };
+        write!(out, "{ending}").unwrap_or_else(|_| fail("stderr write failed"));
+    }
+}
+
+static SWITCHES: std::sync::Mutex<Option<[bool; 37]>> = std::sync::Mutex::new(None);
+
+fn switches() -> std::sync::MutexGuard<'static, Option<[bool; 37]>> {
+    let mut guard = SWITCHES.lock().unwrap();
+    if guard.is_none() {
+        // cob_init: COB_SWITCH_n set to a value starting with '1' or to ON (any case).
+        let mut state = [false; 37];
+        for (n, slot) in state.iter_mut().enumerate() {
+            if let Ok(value) = std::env::var(format!("COB_SWITCH_{n}")) {
+                *slot = value.starts_with('1') || value.eq_ignore_ascii_case("ON");
+            }
+        }
+        *guard = Some(state);
+    }
+    guard
+}
+pub fn switch_on(n: usize) -> bool { switches().unwrap()[n] }
+pub fn set_switch(n: usize, on: bool) { switches().as_mut().unwrap()[n] = on; }
+
 pub fn display(values: &[Value], newline: bool) {
     let mut out = io::stdout().lock();
     for v in values { out.write_all(&v.bytes()).unwrap_or_else(|_| fail("stdout write failed")); }

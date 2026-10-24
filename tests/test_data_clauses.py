@@ -68,3 +68,23 @@ class ArithmeticFormsNativeTests(unittest.TestCase):
         report = verify(ROOT / "tests" / "fixtures" / "relative_start_ge.cob", fmt="free")
         self.assertTrue(report["match"], report)
         self.assertIn("invalid 23", report["cobol_stdout"].splitlines())
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class SpecialNamesNativeTests(unittest.TestCase):
+    def test_special_names_match_gnucobol(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            report = verify(ROOT / "tests" / "fixtures" / "special_names.cob", fmt="free", stdin=b"hello\n",
+                            runtime_env={"COB_SWITCH_2": "ON"})
+        self.assertTrue(report["match"], report)
+        lines = report["cobol_stdout"].splitlines()
+        self.assertEqual(lines[:4], ["[***]", "*!", "sw1 off", "sw2 on"])
+        self.assertEqual(report["cobol_stderr"], report["rust_stderr"])
+
+    def test_accept_follows_cob_accept(self):
+        report = verify(ROOT / "tests" / "fixtures" / "accept_input.cob", fmt="free", stdin=b"bad\n-12.5\nab\r\n123\n")
+        self.assertTrue(report["match"], report)
+        # Invalid digits give zeros, a CR is data, end of input gives a space.
+        self.assertEqual(report["cobol_stdout"], "[00]\n[-012.0]\n[ab\r ]\n[12]\n[    ]\n")

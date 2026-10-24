@@ -433,6 +433,13 @@ class Parser:
         self.last_data = None
         self.filler_count = 0
         self.indexes = {}
+        # SPECIAL-NAMES: mnemonic -> device, switch condition -> (number, on),
+        # alphabet -> identity?, class -> allowed bytes, symbolic -> byte.
+        self.mnemonics = {}
+        self.switch_conditions = {}
+        self.alphabets = {}
+        self.classes = {}
+        self.symbolic = {}
 
     @property
     def t(self):
@@ -750,6 +757,7 @@ class Parser:
             self.expect("SECTION")
             self.expect(".")
             computers = set()
+            collating = None
             while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER"):
                 paragraph = self.take().key
                 if paragraph in computers:
@@ -769,10 +777,20 @@ class Parser:
                         self.accept("IS")
                         if not 1 <= self.integer_literal("SEGMENT-LIMIT") <= 49:
                             self.error("SEGMENT-LIMIT limité à 1..49")
+                    elif self.accept("PROGRAM"):
+                        self.accept("COLLATING")
+                        self.expect("SEQUENCE")
+                        self.accept("IS")
+                        collating = (self.t, self.name())
                     else:
                         break
                 if not self.accept("."):
                     self.error(f"clause {paragraph} non prise en charge; seul le nom de machine est accepté")
+            if self.accept("SPECIAL-NAMES"):
+                self.expect(".")
+                self.special_names()
+            if collating:
+                self.check_identity_alphabet(*collating, "PROGRAM COLLATING SEQUENCE")
             if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
                 self.error("paragraphe CONFIGURATION non pris en charge")
         if self.accept("INPUT-OUTPUT"):
@@ -787,6 +805,109 @@ class Parser:
                 self.io_control()
         if not (self.at("DATA") or self.at("PROCEDURE")):
             self.error("clause ENVIRONMENT DIVISION non prise en charge")
+
+    DEVICES = {"SYSIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout", "SYSLIST": "stdout", "SYSLST": "stdout",
+               "SYSERR": "stderr", "PRINTER": "printer", "SYSPCH": "punch", "FORMFEED": "formfeed",
+               **{f"C{n:02d}": "channel" for n in range(1, 13)}, "CSP": "channel", "TOP": "channel"}
+
+    def check_identity_alphabet(self, token, name, clause):
+        """On an ASCII machine NATIVE, STANDARD-1, STANDARD-2 and ASCII give
+        cobc's identity cob_native table; other alphabets are not modelled."""
+        if name not in self.alphabets:
+            raise CobolError(f"ligne {token.line}: alphabet inconnu pour {clause}: {name}")
+        if not self.alphabets[name]:
+            raise CobolError(f"ligne {token.line}: {clause} avec alphabet non natif non pris en charge")
+
+    def special_names(self):
+        """SPECIAL-NAMES entries with a GnuCOBOL 3.2 meaning on an ASCII machine."""
+        def ordinal_or_text():
+            if self.t.string:
+                return [ord(c) for c in self.take().text]
+            if not self.t.string and self.t.key in {"HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES",
+                                                     "QUOTE", "QUOTES", "SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES"}:
+                key = self.take().key
+                return [255 if key.startswith("HIGH") else 0 if key.startswith("LOW") else 34 if key.startswith("QUOTE")
+                        else 32 if key.startswith("SPACE") else 48]
+            value = self.integer_literal("ordinal")
+            if not 1 <= value <= 256:
+                self.error("position ordinale limitée à 1..256")
+            return [value - 1]
+
+        while not self.at("."):
+            key = self.t.key
+            if self.t.string:
+                self.error("entrée SPECIAL-NAMES attendue")
+            if key in self.DEVICES:
+                self.take()
+                self.accept("IS")
+                if self.at("CRT"):
+                    self.error("CONSOLE IS CRT (entrées-sorties écran) non pris en charge")
+                self.mnemonics[self.name()] = self.DEVICES[key]
+            elif re.fullmatch(r"SWITCH-(\d+)", key) and int(key[7:]) <= 36:
+                number = int(self.take().key[7:])
+                if self.accept("IS") or not (self.at("ON") or self.at("OFF")):
+                    self.mnemonics[self.name()] = ("switch", number)
+                while self.at("ON") or self.at("OFF"):
+                    on = self.take().key == "ON"
+                    self.accept("STATUS")
+                    self.accept("IS")
+                    self.switch_conditions[self.name()] = (number, on)
+            elif self.accept("ALPHABET"):
+                name = self.name()
+                if self.accept("FOR"):
+                    self.expect("ALPHANUMERIC")
+                self.accept("IS")
+                if self.t.key in {"NATIVE", "STANDARD-1", "STANDARD-2", "ASCII"} and not self.t.string:
+                    self.take()
+                    self.alphabets[name] = True
+                elif self.accept("EBCDIC"):
+                    self.alphabets[name] = False
+                else:
+                    # A literal alphabet: kept only for an unused definition.
+                    ordinal_or_text()
+                    while self.t.string or self.t.key[:1].isdigit() or self.t.key in {
+                            "THRU", "THROUGH", "ALSO", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES",
+                            "QUOTE", "QUOTES", "SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES"}:
+                        if not (self.accept("THRU") or self.accept("THROUGH") or self.accept("ALSO")):
+                            ordinal_or_text()
+                    self.alphabets[name] = False
+            elif self.accept("CLASS"):
+                name = self.name()
+                if self.accept("FOR"):
+                    self.expect("ALPHANUMERIC")
+                self.accept("IS")
+                members = set()
+                while self.t.string or self.t.key[:1].isdigit():
+                    low = ordinal_or_text()
+                    if self.accept("THRU") or self.accept("THROUGH"):
+                        high = ordinal_or_text()
+                        if len(low) != 1 or len(high) != 1:
+                            self.error("CLASS THRU requiert des caractères isolés")
+                        members |= set(range(min(low[0], high[0]), max(low[0], high[0]) + 1))
+                    else:
+                        members |= set(low)
+                if not members:
+                    self.error("CLASS requiert au moins un caractère")
+                self.classes[name] = frozenset(members)
+            elif self.accept("SYMBOLIC"):
+                self.accept("CHARACTERS")
+                while not self.at(".") and not self.t.string and self.t.key not in {
+                        "ALPHABET", "CLASS", "SYMBOLIC", "IN", "CURRENCY", "DECIMAL-POINT"} | set(self.DEVICES):
+                    names = []
+                    while not self.t.string and not self.t.key[:1].isdigit() and self.t.key not in {"IS", "ARE"}:
+                        names.append(self.name())
+                    self.accept("IS") or self.accept("ARE")
+                    values = []
+                    while not self.t.string and self.t.key[:1].isdigit():
+                        values.append(ordinal_or_text()[0])
+                    if not names or len(names) != len(values):
+                        self.error("SYMBOLIC CHARACTERS requiert autant de positions que de noms")
+                    self.symbolic.update(zip(names, values))
+                if self.accept("IN"):
+                    self.check_identity_alphabet(self.t, self.name(), "SYMBOLIC CHARACTERS IN")
+            else:
+                self.error(f"entrée SPECIAL-NAMES non prise en charge: {key}")
+        self.expect(".")
 
     def integer_literal(self, clause):
         if self.t.string or not re.fullmatch(r"\d{1,9}", self.t.text):
@@ -990,6 +1111,11 @@ class Parser:
             self.expect(")")
         elif t.key in {"TRUE", "FALSE"}:
             left = Expr("bool", (t.key == "TRUE",))
+        elif not t.string and t.key in self.switch_conditions and not self.candidates(t.key):
+            left = Expr("switch", self.switch_conditions[t.key])
+        elif not t.string and t.key in self.symbolic and not self.candidates(t.key):
+            # A symbolic character is a figurative constant.
+            left = Expr("all", (chr(self.symbolic[t.key]),))
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -1036,12 +1162,19 @@ class Parser:
             except CobolError:
                 self.i = saved
         left = self.expr()
-        if left.op in {"condition", "bool"}:
+        if left.op in {"condition", "bool", "switch"}:
             return left
         self.accept("IS")
         negate = self.accept("NOT")
         if self.accept("NUMERIC"):
             result = Expr("numeric_class", (left,))
+            return Expr("not", (result,)) if negate else result
+        if not self.t.string and self.t.key in self.classes:
+            # A user CLASS: every byte of the item belongs to the class.
+            members = self.classes[self.take().key]
+            if left.op != "var" or (self.fields[left.args[0].name].kind != "text" and left.args[0].start is None):
+                self.error("condition CLASS limitée aux champs alphanumériques")
+            result = Expr("user_class", (left, tuple(sorted(members))))
             return Expr("not", (result,)) if negate else result
         if self.t.key in {"=", "<>", "<", ">", "<=", ">="}:
             op = self.take().key
@@ -1071,6 +1204,16 @@ class Parser:
         line = self.t.line
         verb = self.take().key
         if verb == "SET":
+            if not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
+                # SET switch-mnemonic ... TO ON|OFF (cob_set_switch).
+                switches = []
+                while not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
+                    switches.append(self.mnemonics[self.take().key][1])
+                self.expect("TO")
+                if not (self.at("ON") or self.at("OFF")):
+                    self.error("SET commutateur TO ON ou OFF attendu")
+                on = self.take().key == "ON"
+                return Stmt("set_switch", (switches, on), line)
             if self.candidates(self.t.key) and not self.candidates(self.t.key, True):
                 refs = [self.variable()]
                 while not self.at("TO") and not self.at("UP") and not self.at("DOWN"):
@@ -1290,15 +1433,28 @@ class Parser:
                 values.append(self.expr())
             if not values:
                 self.error("DISPLAY sans opérande")
+            device = "stdout"
+            if self.accept("UPON"):
+                # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
+                target = self.take().key
+                device = self.mnemonics.get(target, self.DEVICES.get(target))
+                device = {"console": "stdout"}.get(device, device)
+                if device not in {"stdout", "stderr"}:
+                    self.error(f"DISPLAY UPON {target} non pris en charge")
             newline = True
             if self.accept("WITH"):
                 self.expect("NO")
                 self.expect("ADVANCING")
                 newline = False
             self.accept("END-DISPLAY")
-            return Stmt("display", (values, newline), line)
+            return Stmt("display", (values, newline, device), line)
         if verb == "ACCEPT":
             name = self.variable()
+            if self.accept("FROM"):
+                # cb_emit_accept_mnemonic: CONSOLE and SYSIN read as plain ACCEPT.
+                source = self.take().key
+                if self.mnemonics.get(source, self.DEVICES.get(source)) not in {"stdin", "console"}:
+                    self.error(f"ACCEPT FROM {source} non pris en charge")
             if self.fields[name.name].kind == "edited" and name.start is None:
                 self.error("ACCEPT vers une PICTURE éditée non pris en charge")
             self.accept("END-ACCEPT")
@@ -1607,8 +1763,10 @@ class Parser:
             self.expect("DUPLICATES")
             self.accept("IN")
             self.accept("ORDER")
-        if self.at("COLLATING") or self.at("SEQUENCE"):
-            self.error(f"{verb} COLLATING SEQUENCE non pris en charge")
+        if self.accept("COLLATING") or self.at("SEQUENCE"):
+            self.expect("SEQUENCE")
+            self.accept("IS")
+            self.check_identity_alphabet(self.t, self.name(), f"{verb} COLLATING SEQUENCE")
 
         def procedure():
             self.accept("IS")

@@ -157,8 +157,7 @@ class RuntimeTests(unittest.TestCase):
     def test_divide_zero_overflow_and_invalid_input_abort(self):
         rustc = find_tool("rustc")
         cases = [("compute n = 1 / 0 stop run.", b"", "division by zero"),
-                 ("compute n = 100 stop run.", b"", "overflow"),
-                 ("accept n stop run.", b"bad\n", "invalid numeric input")]
+                 ("compute n = 100 stop run.", b"", "overflow")]
         for body, stdin, diagnostic in cases:
             with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)

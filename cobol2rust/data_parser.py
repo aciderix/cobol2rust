@@ -21,6 +21,8 @@ def literal(p):
         token = Token(" ", token.line, True)
     elif token.key in {"QUOTE", "QUOTES"}:
         token = Token('"', token.line, True)
+    elif token.key in getattr(p, "symbolic", {}) and not p.candidates(token.key):
+        token = Token(chr(p.symbolic[token.key]), token.line, True)
     elif token.key in {"HIGH-VALUE", "HIGH-VALUES"}:
         token = Token("\xff", token.line, True)
     elif token.key in {"LOW-VALUE", "LOW-VALUES"}:
@@ -150,7 +152,7 @@ def edited_picture(p, picture):
             close = text.find(")", i + 2)
             if close < 0 or not text[i + 2:close].isdigit() or int(text[i + 2:close]) < 1:
                 p.error(f"PICTURE éditée invalide: {picture}")
-            n += min(int(text[i + 2:close]), 257) - 1
+            n += min(int(text[i + 2:close]), 65536) - 1
             i = close
         symbols.append((c, n))
         i += 1
@@ -334,10 +336,14 @@ def declaration(p, file_record=False):
             figurative = None if p.t.string else (
                 "0" if p.t.key in {"ZERO", "ZEROS", "ZEROES"} else " " if p.t.key in {"SPACE", "SPACES"}
                 else '"' if p.t.key in {"QUOTE", "QUOTES"} else "\xff" if p.t.key in {"HIGH-VALUE", "HIGH-VALUES"}
-                else "\x00" if p.t.key in {"LOW-VALUE", "LOW-VALUES"} else None)
+                else "\x00" if p.t.key in {"LOW-VALUE", "LOW-VALUES"}
+                else chr(p.symbolic[p.t.key]) if p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key)
+                else None)
             initial = literal(p)
             if repeated:
                 # VALUE ALL literal repeats the literal over the item.
+                if figurative == "0":
+                    initial = Token("0", initial.line, True)
                 if not initial.string:
                     p.error("VALUE ALL limité aux littéraux alphanumériques et constantes figuratives")
                 figurative = ("ALL", initial.text)
@@ -394,7 +400,7 @@ def declaration(p, file_record=False):
         count = int(match[2])
         if count < 1:
             p.error("répétition PICTURE strictement positive requise")
-        return match[1] * min(count, 257)
+        return match[1] * min(count, 65536)
 
     expanded = re.sub(r"([9XZAP])\((\d+)\)", repeat, picture)
     group_value = group_usage = None
@@ -417,15 +423,15 @@ def declaration(p, file_record=False):
         # Alphanumeric-edited: stored and compared as text, edited on MOVE.
         alnum_edit = re.sub(r"([XA9B0/])\((\d+)\)", repeat, picture.upper())
         kind, digits, scale, signed = "text", len(alnum_edit), 0, False
-        if digits > 256 or usage != "DISPLAY":
-            p.error("PIC alphanumérique éditée limitée à 256 caractères DISPLAY")
+        if digits > 65535 or usage != "DISPLAY":
+            p.error("PIC alphanumérique éditée limitée à 65535 caractères DISPLAY")
     elif re.fullmatch(r"X+|A+", expanded) or (re.fullmatch(r"[XA9]+", expanded) and set(expanded) - {"9"}
                                                 and len(set(expanded)) > 1):
         # PIC A is alphabetic: stored and compared like PIC X; the emitter
         # refuses the numeric MOVEs that GnuCOBOL rejects for it.
         kind, digits, scale, signed = "text", len(expanded), 0, False
-        if digits > 256 or usage != "DISPLAY":
-            p.error("PIC X/A limité à 256 caractères DISPLAY")
+        if digits > 65535 or usage != "DISPLAY":
+            p.error("PIC X/A limité à 65535 caractères DISPLAY")
     elif re.fullmatch(r"S?(?:9+(?:V9*)?|V9+)", expanded):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
@@ -463,7 +469,7 @@ def declaration(p, file_record=False):
             p.error("VALUE ALL limité aux PIC X/A et groupes")
         if picture:
             initial = Token((figurative[1] * digits)[:digits], initial.line, True)
-    elif figurative in {'"', "\xff", "\x00"} and initial is not None and kind == "text":
+    elif isinstance(figurative, str) and figurative not in {"0", " "} and initial is not None and kind == "text":
         # A figurative constant fills every position of the item.
         initial = Token(figurative * digits, initial.line, True)
     group_sign = None

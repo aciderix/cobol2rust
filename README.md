@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 289 tests Python, avec un test d'inspection du PE
-Windows ignoré (290 découverts), et les 77 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 291 tests Python, avec un test d'inspection du PE
+Windows ignoré (292 découverts), et les 78 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -251,6 +251,16 @@ SORT et MERGE (SD, clés ASCENDING/DESCENDING, USING/GIVING de fichiers
 séquentiels fixes, INPUT/OUTPUT PROCEDURE, RELEASE, RETURN) reproduisent le tri
 stable de libcob. COLLATING SEQUENCE et les fichiers USING/GIVING variables
 restent refusés.
+
+## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
+
+SPECIAL-NAMES accepte les noms mnémoniques de périphériques (DISPLAY UPON
+SYSOUT/CONSOLE/SYSERR, ACCEPT FROM SYSIN/CONSOLE), SWITCH-n avec conditions
+ON/OFF et SET … TO ON/OFF (état initial lu dans `COB_SWITCH_n`, comme libcob),
+les alphabets NATIVE, STANDARD-1, STANDARD-2 et ASCII (sans effet sur une
+machine ASCII, y compris en PROGRAM COLLATING SEQUENCE), les classes
+utilisateur et SYMBOLIC CHARACTERS. CURRENCY SIGN, DECIMAL-POINT IS COMMA et
+les alphabets non natifs restent refusés. ACCEPT reproduit `cob_accept`.
 
 ## Calcul décimal et limites explicites
 

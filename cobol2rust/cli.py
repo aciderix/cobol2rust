@@ -202,7 +202,7 @@ def main(argv=None):
     verification.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
-    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED ou COB_LS_SPLIT identique pour les deux programmes")
+    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT ou COB_SWITCH_n identique pour les deux programmes")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)

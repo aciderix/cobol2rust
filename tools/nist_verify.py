@@ -26,6 +26,8 @@ from cobol2rust.verification import verify
 
 
 RUNNER_FLAGS = ["-std=cobol85", "--debug"]
+# report.pl sets these switches for every program.
+RUNNER_ENV = {"COB_SWITCH_1": "ON", "COB_SWITCH_2": "OFF"}
 # report.pl only compiles these programs: their execution is not part of the suite.
 COMPILE_ONLY = {"NC401M", "RL301M", "RL401M", "IC401M", "IX301M", "IX401M", "SQ303M",
                 "SQ401M", "ST301M", "RW301M", "RW302M", "DB205A"}
@@ -63,7 +65,7 @@ def native_seed(corpus: Path, chain: list[Path], copybooks: list[Path], work: Pa
         stdin = program.with_suffix(".DAT")
         with (stdin.open("rb") if stdin.exists() else open(os.devnull, "rb")) as stream:
             subprocess.run([str(executable)], cwd=run_dir, stdin=stream, capture_output=True,
-                           env={**os.environ, "REPORT": f"{program.stem}.log"}, timeout=300)
+                           env={**os.environ, **RUNNER_ENV, "REPORT": f"{program.stem}.log"}, timeout=300)
     for path in sorted(run_dir.glob("XXXXX*")):
         shutil.copy2(path, seed / path.name)
     return seed
@@ -95,7 +97,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     seed = native_seed(corpus, chain, copybooks, work) if chain else None
     stdin = source.with_suffix(".DAT")
     report = verify(source, fmt="fixed", includes=copybooks,
-                    stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed, call_paths=call_paths)
+                    stdin=stdin.read_bytes() if stdin.exists() else b"", data_dir=seed, call_paths=call_paths,
+                    runtime_env=RUNNER_ENV)
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}

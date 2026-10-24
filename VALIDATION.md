@@ -1,5 +1,12 @@
 # Validation — 22 octobre 2026
 
+## SPECIAL-NAMES et ACCEPT — 24 octobre 2026
+
+- **292 tests découverts : 291 réussis, un test PE Windows ignoré.**
+- **78/78 comparaisons locales conformes** ; nouvelles fixtures
+  `special_names.cob` (stdout et stderr identiques), `accept_input.cob`.
+- NIST : **205/458** ; **203/203 programmes acceptés conformes** (4650 PASS).
+
 ## Segments, CLOSE REEL/NO REWIND — 24 octobre 2026
 
 - **290 tests découverts : 289 réussis, un test PE Windows ignoré.**
