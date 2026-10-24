@@ -340,7 +340,9 @@ impl View {
                 let n = BigInt::parse_bytes(&ascii, 10).ok_or("invalid packed decimal")?;
                 if sign == 13 { -n } else { n }
             },
-            Usage::Binary | Usage::Index => {
+            // An index is a native int: little endian on x86-64.
+            Usage::Index => BigInt::from_signed_bytes_le(&bytes),
+            Usage::Binary => {
                 if signed { BigInt::from_signed_bytes_be(&bytes) }
                 else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             },
@@ -365,7 +367,6 @@ impl View {
             // A group receiver requests storage bytes, including a DISPLAY
             // overpunch or the original COMP/COMP-3 representation.
             match self.kind {
-                Kind::Numeric { usage: Usage::Index, .. } => fail("MOVE of an index to a group requires native index storage"),
                 Kind::Numeric { .. } => return Value::Bytes(self.raw()),
                 _ => fail("numeric MOVE to text requires a numeric source"),
             }
@@ -570,7 +571,13 @@ impl View {
                         if nibbles.len() % 2 != 0 { nibbles.insert(0, 0); }
                         nibbles.chunks_exact(2).map(|n| (n[0] << 4) | n[1]).collect()
                     },
-                    Usage::Binary | Usage::Index => {
+                    Usage::Index => {
+                        let mut bytes = units.to_signed_bytes_le();
+                        if bytes.len() > self.size { fail("native index capacity exceeded"); }
+                        bytes.resize(self.size, if negative { 255 } else { 0 });
+                        bytes
+                    },
+                    Usage::Binary => {
                         let mut bytes = if signed { units.to_signed_bytes_be() } else { units.to_bytes_be().1 };
                         if bytes.len() > self.size { fail("binary storage overflow"); }
                         let mut padded = vec![if negative { 255 } else { 0 }; self.size - bytes.len()];
@@ -581,6 +588,23 @@ impl View {
             },
         };
         self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+    }
+    /// cob_decimal_get_display with opt 0: an overflow keeps the low-order
+    /// digits (mpz_tdiv_r) and the sign of the full result.
+    pub fn store_truncated(&mut self, source: &Value) {
+        self.resolved();
+        match self.kind {
+            Kind::Numeric { digits, scale, signed, usage } if usage.is_display() => {
+                let units = source.num().units(scale, false);
+                if absolute(&units) < power(digits) { return self.assign(source, false); }
+                let negative = units.sign() == Sign::Minus;
+                let kept = absolute(&units) % power(digits);
+                let ascii = format!("{:0>width$}", kept.to_string(), width = digits as usize).into_bytes();
+                let mut bytes = display_bytes(ascii, negative && signed, usage, signed);
+                self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+            },
+            _ => self.assign(source, false),
+        }
     }
     pub fn checked_assign(&mut self, source: &Value, rounded: bool) -> Result<(), SizeError> {
         self.resolved();
@@ -658,5 +682,337 @@ pub fn content_copy(argument: &Value) -> Value {
                                dimensions: vec![], initializers: source.initializers.clone() })
         },
         _ => crate::runtime::fail("BY CONTENT requires a data item"),
+    }
+}
+
+/// An INSPECT operand as libcob receives it: the field data, and whether it
+/// is COB_TYPE_ALPHANUMERIC_ALL (a figurative constant or an ALL literal).
+pub struct Operand { pub data: Vec<u8>, pub all: bool }
+impl Operand {
+    pub fn new(data: Vec<u8>, all: bool) -> Self { Operand { data, all } }
+    pub fn of(value: &Value) -> Self {
+        match value {
+            Value::View(view) => Operand { data: view.raw(), all: false },
+            _ => Operand { data: value.bytes(), all: false },
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum InspectMode { All, Leading, First, Trailing }
+
+/// libcob's static INSPECT buffers. They live across INSPECT statements of
+/// the run unit, and cob_inspect_init only clears the marker range it knows.
+struct InspectBuffers {
+    mark: Vec<u8>, mark_size: usize, mark_min: usize, mark_max: usize,
+    repdata: Vec<u8>, repdata_written: Vec<bool>, repdata_size: usize,
+}
+thread_local! {
+    static INSPECT: RefCell<InspectBuffers> = RefCell::new(InspectBuffers {
+        mark: vec![], mark_size: 0, mark_min: 0, mark_max: 0,
+        repdata: vec![], repdata_written: vec![], repdata_size: 0,
+    });
+}
+const COB_NORMAL_BUFF: usize = 2048;
+
+fn memory_fault() -> ! {
+    fail("INSPECT: libcob 3.2 would access memory outside its INSPECT buffers; not modelled")
+}
+impl InspectBuffers {
+    fn mark_at(&self, i: usize) -> u8 { *self.mark.get(i).unwrap_or_else(|| memory_fault()) }
+    fn set_mark(&mut self, pos: usize, length: usize) {
+        if pos.checked_add(length).map_or(true, |end| end > self.mark.len()) { memory_fault(); }
+        self.mark[pos..pos + length].iter_mut().for_each(|m| *m = 1);
+        let pos_end = pos.wrapping_add(length).wrapping_sub(1);
+        if (self.mark_min == 0 && self.mark_at(self.mark_min) == 0) || pos < self.mark_min { self.mark_min = pos; }
+        if pos_end > self.mark_max { self.mark_max = pos_end; }
+    }
+    fn is_marked(&self, pos: usize, length: usize) -> bool {
+        if self.mark_at(self.mark_min) == 0 || self.mark_max < pos || self.mark_min >= pos.wrapping_add(length) {
+            return false;
+        }
+        if self.mark_min >= pos || self.mark_max < pos.wrapping_add(length) { return true; }
+        (0..length).any(|i| self.mark_at(pos + i) != 0)
+    }
+    fn setup_repdata(&mut self, size: usize) {
+        if size > self.repdata_size {
+            self.repdata_size = if !self.repdata.is_empty() { size }
+                                else if size < COB_NORMAL_BUFF { COB_NORMAL_BUFF } else { size };
+            // cob_fast_malloc: the content is undefined until written.
+            self.repdata = vec![0; self.repdata_size + 1];
+            self.repdata_written = vec![false; self.repdata_size + 1];
+        }
+    }
+    fn write_repdata(&mut self, pos: usize, bytes: &[u8]) {
+        if pos + bytes.len() > self.repdata.len() { memory_fault(); }
+        self.repdata[pos..pos + bytes.len()].copy_from_slice(bytes);
+        self.repdata_written[pos..pos + bytes.len()].iter_mut().for_each(|w| *w = true);
+    }
+}
+
+/// One INSPECT statement (or its TALLYING/REPLACING half), following
+/// GnuCOBOL 3.2 strings.c: cob_inspect_init, cob_inspect_start, BEFORE/AFTER,
+/// the counting/replacing calls and cob_inspect_finish.
+pub struct Inspect {
+    memory: Memory, offset: usize, size: usize,
+    start: usize, end: usize, replacing: bool,
+    /// cob_real_get_sign of an overpunched signed DISPLAY target: the sign
+    /// byte's position and the sign, restored by cob_real_put_sign.
+    sign: Option<(usize, i32)>,
+}
+impl Inspect {
+    fn common(target: &Value) -> Self {
+        let view = match target { Value::View(view) => view, _ => fail("INSPECT requires a data item") };
+        view.resolved();
+        let mut sign = None;
+        if let Kind::Numeric { signed: true, usage, .. } = view.kind {
+            match usage {
+                Usage::Display | Usage::SignLeading => {
+                    let position = view.offset + if matches!(usage, Usage::SignLeading) { 0 } else { view.size - 1 };
+                    let mut memory = view.memory.borrow_mut();
+                    let byte = memory[position];
+                    let value = if byte.is_ascii_digit() || byte == b' ' { 1 }
+                        else if (b'p'..=b'y').contains(&byte) { memory[position] = byte & !0x40; -1 }
+                        else { memory[position] = b'0'; 1 };
+                    sign = Some((position, value));
+                },
+                Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
+                _ => fail("INSPECT of a binary or packed item not modelled"),
+            }
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::Binary | Usage::Index, .. } = view.kind {
+            fail("INSPECT of a binary or packed item not modelled");
+        }
+        // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.
+        let (offset, size) = match view.kind {
+            Kind::Numeric { signed: true, usage: Usage::SignLeadingSeparate, .. } => (view.offset + 1, view.size - 1),
+            Kind::Numeric { signed: true, usage: Usage::SignTrailingSeparate, .. } => (view.offset, view.size - 1),
+            _ => (view.offset, view.size),
+        };
+        Inspect { memory: view.memory.clone(), offset, size, start: 0, end: 0, replacing: false, sign }
+    }
+    pub fn init(target: &Value, replacing: bool) -> Self {
+        let mut inspect = Self::common(target);
+        inspect.replacing = replacing;
+        let size = inspect.size;
+        INSPECT.with(|buffers| {
+            let mut b = buffers.borrow_mut();
+            if size > b.mark_size {
+                b.mark_size = if !b.mark.is_empty() { size } else if size < COB_NORMAL_BUFF { COB_NORMAL_BUFF } else { size };
+                b.mark = vec![0; b.mark_size + 1];
+            } else if b.mark_size != 0 && b.mark_at(b.mark_min) != 0 {
+                let (min, max) = (b.mark_min, b.mark_max);
+                let length = max.wrapping_sub(min).wrapping_add(1);
+                if min.checked_add(length).map_or(true, |end| end > b.mark.len()) { memory_fault(); }
+                b.mark[min..min + length].iter_mut().for_each(|m| *m = 0);
+            }
+            b.mark_min = 0;
+            b.mark_max = 0;
+        });
+        inspect
+    }
+    pub fn init_converting(target: &Value) -> Self { Self::common(target) }
+    fn data(&self) -> Vec<u8> { self.memory.borrow()[self.offset..self.offset + self.size].to_vec() }
+    pub fn start(&mut self) { self.start = 0; self.end = self.size; }
+    fn find(&self, operand: &Operand) -> Option<usize> {
+        let data = self.data();
+        let len = operand.data.len();
+        let end_p = self.end as isize - len as isize + 1;
+        if (self.start as isize) > end_p { return None; }
+        (self.start..end_p as usize).find(|&p| data[p..p + len] == operand.data[..])
+    }
+    pub fn before(&mut self, operand: &Operand) { if let Some(p) = self.find(operand) { self.end = p; } }
+    pub fn after(&mut self, operand: &Operand) {
+        self.start = match self.find(operand) { Some(p) => p + operand.data.len(), None => self.end };
+    }
+    /// cob_inspect_characters for TALLYING: the count to cob_add_int.
+    pub fn tally_characters(&mut self) -> i64 {
+        let (pos, len) = (self.start, self.end - self.start);
+        if len == 0 { return 0; }
+        INSPECT.with(|buffers| {
+            let mut b = buffers.borrow_mut();
+            let n = if b.is_marked(pos, len) { (pos..pos + len).filter(|&i| b.mark_at(i) == 0).count() } else { len };
+            b.set_mark(pos, len);
+            n as i64
+        })
+    }
+    /// cob_inspect_characters for REPLACING CHARACTERS BY operand.
+    pub fn replace_characters(&mut self, by: &Operand) {
+        let (pos, len) = (self.start, self.end - self.start);
+        if len == 0 { return; }
+        let byte = *by.data.first().unwrap_or_else(|| memory_fault());
+        INSPECT.with(|buffers| {
+            let mut b = buffers.borrow_mut();
+            b.setup_repdata(self.size);
+            if b.is_marked(pos, len) {
+                for i in pos..pos + len { if b.mark_at(i) == 0 { b.write_repdata(i, &[byte]); } }
+            } else {
+                b.write_repdata(pos, &vec![byte; len]);
+            }
+            b.set_mark(pos, len);
+        })
+    }
+    /// The byte compared at offset i (relative to inspect_start, possibly negative
+    /// after libcob's TRAILING step); before the item it is outside the model.
+    fn matches(&self, data: &[u8], i: isize, pattern: &[u8]) -> bool {
+        let at = self.start as isize + i;
+        if at < 0 || at as usize + pattern.len() > data.len() { memory_fault(); }
+        data[at as usize..at as usize + pattern.len()] == *pattern
+    }
+    /// inspect_common for TALLYING: the count to cob_add_int.
+    pub fn tally(&mut self, mode: InspectMode, value: &Operand) -> i64 {
+        let (pos, len) = (self.start, self.end - self.start);
+        let f2 = &value.data[..];
+        if len == 0 || f2.len() > len { return 0; }
+        let data = self.data();
+        INSPECT.with(|buffers| {
+            let mut b = buffers.borrow_mut();
+            let mut n = 0i64;
+            let size = f2.len() as isize;
+            match mode {
+                InspectMode::Trailing => {
+                    let mut i = (len - f2.len()) as isize;
+                    let mut first_marker = 0isize;
+                    loop {
+                        if !self.matches(&data, i, f2) { break; }
+                        if !b.is_marked((pos as isize + i) as usize, f2.len()) {
+                            n += 1;
+                            first_marker = i;
+                            i -= size - 1;
+                        }
+                        if i == 0 { break; }
+                        i -= 1;
+                    }
+                    if n != 0 {
+                        b.set_mark((pos as isize + first_marker) as usize, (len as isize - first_marker) as usize);
+                    }
+                },
+                InspectMode::Leading => {
+                    let i_max = (len - f2.len() + 1) as isize;
+                    let mut last_marker = 0isize;
+                    let mut i = 0isize;
+                    while i < i_max {
+                        if !self.matches(&data, i, f2) { break; }
+                        if !b.is_marked(pos + i as usize, f2.len()) {
+                            n += 1;
+                            i += size - 1;
+                            last_marker = i;
+                        }
+                        i += 1;
+                    }
+                    // libcob 3.2 marks last_marker positions, not last_marker + 1.
+                    if n != 0 { b.set_mark(pos, last_marker as usize); }
+                },
+                InspectMode::All | InspectMode::First => {
+                    let i_max = (len - f2.len() + 1) as isize;
+                    let mut i = 0isize;
+                    while i < i_max {
+                        if self.matches(&data, i, f2) && !b.is_marked(pos + i as usize, f2.len()) {
+                            n += 1;
+                            b.set_mark(pos + i as usize, f2.len());
+                            if mode == InspectMode::First { break; }
+                            i += size - 1;
+                        }
+                        i += 1;
+                    }
+                },
+            }
+            n
+        })
+    }
+    /// inspect_common for REPLACING mode `from` BY `to`.
+    pub fn replace(&mut self, mode: InspectMode, to: &Operand, from: &Operand) {
+        let (pos, len) = (self.start, self.end - self.start);
+        if len == 0 { return; }
+        let f2 = &from.data[..];
+        let f1: Vec<u8> = if to.data.len() != f2.len() {
+            if !to.all { return; } // EC-RANGE-INSPECT-SIZE, not checked
+            to.data.iter().cycle().take(f2.len()).copied().collect()
+        } else { to.data.clone() };
+        if f2.len() > len { return; }
+        let data = self.data();
+        let size = self.size;
+        INSPECT.with(|buffers| {
+            let mut b = buffers.borrow_mut();
+            let mut do_mark = |b: &mut InspectBuffers, at: usize| -> bool {
+                if b.is_marked(at, f2.len()) { return false; }
+                b.setup_repdata(size);
+                b.write_repdata(at, &f1);
+                b.set_mark(at, f2.len());
+                true
+            };
+            let step = f2.len() as isize;
+            match mode {
+                InspectMode::Trailing => {
+                    let mut i = (len - f2.len()) as isize;
+                    loop {
+                        if !self.matches(&data, i, f2) { break; }
+                        if do_mark(&mut b, (pos as isize + i) as usize) { i -= step - 1; }
+                        if i == 0 { break; }
+                        i -= 1;
+                    }
+                },
+                InspectMode::Leading => {
+                    let i_max = (len - f2.len() + 1) as isize;
+                    let mut i = 0isize;
+                    while i < i_max {
+                        if !self.matches(&data, i, f2) { break; }
+                        if do_mark(&mut b, pos + i as usize) { i += step - 1; }
+                        i += 1;
+                    }
+                },
+                InspectMode::All | InspectMode::First => {
+                    let i_max = (len - f2.len() + 1) as isize;
+                    let mut i = 0isize;
+                    while i < i_max {
+                        if self.matches(&data, i, f2) && do_mark(&mut b, pos + i as usize) {
+                            if mode == InspectMode::First { break; }
+                            i += step - 1;
+                        }
+                        i += 1;
+                    }
+                },
+            }
+        })
+    }
+    fn put_sign(&self) {
+        if let Some((position, -1)) = self.sign { self.memory.borrow_mut()[position] |= 0x40; }
+    }
+    /// cob_inspect_converting; it restores the sign itself, unless it returns early.
+    pub fn convert(&mut self, from: &Operand, to: &Operand) {
+        let len = self.end - self.start;
+        if len == 0 { return; }
+        let f2: Vec<u8> = if from.data.len() != to.data.len() {
+            if !to.all { return; } // EC-RANGE-INSPECT-SIZE
+            to.data.iter().cycle().take(from.data.len()).copied().collect()
+        } else { to.data.clone() };
+        let mut table = [None; 256];
+        for (&a, &b) in from.data.iter().zip(&f2) { if table[a as usize].is_none() { table[a as usize] = Some(b); } }
+        {
+            let mut memory = self.memory.borrow_mut();
+            for byte in &mut memory[self.offset + self.start..self.offset + self.end] {
+                if let Some(b) = table[*byte as usize] { *byte = b; }
+            }
+        }
+        self.put_sign();
+    }
+    pub fn finish(self) {
+        if self.replacing {
+            INSPECT.with(|buffers| {
+                let b = buffers.borrow();
+                if b.repdata_size != 0 && b.mark_at(b.mark_min) != 0 {
+                    let mut memory = self.memory.borrow_mut();
+                    let mut i = b.mark_min;
+                    while i <= b.mark_max {
+                        if b.mark_at(i) != 0 {
+                            if i >= self.size || !b.repdata_written[i] { memory_fault(); }
+                            memory[self.offset + i] = b.repdata[i];
+                        }
+                        if i == usize::MAX { break; }
+                        i += 1;
+                    }
+                }
+            });
+        }
+        self.put_sign();
     }
 }

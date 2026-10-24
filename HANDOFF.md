@@ -4,6 +4,18 @@
 
 ## Reprise cloud et objectif élargi
 
+Dernière étape : `Parser.search_statement` (nœuds `search_test`/`search_step`/
+`search_all`), USAGE INDEX (`Usage::Index` petit-boutiste), INSPECT
+(`Parser.inspect_statement`, `storage_runtime::Inspect` = portage de
+`strings.c` avec tampons `thread_local` persistants comme les statiques de
+libcob ; accès hors tampon = arrêt nommé), `View::store_truncated`
+(`cob_decimal_get_display` opt 0), EVALUATE désucré en conditions
+(`Parser.evaluate_subject`/`evaluate_object` = `evaluate_test`), ELSE
+imbriqués, 88 de groupe, SET mixte, littéraux signés dans `lex` (seulement
+après un opérande entre parenthèses). NIST **229/458**, 227/227 conformes.
+Prochain chantier : porter `cb_build_expr` (conditions abrégées, POSITIVE/
+NEGATIVE/ZERO, NOT des relations) au lieu de `Parser.comparison`.
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

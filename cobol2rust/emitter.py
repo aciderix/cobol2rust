@@ -77,11 +77,11 @@ class Emitter:
             return "bool"
         return "number"
 
-    def reference(self, ref):
+    def reference(self, ref, active=True):
         if isinstance(ref, str):
             ref = DataRef(ref)
         result = f"self.{self.names[ref.name]}"
-        if ref.name in self.variable_groups:
+        if ref.name in self.variable_groups and active:
             f = self.variable_groups[ref.name]
             prefix = self.program.fields[ref.name].size - f.size * f.occurs
             result += f".active_size(&self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs}, {prefix}, {f.size})"
@@ -163,6 +163,13 @@ class Emitter:
             operator = {"=": "==", "<>": "!=", "<": "<", ">": ">", "<=": "<=", ">=": ">="}[op[3:]]
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
+
+    def occurs(self, table):
+        """output_occurs: the maximum, or the current ODO value."""
+        field = self.program.fields[table]
+        if field.depending:
+            return f"{self.reference(DataRef(field.depending))}.integer(\"OCCURS DEPENDING\")"
+        return str(field.occurs)
 
     def folded_comparison(self, op, left, right):
         """cobc's compare_field_literal constant folding (tree.c), or None.
@@ -309,8 +316,6 @@ class Emitter:
                     conversion = "literal"
                 elif expr.op == "var":
                     source_field = self.program.fields[expr.args[0].name]
-                    if group and source_field.usage == "INDEX":
-                        raise CobolError("MOVE index vers groupe non pris en charge; stockage natif non modélisé")
                     if not group and source_field.scale > 0:
                         raise CobolError("MOVE numérique non entier vers PIC X ou sous-chaîne invalide; utiliser un groupe pour copier le stockage brut")
                     conversion = "group" if group else "integer"
@@ -559,10 +564,70 @@ class Emitter:
                     self.write(f"unit.cancel({quoted(target)});")
                 else:
                     self.write(f"unit.cancel(String::from_utf8_lossy(&{self.reference(target)}.bytes()).trim_end_matches(' '));")
+        elif op == "inspect":
+            self.inspect(*a)
         elif op == "continue":
             self.write("{}")
         else:
             raise CobolError(f"instruction inconnue: {op}")
+
+    def inspect_operand(self, e):
+        if e.op == "var":
+            return f"storage_runtime::Operand::of(&{self.reference(e.args[0])})"
+        data = "vec![" + ", ".join(f"{ord(c)}u8" for c in e.args[0]) + "]"
+        return f"storage_runtime::Operand::new({data}, {str(e.op == 'all').lower()})"
+
+    def inspect(self, target, clauses):
+        """cb_emit_inspect: init, then per item cob_inspect_start, BEFORE/AFTER
+        in source order and the operation; TALLYING and REPLACING each finish."""
+        field = self.program.fields[target.name]
+        if target.start is None and field.kind == "number" and field.usage != "DISPLAY":
+            raise CobolError("INSPECT d'un champ binaire, packé ou index non pris en charge")
+        modes = {"all": "All", "leading": "Leading", "first": "First", "trailing": "Trailing"}
+        for clause in clauses:
+            self.write("{")
+            self.indent += 1
+            if clause[0] == "converting":
+                _, source, to, region = clause
+                self.write(f"let mut inspect = storage_runtime::Inspect::init_converting(&{self.reference(target)});")
+                items = [("convert", source, to, region)]
+            else:
+                replacing = clause[0] == "replacing"
+                self.write(f"let mut inspect = storage_runtime::Inspect::init(&{self.reference(target)}, {str(replacing).lower()});")
+                items = clause[1]
+            for item in items:
+                region = item[3]
+                self.write("inspect.start();")
+                for word, operand in region:
+                    self.write(f"inspect.{word}(&{self.inspect_operand(operand)});")
+                if clause[0] == "tallying":
+                    counter, mode, value, _ = item
+                    call = "inspect.tally_characters()" if mode == "characters" else \
+                        f"inspect.tally(storage_runtime::InspectMode::{modes[mode]}, &{self.inspect_operand(value)})"
+                    count, delta = self.unique(), self.unique()
+                    positions = max(0, -self.program.fields[counter.name].scale)
+                    self.write(f"let {count} = {call};")
+                    # cob_add_int: P positions truncate the count first.
+                    self.write(f"if {count} != 0 {{ if let Some({delta}) = runtime::cob_add_int_operand(&Value::number(&{count}.to_string()), {positions}, false) {{")
+                    self.indent += 1
+                    target_counter = self.reference(counter)
+                    self.write(f"let {delta} = {target_counter}.snapshot().plus(&{delta});")
+                    self.write(f"{target_counter}.store_truncated(&{delta});")
+                    self.indent -= 1
+                    self.write("} }")
+                elif clause[0] == "replacing":
+                    mode, source, to, _ = item
+                    if mode == "characters":
+                        self.write(f"inspect.replace_characters(&{self.inspect_operand(to)});")
+                    else:
+                        self.write(f"inspect.replace(storage_runtime::InspectMode::{modes[mode]}, &{self.inspect_operand(to)}, &{self.inspect_operand(source)});")
+                else:
+                    _, source, to, _ = item
+                    self.write(f"inspect.convert(&{self.inspect_operand(source)}, &{self.inspect_operand(to)});")
+            if clause[0] != "converting":
+                self.write("inspect.finish();")
+            self.indent -= 1
+            self.write("}")
 
     def control_node(self, index, node):
         op, a = node.op, node.args
@@ -579,7 +644,9 @@ class Emitter:
             target, arguments, continuation, exception, success = a
             values = []
             for mode, ref in arguments:
-                view = self.reference(ref) + ".clone()"
+                # BY REFERENCE passes an address: a variable group's LINKAGE
+                # item may address its whole allocation, not only the active part.
+                view = self.reference(ref, active=mode == "CONTENT" or ref.start is not None) + ".clone()"
                 values.append(f"storage_runtime::content_copy(&{view})" if mode == "CONTENT" else view)
             # A program not found raises EC-PROGRAM-NOT-FOUND, handled by
             # ON EXCEPTION; without it GnuCOBOL stops the run unit.
@@ -604,6 +671,40 @@ class Emitter:
             self.write("None => runtime::fail(\"CALL of a program absent from the conversion or recursive; not modelled\"),")
             self.indent -= 1
             self.write("}")
+        elif op == "search_test":
+            table, index, ending, whens = a
+            self.write(f"if {self.reference(DataRef(index))}.integer(\"SEARCH\") > {self.occurs(table)} {{ pc = {ending}; }} else {{ pc = {whens}; }}")
+        elif op == "search_step":
+            index, varying, test = a
+            name = self.reference(DataRef(index))
+            self.write(f"let step = {name}.plus(&Value::number(\"1\"));")
+            self.write(f"{name}.assign(&step, false);")
+            if varying is not None and varying.name != index:
+                self.write(f"let value = {name}.snapshot();")
+                self.write(f"{self.reference(varying)}.assign(&value, false);")
+            self.write(f"pc = {test};")
+        elif op == "search_all":
+            # output_search_all: head 0, tail max + 1, index (head + tail) / 2;
+            # ret is the comparison of the first unequal key, as cobc's (ret = ...).
+            table, index, keys, body, ending = a
+            name = self.reference(DataRef(index))
+            for left, right in keys:
+                if self.folded_comparison("=", left, right) is not None:
+                    raise CobolError("SEARCH ALL avec une comparaison de clé résolue à la compilation non pris en charge")
+            self.write(f"let mut head: i128 = 0; let mut tail: i128 = {self.occurs(table)} + 1; let mut found = false;")
+            self.write("loop {")
+            self.indent += 1
+            self.write("if head >= tail - 1 { break; }")
+            self.write("let mid = (head + tail) / 2;")
+            self.write(f"{name}.assign(&Value::number(&mid.to_string()), false);")
+            self.write("let mut ret = std::cmp::Ordering::Equal;")
+            for left, right in keys:
+                self.write(f"if ret == std::cmp::Ordering::Equal {{ ret = {self.comparison_order(left, right)}; }}")
+            self.write("if ret == std::cmp::Ordering::Equal { found = true; break; }")
+            self.write("if ret == std::cmp::Ordering::Less { head = mid; } else { tail = mid; }")
+            self.indent -= 1
+            self.write("}")
+            self.write(f"pc = if found {{ {body} }} else {{ {ending} }};")
         elif op == "sort_init":
             name, keys, following = a
             spec = self.program.files[name]
@@ -733,17 +834,11 @@ class Emitter:
             self.write(f"{name}.assign(&step, false);")
             self.write(f"pc = {continuation};")
         elif op == "evaluate":
-            subject, branches, otherwise = a
-            category = lambda e: "text" if self.kind(e) == "edited" else self.kind(e)
-            temp = self.unique()
-            self.write(f"let {temp} = {self.expression(subject)};")
-            branches = [(case, target) for case, target in branches
-                        if self.kind(case) == "bool" or self.folded_comparison("=", subject, case) is not False]
-            for i, (case, target) in enumerate(branches):
-                if category(case) != category(subject):
-                    raise CobolError("EVALUATE: types incompatibles")
-                comparison = f"{temp} == ({self.expression(case)})" if self.kind(case) == "bool" else f"{temp}.compare(&({self.expression(case)})) == std::cmp::Ordering::Equal"
-                self.write(f"{'if' if i == 0 else '} else if'} {comparison} {{")
+            _, branches, otherwise = a
+            for i, (condition, target) in enumerate(branches):
+                if self.kind(condition) != "bool":
+                    raise CobolError("EVALUATE: condition attendue")
+                self.write(f"{'if' if i == 0 else '} else if'} {self.expression(condition)} {{")
                 self.indent += 1
                 self.write(f"pc = {target};")
                 self.indent -= 1

@@ -63,11 +63,10 @@ class NumericMoveTests(unittest.TestCase):
                 Emitter(Parser(program("01 n pic 999. 01 output-a pic xxx. "
                                        "01 edited-a pic +999. 01 edited-b pic +999.", body)).parse()).generate()
 
-    def test_implicit_index_cannot_be_copied_to_raw_group(self):
-        with self.assertRaises(CobolError):
-            Emitter(Parser(program("01 table-a. 02 item-a pic x occurs 2 indexed by idx. "
-                                   "01 group-a. 02 cell-a pic x(8).",
-                                   "move idx to group-a.")).parse()).generate()
+    def test_implicit_index_copies_native_bytes_to_raw_group(self):
+        Emitter(Parser(program("01 table-a. 02 item-a pic x occurs 2 indexed by idx. "
+                               "01 group-a. 02 cell-a pic x(8).",
+                               "move idx to group-a.")).parse()).generate()
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

@@ -88,3 +88,15 @@ class SpecialNamesNativeTests(unittest.TestCase):
         self.assertTrue(report["match"], report)
         # Invalid digits give zeros, a CR is data, end of input gives a space.
         self.assertEqual(report["cobol_stdout"], "[00]\n[-012.0]\n[ab\r ]\n[12]\n[    ]\n")
+
+
+@unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
+class TablesAndIndexesNativeTests(unittest.TestCase):
+    def test_usage_index_items_are_native_integers(self):
+        report = verify(ROOT / "tests" / "fixtures" / "usage_index.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertTrue(report["cobol_stdout"].startswith("<\x02\x01\x00\x00>"))
+
+    def test_search_and_search_all_match_gnucobol(self):
+        report = verify(ROOT / "tests" / "fixtures" / "search_tables.cob", fmt="free")
+        self.assertTrue(report["match"], report)

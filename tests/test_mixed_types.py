@@ -44,13 +44,16 @@ class MixedTypeTests(unittest.TestCase):
             with self.subTest(condition=condition), self.assertRaises(CobolError):
                 self.emit(data, f"if {condition} continue end-if.")
 
-    def test_mixed_evaluate_remains_outside_the_comparison_profile(self):
-        data = "01 n pic 99. 01 t pic xx."
+    def test_evaluate_uses_the_comparison_profile(self):
+        # cb_emit_evaluate builds the same comparisons as IF.
+        data = "01 n pic 99. 01 t pic xx. 01 w pic 999."
         for body in ('evaluate n when "12" continue end-evaluate.',
                      "evaluate t when 12 continue end-evaluate.",
                      "evaluate t when zero continue end-evaluate."):
-            with self.subTest(body=body), self.assertRaises(CobolError):
+            with self.subTest(body=body):
                 self.emit(data, body)
+        with self.assertRaises(CobolError):
+            self.emit(data, 'evaluate w when "12" continue end-evaluate.')
 
     def test_direct_text_literals_with_unmodelled_native_optimizations_are_rejected(self):
         # n = "1230" with PIC S99V99 is folded by cobc (comparison_folding.cob).

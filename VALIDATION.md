@@ -1,5 +1,19 @@
 # Validation — 22 octobre 2026
 
+## SEARCH, USAGE INDEX, INSPECT, EVALUATE — 24 octobre 2026
+
+- **301 tests découverts : 300 réussis, un test PE Windows ignoré.**
+- **85/85 comparaisons locales conformes** ; nouvelles fixtures
+  `usage_index.cob`, `search_tables.cob`, `inspect_statement.cob`,
+  `inspect_markers.cob` (marqueurs statiques de libcob entre instructions),
+  `evaluate_forms.cob`, `nested_conditions.cob`.
+- NIST : **229/458** ; **227/227 programmes acceptés conformes** (5269 PASS,
+  0 FAIL) : `build/nist-verify-inspect.json` (224) et
+  `build/nist-verify-subscripts.json`.
+- Défaut corrigé : deux `WHEN` consécutifs ne partageaient pas les
+  instructions suivantes (le premier ne faisait rien), écart silencieux
+  détecté par une sonde native.
+
 ## SPECIAL-NAMES et ACCEPT — 24 octobre 2026
 
 - **292 tests découverts : 291 réussis, un test PE Windows ignoré.**

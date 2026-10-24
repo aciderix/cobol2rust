@@ -214,7 +214,14 @@ def lex(source: str) -> list[Token]:
             # a numeric literal may start with its decimal point after a separator.
             point = (c == "." and i + 1 < len(source) and source[i + 1].isdigit()
                      and (i == 0 or source[i - 1].isspace() or source[i - 1] in "(+-*/=<>,"))
-            match = re.match(r"\.\d+" if point else
+            # cobc scans a sign followed by digits as a signed literal, so in
+            # a list "(I +1)" holds two subscripts. After an operand that
+            # matters only inside parentheses; elsewhere cobc rejects it.
+            signed = (c in "+-" and parentheses and tokens and i + 1 < len(source)
+                      and (source[i + 1].isdigit() or source[i + 1] == "." and source[i + 2:i + 3].isdigit())
+                      and (tokens[-1].string or tokens[-1].text == ")"
+                           or re.fullmatch(r"[+-]?[A-Za-z0-9_.][A-Za-z0-9_.-]*", tokens[-1].text)))
+            match = re.match(r"[+-](?:\d+(?:\.\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              r"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|[.(),:+*/=<>-]",
                              source[i:])
             if not match:
@@ -316,6 +323,8 @@ class Field:
     sign_separate: bool = False
     group_sign: tuple | None = None
     synchronized: bool = False
+    # OCCURS ... ASCENDING/DESCENDING KEY: (descending, key) in declaration order.
+    search_keys: list = field(default_factory=list)
     group_value: tuple[str, str | None] | None = None  # (literal, ZERO/SPACE fill)
     group_usage: str | None = None
 
@@ -343,6 +352,7 @@ class Expr:
     args: tuple
     figurative_zero: bool = False
     figurative_space: bool = False
+    literal_all: bool = False
 
 
 @dataclass
@@ -414,8 +424,11 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN".split())
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+VERBS = set("DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT".split())
+INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
+                       "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
+                       "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -1106,6 +1119,9 @@ class Parser:
             left = Expr("all", (self.take().text,))
         elif t.key in {"+", "-"}:
             left = Expr("unary" + t.key, (self.expr(30),))
+        elif re.fullmatch(r"[+-](?:\d+(?:\.\d+)?|\.\d+)", t.text):
+            # A signed literal token (see lex): the same as a unary sign.
+            left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],)),))
         elif t.key == "(":
             left = self.expr()
             self.expect(")")
@@ -1194,6 +1210,47 @@ class Parser:
         result = Expr("cmp" + op, (left, self.expr()))
         return Expr("not", (result,)) if negate else result
 
+    BOOLEAN_OPS = {"and", "or", "not", "condition", "bool", "numeric_class", "user_class", "switch"}
+
+    def evaluate_subject(self):
+        if self.at("TRUE") or self.at("FALSE"):
+            return ("truth", self.take().key == "TRUE")
+        saved = self.i
+        try:
+            condition = self.condition()
+            if condition.op in self.BOOLEAN_OPS or condition.op.startswith("cmp"):
+                return ("condition", condition)
+        except CobolError:
+            pass
+        self.i = saved
+        return ("value", self.expr())
+
+    def evaluate_object(self, subject):
+        """evaluate_test for one subject and one object."""
+        kind, value = subject
+        as_condition = Expr("bool", (value,)) if kind == "truth" else value if kind == "condition" else None
+        if self.accept("ANY"):
+            return Expr("bool", (True,))
+        if self.at("TRUE") or self.at("FALSE"):
+            truth = self.take().key == "TRUE"
+            if as_condition is None:
+                self.error("objet TRUE/FALSE avec un sujet non conditionnel non pris en charge")
+            return as_condition if truth else Expr("not", (as_condition,))
+        if kind == "truth":
+            condition = self.condition()
+            return condition if value else Expr("not", (condition,))
+        if kind == "condition":
+            self.error("objet d'un sujet conditionnel: TRUE, FALSE ou ANY attendu")
+        negate = self.accept("NOT")
+        x = self.expr()
+        if x.op == "condition":
+            self.error("invalid use of 88 level in WHEN expression")
+        if self.accept("THRU") or self.accept("THROUGH"):
+            y = self.expr()
+            test = Expr("and", (Expr("cmp<=", (x, value)), Expr("cmp<=", (value, y))))
+            return Expr("not", (test,)) if negate else test
+        return Expr("cmp<>" if negate else "cmp=", (value, x))
+
     def block(self, stops):
         result = []
         while self.t.string or self.t.key not in stops | {".", "<EOF>"}:
@@ -1218,18 +1275,29 @@ class Parser:
                 refs = [self.variable()]
                 while not self.at("TO") and not self.at("UP") and not self.at("DOWN"):
                     refs.append(self.variable())
-                if all(not self.fields[ref.name].index_for for ref in refs) and self.accept("TO"):
+                index_like = lambda ref: bool(self.fields[ref.name].index_for) or self.fields[ref.name].usage == "INDEX"
+                if all(not index_like(ref) for ref in refs) and self.accept("TO"):
                     # SET integer-items TO index-name stores the occurrence number.
                     source = self.variable()
-                    if not self.fields[source.name].index_for:
-                        self.error("SET donnée TO requiert un index INDEXED BY")
+                    if not index_like(source):
+                        self.error("SET donnée TO requiert un index INDEXED BY ou USAGE INDEX")
                     for ref in refs:
                         field = self.fields[ref.name]
                         if ref.start is not None or field.kind != "number" or field.scale or field.usage == "INDEX":
                             self.error("SET donnée TO index requiert un entier numérique")
                     return Stmt("compute", (None, [(ref, Expr("var", (source,)), False) for ref in refs]), line)
-                if any(not self.fields[ref.name].index_for for ref in refs):
-                    self.error("SET numérique requiert des index INDEXED BY")
+                if any(not index_like(ref) for ref in refs):
+                    # Mixed receivers: each one is set in turn from an index.
+                    if not self.accept("TO") or not self.candidates(self.t.key):
+                        self.error("SET numérique requiert des index INDEXED BY ou USAGE INDEX")
+                    source = self.variable()
+                    if not index_like(source):
+                        self.error("SET donnée TO requiert un index INDEXED BY ou USAGE INDEX")
+                    for ref in refs:
+                        field = self.fields[ref.name]
+                        if not index_like(ref) and (ref.start is not None or field.kind != "number" or field.scale):
+                            self.error("SET donnée TO index requiert un entier numérique")
+                    return Stmt("set_index", (refs, "to", Expr("var", (source,))), line)
                 if self.accept("TO"):
                     mode = "to"
                 elif self.accept("UP"):
@@ -1291,6 +1359,8 @@ class Parser:
             return Stmt("close", (names,), line)
         if verb in {"SORT", "MERGE"}:
             return self.sort_statement(verb, line)
+        if verb == "SEARCH":
+            return self.search_statement(line)
         if verb == "RELEASE":
             record = self.variable()
             files = [f.name for f in self.files.values() if f.sort and record.name in f.records]
@@ -1531,8 +1601,9 @@ class Parser:
             cond = self.condition()
             self.accept("THEN")
             yes = self.block({"ELSE", "END-IF"})
-            no = self.block({"END-IF"}) if self.accept("ELSE") else []
-            if not self.accept("END-IF") and not self.at("."):
+            # Without END-IF, a further ELSE belongs to an enclosing IF.
+            no = self.block({"END-IF", "ELSE"}) if self.accept("ELSE") else []
+            if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
         if verb == "GO":
@@ -1604,20 +1675,40 @@ class Parser:
                 self.expect("END-PERFORM")
             return Stmt("loop", (mode, control, body), line)
         if verb == "EVALUATE":
-            subject = self.expr()
-            branches = []
-            otherwise = []
-            while self.accept("WHEN"):
+            # cb_emit_evaluate: each WHEN group is one IF whose condition ORs
+            # its WHEN lines, each the AND of evaluate_test over ALSO positions.
+            subjects = [self.evaluate_subject()]
+            while self.accept("ALSO"):
+                subjects.append(self.evaluate_subject())
+            branches, otherwise = [], []
+            stops = {"WHEN", "END-EVALUATE", "ELSE", "END-IF", "END-PERFORM"}
+            while self.at("WHEN"):
+                self.take()
                 if self.accept("OTHER"):
-                    otherwise = self.block({"END-EVALUATE"})
+                    otherwise = self.block(stops - {"WHEN"})
                     break
-                case = self.condition() if subject.op in {"bool", "condition"} else self.expr()
-                body = self.block({"WHEN", "END-EVALUATE"})
-                branches.append((case, body))
-            if not branches:
+                condition = None
+                while True:
+                    tests = [self.evaluate_object(subjects[0])]
+                    while self.accept("ALSO"):
+                        if len(tests) >= len(subjects):
+                            self.error("wrong number of WHEN parameters")
+                        tests.append(self.evaluate_object(subjects[len(tests)]))
+                    if len(tests) != len(subjects):
+                        self.error("wrong number of WHEN parameters")
+                    line_test = tests[0]
+                    for test in tests[1:]:
+                        line_test = Expr("and", (line_test, test))
+                    condition = line_test if condition is None else Expr("or", (condition, line_test))
+                    if self.at("WHEN") and not self.tokens[self.i + 1].string and self.tokens[self.i + 1].key != "OTHER":
+                        self.take()
+                        continue
+                    break
+                branches.append((condition, self.block(stops)))
+            if not branches and not otherwise:
                 self.error("EVALUATE requiert au moins un WHEN")
-            self.expect("END-EVALUATE")
-            return Stmt("evaluate", (subject, branches, otherwise), line)
+            self.accept("END-EVALUATE")
+            return Stmt("evaluate", (None, branches, otherwise), line)
         if verb == "INITIALIZE":
             targets = self.targets()
             with_filler = False
@@ -1686,6 +1777,8 @@ class Parser:
             if not targets:
                 self.error("CANCEL requiert un programme")
             return Stmt("cancel", (targets,), line)
+        if verb == "INSPECT":
+            return self.inspect_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
         if verb == "NEXT":
@@ -1731,6 +1824,254 @@ class Parser:
         while not self.t.string and self.candidates(self.t.key):
             receivers.append((self.variable(), self.accept("ROUNDED")))
         return receivers
+
+    def inspect_operand(self, all_allowed=False):
+        """An INSPECT operand: a DISPLAY identifier, an alphanumeric literal or
+        a figurative constant (an "all" Expr, COB_TYPE_ALPHANUMERIC_ALL)."""
+        t = self.t
+        if t.string:
+            self.take()
+            return Expr("text", (t.text,))
+        if t.key == "ALL":
+            if not all_allowed:
+                self.error("ALL littéral non admis ici")
+            self.take()
+            operand = self.inspect_operand()
+            if operand.op == "var":
+                self.error("ALL requiert un littéral")
+            return Expr("all", operand.args, literal_all=True) if operand.op == "text" else operand
+        if t.key in INSPECT_FIGURATIVES:
+            self.take()
+            return Expr("all", (INSPECT_FIGURATIVES[t.key],))
+        if t.key in self.symbolic and not self.candidates(t.key):
+            self.take()
+            return Expr("all", (chr(self.symbolic[t.key]),))
+        if re.fullmatch(r"[+-]?(\d+(\.\d*)?|\.\d+)", t.text):
+            self.error("littéral numérique non admis dans INSPECT (cobc: is not an alphanumeric literal)")
+        if not self.candidates(t.key):
+            self.error("opérande INSPECT attendu")
+        ref = self.variable()
+        f = self.fields[ref.name]
+        if f.kind == "number" and f.usage not in {"DISPLAY"} and ref.start is None:
+            self.error(f"'{f.label}' is not USAGE DISPLAY")
+        return Expr("var", (ref,))
+
+    def tallying_counter_ahead(self):
+        """identifier FOR: a counter, not a value to count."""
+        if self.t.string or not self.candidates(self.t.key):
+            return False
+        position = self.i
+        try:
+            self.variable()
+            return self.at("FOR")
+        except CobolError:
+            return False
+        finally:
+            self.i = position
+
+    def inspect_operand_start(self):
+        t = self.t
+        return t.string or t.key in INSPECT_FIGURATIVES or (t.key in self.symbolic and not self.candidates(t.key)) \
+            or (t.key not in BOUNDARIES and bool(self.candidates(t.key)))
+
+    def operand_size(self, e):
+        """calc_reference_size / literal size for validate_inspect; 0 if unknown."""
+        if e.op == "text":
+            return len(e.args[0])
+        if e.op == "all":
+            return 0
+        ref = e.args[0]
+        size = self.fields[ref.name].size
+        if ref.start is None:
+            return size
+        if ref.length is not None:
+            return int(ref.length.args[0]) if ref.length.op == "number" else 0
+        return size - int(ref.start.args[0]) + 1 if ref.start.op == "number" else 0
+
+    def inspect_region(self):
+        region = []
+        for _ in range(2):
+            word = "BEFORE" if self.at("BEFORE") else "AFTER" if self.at("AFTER") else None
+            if word is None or any(w == word.lower() for w, _ in region):
+                break
+            self.take()
+            self.accept("INITIAL")
+            region.append((word.lower(), self.inspect_operand()))
+        return tuple(region)
+
+    def inspect_statement(self, line):
+        if self.at("BACKWARD"):
+            self.error("INSPECT BACKWARD non pris en charge (cobc: PENDING)")
+        if self.t.string or not self.candidates(self.t.key):
+            self.error("cible INSPECT littérale ou fonction non prise en charge")
+        target = self.variable()
+        clauses = []
+        if self.accept("TALLYING"):
+            items, counter, previous = [], None, None
+            while True:
+                if self.at("CHARACTERS"):
+                    # check_preceding_tallying_phrases lets ALL/LEADING/TRAILING
+                    # precede CHARACTERS, which then counts characters.
+                    if previous is None:
+                        self.error("missing FOR phrase before CHARACTERS/ALL/LEADING/TRAILING phrase")
+                    self.take()
+                    items.append((counter, "characters", None, self.inspect_region()))
+                    previous = "characters"
+                elif self.at("ALL") or self.at("LEADING") or self.at("TRAILING"):
+                    if previous is None:
+                        self.error("missing FOR phrase before CHARACTERS/ALL/LEADING/TRAILING phrase")
+                    if previous in {"characters", "keyword"}:
+                        self.error("missing value between ALL/LEADING/TRAILING words")
+                    mode = self.take().key.lower()
+                    previous = "keyword"
+                elif self.tallying_counter_ahead():
+                    if previous == "keyword":
+                        self.error("FOR phrase cannot immediately follow ALL/LEADING/TRAILING")
+                    if previous == "for":
+                        self.error("missing CHARACTERS/ALL/LEADING/TRAILING phrase after FOR phrase")
+                    counter = self.variable()
+                    self.expect("FOR")
+                    f = self.fields[counter.name]
+                    if f.kind != "number" or counter.start is not None or f.usage == "INDEX" or f.index_for:
+                        self.error("compteur TALLYING numérique requis")
+                    previous = "for"
+                elif previous in {"keyword", "value"} and self.inspect_operand_start():
+                    value = self.inspect_operand()
+                    items.append((counter, mode, value, self.inspect_region()))
+                    previous = "value"
+                else:
+                    break
+            if previous not in {"characters", "value"}:
+                self.error("TALLYING clause is incomplete")
+            clauses.append(("tallying", tuple(items)))
+        if self.accept("REPLACING"):
+            items, mode = [], None
+            while True:
+                if self.accept("CHARACTERS"):
+                    self.expect("BY")
+                    to = self.inspect_operand()
+                    if to.op == "text" and len(to.args[0]) != 1:
+                        self.error("operand has wrong size")
+                    items.append(("characters", None, to, self.inspect_region()))
+                    mode = None
+                    continue
+                keyword = next((w for w in ("ALL", "LEADING", "FIRST", "TRAILING") if self.at(w)), None)
+                if keyword:
+                    self.take()
+                    mode = keyword.lower()
+                elif not self.inspect_operand_start():
+                    break
+                if mode is None:
+                    self.error("INSPECT missing ALL/FIRST/LEADING/TRAILING")
+                source = self.inspect_operand()
+                self.expect("BY")
+                to = self.inspect_operand(all_allowed=True)
+                self.inspect_sizes(source, to, "REPLACING")
+                items.append((mode, source, to, self.inspect_region()))
+            if not items:
+                self.error("REPLACING incomplet")
+            clauses.append(("replacing", tuple(items)))
+        if not clauses:
+            if not self.accept("CONVERTING"):
+                self.error("TALLYING, REPLACING ou CONVERTING attendu")
+            source = self.inspect_operand()
+            self.expect("TO")
+            to = self.inspect_operand(all_allowed=True)
+            self.inspect_sizes(source, to, "CONVERTING")
+            clauses.append(("converting", source, to, self.inspect_region()))
+        return Stmt("inspect", (target, tuple(clauses)), line)
+
+    def inspect_sizes(self, source, to, clause):
+        """validate_inspect: a figurative source counts as size 1, a figurative target is unchecked."""
+        size1 = 1 if source.op == "all" else self.operand_size(source)
+        # An ALL literal target keeps its literal size; a figurative has none.
+        size2 = self.operand_size(to) if to.op != "all" else (len(to.args[0]) if to.literal_all else 0)
+        if size1 and size2 and size1 != size2:
+            self.error(f"{clause} operands differ in size")
+
+    def table_indexes(self, table):
+        return [name for name, field in self.fields.items() if field.index_for == table]
+
+    def search_statement(self, line):
+        """SEARCH [ALL] table, as cobc's output_search_whens/output_search_all."""
+        search_all = self.accept("ALL")
+        label = self.name()
+        qualifiers = []
+        while self.accept("OF") or self.accept("IN"):
+            qualifiers.append(self.name())
+        table = DataRef(self.resolve(label, qualifiers))
+        field = self.fields[table.name]
+        if self.at("(") or not field.table:
+            self.error("SEARCH requiert une table OCCURS sans indice")
+        indexes = self.table_indexes(table.name)
+        if not indexes:
+            self.error("SEARCH requiert une table INDEXED BY")
+        varying = None
+        if not search_all and self.accept("VARYING"):
+            varying = self.variable()
+            var = self.fields[varying.name]
+            if varying.indices or varying.start is not None or not (
+                    var.index_for or var.usage == "INDEX" or (var.kind == "number" and var.scale == 0)):
+                self.error("SEARCH VARYING requiert un index ou un entier")
+        index = varying.name if varying is not None and varying.name in indexes else indexes[0]
+        at_end = None
+        if self.accept("AT") or self.at("END"):
+            self.expect("END")
+            at_end = self.block({"WHEN"})
+        whens = []
+        while self.accept("WHEN"):
+            condition = self.condition()
+            whens.append((condition, self.block({"WHEN", "END-SEARCH"})))
+        if not whens:
+            self.error("SEARCH requiert au moins un WHEN")
+        self.accept("END-SEARCH")
+        if not search_all:
+            return Stmt("search", (table.name, index, varying, at_end, whens), line)
+        if len(whens) != 1:
+            self.error("SEARCH ALL requiert un seul WHEN")
+        # cb_build_search_all: one comparison per declared key, in key order;
+        # ascending KEY = value, descending value = KEY.
+        bound = {}
+
+        def collect(expr):
+            if expr.op == "condition":
+                # build_cond_88: one VALUE gives parent = value; more is an OR.
+                ref = expr.args[0]
+                condition = self.conditions[ref.name]
+                if len(condition.values) != 1 or condition.values[0][0] is not condition.values[0][1]:
+                    self.error("invalid SEARCH ALL condition")
+                token = condition.values[0][0]
+                if not token.string and not re.fullmatch(r"[+-]?\d+(\.\d+)?", token.text):
+                    self.error("condition SEARCH ALL avec constante figurative non prise en charge")
+                expr = Expr("cmp=", (Expr("var", (DataRef(condition.parent, ref.indices),)),
+                                     Expr("text" if token.string else "number", (token.text,))))
+            if expr.op == "and":
+                collect(expr.args[0]); collect(expr.args[1])
+            elif expr.op == "cmp=":
+                left, right = expr.args
+                for key, other in ((left, right), (right, left)):
+                    if key.op == "var" and any(self.key_field(table.name, label) == key.args[0].name
+                                               for _, label in field.search_keys):
+                        bound[key.args[0].name] = (key, other)
+                        return
+                self.error("condition SEARCH ALL: une clé ASCENDING/DESCENDING est requise")
+            else:
+                self.error("condition SEARCH ALL limitée à clé = valeur [AND ...]")
+        collect(whens[0][0])
+        keys = []
+        for descending, label in field.search_keys:
+            name = self.key_field(table.name, label)
+            if name in bound:
+                key, value = bound[name]
+                keys.append((value, key) if descending else (key, value))
+        return Stmt("search_all", (table.name, index, at_end, keys, whens[0][1]), line)
+
+    def key_field(self, table, label):
+        names = [name for name, f in self.fields.items()
+                 if f.label == label and (name == table or name.startswith(table + "."))]
+        if len(names) != 1:
+            self.error(f"clé de table introuvable ou ambiguë: {label}")
+        return names[0]
 
     def sort_statement(self, verb, line):
         """SORT/MERGE sd ON ASCENDING/DESCENDING KEY ... as cobc emits it:
@@ -1929,6 +2270,12 @@ class Parser:
                     walk(s.args[2], section); walk(s.args[3], section)
                 elif s.op in {"write", "rewrite", "delete", "start", "call_program", "return_sort"}:
                     walk(s.args[-2], section); walk(s.args[-1], section)
+                elif s.op == "search":
+                    walk(s.args[3] or [], section)
+                    for _, body in s.args[4]:
+                        walk(body, section)
+                elif s.op == "search_all":
+                    walk(s.args[2] or [], section); walk(s.args[4], section)
         if program.blocks:
             for block in program.blocks:
                 walk(block.body, block.section)

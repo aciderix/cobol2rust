@@ -78,8 +78,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 291 tests Python, avec un test d'inspection du PE
-Windows ignoré (292 découverts), et les 78 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 300 tests Python, avec un test d'inspection du PE
+Windows ignoré (301 découverts), et les 85 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -115,7 +115,7 @@ Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-`SEARCH`, `USAGE INDEX` explicite, niveaux 66/78,
+niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, `COPY REPLACING`, conditions abrégées,
 fonctions intrinsèques, appels externes, `ALTER`, `GO TO` sans cible,
@@ -261,6 +261,28 @@ les alphabets NATIVE, STANDARD-1, STANDARD-2 et ASCII (sans effet sur une
 machine ASCII, y compris en PROGRAM COLLATING SEQUENCE), les classes
 utilisateur et SYMBOLIC CHARACTERS. CURRENCY SIGN, DECIMAL-POINT IS COMMA et
 les alphabets non natifs restent refusés. ACCEPT reproduit `cob_accept`.
+
+## SEARCH, USAGE INDEX et INSPECT
+
+`SEARCH` (index VARYING ou premier index de la table, AT END, WHEN multiples)
+et `SEARCH ALL` (recherche dichotomique de cobc sur les clés ASCENDING/
+DESCENDING) suivent le code généré par cobc. `USAGE INDEX` explicite est un
+entier natif de 4 octets petit-boutiste, copié brut vers un groupe.
+`INSPECT` TALLYING, REPLACING et CONVERTING, avec BEFORE/AFTER INITIAL, est un
+portage de `strings.c` : marqueurs et tampon de remplacement statiques partagés
+entre instructions (y compris le marquage incomplet de LEADING en TALLYING),
+signe incrusté retiré puis remis, compteurs mis à jour par `cob_add_int`
+(troncature des chiffres de poids fort). Un accès hors des tampons de libcob,
+qui ferait planter le programme natif, est un arrêt nommé. Les cibles binaires
+ou packées et INSPECT BACKWARD restent refusés.
+
+`EVALUATE` suit `cb_emit_evaluate` : sujets multiples `ALSO`, `TRUE`/`FALSE`,
+objets `ANY`, `NOT`, `THRU`, conditions, lignes `WHEN` consécutives partageant
+les mêmes instructions, et mêmes comparaisons qu'un `IF`. Sans `END-IF`, un
+`ELSE` se rattache au `IF` ouvert le plus proche. Un niveau 88 de groupe
+compare la zone en alphanumérique. Comme le scanner de cobc, un signe collé à
+des chiffres après un opérande est un littéral signé : `T(I +1)` a deux
+sous-scripts.
 
 ## Calcul décimal et limites explicites
 

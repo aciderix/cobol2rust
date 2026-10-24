@@ -137,6 +137,22 @@ class ControlGraph:
             else:
                 position = self._add("sort_using", (name, source[1], position), stmt)
             return self._add("sort_init", (name, keys, position), stmt)
+        if op == "search":
+            table, index, varying, at_end, whens = args
+            # Loop: end test, the WHENs in order, then index + 1 (and the
+            # VARYING item set from it) before testing again.
+            step = self._add("search_step", (index, varying, None), stmt)
+            position = step
+            for condition, body in reversed(whens):
+                position = self._add("branch", (condition, self._body(body, after, block), position), stmt)
+            ending = self._body(at_end, after, block) if at_end is not None else after
+            test = self._add("search_test", (table, index, ending, position), stmt)
+            self.nodes[step] = Node("search_step", (index, varying, test), stmt)
+            return test
+        if op == "search_all":
+            table, index, at_end, keys, body = args
+            ending = self._body(at_end, after, block) if at_end is not None else after
+            return self._add("search_all", (table, index, keys, self._body(body, after, block), ending), stmt)
         if op == "return_sort":
             name, into, at_end, not_at_end = args
             return self._add("return_sort", (name, into, self._body(at_end, after, block),

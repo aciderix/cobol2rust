@@ -3,7 +3,8 @@ import re
 
 from .frontend import Condition, Field, Token, VERBS
 
-USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4"}
+USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
+          "INDEX"}
 
 
 def literal(p):
@@ -206,8 +207,10 @@ def declaration(p, file_record=False):
         p.error("nom réservé: " + p.t.key)
     label = "FILLER" if implicit_filler else p.name()
     if level == 88:
-        if not p.last_data or not p.fields[p.last_data].picture:
-            p.error("niveau 88 requiert une donnée élémentaire précédente")
+        if not p.last_data:
+            p.error("niveau 88 requiert une donnée précédente")
+        # A group's condition compares its storage as alphanumeric text.
+        group_condition = not p.fields[p.last_data].picture and p.fields[p.last_data].usage != "INDEX"
         key = p.last_data + "." + label
         if key in p.conditions or label in VERBS:
             p.error("condition dupliquée ou réservée")
@@ -219,6 +222,8 @@ def declaration(p, file_record=False):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
+            if group_condition and not p.t.string:
+                p.error("niveau 88 de groupe limité aux littéraux alphanumériques")
             if p.accept("ALL") or figurative:
                 # ALL literal and figurative constants: repeated over the item.
                 token = literal(p)
@@ -272,6 +277,7 @@ def declaration(p, file_record=False):
     blank_zero = justified = False
     sign_clause = None
     synchronized = False
+    search_keys = []
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -306,21 +312,24 @@ def declaration(p, file_record=False):
             table = True
             p.accept("TIMES")
             if variable:
-                p.expect("DEPENDING"); p.expect("ON")
+                p.expect("DEPENDING"); p.accept("ON")
                 depending = p.name()
-            # ASCENDING/DESCENDING KEY only serves SEARCH ALL, which stays refused.
-            while p.accept("ASCENDING") or p.accept("DESCENDING"):
-                p.accept("KEY"); p.accept("IS")
-                p.name()
-                while not p.t.string and p.t.key not in {"ASCENDING", "DESCENDING", "INDEXED", "PIC", "PICTURE",
-                                                         "VALUE", "USAGE", ".", "<EOF>"} | USAGES:
-                    p.name()
+        elif p.at("ASCENDING") or p.at("DESCENDING"):
+            # ASCENDING/DESCENDING KEY: the keys of SEARCH ALL, in order.
+            if not table:
+                p.error("KEY requiert OCCURS")
+            descending = p.take().key == "DESCENDING"
+            p.accept("KEY"); p.accept("IS")
+            search_keys.append((descending, p.name()))
+            while not p.t.string and p.t.key not in {"ASCENDING", "DESCENDING", "INDEXED", "PIC", "PICTURE",
+                                                     "VALUE", "USAGE", ".", "<EOF>"} | USAGES:
+                search_keys.append((descending, p.name()))
         elif p.accept("INDEXED"):
             if not table:
                 p.error("INDEXED BY requiert OCCURS")
-            p.expect("BY")
+            p.accept("BY")
             names = [p.name()]
-            while p.t.key not in {"PIC", "PICTURE", "VALUE", "USAGE", ".", "<EOF>"} | USAGES:
+            while p.t.key not in {"PIC", "PICTURE", "VALUE", "USAGE", "ASCENDING", "DESCENDING", ".", "<EOF>"} | USAGES:
                 p.accept(",")
                 names.append(p.name())
             for name in names:
@@ -383,6 +392,10 @@ def declaration(p, file_record=False):
                 p.error("USAGE/clause non pris en charge")
             usage = p.take().key
     p.expect(".")
+    # USAGE INDEX without PICTURE is an elementary index data item, unless
+    # subordinate entries follow (a group whose USAGE they inherit).
+    has_children = (not p.t.string and p.t.key.isdigit() and level not in {66, 77}
+                    and int(p.t.key) not in {66, 77, 88} and level < int(p.t.key) <= 49)
     # Group USAGE applies to subordinate elementary items without their own
     # USAGE; GnuCOBOL lets an explicit subordinate USAGE take precedence.
     ancestors = []
@@ -402,6 +415,13 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 65536)
 
+    if usage == "INDEX" and not picture and not has_children:
+        if initial is not None:
+            p.error("VALUE sur un article USAGE INDEX non pris en charge")
+        # cobc: a native signed int (4 bytes), holding an occurrence number.
+        picture = "S9(9)"
+    elif usage == "INDEX" and picture:
+        p.error("USAGE INDEX ne prend pas de PICTURE")
     expanded = re.sub(r"([9XZAP])\((\d+)\)", repeat, picture)
     group_value = group_usage = None
     if not picture:
@@ -464,6 +484,9 @@ def declaration(p, file_record=False):
     if figurative == "0" and initial is not None and kind == "text" and picture and not alnum_edit:
         # VALUE ZERO of an alphanumeric item: zeros in every position.
         initial = Token("0" * digits, initial.line, True)
+    if isinstance(figurative, tuple) and figurative[1] == "0" and kind == "number":
+        # VALUE ALL ZERO of a numeric item is its zero value.
+        initial, figurative = Token("0", initial.line), "0"
     if isinstance(figurative, tuple):
         if kind != "text" or alnum_edit:
             p.error("VALUE ALL limité aux PIC X/A et groupes")
@@ -499,6 +522,7 @@ def declaration(p, file_record=False):
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.linkage = linkage
     descriptor.occurs_min, descriptor.depending = minimum, depending
+    descriptor.search_keys = search_keys
     descriptor.group_value, descriptor.group_usage = group_value, group_usage
     descriptor.editing = expanded if kind == "edited" else ""
     descriptor.alnum_edit = alnum_edit

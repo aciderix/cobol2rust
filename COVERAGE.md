@@ -552,6 +552,20 @@ alphanumérique). `nist_verify` reproduit `COB_SWITCH_1=ON`/`COB_SWITCH_2=OFF`
 de report.pl. Émission acceptée : **205/458** ; revérification : **203/203
 programmes conformes**, 4650 PASS, 0 FAIL (`build/nist-verify-special.json`).
 
+## Progression : SEARCH, USAGE INDEX, INSPECT, EVALUATE
+
+SEARCH et SEARCH ALL (code généré par cobc, y compris une condition 88 de clé
+comme `build_cond_88`), USAGE INDEX explicite (entier natif petit-boutiste),
+INSPECT TALLYING/REPLACING/CONVERTING porté de `strings.c` (tampons statiques,
+marquage LEADING incomplet, signe incrusté, `cob_add_int` tronquant), EVALUATE
+réécrit d'après `cb_emit_evaluate` (ALSO, ANY, THRU, NOT, TRUE/FALSE, WHEN
+consécutifs), ELSE imbriqués sans END-IF, 88 de groupe, SET mixte index/entier,
+BY et ON facultatifs dans INDEXED BY / DEPENDING ON, KEY après INDEXED,
+littéraux signés du scanner de cobc dans les sous-scripts, et passage BY
+REFERENCE de l'allocation entière d'un groupe ODO (IC207A). Émission acceptée :
+**229/458** ; revérification : **227/227 programmes conformes**, 5269 PASS,
+0 FAIL (`build/nist-verify-inspect.json`, `build/nist-verify-subscripts.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en
