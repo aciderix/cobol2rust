@@ -77,7 +77,15 @@ def inspect_source(path, fmt, includes, call_paths=()):
         program = Parser(expanded).parse()
         result["program"] = program.name
         stage = "emission"
-        emit_unit(path, fmt, includes, [path.parent / relative for relative in call_paths])
+        if program.using:
+            # A program with PROCEDURE DIVISION USING only runs when called:
+            # it is emitted as a subprogram, as a caller's run unit would.
+            from cobol2rust.emitter import Emitter, generate_unit
+            generate_unit([Emitter(program, struct="Program1", subprogram=True,
+                                   called=[program.entry_name], present=set())])
+            result["subprogram"] = True
+        else:
+            emit_unit(path, fmt, includes, [path.parent / relative for relative in call_paths])
         result["status"] = "emission_accepted"
     except CobolError as error:
         result.update(status=stage + "_blocked", diagnostic=str(error))

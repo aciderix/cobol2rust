@@ -79,7 +79,7 @@ Le projet produit contient :
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
 également validé sous Linux 304 tests Python, avec un test d'inspection du PE
-Windows ignoré (305 découverts), et les 95 comparaisons COBOL/Rust du corpus actuel.
+Windows ignoré (305 découverts), et les 96 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -118,7 +118,8 @@ Sont notamment refusés : tables variables à offsets ou strides variables,
 niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
-fonctions intrinsèques, appels externes, `ALTER`, `GO TO` sans cible,
+fonctions intrinsèques hors liste ci-dessous (trigonométrie, LOG, SQRT,
+STANDARD-DEVIATION, RANDOM, CURRENT-DATE, WHEN-COMPILED), appels externes, `ALTER`, `GO TO` sans cible,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, noms de procédure qualifiés ou homonymes et
 segments SECTION numérotés,
 fichiers à enregistrements variables, relatifs/indexés, SQL embarqué, CICS et

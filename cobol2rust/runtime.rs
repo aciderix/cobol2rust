@@ -476,3 +476,240 @@ mod tests {
         assert_eq!(field.show(), "1.000000");
     }
 }
+
+// Intrinsic functions, ported from GnuCOBOL 3.2 libcob/intrinsic.c. Numeric
+// results are exact decimals (cob_alloc_field sizes them to fit).
+pub mod intrinsic {
+    use super::{fail, power, absolute, Number, Value};
+    use num_bigint::{BigInt, Sign};
+
+    fn trimmed(n: Number) -> Number { n.trimmed() }
+    fn value(n: Number) -> Value { Value::Num(n, None) }
+    fn int_of(n: i128) -> Value { Value::Num(Number::new(BigInt::from(n), 0), None) }
+    /// cob_get_int: the integer part, which must fit a C int.
+    fn get_int(v: &Value) -> i64 {
+        let units = v.num().units(0, false);
+        let n: i64 = units.to_string().parse().unwrap_or_else(|_| fail("function argument outside the C int range"));
+        if n < i32::MIN as i64 || n > i32::MAX as i64 { fail("function argument outside the C int range"); }
+        n
+    }
+    fn argument_error(name: &str) -> ! {
+        fail(&format!("FUNCTION {name}: argument outside its domain (EC-ARGUMENT-FUNCTION) not modelled"))
+    }
+    /// FUNCTION INTEGER: the greatest integer not above the argument.
+    pub fn integer(v: &Value) -> Value {
+        let n = v.num();
+        let divisor = power(n.scale);
+        let (q, r) = (&n.n / &divisor, &n.n % &divisor);
+        value(Number::new(if n.n.sign() == Sign::Minus && r != BigInt::from(0) { q - 1 } else { q }, 0))
+    }
+    pub fn integer_part(v: &Value) -> Value {
+        let n = v.num();
+        value(Number::new(&n.n / power(n.scale), 0))
+    }
+    /// cob_mod_or_rem: f1 - f2 * INTEGER (MOD) or INTEGER-PART (REM) of f1 / f2.
+    pub fn mod_or_rem(f1: &Value, f2: &Value, rem: bool) -> Value {
+        if f2.num().n == BigInt::from(0) { argument_error(if rem { "REM" } else { "MOD" }); }
+        let quotient = value(f1.num().divide(f2.num()));
+        let whole = if rem { integer_part(&quotient) } else { integer(&quotient) };
+        value(f1.num().plus(whole.num().times(f2.num()).neg()))
+    }
+    pub fn factorial(v: &Value) -> Value {
+        let n = get_int(v);
+        if n < 0 { argument_error("FACTORIAL"); }
+        if n > 2000 { fail("FACTORIAL argument too large for this runtime"); }
+        let mut result = BigInt::from(1);
+        for i in 2..=n { result *= i; }
+        value(Number::new(result, 0))
+    }
+    pub fn sum(args: &[Value]) -> Value {
+        let mut total = Number::new(BigInt::from(0), 0);
+        for a in args { total = total.plus(a.num()); }
+        value(total)
+    }
+    pub fn mean(args: &[Value]) -> Value {
+        if args.len() == 1 { return args[0].snapshot(); }
+        value(sum(args).num().divide(Number::new(BigInt::from(args.len()), 0)))
+    }
+    fn select(args: &[Value], want: std::cmp::Ordering) -> (usize, Value) {
+        let mut best = 0;
+        for (i, a) in args.iter().enumerate().skip(1) {
+            if a.compare(&args[best]) == want { best = i; }
+        }
+        (best, args[best].snapshot())
+    }
+    pub fn max(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Greater).1 }
+    pub fn min(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Less).1 }
+    pub fn ord_max(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Greater).0 as i128 + 1) }
+    pub fn ord_min(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Less).0 as i128 + 1) }
+    /// get_min_and_max_of_args: the first minimum and the first maximum.
+    fn min_and_max(args: &[Value]) -> (Value, Value) {
+        let (mut low, mut high) = (0, 0);
+        for i in 1..args.len() {
+            if args[i].compare(&args[low]) == std::cmp::Ordering::Less { low = i; }
+            if args[i].compare(&args[high]) == std::cmp::Ordering::Greater { high = i; }
+        }
+        (args[low].snapshot(), args[high].snapshot())
+    }
+    pub fn range(args: &[Value]) -> Value {
+        let (low, high) = min_and_max(args);
+        value(high.num().plus(low.num().neg()))
+    }
+    pub fn midrange(args: &[Value]) -> Value {
+        let (low, high) = min_and_max(args);
+        value(low.num().plus(high.num()).divide(Number::new(BigInt::from(2), 0)))
+    }
+    pub fn median(args: &[Value]) -> Value {
+        if args.len() == 1 { return args[0].snapshot(); }
+        let mut sorted: Vec<Value> = args.iter().map(|a| a.snapshot()).collect();
+        sorted.sort_by(|a, b| a.compare(b));
+        let i = sorted.len() / 2;
+        if sorted.len() % 2 == 1 { return sorted[i].clone(); }
+        value(sorted[i - 1].num().plus(sorted[i].num()).divide(Number::new(BigInt::from(2), 0)))
+    }
+    /// GET_VARIANCE: mean, then the mean of the squared differences.
+    pub fn variance(args: &[Value]) -> Value {
+        if args.len() == 1 { return value(Number::new(BigInt::from(0), 0)); }
+        let n = Number::new(BigInt::from(args.len()), 0);
+        let mut total = Number::new(BigInt::from(0), 0);
+        for a in args { total = total.plus(a.num()); }
+        let mean = total.divide(n.clone());
+        let mut squares = Number::new(BigInt::from(0), 0);
+        for a in args {
+            let d = a.num().plus(mean.clone().neg());
+            squares = squares.plus(d.clone().times(d));
+        }
+        value(squares.divide(n))
+    }
+    pub fn annuity(rate: &Value, periods: &Value) -> Value {
+        let (r, p) = (rate.num(), periods.num());
+        if r.n.sign() == Sign::Minus || p.n.sign() != Sign::Plus || p.scale != 0 { argument_error("ANNUITY"); }
+        if r.n == BigInt::from(0) { return value(Number::new(BigInt::from(1), 0).divide(p)); }
+        let base = trimmed(r.clone().plus(Number::new(BigInt::from(1), 0)));
+        let raised = base.power(trimmed(p.neg()));
+        let denominator = trimmed(Number::new(BigInt::from(1), 0).plus(raised.neg()));
+        value(trimmed(r).divide(denominator))
+    }
+    pub fn present_value(args: &[Value]) -> Value {
+        let rate = args[0].num().plus(Number::new(BigInt::from(1), 0));
+        let mut total = Number::new(BigInt::from(0), 0);
+        for (i, a) in args.iter().enumerate().skip(1) {
+            let mut d3 = rate.clone();
+            if i > 1 { d3 = Number::new(d3.n.pow(i as u32), d3.scale * i as u32); }
+            total = total.plus(a.num().divide(d3));
+        }
+        value(total)
+    }
+    pub fn char_of(v: &Value) -> Value {
+        let i = get_int(v);
+        Value::Bytes(vec![if (1..=256).contains(&i) { (i - 1) as u8 } else { 0 }])
+    }
+    pub fn ord(v: &Value) -> Value {
+        let b = v.bytes();
+        int_of(*b.first().unwrap_or_else(|| fail("FUNCTION ORD of an empty item")) as i128 + 1)
+    }
+    fn ascii_only(bytes: &[u8], name: &str) {
+        if bytes.iter().any(|b| *b >= 128) { fail(&format!("FUNCTION {name}: case of a non-ASCII byte depends on the locale")); }
+    }
+    pub fn upper_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "UPPER-CASE"); Value::Bytes(b.to_ascii_uppercase()) }
+    pub fn lower_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "LOWER-CASE"); Value::Bytes(b.to_ascii_lowercase()) }
+    pub fn reverse(v: &Value) -> Value { let mut b = v.bytes(); b.reverse(); Value::Bytes(b) }
+
+    const NORMAL_DAYS: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+    const LEAP_DAYS: [i64; 13] = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
+    const NORMAL_MONTH: [i64; 13] = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const LEAP_MONTH: [i64; 13] = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    fn leap(y: i64) -> bool { (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 }
+    fn days_in_year(y: i64) -> i64 { 365 + leap(y) as i64 }
+    fn days_up_to_year(y: i64) -> i64 { (1601..y).map(days_in_year).sum() }
+    pub fn integer_of_date(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
+        if !(1601..=9999).contains(&year) || !(1..=12).contains(&month) { argument_error("INTEGER-OF-DATE"); }
+        let limit = if leap(year) { LEAP_MONTH[month as usize] } else { NORMAL_MONTH[month as usize] };
+        if !(1..=limit).contains(&day) { argument_error("INTEGER-OF-DATE"); }
+        let before = if leap(year) { LEAP_DAYS[month as usize - 1] } else { NORMAL_DAYS[month as usize - 1] };
+        int_of((days_up_to_year(year) + before + day) as i128)
+    }
+    pub fn integer_of_day(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, day) = (date / 1000, date % 1000);
+        if !(1601..=9999).contains(&year) || !(1..=days_in_year(year)).contains(&day) { argument_error("INTEGER-OF-DAY"); }
+        int_of((days_up_to_year(year) + day) as i128)
+    }
+    fn year_of(days: i64) -> (i64, i64) {
+        let (mut days, mut year, mut length) = (days, 1601, 365);
+        while days > length { days -= length; year += 1; length = days_in_year(year); }
+        (year, days)
+    }
+    pub fn date_of_integer(v: &Value) -> Value {
+        let n = get_int(v);
+        if !(1..=3067671).contains(&n) { argument_error("DATE-OF-INTEGER"); }
+        let (year, mut days) = year_of(n);
+        let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+        let mut month = 13;
+        for i in 1..13 { if days <= table[i] { days -= table[i - 1]; month = i as i64; break; } }
+        int_of((year * 10000 + month * 100 + days) as i128)
+    }
+    pub fn day_of_integer(v: &Value) -> Value {
+        let n = get_int(v);
+        if !(1..=3067671).contains(&n) { argument_error("DAY-OF-INTEGER"); }
+        let (year, days) = year_of(n);
+        int_of((year * 1000 + days) as i128)
+    }
+    /// numval: the digits, sign and decimal point of a NUMVAL/NUMVAL-C argument.
+    pub fn length(v: &Value) -> Value { int_of(v.bytes().len() as i128) }
+    pub fn numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
+        let data = v.bytes();
+        if data.is_empty() { return int_of(0); }
+        let mut end = data.len() - 1;
+        while end > 0 && (data[end] == b' ' || data[end] == 0) { end -= 1; }
+        let mut p = 0;
+        while p != end && (data[p] == b' ' || data[p] == b'0') { p += 1; }
+        let (mut digits, mut decimals, mut sign, mut point, mut exception) = (Vec::new(), 0u32, 0i32, false, false);
+        let mut currency_seen = false;
+        // A currency argument counts only when it is shorter than the data.
+        let currency = currency.filter(|c| c.len() < (end - p + 1).min(38));
+        while p <= end {
+            if end - p + 1 >= 2 && matches!((data[p].to_ascii_uppercase(), data[p + 1].to_ascii_uppercase()), (b'C', b'R') | (b'D', b'B')) {
+                if sign != 0 { exception = true; }
+                else if data[p + 2..=end].iter().any(|b| *b != b' ') { exception = true; }
+                sign = -1;
+                break;
+            }
+            if let Some(symbol) = &currency {
+                if end - p + 1 >= symbol.len() && data[p..p + symbol.len()] == symbol[..] {
+                    if currency_seen || !digits.is_empty() || point { exception = true; }
+                    currency_seen = true;
+                    p += symbol.len();
+                    continue;
+                }
+            } else if currency_sign && data[p] == b'$' {
+                if currency_seen { exception = true; } else { currency_seen = true; }
+                p += 1;
+                continue;
+            }
+            match data[p] {
+                b'0' if digits.is_empty() && !point => {},
+                b'0'..=b'9' => {
+                    if point { decimals += 1; }
+                    digits.push(data[p]);
+                    if digits.len() > 38 { exception = true; break; }
+                },
+                b'+' => if sign != 0 { exception = true } else { sign = 1 },
+                b'-' => if sign != 0 { exception = true } else { sign = -1 },
+                b' ' => {},
+                b'.' => { if point { exception = true; } point = true; },
+                b',' if currency_sign => {},
+                _ => exception = true,
+            }
+            p += 1;
+        }
+        if exception { fail("FUNCTION NUMVAL: invalid argument (EC-ARGUMENT-FUNCTION) not modelled"); }
+        let mut n = if digits.is_empty() { BigInt::from(0) } else { BigInt::parse_bytes(&digits, 10).unwrap() };
+        if sign == -1 { n = -n; }
+        value(Number::new(n, decimals))
+    }
+    #[allow(dead_code)]
+    fn unused(_: &BigInt) -> BigInt { absolute(&BigInt::from(0)) }
+}

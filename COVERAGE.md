@@ -593,6 +593,20 @@ conformes**, 6104 PASS, 0 FAIL (`build/nist-verify-corresponding.json`).
 Émission acceptée : **262/458** ; revérification : **260/260 programmes
 conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
 
+## Progression : fonctions intrinsèques
+
+Port de libcob/intrinsic.c pour INTEGER, INTEGER-PART, MOD, REM, FACTORIAL,
+SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
+ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
+INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
+LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
+Restent refusées : trigonométrie, LOG/LOG10, SQRT, STANDARD-DEVIATION, RANDOM,
+CURRENT-DATE, WHEN-COMPILED et la modification de référence d'un résultat.
+`tools/coverage.py` émet les sources à PROCEDURE DIVISION USING comme
+sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
+revérification : **289/289 programmes principaux conformes**, 6608 PASS,
+0 FAIL (`build/nist-verify-intrinsics.json`).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en

@@ -1,5 +1,16 @@
 # Validation — 22 octobre 2026
 
+## Fonctions intrinsèques — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **96/96 comparaisons locales conformes** ; nouvelle fixture
+  `intrinsic_functions.cob`.
+- NIST : **313/458** émissions acceptées, dont 24 sous-programmes `lib`
+  désormais émis comme sous-programmes et vérifiés au travers de leurs
+  appelants ; **289/289 programmes principaux conformes** (6608 PASS, 0 FAIL,
+  7 DELETED, 1 INSPECT) : `build/nist-verify-intrinsics.json`,
+  `build/coverage-nist-intrinsics.json`.
+
 ## COPY REPLACING — 24 octobre 2026
 
 - **305 tests découverts : 304 réussis, un test PE Windows ignoré.**

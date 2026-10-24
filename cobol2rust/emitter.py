@@ -31,6 +31,8 @@ def byte_pattern(text):
 class Emitter:
     def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=()):
         self.program = program
+        from .frontend import Parser
+        self.program_functions = Parser.FUNCTIONS
         self.struct = struct
         self.subprogram = subprogram
         # CALL targets converted with this run unit (literal names).
@@ -67,6 +69,15 @@ class Emitter:
         return f"temp{self.counter}"
 
     def kind(self, e):
+        if e.op == "function":
+            name, args = e.args
+            result = self.program_functions[name][1]
+            if result == "args":
+                kinds = {"text" if self.kind(a) in {"text", "edited"} else self.kind(a) for a in args}
+                if len(kinds) != 1:
+                    raise CobolError(f"FUNCTION {name}: arguments numériques et alphanumériques mêlés non pris en charge")
+                return kinds.pop()
+            return result
         if e.op == "var":
             return "text" if e.args[0].start is not None else self.program.fields[e.args[0].name].kind
         if e.op in {"number", "text"}:
@@ -122,6 +133,8 @@ class Emitter:
             item, members = args
             table = "[" + ", ".join(f"{m}u8" for m in members) + "]"
             return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
+        if op == "function":
+            return self.function(*args)
         if op == "alpha_class":
             # cob_is_alpha/upper/lower: spaces and letters of the C library's
             # classification; bytes above 127 depend on the locale.
@@ -175,6 +188,49 @@ class Emitter:
             operator = {"=": "==", "<>": "!=", "<": "<", ">": ">", "<=": "<=", ">=": ">="}[op[3:]]
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
+
+    def function(self, name, args):
+        """A call into runtime::intrinsic (libcob intrinsic.c)."""
+        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH"}
+        values = []
+        for a in args:
+            if textual:
+                if a.op == "var":
+                    # The function sees the argument's storage bytes.
+                    values.append(f"Value::Bytes(storage_runtime::Operand::of(&{self.reference(a.args[0])}).data)")
+                elif a.op == "text":
+                    values.append(text_value(a.args[0]))
+                elif a.op == "function" and self.kind(a) == "text":
+                    values.append(self.expression(a))
+                else:
+                    raise CobolError(f"FUNCTION {name}: argument alphanumérique attendu")
+            else:
+                if self.kind(a) not in {"number"} and name not in {"MAX", "MIN", "ORD-MAX", "ORD-MIN"}:
+                    raise CobolError(f"FUNCTION {name}: argument numérique attendu")
+                if a.op == "all":
+                    raise CobolError(f"FUNCTION {name}: argument figuratif non pris en charge")
+                values.append(self.expression(a))
+        rust = {"INTEGER": "integer", "INTEGER-PART": "integer_part", "FACTORIAL": "factorial",
+                "CHAR": "char_of", "ORD": "ord", "UPPER-CASE": "upper_case", "LOWER-CASE": "lower_case",
+                "REVERSE": "reverse", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
+                "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer"}
+        listed = {"SUM": "sum", "MEAN": "mean", "MEDIAN": "median", "MIDRANGE": "midrange", "RANGE": "range",
+                  "VARIANCE": "variance", "ORD-MAX": "ord_max", "ORD-MIN": "ord_min", "MAX": "max", "MIN": "min",
+                  "PRESENT-VALUE": "present_value"}
+        if name in rust:
+            return f"runtime::intrinsic::{rust[name]}(&{values[0]})"
+        if name in listed:
+            return f"runtime::intrinsic::{listed[name]}(&[{', '.join(values)}])"
+        if name in {"MOD", "REM"}:
+            return f"runtime::intrinsic::mod_or_rem(&{values[0]}, &{values[1]}, {str(name == 'REM').lower()})"
+        if name == "ANNUITY":
+            return f"runtime::intrinsic::annuity(&{values[0]}, &{values[1]})"
+        if name in {"NUMVAL", "NUMVAL-C"}:
+            currency = f"Some({values[1]}.bytes())" if len(values) > 1 else "None"
+            return f"runtime::intrinsic::numval(&{values[0]}, {str(name == 'NUMVAL-C').lower()}, {currency})"
+        if name == "LENGTH":
+            return f"runtime::intrinsic::length(&{values[0]})"
+        raise CobolError(f"FUNCTION {name} non prise en charge")
 
     def occurs(self, table):
         """output_occurs: the maximum, or the current ODO value."""

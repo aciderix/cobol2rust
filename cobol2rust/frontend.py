@@ -1236,6 +1236,8 @@ class Parser:
         elif t.key == "(":
             left = self.expr()
             self.expect(")")
+        elif t.key == "FUNCTION" and not t.string:
+            left = self.function_call()
         elif t.key in {"TRUE", "FALSE"}:
             left = Expr("bool", (t.key == "TRUE",))
         elif not t.string and t.key in self.switch_conditions and not self.candidates(t.key):
@@ -1263,12 +1265,60 @@ class Parser:
             left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
         return left
 
+    # Intrinsic functions modelled after libcob/intrinsic.c: name -> (arguments, result).
+    FUNCTIONS = {
+        "INTEGER": (1, "number"), "INTEGER-PART": (1, "number"), "MOD": (2, "number"),
+        "REM": (2, "number"), "FACTORIAL": (1, "number"), "SUM": (-1, "number"),
+        "MEAN": (-1, "number"), "MEDIAN": (-1, "number"), "MIDRANGE": (-1, "number"),
+        "RANGE": (-1, "number"), "VARIANCE": (-1, "number"), "ORD-MAX": (-1, "number"),
+        "ORD-MIN": (-1, "number"), "MAX": (-1, "args"), "MIN": (-1, "args"),
+        "ANNUITY": (2, "number"), "PRESENT-VALUE": (-2, "number"), "CHAR": (1, "text"),
+        "ORD": (1, "number"), "UPPER-CASE": (1, "text"), "LOWER-CASE": (1, "text"),
+        "REVERSE": (1, "text"), "INTEGER-OF-DATE": (1, "number"), "INTEGER-OF-DAY": (1, "number"),
+        "DATE-OF-INTEGER": (1, "number"), "DAY-OF-INTEGER": (1, "number"),
+        "NUMVAL": (1, "number"), "NUMVAL-C": (-1, "number"), "LENGTH": (1, "number"),
+    }
+
+    def function_call(self):
+        """FUNCTION name [(exp_list)]: arguments separated by spaces or commas."""
+        name = self.take()
+        if name.string or name.key not in self.FUNCTIONS:
+            self.error(f"FUNCTION {name.text} non prise en charge")
+        count, _ = self.FUNCTIONS[name.key]
+        args = []
+        if self.accept("("):
+            while not self.accept(")"):
+                self.accept(",")
+                if self.at(")"):
+                    continue
+                args.append(self.expr())
+        if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
+                or (name.key == "NUMVAL-C" and len(args) > 2):
+            self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
+        if self.at("("):
+            self.error("modification de référence d'une FUNCTION non prise en charge")
+        if name.key == "LENGTH":
+            # cb_build_intrinsic: the length of a fixed item or literal is a literal.
+            arg = args[0]
+            if arg.op in {"text", "all"} and arg.op == "text":
+                return Expr("number", (str(len(arg.args[0])),))
+            if arg.op == "var" and arg.args[0].start is None:
+                f = self.fields[arg.args[0].name]
+                if not f.depending and not any(self.fields[k].depending for k in self.fields
+                                                if k.startswith(arg.args[0].name + ".")):
+                    return Expr("number", (str(f.size),))
+            if arg.op != "function":
+                self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
+        return Expr("function", (name.key, tuple(args)))
+
     def operand_start(self):
         """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
         t = self.t
         if t.string or re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", t.text):
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
+        if k == "FUNCTION":
+            return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
                 or k in self.switch_conditions or k in self.symbolic
