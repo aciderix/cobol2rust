@@ -77,8 +77,10 @@ def _space(text):
     return text[:1] in {" ", "\n"}
 
 
-def apply(source: str, replacements, line) -> str:
-    """check_replace / check_replace_all over the copybook texts."""
+def apply(source: str, replacements, line, keep_lines=False) -> str:
+    """check_replace / check_replace_all over the copybook texts. With
+    keep_lines, the newlines of a replaced span follow its replacement, so
+    that the next source lines keep their numbers."""
     stream = texts(source)
     out, i = [], 0
     while i < len(stream):
@@ -98,6 +100,8 @@ def apply(source: str, replacements, line) -> str:
                 j += 1
             if matched:
                 out.extend(new_text)
+                if keep_lines:
+                    out.append("\n" * stream[i:j].count("\n"))
                 i = j
                 break
         else:
@@ -176,3 +180,31 @@ def statement_texts(text: str):
         merged.append(result[i])
         i += 1
     return merged
+
+
+def replace_statements(text: str, tokens) -> str:
+    """REPLACE ... BY ... . and REPLACE OFF (ppparse.y replace_statement,
+    cb_set_replace_list): each statement replaces the active list for the
+    text that follows it, COPY expansion and COPY REPLACING included. The
+    statement is removed, its lines kept blank."""
+    pieces, cursor, active, i = [], 0, [], 0
+    while i < len(tokens) - 1:
+        if tokens[i].string or tokens[i].key != "REPLACE":
+            i += 1
+            continue
+        start, line = tokens[i].start, tokens[i].line
+        stop = statement_end(text, tokens[i].end)
+        if stop < 0:
+            raise CobolError(f"ligne {line}: REPLACE sans point final")
+        segment = text[cursor:start]
+        pieces += [apply(segment, active, line, True) if active else segment, "\n" * text[start:stop].count("\n")]
+        words = statement_texts(text[start:stop - 1])[1:]
+        if words and words[0].upper() in {"ALSO", "LAST"}:
+            raise CobolError(f"ligne {line}: REPLACE {words[0].upper()} non pris en charge")
+        active = [] if [w.upper() for w in words] == ["OFF"] else parse_replacing(words, line)
+        cursor = stop
+        while i < len(tokens) and tokens[i].start < stop:
+            i += 1
+    segment = text[cursor:]
+    pieces.append(apply(segment, active, 0, True) if active else segment)
+    return "".join(pieces)

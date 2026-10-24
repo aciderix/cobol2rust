@@ -294,6 +294,13 @@ def declaration(p, file_record=False):
     else:
         component = label
     key = (parent + "." if parent else "") + component
+    if parent and key in p.fields and label not in VERBS:
+        # Homonymous siblings are valid; a reference to them is ambiguous
+        # (cb_ref), which resolve() reports. Keep their keys distinct.
+        duplicate = 2
+        while f"{key}${duplicate}" in p.fields:
+            duplicate += 1
+        key = f"{key}${duplicate}"
     if key in p.fields or label in VERBS or label in {"ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES"}:
         p.error(f"nom de donnée réservé ou dupliqué: {label}")
     picture, usage, initial = "", "DISPLAY", None

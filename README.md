@@ -104,7 +104,7 @@ Ces résultats portent sur les entrées testées.
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
-| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` en SEQUENTIAL, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
@@ -299,7 +299,10 @@ et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
 `STRING` (DELIMITED BY, POINTER, ON OVERFLOW) et `UNSTRING` (DELIMITED BY
 [ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
 reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune
-exception levée). Les mots réservés de cobc sont refusés comme noms.
+exception levée). Les mots réservés de cobc sont refusés comme noms : la
+liste par défaut, ou celle de `config/cobol85.words` avec `--std cobol85`
+(NOTHING y redevient un nom, AUTHOR y est réservé). Deux articles frères de même
+nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée.
 
 ## Fichiers, RENAMES, exponentiation
 
@@ -331,8 +334,14 @@ nommé en cas de dépassement. Un MOVE d'un champ édité vers un numérique sui
 portage de `replace.c` (`cobol2rust/copy_replace.py`) : textes de pplex
 (mots, littéraux numériques et alphanumériques, autres caractères, espaces),
 pseudo-texte `==…==` comparé sans tenir compte de la casse ni des espaces,
-identifiants qualifiés ou indicés, littéraux. LEADING/TRAILING, COPY OF/IN et
-REPLACING d'un copybook qui contient lui-même un COPY restent refusés.
+identifiants qualifiés ou indicés, littéraux. `COPY nom OF|IN bibliothèque`
+cherche `bibliothèque/nom` comme `ppcopy` (tel quel puis dans chaque dossier
+`-I`), puis le nom seul. L'instruction `REPLACE ==…== BY ==…== .` et
+`REPLACE OFF` s'appliquent au texte qui suit, COPY développés compris (deux
+filtres de `replace.c`) ; l'instruction est effacée et les numéros de ligne
+conservés. LEADING/TRAILING, REPLACE ALSO/LAST, `COB_COPY_LIB_*` et REPLACING
+d'un copybook qui contient lui-même un COPY restent refusés. En format fixe, la
+zone de séquence (colonnes 1-6) est ignorée quel que soit son contenu.
 `--debugging-lines` reproduit `cobc -fdebugging-line`.
 `SOURCE-COMPUTER ... WITH DEBUGGING MODE` et `USE FOR DEBUGGING` (procédures,
 ALL PROCEDURES, fichiers) suivent cobc 3.2 ; les sections de débogage ne
@@ -596,12 +605,28 @@ retourne `00` dans le profil GnuCOBOL vérifié, puis `10` et `46` aux lectures
 suivantes. `READ INTO` copie uniquement les octets effectivement lus, puis
 complète sa destination, au lieu de recopier cette queue ancienne.
 
-`WRITE ... BEFORE/AFTER ADVANCING` est pris en charge pour ces fichiers avec
-PAGE ou un entier littéral de 0 à 65535 lignes. Les contrôles sont les octets
+`WRITE ... BEFORE/AFTER ADVANCING` est pris en charge pour ces fichiers et
+pour LINE SEQUENTIAL avec PAGE, un mnémonique FORMFEED (S01-S05, CSP, TOP) ou
+canal C01-C12 (une page, comme `cb_build_write_advancing_mnemonic`), un entier
+littéral, ZERO ou un identificateur numérique de 0 à 65535 lignes (hors de cette
+plage cobc corromprait l'option : arrêt nommé). Les contrôles sont les octets
 LF (lignes), CR (zéro ligne) et FF (PAGE). AFTER écrit le contrôle avant le
-record ; BEFORE l'écrit après. Les espaces des records sont conservés. Un LF
-final restant après AFTER est écrit à CLOSE ou à la fermeture implicite de
-STOP RUN. OPEN réinitialise cet état.
+record ; BEFORE l'écrit après ; un WRITE LINE SEQUENTIAL sans ADVANCING vaut
+BEFORE 1 LINE (`cb_emit_write`). Les espaces des records SEQUENTIAL sont
+conservés. Un LF final restant après AFTER est écrit à CLOSE ou à la fermeture
+implicite de STOP RUN. OPEN réinitialise cet état.
+
+La clause FD `LINAGE [IS] n [LINES] [WITH FOOTING [AT] f] [LINES AT TOP t]
+[LINES AT BOTTOM b]` (entiers ou noms de données) rend le fichier LINE
+SEQUENTIAL et suit `cob_linage_write_opt` : marge haute due au premier WRITE,
+page logique de n lignes, saut vers la page suivante (lignes restantes, marge
+basse, relecture des valeurs, marge haute), statut 57 si la géométrie lue est
+invalide. `LINAGE-COUNTER [IN|OF fichier]` est lisible (registre `unsigned int`
+affiché sur 10 chiffres) ; `AT END-OF-PAGE`/`NOT AT END-OF-PAGE` reproduisent
+`check_eop` et `output_ferror_stmt`. Après un OPEN en 57, libcob garde le mode
+ouvert sur un `FILE *` fermé : un nouvel OPEN rend 41, toute autre opération est
+un arrêt nommé. Une écriture dans LINAGE-COUNTER et l'OPEN INPUT d'un fichier
+LINAGE restent refusés.
 
 Les clauses FD `LABEL RECORDS OMITTED/STANDARD`, `BLOCK CONTAINS` (en records
 ou caractères, éventuellement sous forme de plage) et `RECORDING MODE F` sont
@@ -618,8 +643,7 @@ Les fichiers INDEXED suivent le gestionnaire Berkeley DB de libcob 3.2
 DELETE, REWRITE), dans un format disque propre à cobol2rust (`nom`, `nom.1`,
 ...) qui n'est pas interchangeable avec les fichiers BDB de GnuCOBOL ; le
 vérificateur compare leur contenu logique (`cobol2rust/bdb_dump.c`, libdb).
-Les compteurs ADVANCING variables, LINAGE, les autres clauses FD et les clés
-INDEXED composées (SOURCE IS), SUPPRESS ou READ PREVIOUS restent refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
+Les autres clauses FD et les clés INDEXED composées (SOURCE IS), SUPPRESS ou READ PREVIOUS restent refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
 modélisés (`COB_SEQ_CONCAT_NAME`, `COB_SEQ_CONCAT_SEP`). Les options `COB_LS_FIXED`
 et `COB_LS_SPLIT` s'appliquent seulement au runtime LINE SEQUENTIAL.
 

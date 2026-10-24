@@ -27,6 +27,21 @@ def unsigned(parser, clause, minimum=0):
     return value
 
 
+def linage_value(parser):
+    """reference_or_literal: an unsigned integer literal or a data name,
+    read by libcob with cob_get_int at OPEN and at each page change."""
+    token = parser.t
+    if token.string:
+        parser.error("LINAGE requiert un entier ou un nom de donnée")
+    if token.text.isascii() and token.text.isdigit():
+        return ("literal", unsigned(parser, "LINAGE"))
+    label = parser.name()
+    qualifiers = []
+    while parser.accept("OF") or parser.accept("IN"):
+        qualifiers.append(parser.name())
+    return ("name", label, tuple(qualifiers))
+
+
 def parse_fd_clauses(parser, spec):
     """Consume FD options and their terminating period, preserving metadata."""
     clauses = {}
@@ -124,6 +139,37 @@ def parse_fd_clauses(parser, spec):
                 while parser.accept("OF") or parser.accept("IN"):
                     parser.name()
             put("value_of", True)
+        elif parser.accept("LINAGE"):
+            # parser.y linage_clause: LINAGE [IS] x [LINES] then FOOTING, TOP
+            # and BOTTOM in any order; the file becomes LINE SEQUENTIAL. The
+            # scanner folds [LINES] [AT] before TOP/BOTTOM into one token.
+            if spec.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                parser.error("LINAGE clause with wrong file type")
+            parser.accept("IS")
+            linage = {"lines": linage_value(parser)}
+            parser.accept("LINES")
+            while True:
+                if parser.at("WITH") or parser.at("FOOTING"):
+                    parser.accept("WITH")
+                    parser.expect("FOOTING")
+                    parser.accept("AT")
+                    part = "footing"
+                else:
+                    start = parser.i
+                    parser.accept("LINES")
+                    parser.accept("AT")
+                    if parser.accept("TOP"):
+                        part = "top"
+                    elif parser.accept("BOTTOM"):
+                        part = "bottom"
+                    else:
+                        parser.i = start
+                        break
+                if part in linage:
+                    parser.error(f"clause LINAGE {part.upper()} dupliquée")
+                linage[part] = linage_value(parser)
+            put("linage", linage)
+            spec.organization = "LINE SEQUENTIAL"
         else:
             parser.error("clause FD non prise en charge")
     parser.expect(".")

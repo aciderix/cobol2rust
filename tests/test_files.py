@@ -38,7 +38,7 @@ class FileFrontendTests(unittest.TestCase):
             file_program(storage="01 fs. 02 a pic x."),
             file_program(storage="01 fs. 02 a pic x(3)."),
             file_program(storage="01 g. 02 fs occurs 2. 03 a pic xx."),
-            file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(8)."),
+            file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(4)."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
@@ -53,7 +53,7 @@ class FileFrontendTests(unittest.TestCase):
 
     def test_reject_unsupported_operations_and_incomplete_input(self):
         cases = ["open f.", "open i-o f.", "open input.", "read.", "write fs.", "close.",
-                 "read f into fs.", "read f with lock.", "rewrite rec.", "write rec after advancing 2 lines.",
+                 "read f into fs.", "read f with lock.", "rewrite rec.",
                  "read f at end perform missing end-read."]
         for body in cases:
             with self.subTest(body=body), self.assertRaises(CobolError):

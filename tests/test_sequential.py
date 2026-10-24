@@ -37,7 +37,6 @@ class SequentialFrontendTests(unittest.TestCase):
             sequential("write rec after advancing 1.5 lines."),
             sequential("write rec after advancing 65536 lines."),
             sequential("write rec before advancing 'PAGE'."),
-            sequential("write rec after advancing 1 lines.", organization="organization line sequential"),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):

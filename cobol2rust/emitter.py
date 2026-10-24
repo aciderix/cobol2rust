@@ -119,6 +119,8 @@ class Emitter:
             return self.reference(args[0]) + ".snapshot()"
         if op == "shared":
             return f"{self.shared}.clone()"
+        if op == "linage":
+            return f"self.{self.files[args[0]]}.linage_counter()"
         if op == "all":
             raise CobolError("ALL littéral limité au MOVE vers texte, groupe ou sous-chaîne")
         if op == "remainder":
@@ -533,7 +535,24 @@ class Emitter:
             handler = f"match self.{self.files[file_name]}.last_open_mode() {{ {cases} _ => None }}"
         self.write(f"let handler: Option<usize> = {handler};")
         invalid = str(getattr(self, "io_invalid", False)).lower()
-        self.write(f"file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some());")
+        result = "let eop = " if getattr(self, "io_eop", None) else ""
+        self.write(f"{result}file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some());")
+
+    def linage_values(self, file_name):
+        """The LINAGE phrases as cob_get_int reads them at OPEN and WRITE."""
+        linage = self.program.files[file_name].linage
+        if not linage:
+            return
+        values = []
+        for part in ("lines", "footing", "top", "bottom"):
+            value = linage.get(part)
+            if value is None:
+                values.append("None")
+            elif value[0] == "literal":
+                values.append(f"Some({value[1]})")
+            else:
+                values.append(f"Some(self.{self.names[value[1]]}.snapshot().count())")
+        self.write(f"self.{self.files[file_name]}.linage_values([{', '.join(values)}]);")
 
     def statement(self, stmt):
         op, a = stmt.op, stmt.args
@@ -559,6 +578,7 @@ class Emitter:
                 self.assignment(self.literal(token), [DataRef(condition.parent, ref.indices)], False)
         elif op == "open":
             for mode, name in a[0]:
+                self.linage_values(name)
                 self.write(f"let status = self.{self.files[name]}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
@@ -600,8 +620,13 @@ class Emitter:
             if advancing is not None:
                 direction, count = advancing
                 variant = direction.title() + ("Page" if count is None else "Lines")
-                argument = "" if count is None else f"({count})"
+                if isinstance(count, Expr):
+                    # cb_build_write_advancing_lines: cob_get_int of the item.
+                    argument = f"(file_runtime::advance_lines(&{self.expression(count)}))"
+                else:
+                    argument = "" if count is None else f"({count})"
                 control = f"Some(file_runtime::Advance::{variant}{argument})"
+            self.linage_values(name)
             if self.program.files[name].organization == "RELATIVE":
                 control = self.relative_key(name, True)
             size = self.program.fields[record].size
@@ -609,6 +634,10 @@ class Emitter:
                 if advancing is not None:
                     raise CobolError("WRITE ADVANCING sur un fichier INDEXED")
                 self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {self.depending(name, False)});")
+            elif self.program.files[name].organization in {"SEQUENTIAL", "LINE SEQUENTIAL"} and getattr(self, "io_eop", None):
+                # cb_emit_write: check_eop only with an AT END-OF-PAGE phrase.
+                check = str(self.io_eop[0]).lower()
+                self.write(f"let status = self.{self.files[name]}.write_checked(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)}, {check});")
             else:
                 self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
             self.file_status(name, "status")
@@ -618,6 +647,9 @@ class Emitter:
                 if e.op == "all":
                     # DISPLAY shows an ALL literal or a figurative constant once.
                     values.append("Value::Bytes(vec![" + ", ".join(str(ord(c)) for c in e.args[0]) + "])")
+                    continue
+                if e.op == "linage":
+                    values.append(f"self.{self.files[e.args[0]]}.linage_display()")
                     continue
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
@@ -1013,13 +1045,23 @@ class Emitter:
             self.write(f"pc = {a[1]};")
         elif op == "io":
             stmt, continuation, self.io_handlers, invalid, valid, debug = a
-            self.io_invalid = invalid is not None
+            eop = (stmt.op == "write" and (invalid is not None or valid is not None)
+                   and self.program.files[stmt.args[0]].organization in {"SEQUENTIAL", "LINE SEQUENTIAL"})
+            # AT END-OF-PAGE / NOT AT END-OF-PAGE hold the INVALID KEY slots.
+            self.io_eop = (invalid is not None,) if eop else None
+            self.io_invalid = invalid is not None and not eop
             self.statement(stmt)
-            self.io_handlers, self.io_invalid = None, False
+            self.io_handlers, self.io_invalid, self.io_eop = None, False, None
             success = continuation if valid is None else valid
-            # INVALID KEY takes 2x; any other status outside 0x runs its USE procedure.
-            prefix = f"if status / 10 == 2 {{ {invalid} }} else " if invalid is not None else ""
-            dispatch = f"{prefix}if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {success} }}"
+            if eop:
+                # output_ferror_stmt: an exception other than EOP is a file
+                # error; EOP runs AT END-OF-PAGE, no exception NOT AT END-OF-PAGE.
+                exception = continuation if invalid is None else invalid
+                dispatch = f"if status >= 10 {{ handler.unwrap_or({continuation}) }} else if eop {{ {exception} }} else {{ {success} }}"
+            else:
+                # INVALID KEY takes 2x; any other status outside 0x runs its USE procedure.
+                prefix = f"if status / 10 == 2 {{ {invalid} }} else " if invalid is not None else ""
+                dispatch = f"{prefix}if status >= 10 {{ handler.unwrap_or({continuation}) }} else {{ {success} }}"
             if debug is None:
                 self.write(f"pc = {dispatch};")
             else:
@@ -1247,7 +1289,8 @@ class Emitter:
                                  for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
                 self.write(f"{rust_name}: file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]),")
             else:
-                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}),")
+                linage = ".with_linage()" if spec.linage else ""
+                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage},")
             offset = self.program.fields[spec.record].offset
             self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
         alters = len(self.program.alters)

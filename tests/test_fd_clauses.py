@@ -14,8 +14,8 @@ from tests.test_files import file_program
 
 
 class FdClauseTests(unittest.TestCase):
-    def clauses(self, source):
-        parser, spec = Parser(source), SimpleNamespace(fd_clauses={})
+    def clauses(self, source, organization="SEQUENTIAL"):
+        parser, spec = Parser(source), SimpleNamespace(fd_clauses={}, organization=organization)
         parse_fd_clauses(parser, spec)
         self.assertTrue(parser.at("<EOF>"))
         return spec.fd_clauses
@@ -62,15 +62,24 @@ class FdClauseTests(unittest.TestCase):
             "block contains 1 records block contains 2 records.",
             "record contains 5 characters record contains 5 characters.",
             "recording mode f recording mode f.", "recording mode v.",
-            "recording mode s.", "recording mode u.", "linage 66 lines.",
+            "recording mode s.", "recording mode u.", "linage 66 lines footing 2 footing 3.",
+            "linage.", "linage 'A'.", "linage 6 top.",
             "code-set is custom-alphabet.",
             "external.", "global.", "data rec.", "data record.", "data records are.",
             "data record is rec data record is rec.", "data record label records standard.",
-            "data record is 'rec'.", "data record is rec of f.", "data record rec linage 60.",
+            "data record is 'rec'.", "data record is rec of f.",
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
                 self.clauses(source)
+
+    def test_linage_phrases_in_any_order(self):
+        clauses = self.clauses("data record rec linage is page-size lines lines at bottom 2 "
+                               "with footing at 50 at top 1.")
+        self.assertEqual(clauses["linage"], {"lines": ("name", "PAGE-SIZE", ()), "bottom": ("literal", 2),
+                                             "footing": ("literal", 50), "top": ("literal", 1)})
+        with self.assertRaises(CobolError):
+            self.clauses("linage 60.", organization="RELATIVE")
 
     def test_record_length_is_checked_after_physical_layout(self):
         select = 'select f assign to "data.bin" organization sequential file status fs.'

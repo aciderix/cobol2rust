@@ -154,8 +154,8 @@ nombre de programmes entièrement acceptés.
 | Clause FD BLOCK | 16 |
 | I-O-CONTROL | 13 |
 
-Les formats variables, les autres clauses FD et les compteurs ADVANCING
-variables restent explicitement refusés. Aucun résultat de cette étape ne
+Les formats variables et les autres clauses FD restent explicitement refusés
+(les compteurs ADVANCING variables et LINAGE sont pris en charge depuis). Aucun résultat de cette étape ne
 constitue une réussite des assertions de conformité NIST.
 
 ## Progression : PICTURE éditées et clauses FD
@@ -681,3 +681,18 @@ significatifs arrondis au plus proche comme `cob_decimal_set_mpf`
 (COB_MAX_INTERMEDIATE_FLOATING_SIZE). Émission acceptée : **390/458** ;
 revérification : **365/366 programmes principaux conformes**, 8066 PASS,
 0 FAIL (`build/nist-verify-math.json`, `build/coverage-nist-math.json`).
+
+## Progression : LINAGE, ADVANCING et formes de préprocesseur
+
+Port de `cob_linage_write_opt`, `file_linage_check` et `lineseq_write` (marge
+haute au premier WRITE, saut de page, statut 57, END-OF-PAGE via `check_eop`),
+ADVANCING sur LINE SEQUENTIAL, par identifiant, ZERO et mnémonique
+FORMFEED/Cnn, qualification d'un enregistrement par son FD (`PRINT-REC IN
+PRINT-FILE`). Formes levées au passage : `TEST BEFORE/AFTER` sans WITH, liste de
+mots réservés `cobol85.words` en `--std cobol85`, `[NOT] [ON] SIZE ERROR` qui ne
+capture plus le NOT ON EXCEPTION d'un CALL englobant, articles frères
+homonymes, I-O-CONTROL vide, instruction REPLACE, `COPY … OF|IN`, zone de
+séquence quelconque, `SET` à plusieurs groupes de commutateurs, terminateur de
+portée qui ferme les instructions conditionnelles englobées. Émission
+acceptée : **407/458** ; revérification : **382/383 programmes principaux conformes**, 8325 PASS, 0 FAIL
+(`build/nist-verify-linage.json`, `build/coverage-nist-linage.json`).

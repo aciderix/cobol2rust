@@ -3,7 +3,9 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use crate::runtime::{Value, fail};
 
-enum State { Closed, Locked, Input(BufReader<File>), Output(File), InputOutput(File), Missing }
+/// HalfOpen: cob_file_open answered 57 after fclose but kept the open mode,
+/// so OPEN says 41 and any other operation would reuse a closed FILE *.
+enum State { Closed, Locked, Input(BufReader<File>), Output(File), InputOutput(File), Missing, HalfOpen }
 
 #[derive(Clone, Copy)]
 pub enum Advance { BeforeLines(u32), AfterLines(u32), BeforePage, AfterPage }
@@ -25,6 +27,27 @@ pub struct CobolFile {
     read_done: bool,
     record_min: usize,
     record_max: usize,
+    linage: Option<Linage>,
+}
+
+/// FD LINAGE (cob_linage): the values cob_get_int reads from the clause,
+/// the page geometry checked from them, the LINAGE-COUNTER register and
+/// the top margin still owed to the first WRITE after OPEN.
+#[derive(Default)]
+struct Linage {
+    values: [Option<i64>; 4],
+    lines: i64,
+    foot: i64,
+    top: i64,
+    bottom: i64,
+    counter: i64,
+    needs_top: bool,
+}
+
+thread_local! {
+    /// libcob's eop_status: set by a LINAGE WRITE asked to check END-OF-PAGE,
+    /// reported (and cleared) by the next successful file status.
+    static EOP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// cob_write/cob_rewrite record size: DEPENDING ON value capped at the size
@@ -68,6 +91,14 @@ fn setting(name: &str, default: bool) -> bool {
     }
 }
 
+/// WRITE ADVANCING identifier: cobc adds cob_get_int of the item to the
+/// option word, so only 0..65535 keeps the LINES flag intact.
+pub fn advance_lines(value: &Value) -> u32 {
+    let count = value.count();
+    if !(0..=u16::MAX as i128).contains(&count) { fail("ADVANCING identifier outside 0..65535 not modelled"); }
+    count as u32
+}
+
 fn write_advance(file: &mut File, advance: Advance) {
     let bytes = match advance {
         Advance::BeforeLines(count) | Advance::AfterLines(count) => {
@@ -105,14 +136,120 @@ impl CobolFile {
         let line = organization == Organization::LineSequential;
         Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
-               needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max }
+               needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
+               linage: None }
+    }
+
+    /// An FD with LINAGE: cobc makes the file LINE SEQUENTIAL.
+    pub fn with_linage(mut self) -> Self {
+        if self.organization != Organization::LineSequential { fail("LINAGE requires a LINE SEQUENTIAL file"); }
+        self.linage = Some(Linage::default());
+        self
+    }
+
+    /// The current LINAGE, FOOTING, TOP and BOTTOM values, as cob_get_int
+    /// would read them at this point; absent phrases are None.
+    pub fn linage_values(&mut self, values: [Option<i128>; 4]) {
+        let linage = self.linage.as_mut().unwrap_or_else(|| fail("file without LINAGE"));
+        for (slot, value) in linage.values.iter_mut().zip(values) {
+            *slot = value.map(|v| i32::try_from(v).unwrap_or_else(|_| fail("LINAGE value outside the native int range")) as i64);
+        }
+    }
+
+    /// LINAGE-COUNTER: an unsigned int register, 0 until the first OPEN.
+    pub fn linage_counter(&self) -> Value {
+        Value::number(&self.linage.as_ref().unwrap_or_else(|| fail("file without LINAGE")).counter.to_string())
+    }
+
+    /// DISPLAY of the unsigned int register shows all 10 digits of its binary size.
+    pub fn linage_display(&self) -> Value {
+        Value::text(&format!("{:010}", self.linage.as_ref().unwrap_or_else(|| fail("file without LINAGE")).counter))
+    }
+
+    /// file_linage_check: read the page geometry; on error the counter
+    /// becomes 0 and the caller returns status 57.
+    fn linage_check(&mut self) -> bool {
+        let linage = self.linage.as_mut().unwrap();
+        let [lines, foot, top, bottom] = linage.values;
+        linage.lines = lines.unwrap_or_else(|| fail("LINAGE value missing"));
+        let valid = linage.lines >= 1 && match foot {
+            Some(foot) => { linage.foot = foot; foot >= 1 && foot <= linage.lines },
+            None => { linage.foot = 0; true },
+        } && match top {
+            Some(top) => { linage.top = top; top >= 0 },
+            None => { linage.top = 0; true },
+        } && match bottom {
+            Some(bottom) => { linage.bottom = bottom; bottom >= 0 },
+            None => { linage.bottom = 0; true },
+        };
+        if !valid { linage.counter = 0; }
+        !valid
+    }
+
+    /// cob_linage_write_opt: advance within the logical page, or past its
+    /// end to the next page (bottom margin, new check, top margin).
+    fn linage_advance(&mut self, advance: Advance, check_eop: bool) -> u8 {
+        let mut out = Vec::new();
+        let linage = self.linage.as_mut().unwrap();
+        match advance {
+            Advance::BeforePage | Advance::AfterPage => {
+                if linage.counter == 0 { return 57; }
+                out.resize((linage.lines - linage.counter).max(0) as usize + linage.bottom as usize, b'\n');
+                self.output(&out);
+                if self.linage_check() { return 57; }
+                let linage = self.linage.as_mut().unwrap();
+                let top = vec![b'\n'; linage.top as usize];
+                linage.counter = 1;
+                self.output(&top);
+            },
+            Advance::BeforeLines(count) | Advance::AfterLines(count) => {
+                let start = linage.counter;
+                if start == 0 { return 57; }
+                linage.counter += count as i64;
+                let line = linage.counter;
+                if check_eop && linage.foot != 0 && line >= linage.foot { EOP.with(|eop| eop.set(true)); }
+                if line > linage.lines {
+                    if check_eop { EOP.with(|eop| eop.set(true)); }
+                    out.resize((linage.lines - start).max(0) as usize + linage.bottom as usize, b'\n');
+                    self.output(&out);
+                    if self.linage_check() { return 57; }
+                    let linage = self.linage.as_mut().unwrap();
+                    linage.counter = 1;
+                    let top = vec![b'\n'; linage.top as usize];
+                    self.output(&top);
+                } else {
+                    out.resize((count as usize).saturating_sub(1), b'\n');
+                    self.output(&out);
+                }
+            },
+        }
+        0
+    }
+
+    fn output(&mut self, bytes: &[u8]) {
+        let file = match &mut self.state { State::Output(file) => file, _ => unreachable!() };
+        file.write_all(bytes).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
     }
 
     /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
 
     pub fn open(&mut self, mode: &str) -> u8 {
-        let status = self.open_file(mode);
+        if self.linage.is_some() && !matches!(mode, "OUTPUT" | "EXTEND") {
+            fail("OPEN INPUT or I-O of a LINAGE file not modelled");
+        }
+        let mut status = self.open_file(mode);
+        if status < 10 && self.linage.is_some() {
+            // cob_file_open: a bad page geometry closes the file again (57).
+            if self.linage_check() {
+                self.state = State::HalfOpen;
+                status = 57;
+            } else {
+                let linage = self.linage.as_mut().unwrap();
+                linage.needs_top = true;
+                linage.counter = 1;
+            }
+        }
         if status < 10 { claim_path(&self.path); }
         status
     }
@@ -173,7 +310,12 @@ impl CobolFile {
         }
     }
 
+    fn usable(&self) {
+        if matches!(self.state, State::HalfOpen) { fail("file left half open by OPEN status 57 (closed FILE reused by libcob) not modelled"); }
+    }
+
     pub fn close(&mut self, lock: bool) -> u8 {
+        self.usable();
         if matches!(self.state, State::Closed) { return 42; }
         if matches!(self.state, State::Locked) { fail("CLOSE of a file closed WITH LOCK not modelled"); }
         self.read_done = false;
@@ -181,7 +323,8 @@ impl CobolFile {
             file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
         }
         if let State::Output(file) = &mut self.state {
-            if self.needs_nl {
+            // cob_file_close: a LINAGE file owes no final newline.
+            if self.needs_nl && self.linage.is_none() {
                 file.write_all(b"\n").unwrap_or_else(|e| fail(&format!("file closing newline failed: {e}")));
             }
             file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
@@ -198,6 +341,7 @@ impl CobolFile {
     /// NO REWIND closes and returns 07; REEL and UNIT only synchronize the
     /// file, which stays open, and return 07. A missing OPTIONAL file closes as usual.
     pub fn close_unit(&mut self, no_rewind: bool) -> u8 {
+        self.usable();
         if matches!(self.state, State::Closed) { return 42; }
         if matches!(self.state, State::Locked) { fail("CLOSE of a file closed WITH LOCK not modelled"); }
         if matches!(self.state, State::Missing) { return self.close(false); }
@@ -252,6 +396,7 @@ impl CobolFile {
     }
 
     fn read_record(&mut self, record: &mut Value) -> u8 {
+        self.usable();
         self.last_read_size = 0;
         self.read_done = false;
         if !matches!(self.state, State::Input(_) | State::InputOutput(_) | State::Missing) { return 47; }
@@ -337,10 +482,13 @@ impl CobolFile {
     }
 
     pub fn write(&mut self, area: &Value, size: usize, advancing: Option<Advance>, depending: Option<&Value>) -> u8 {
+        self.write_checked(area, size, advancing, depending, false)
+    }
+
+    /// WRITE with AT END-OF-PAGE: cob_write's check_eop.
+    pub fn write_checked(&mut self, area: &Value, size: usize, advancing: Option<Advance>, depending: Option<&Value>, check_eop: bool) -> u8 {
+        self.usable();
         self.read_done = false;
-        if self.organization == Organization::LineSequential && advancing.is_some() {
-            fail("ADVANCING on LINE SEQUENTIAL is not supported");
-        }
         let variable = self.variable();
         let size = record_size(size, depending);
         let file = match &mut self.state { State::Output(file) => file, _ => return 48 };
@@ -367,9 +515,40 @@ impl CobolFile {
             fail("LINE SEQUENTIAL requires printable ASCII records");
         }
         let text = std::str::from_utf8(&bytes).unwrap();
-        let text = if self.fixed { text } else { text.trim_end_matches(' ') };
-        file.write_all(text.as_bytes()).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
-        file.write_all(if cfg!(windows) { b"\r\n" } else { b"\n" }).unwrap_or_else(|e| fail(&format!("file write failed: {e}")));
+        let text = if self.fixed { text } else { text.trim_end_matches(' ') }.as_bytes().to_vec();
+        // cb_emit_write: a LINE SEQUENTIAL WRITE without ADVANCING is BEFORE 1 LINE.
+        let advance = advancing.unwrap_or(Advance::BeforeLines(1));
+        if let Advance::BeforeLines(count) | Advance::AfterLines(count) = advance {
+            if count > u16::MAX as u32 { fail("ADVANCING count exceeds supported range 0..65535"); }
+        }
+        // lineseq_write: the top margin is owed to the first WRITE after OPEN.
+        if let Some(linage) = self.linage.as_mut() {
+            if linage.needs_top {
+                linage.needs_top = false;
+                let top = vec![b'\n'; linage.top as usize];
+                self.output(&top);
+            }
+        }
+        if matches!(advance, Advance::AfterLines(_) | Advance::AfterPage) {
+            let status = self.line_advance(advance, check_eop);
+            if status != 0 { return status; }
+            self.needs_nl = true;
+        }
+        self.output(&text);
+        if self.linage.is_some() { self.output(b"\n"); }
+        if matches!(advance, Advance::BeforeLines(_) | Advance::BeforePage) {
+            let status = self.line_advance(advance, check_eop);
+            if status != 0 { return status; }
+            self.needs_nl = false;
+        }
+        0
+    }
+
+    /// cob_file_write_opt: LINAGE pages, else newlines, CR for 0 lines, form feed.
+    fn line_advance(&mut self, advance: Advance, check_eop: bool) -> u8 {
+        if self.linage.is_some() { return self.linage_advance(advance, check_eop); }
+        let file = match &mut self.state { State::Output(file) => file, _ => unreachable!() };
+        write_advance(file, advance);
         0
     }
 }
@@ -384,7 +563,10 @@ impl Drop for CobolFile {
 /// Store FILE STATUS. Without it, an exception (status 1x..9x) that no AT END
 /// phrase or USE procedure handles is fatal, like GnuCOBOL's standard handler.
 /// AT END covers every 1x status and INVALID KEY every 2x, like cobc's handlers.
-pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool) {
+/// Returns libcob's END-OF-PAGE exception: a pending EOP is reported by
+/// the next 0x status, whatever the file.
+pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool) -> bool {
+    let eop = status < 10 && EOP.with(|eop| eop.replace(false));
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
@@ -392,6 +574,7 @@ pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: boo
     } else if status >= 10 && !(status / 10 == 1 && eof_handled) && !(status / 10 == 2 && invalid_handled) && !declarative {
         fail(&format!("unhandled file status {status:02}"));
     }
+    eop
 }
 
 #[derive(Clone, Copy, PartialEq)]

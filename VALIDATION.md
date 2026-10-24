@@ -1,5 +1,24 @@
 # Validation — 22 octobre 2026
 
+## LINAGE, ADVANCING et formes de préprocesseur — 24 octobre 2026
+
+- **327 tests découverts : 326 réussis, un test PE Windows ignoré.**
+- **110/110 comparaisons locales conformes** ; nouvelles fixtures
+  `linage.cob` (FOOTING/TOP/BOTTOM littéraux et noms de données, AT/NOT AT
+  END-OF-PAGE, ADVANCING identifiant, PAGE, FORMFEED, C01, 0 ligne, statut 57
+  au changement de page, LINE SEQUENTIAL avec AFTER/BEFORE) et
+  `preprocessing.cob` (REPLACE/REPLACE OFF, COPY OF bibliothèque, TEST BEFORE
+  sans WITH, homonymes, I-O-CONTROL vide, SET à plusieurs groupes, NOT ON
+  EXCEPTION après ADD) ; les trois fichiers LINAGE sont identiques à cobc.
+- NIST : **407/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **382/383 programmes principaux conformes** (8325 PASS, 0 FAIL, 8 DELETED,
+  104 INSPECT, ces derniers surtout dans les programmes d'impression LINAGE
+  dont le REPORT est comparé octet à octet) : `build/nist-verify-linage.json`,
+  `build/coverage-nist-linage.json`. 17 programmes ajoutés : IC222A, IF402M,
+  NC114M, NC174A, NC201A, NC211A, SM207A, SM208A, SM401M, SQ101M, SQ201M,
+  SQ207M, SQ208M, SQ209M, SQ210M, SQ212A, ST147A. Écart connu inchangé :
+  OBNC1M (SIGINT).
+
 ## PROGRAM COLLATING SEQUENCE et fonctions mathématiques — 24 octobre 2026
 
 - **311 tests découverts : 310 réussis, un test PE Windows ignoré.**

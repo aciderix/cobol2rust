@@ -78,6 +78,17 @@ Dernière étape : collation et mathématiques. `Parser.alphabet_table`
 chiffres significatifs). NIST **390/458**, 365/366. Prochain : LINAGE (en
 cours), ADVANCING identifiant/mnémonique.
 
+Dernière étape : LINAGE. `file_runtime::Linage` dans `CobolFile`
+(`with_linage`, `linage_values` appelé avant OPEN et WRITE, `linage_check`,
+`linage_advance`, état `HalfOpen` après un OPEN en 57), EOP global (`EOP`,
+rendu par `file_status`), `write_checked` ; `FileSpec.linage`,
+`Expr("linage", fichier)` pour LINAGE-COUNTER, `Parser.eop_handlers` (les
+corps END-OF-PAGE occupent les places INVALID KEY du nœud io). Aussi :
+`copy_replace.replace_statements` (REPLACE), `RESERVED_COBOL85`, `COPY OF`.
+NIST **407/458**, 382/383. Prochains blocages : programmes imbriqués,
+GLOBAL/EXTERNAL (IC226A-IC235A), INITIALIZE REPLACING, ODO hors WORKING-STORAGE,
+CURRENCY/DECIMAL-POINT, RANDOM, CODE-SET.
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

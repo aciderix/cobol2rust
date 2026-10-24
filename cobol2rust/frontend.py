@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,8 +90,11 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if not line.strip():
                 result.append("")
                 continue
-            if len(line) < 7 or not re.fullmatch(r"[ 0-9]{6}", line[:6]):
-                raise CobolError(f"ligne {number}: format fixe invalide (colonnes 1-7)")
+            # The sequence area (columns 1-6) is ignored whatever it holds;
+            # a line ending inside it is blank.
+            if len(line) < 7:
+                result.append("")
+                continue
             indicator = line[6]
             if indicator in "*/":
                 result.append("")
@@ -280,8 +284,14 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
         if name[:1] in "\"'":
             name = name[1:-1]
         rest = words[2:]
+        library = None
         if rest and rest[0].upper() in {"OF", "IN"}:
-            raise CobolError(f"ligne {start}: COPY OF/IN bibliothèque non pris en charge")
+            if len(rest) < 2:
+                raise CobolError(f"ligne {start}: nom de bibliothèque COPY attendu")
+            library = rest[1][1:-1] if rest[1][:1] in "\"'" else rest[1]
+            if library[:1] in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" and os.environ.get(f"COB_COPY_LIB_{library}") is not None:
+                raise CobolError(f"ligne {start}: COB_COPY_LIB_{library} non pris en charge")
+            rest = rest[2:]
         if rest and rest[0].upper() == "SUPPRESS":
             rest = rest[1:]
         replacements = []
@@ -290,7 +300,12 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
                 raise CobolError(f"ligne {start}: COPY: REPLACING ou point attendu")
             replacements = parse_replacing(rest[1:], start)
         roots = [path.parent, *include_dirs]
-        candidates = [root / (name + ext) for root in roots for ext in ("", ".cpy", ".CPY", ".cob", ".cbl")]
+        extensions = ("", ".cpy", ".CPY", ".cob", ".cbl")
+        candidates = [root / (name + ext) for root in roots for ext in extensions]
+        if library is not None:
+            # ppcopy: library/name first (as is, then in each copybook
+            # directory), else the name alone, with a warning.
+            candidates = [root / library / (name + ext) for root in roots for ext in extensions] + candidates
         found = next((p for p in candidates if p.is_file()), None)
         if found is None:
             raise CobolError(f"ligne {start}: copybook introuvable: {name}")
@@ -307,7 +322,12 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
         while i < len(toks) and toks[i].start < stop:
             i += 1
     pieces.append(text[cursor:])
-    return "".join(pieces), list(dict.fromkeys(copies))
+    result = "".join(pieces)
+    # A REPLACE statement may also come from a copybook.
+    if not stack and re.search(r"(?<![\w-])REPLACE(?![\w-])", result, re.IGNORECASE):
+        from .copy_replace import replace_statements
+        result = replace_statements(result, lex(result))
+    return result, list(dict.fromkeys(copies))
 
 
 @dataclass
@@ -408,6 +428,8 @@ class FileSpec:
     # INDEXED: RECORD KEY, then ALTERNATE RECORD KEYs as (key, WITH DUPLICATES).
     record_key: object = None
     alternate_keys: list = field(default_factory=list)
+    # FD LINAGE: part (lines, footing, top, bottom) -> ("literal", n) or ("field", name).
+    linage: dict | None = None
 
 
 @dataclass
@@ -640,9 +662,13 @@ class Parser:
         for key in candidates:
             parent = registry[key].parent
             ancestors = []
+            root = key if registry is self.fields else None
             while parent:
                 ancestors.append(self.fields[parent].label)
+                root = parent
                 parent = self.fields[parent].parent
+            # A file name qualifies the records of its FD (cb_ref).
+            ancestors += [spec.name for spec in self.files.values() if root in spec.records]
             position = 0
             for qualifier in qualifiers:
                 try:
@@ -728,7 +754,8 @@ class Parser:
                         if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
                             self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
-                            if spec.organization not in {"SEQUENTIAL", "RELATIVE", "INDEXED", "SORT"}:
+                            # LINE SEQUENTIAL records must also share one size (validate_files).
+                            if spec.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL", "RELATIVE", "INDEXED", "SORT"}:
                                 self.error("plusieurs enregistrements FD limités à SEQUENTIAL/RELATIVE de taille fixe égale")
                             descriptor.redefines = spec.record
                         else:
@@ -952,8 +979,11 @@ class Parser:
         before = set(self.fields)
         self.tokens[self.i:self.i] = lex(text)[:-1]
         self.data_stack, self.in_linkage = [], False
+        # The register's names are reserved words of cobol85.words.
+        self.building_register = True
         while not self.at("PROCEDURE"):
             self.declaration()
+        self.building_register = False
         from .layout import layout_fields
         added = {key: f for key, f in self.fields.items() if key not in before}
         extent = layout_fields(added)
@@ -1059,8 +1089,8 @@ class Parser:
 
     def user_word(self, name):
         """cobc refuses a reserved word as a user-defined name."""
-        from .reserved import RESERVED
-        if name in RESERVED:
+        from .reserved import RESERVED, RESERVED_COBOL85
+        if name in (RESERVED_COBOL85 if STD == "cobol85" else RESERVED) and not getattr(self, "building_register", False):
             raise CobolError(f"ligne {self.tokens[self.i - 1].line}: mot réservé de GnuCOBOL utilisé comme nom: {name}")
         return name
 
@@ -1230,7 +1260,8 @@ class Parser:
 
     DEVICES = {"SYSIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout", "SYSLIST": "stdout", "SYSLST": "stdout",
                "SYSERR": "stderr", "PRINTER": "printer", "SYSPCH": "punch", "FORMFEED": "formfeed",
-               **{f"C{n:02d}": "channel" for n in range(1, 13)}, "CSP": "channel", "TOP": "channel"}
+               **{f"C{n:02d}": "channel" for n in range(1, 13)},
+               **{f"S{n:02d}": "formfeed" for n in range(1, 6)}, "CSP": "formfeed", "TOP": "formfeed"}
 
     def figurative_value(self, key):
         """A figurative constant's byte; HIGH/LOW-VALUE follow the program
@@ -1478,7 +1509,9 @@ class Parser:
                     self.same_records.append(group)
             else:
                 self.error("clause I-O-CONTROL non prise en charge")
-        self.expect(".")
+        # _i_o_control_entries: an empty paragraph has no closing period.
+        if not (self.at("DATA") or self.at("PROCEDURE")) or self.tokens[self.i - 1].key != ".":
+            self.expect(".")
 
     def file_name(self):
         name = self.name()
@@ -1663,6 +1696,17 @@ class Parser:
                 if len({(offset, size) for _, offset, size, _ in resolved}) != len(resolved):
                     self.error("clés INDEXED de même position non prises en charge")
                 spec.record_key, spec.alternate_keys = resolved[0], resolved[1:]
+            if "linage" in spec.fd_clauses:
+                # file_linage_check reads each value with cob_get_int.
+                spec.linage = {}
+                for part, value in spec.fd_clauses["linage"].items():
+                    if value[0] == "name":
+                        name = self.resolve(value[1], value[2])
+                        item = self.fields[name]
+                        if item.kind != "number" or item.scale or item.dimensions or item.usage == "INDEX":
+                            self.error(f"LINAGE {part.upper()} limité à un entier numérique: {item.label}")
+                        value = ("field", name)
+                    spec.linage[part] = value
             from .layout import leaves
             sizes = [self.fields[key].size for key in spec.records]
             varying = spec.fd_clauses.get("record_varying")
@@ -1737,6 +1781,8 @@ class Parser:
         elif not t.string and t.key in self.symbolic and not self.candidates(t.key):
             # A symbolic character is a figurative constant.
             left = Expr("all", (chr(self.symbolic[t.key]),))
+        elif not t.string and t.key == "LINAGE-COUNTER":
+            left = Expr("linage", (self.linage_file(),))
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -1756,6 +1802,21 @@ class Parser:
             # exp_factor: exponentiation is right associative.
             left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
         return left
+
+    def linage_file(self):
+        """line_linage_page_counter: LINAGE-COUNTER [IN|OF file], the counter
+        register cobc defines for each FD with LINAGE."""
+        if self.accept("IN") or self.accept("OF"):
+            name = self.name()
+            if name not in self.files:
+                self.error(f"'{name}' is not a file name")
+            if self.files[name].fd_clauses.get("linage") is None:
+                self.error(f"LINAGE-COUNTER: {name} sans clause LINAGE")
+            return name
+        files = [f.name for f in self.files.values() if "linage" in f.fd_clauses]
+        if len(files) != 1:
+            self.error("LINAGE-COUNTER must be qualified here" if files else "invalid LINAGE-COUNTER usage")
+        return files[0]
 
     # Intrinsic functions modelled after libcob/intrinsic.c: name -> (arguments, result).
     FUNCTIONS = {
@@ -1813,7 +1874,7 @@ class Parser:
         if t.string or re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", t.text):
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
-        if k == "FUNCTION":
+        if k in {"FUNCTION", "LINAGE-COUNTER"}:
             return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
@@ -1944,6 +2005,9 @@ class Parser:
         return Expr("cmp<>" if negate else "cmp=", (value, x))
 
     def block(self, stops):
+        # A scope terminator also ends the conditional statements it encloses
+        # (END-PERFORM after READ ... AT END without END-READ).
+        stops = stops | {key for key in BOUNDARIES if key.startswith("END-")}
         result = []
         while self.t.string or self.t.key not in stops | {".", "<EOF>"}:
             result.append(self.statement())
@@ -1954,15 +2018,17 @@ class Parser:
         verb = self.take().key
         if verb == "SET":
             if not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
-                # SET switch-mnemonic ... TO ON|OFF (cob_set_switch).
-                switches = []
+                # SET {switch-mnemonic ... TO ON|OFF} ... (cob_set_switch).
+                groups = []
                 while not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
-                    switches.append(self.mnemonics[self.take().key][1])
-                self.expect("TO")
-                if not (self.at("ON") or self.at("OFF")):
-                    self.error("SET commutateur TO ON ou OFF attendu")
-                on = self.take().key == "ON"
-                return Stmt("set_switch", (switches, on), line)
+                    switches = []
+                    while not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
+                        switches.append(self.mnemonics[self.take().key][1])
+                    self.expect("TO")
+                    if not (self.at("ON") or self.at("OFF")):
+                        self.error("SET commutateur TO ON ou OFF attendu")
+                    groups.append(Stmt("set_switch", (switches, self.take().key == "ON"), line))
+                return groups[0] if len(groups) == 1 else Stmt("sequence", (groups,), line)
             if self.candidates(self.t.key) and not self.candidates(self.t.key, True):
                 refs = [self.variable()]
                 while not self.at("TO") and not self.at("UP") and not self.at("DOWN"):
@@ -2192,15 +2258,37 @@ class Parser:
                 self.accept("ADVANCING")  # optional word in WRITE BEFORE/AFTER
                 if self.accept("PAGE"):
                     count = None
+                elif not self.t.string and self.mnemonics.get(self.t.key) in {"formfeed", "channel"}:
+                    # cb_build_write_advancing_mnemonic: FORMFEED (S01-S05, CSP,
+                    # TOP) and the channels C01-C12 all advance to a new page.
+                    self.take()
+                    count = None
                 else:
-                    if self.t.string or not self.t.text.isdigit() or not 0 <= int(self.t.text) <= 65535:
-                        self.error("ADVANCING requiert PAGE ou un entier littéral de 0 à 65535")
-                    count = int(self.take().text)
+                    if not self.t.string and self.t.key in {"ZERO", "ZEROS", "ZEROES"}:
+                        self.take()
+                        count = 0
+                    elif not self.t.string and self.t.text.isascii() and self.t.text.isdigit():
+                        if not 0 <= int(self.t.text) <= 65535:
+                            self.error("ADVANCING requiert un entier littéral de 0 à 65535")
+                        count = int(self.take().text)
+                    elif not self.t.string and self.candidates(self.t.key):
+                        # cb_build_write_advancing_lines: cob_get_int of the item.
+                        ref = self.variable()
+                        if self.fields[ref.name].kind != "number" or ref.start is not None \
+                                or self.fields[ref.name].usage == "INDEX":
+                            self.error("ADVANCING requiert un identificateur numérique")
+                        count = Expr("var", (ref,))
+                    else:
+                        self.error("ADVANCING requiert PAGE, un mnémonique, un entier ou un identificateur")
                     self.accept("LINE") or self.accept("LINES")
-                if self.files[files[0]].organization != "SEQUENTIAL":
-                    self.error("WRITE ADVANCING limité à SEQUENTIAL dans le profil actuel")
+                if self.files[files[0]].organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                    self.error("WRITE ADVANCING limité aux fichiers SEQUENTIAL et LINE SEQUENTIAL")
                 advancing = (direction, count)
-            invalid, valid = self.key_handlers(files[0], "END-WRITE")
+            if self.files[files[0]].organization in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
+                # at_eop_clauses take the place of INVALID KEY for these files.
+                invalid, valid = self.eop_handlers()
+            else:
+                invalid, valid = self.key_handlers(files[0], "END-WRITE")
             return Stmt("write", (files[0], record.name, value, advancing, invalid, valid), line)
         if verb == "DISPLAY":
             values = []
@@ -2384,14 +2472,15 @@ class Parser:
             # An all-digit word is a procedure name unless TIMES follows it.
             numeric_name = (not self.t.string and re.fullmatch(r"\d+", self.t.key)
                             and self.tokens[self.i + 1].key != "TIMES")
-            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH"} | VERBS and not self.t.string
+            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH", "TEST"} | VERBS and not self.t.string
                                 and not self.candidates(self.t.key)
                                 and re.fullmatch(r"[A-Z_][A-Z_0-9-]*|\d[A-Z0-9-]*[A-Z][A-Z_0-9-]*", self.t.key)):
                 target = [self.procedure_reference()]
                 if self.accept("THRU") or self.accept("THROUGH"):
                     target.append(self.procedure_reference())
             test_after = False
-            if self.accept("WITH"):
+            # perform_test: [WITH] TEST BEFORE|AFTER.
+            if self.accept("WITH") or self.at("TEST"):
                 self.expect("TEST")
                 if self.accept("AFTER"):
                     test_after = True
@@ -2565,6 +2654,35 @@ class Parser:
                 return Stmt("continue", (), line)
             self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")
         self.error(f"instruction non prise en charge: {verb}")
+
+    def eop_start(self, offset=0):
+        """The scanner's EOP token: [AT] END-OF-PAGE or [AT] EOP."""
+        t = self.tokens[min(self.i + offset, len(self.tokens) - 1)]
+        if not t.string and t.key == "AT":
+            t = self.tokens[min(self.i + offset + 1, len(self.tokens) - 1)]
+        return not t.string and t.key in {"END-OF-PAGE", "EOP"}
+
+    def eop_handlers(self):
+        """at_eop_clauses: AT END-OF-PAGE [NOT AT END-OF-PAGE], or the
+        reverse order, which cobol85.conf rejects (unconformable)."""
+        bodies = {}
+        while len(bodies) < 2:
+            negated = self.at("NOT") and self.eop_start(1)
+            if not (negated or self.eop_start()) or negated in bodies:
+                break
+            if not negated and bodies and STD == "cobol85":
+                self.error("NOT AT END-OF-PAGE before AT END-OF-PAGE")
+            if negated:
+                self.take()
+            self.accept("AT")
+            self.take()
+            bodies[negated] = self.block({"NOT", "END-WRITE"})
+            if not bodies[negated]:
+                self.error(f"{'NOT AT' if negated else 'AT'} END OF PAGE without imperative statement")
+        if self.at("INVALID") or (self.at("NOT") and self.tokens[self.i + 1].key == "INVALID"):
+            self.error("INVALID KEY limité aux fichiers RELATIVE et INDEXED")
+        self.accept("END-WRITE")
+        return bodies.get(False, []), bodies.get(True, [])
 
     def invalid_key(self, stops):
         self.expect("INVALID")
@@ -3134,15 +3252,22 @@ class Parser:
         ending = "END-" + verb
         error, success, handled = [], [], False
         stops = {ending, "ELSE", "END-IF", "END-PERFORM", "WHEN", "END-EVALUATE"}
-        if self.accept("ON"):
+        # [ON] SIZE ERROR and NOT [ON] SIZE ERROR; another NOT ON phrase
+        # (NOT ON EXCEPTION) belongs to an enclosing statement.
+        def size_phrase(offset):
+            words = [self.tokens[min(self.i + k, len(self.tokens) - 1)] for k in range(offset, offset + 2)]
+            return any(not t.string and t.key == "SIZE" for t in (words if words[0].key == "ON" else words[:1]))
+        if size_phrase(0):
             handled = True
+            self.accept("ON")
             self.expect("SIZE"); self.expect("ERROR")
             error = self.block(stops | {"NOT"})
             if not error:
                 self.error("instruction attendue après ON SIZE ERROR")
-        if self.accept("NOT"):
+        if self.at("NOT") and size_phrase(1):
+            self.take()
             handled = True
-            self.expect("ON"); self.expect("SIZE"); self.expect("ERROR")
+            self.accept("ON"); self.expect("SIZE"); self.expect("ERROR")
             success = self.block(stops)
             if not success:
                 self.error("instruction attendue après NOT ON SIZE ERROR")
