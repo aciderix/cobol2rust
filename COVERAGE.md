@@ -714,3 +714,15 @@ système, fuseau UTC seul modélisé) et WHEN-COMPILED (littéral de l'heure de
 conversion, comme `cb_set_intr_when_compiled`). Émission acceptée :
 **426/458** ; revérification : **401/402 programmes principaux conformes**, 9303 PASS, 0 FAIL
 (`build/nist-verify-odo.json`, `build/coverage-nist-odo.json`).
+
+## Progression : Report Writer
+
+Port de `reportio.c` sans ruptures de contrôle (`do_page_heading`,
+`do_page_footing`, `report_line`, `report_line_type`, `cob_report_generate`,
+`cob_report_terminate`) et des règles de cobc pour la REPORT SECTION
+(`page_limit_clause`, `finalize_report`, `output_report_define_lines`) : FD
+REPORT, RD avec limites de page littérales, groupes RH/PH/DE/PF/RF, LINE [PLUS],
+COLUMN, SOURCE, VALUE, LINE-COUNTER et PAGE-COUNTER. Émission acceptée :
+**430/458** ; revérification : **405/406 programmes principaux conformes**,
+9343 PASS, 0 FAIL (`build/nist-verify-report.json`,
+`build/coverage-nist-report.json`).

@@ -109,7 +109,8 @@ instructions `initiate`/`generate`/`terminate` ; `file_runtime::Report` (port de
 `reportio.c` sans contrôles) appelle le programme par `ReportEvent` : la méthode
 `reportN_event` fait le MOVE des SOURCE et le `write_report` du fichier pendant
 que le rapport est sorti du programme (`std::mem::take`). RW101A-RW104A
-conformes (REPORT et fichier de rapport identiques à cobc). Prochains blocages : USE FOR DEBUGGING sur identifiants (DB201A-203A,
+conformes (REPORT et fichier de rapport identiques à cobc). NIST **430/458**,
+405/406. Prochains blocages : USE FOR DEBUGGING sur identifiants (DB201A-203A,
 listes `debug_check` de cobc), FD GLOBAL/EXTERNAL et USE GLOBAL
 (IC227A/233A/234A).
 

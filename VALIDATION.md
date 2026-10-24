@@ -1,5 +1,19 @@
 # Validation — 22 octobre 2026
 
+## Report Writer — 24 octobre 2026
+
+- **341 tests découverts : 340 réussis, un test PE Windows ignoré.**
+- **117/117 comparaisons locales conformes** ; nouvelle fixture
+  `report_writer.cob` (REPORT/PAGE HEADING, DETAIL à plusieurs lignes,
+  LINE absolue, PAGE/REPORT FOOTING, GENERATE du rapport, deux rapports, OPEN
+  EXTEND) ; stdout et fichiers de rapport identiques à cobc.
+- NIST : **430/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **405/406 programmes principaux conformes** (9343 PASS, 0 FAIL, 12 DELETED,
+  104 INSPECT) : `build/nist-verify-report.json`,
+  `build/coverage-nist-report.json`. 4 programmes ajoutés : RW101A, RW102A,
+  RW103A, RW104A (fichiers de rapport XXXXX049 identiques à ceux de cobc).
+  Écart connu inchangé : OBNC1M (SIGINT).
+
 ## OCCURS DEPENDING, symboles du module, programmes contenus — 24 octobre 2026
 
 - **336 tests découverts : 335 réussis, un test PE Windows ignoré.**
