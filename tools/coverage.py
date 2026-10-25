@@ -115,10 +115,10 @@ def implementation_hashes():
 
 
 def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, include_subprograms=False,
-            call_paths=()):
+            call_paths=(), extensions=None):
     root = Path(root).absolute()
     includes = [Path(path).absolute() for path in includes]
-    extensions = EXTENSIONS | ({".sub"} if include_subprograms else set())
+    extensions = set(extensions or EXTENSIONS) | ({".sub"} if include_subprograms else set())
     try:
         paths, errors, excluded = discover(root, extensions)
     except OSError as error:

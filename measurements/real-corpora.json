@@ -1,0 +1,498 @@
+{
+ "schema": 1,
+ "measured_at": "2026-10-25T11:22:24+00:00",
+ "git_head": "80ec66776fa3678f7e36f1bc0c475c16e017508a",
+ "implementation_sha256": "b3ceda67814cd5beb4f0f451dcc0c8330ec16b238b1547f18dfbc284b242bb62",
+ "cobc": "cobc (GnuCOBOL) 3.2.0",
+ "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
+ "totals": {
+  "sources": 2458,
+  "accepted": 230,
+  "cobc_accepted": 738,
+  "gap": 518,
+  "accepted_where_cobc_refuses": 10
+ },
+ "corpora": {
+  "carddemo": {
+   "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)",
+   "commit": "59cc6c2fd7ebd7ef7925cad552a01a4b8b6e4d5e",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)"
+   },
+   "sources": 44,
+   "accepted": 0,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "COPY: REPLACING ou point attendu",
+     36
+    ],
+    [
+     "copybook introuvable: CMQGMOV",
+     2
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     2
+    ],
+    [
+     "caractère non pris en charge '?'",
+     2
+    ],
+    [
+     "copybook introuvable: DFHBMSCA",
+     1
+    ],
+    [
+     "caractère non pris en charge '!'",
+     1
+    ]
+   ],
+   "cobc_accepted": 14,
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 14,
+   "gap_blockers": [
+    [
+     "COPY: REPLACING ou point attendu",
+     13
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     1
+    ]
+   ]
+  },
+  "zopeneditor-sample": {
+   "kind": "application exemple IBM",
+   "commit": "8f9835308de6159eb54f226041d5f81a780cb8eb",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "application exemple IBM"
+   },
+   "sources": 5,
+   "accepted": 0,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "COPY: REPLACING ou point attendu",
+     5
+    ]
+   ],
+   "cobc_accepted": 5,
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 5,
+   "gap_blockers": [
+    [
+     "COPY: REPLACING ou point attendu",
+     5
+    ]
+   ]
+  },
+  "cobol-programming-course": {
+   "kind": "cours IBM Enterprise COBOL",
+   "commit": "780b1c9624e066b9d784a738896e493282c5fbf4",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "cours IBM Enterprise COBOL"
+   },
+   "sources": 32,
+   "accepted": 5,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "IDENTIFICATION DIVISION attendue",
+     17
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     3
+    ],
+    [
+     "caractère non pris en charge '#'",
+     3
+    ],
+    [
+     "caractère non pris en charge '&'",
+     1
+    ],
+    [
+     "caractère non pris en charge '$'",
+     1
+    ],
+    [
+     "caractère non pris en charge '|'",
+     1
+    ],
+    [
+     "instruction non prise en charge: **",
+     1
+    ]
+   ],
+   "cobc_accepted": 12,
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 7,
+   "gap_blockers": [
+    [
+     "IDENTIFICATION DIVISION attendue",
+     5
+    ],
+    [
+     "caractère non pris en charge '|'",
+     1
+    ],
+    [
+     "instruction non prise en charge: **",
+     1
+    ]
+   ]
+  },
+  "beg-cobol-for-programmers": {
+   "kind": "livre, programmes complets",
+   "commit": "3d2656fadd3cd3534beab8e00f85fe96ac41f5c2",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "livre, programmes complets"
+   },
+   "sources": 113,
+   "accepted": 43,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "PROCEDURE attendu",
+     22
+    ],
+    [
+     "niveau 88 de groupe limité aux littéraux alphanumériques",
+     21
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     2
+    ],
+    [
+     "caractère non pris en charge '?'",
+     2
+    ],
+    [
+     "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa3 in position 157: invalid start byte",
+     2
+    ],
+    [
+     ". attendu",
+     2
+    ],
+    [
+     "fichier non déclaré: COUNTYDETAILS",
+     2
+    ],
+    [
+     "cible INSPECT littérale ou fonction non prise en charge",
+     2
+    ],
+    [
+     "niveau de donnée attendu",
+     2
+    ],
+    [
+     "caractère non pris en charge '$'",
+     2
+    ],
+    [
+     "entrée SPECIAL-NAMES non prise en charge: SPACE",
+     1
+    ],
+    [
+     "expression non prise en charge: INSPECT",
+     1
+    ]
+   ],
+   "cobc_accepted": 65,
+   "accepted_where_cobc_refuses": 2,
+   "accepted_where_cobc_refuses_sources": [
+    "978-1-4302-6253-4_Coughlan_Ch16/Listing16-3.cbl",
+    "978-1-4302-6253-4_Coughlan_Ch16/Listing16-4.cbl"
+   ],
+   "gap": 24,
+   "gap_blockers": [
+    [
+     "niveau 88 de groupe limité aux littéraux alphanumériques",
+     16
+    ],
+    [
+     "fichier non déclaré: COUNTYDETAILS",
+     2
+    ],
+    [
+     "cible INSPECT littérale ou fonction non prise en charge",
+     2
+    ],
+    [
+     "entrée SPECIAL-NAMES non prise en charge: SPACE",
+     1
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     1
+    ],
+    [
+     "END-IF ou point attendu",
+     1
+    ],
+    [
+     "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
+     1
+    ]
+   ]
+  },
+  "proleap-cobol-parser": {
+   "kind": "tests de parseur (fragments, dialectes)",
+   "commit": "d1bfe75bdd6d480f70c74c6345bcc02610ac30d3",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "tests de parseur (fragments, dialectes)"
+   },
+   "sources": 759,
+   "accepted": 85,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "ASSIGN requiert un chemin littéral entre guillemets",
+     216
+    ],
+    [
+     "indicateur fixe 'C' non pris en charge",
+     209
+    ],
+    [
+     "niveau de donnée attendu",
+     33
+    ],
+    [
+     "PROCEDURE attendu",
+     32
+    ],
+    [
+     "expression attendue",
+     14
+    ],
+    [
+     "instruction non prise en charge: EXEC",
+     12
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     11
+    ],
+    [
+     "COMMUNICATION SECTION non conforme hors -std=cobol85",
+     9
+    ],
+    [
+     "nom inconnu: SOMEID1; qualifier avec OF/IN si nécessaire",
+     7
+    ],
+    [
+     "RD REPORT1 sans clause REPORT dans un FD",
+     6
+    ],
+    [
+     "indicateur fixe 'A' non pris en charge",
+     5
+    ],
+    [
+     "PROGRAM-ID attendu",
+     5
+    ]
+   ],
+   "cobc_accepted": 311,
+   "accepted_where_cobc_refuses": 5,
+   "accepted_where_cobc_refuses_sources": [
+    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionGreater.cbl",
+    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionGreaterOrEqual.cbl",
+    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionLess.cbl",
+    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionLessOrEqual.cbl",
+    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionNotEqualChar.cbl"
+   ],
+   "gap": 231,
+   "gap_blockers": [
+    [
+     "ASSIGN requiert un chemin littéral entre guillemets",
+     172
+    ],
+    [
+     "PROCEDURE attendu",
+     20
+    ],
+    [
+     "niveau de donnée attendu",
+     18
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     6
+    ],
+    [
+     "COMMUNICATION SECTION non conforme hors -std=cobol85",
+     2
+    ],
+    [
+     "paragraphe CONFIGURATION non pris en charge",
+     2
+    ],
+    [
+     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
+     1
+    ],
+    [
+     "expression non prise en charge: :",
+     1
+    ],
+    [
+     "clause SELECT non prise en charge",
+     1
+    ],
+    [
+     "entrée SPECIAL-NAMES non prise en charge: <EOF>",
+     1
+    ],
+    [
+     "invalid expression: unfinished expression",
+     1
+    ],
+    [
+     "instruction non prise en charge: GIVING",
+     1
+    ]
+   ]
+  },
+  "che4z-lsp-for-cobol": {
+   "kind": "tests de serveur de langage IBM",
+   "commit": "7ae2bceb8bcfd5f0692d2b8af8e846b93ae42a26",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "tests de serveur de langage IBM"
+   },
+   "sources": 1505,
+   "accepted": 97,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "clause ENVIRONMENT DIVISION non prise en charge",
+     351
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     315
+    ],
+    [
+     "caractère non pris en charge '|'",
+     231
+    ],
+    [
+     "ASSIGN requiert un chemin littéral entre guillemets",
+     216
+    ],
+    [
+     "COPY: REPLACING ou point attendu",
+     88
+    ],
+    [
+     "expression attendue",
+     22
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     11
+    ],
+    [
+     "instruction non prise en charge: OBTAIN",
+     11
+    ],
+    [
+     "PROCEDURE attendu",
+     10
+    ],
+    [
+     "instruction non prise en charge: FIND",
+     10
+    ],
+    [
+     "copybook introuvable: LGCMAREA",
+     10
+    ],
+    [
+     "BY attendu dans COPY REPLACING",
+     8
+    ]
+   ],
+   "cobc_accepted": 331,
+   "accepted_where_cobc_refuses": 3,
+   "accepted_where_cobc_refuses_sources": [
+    "clients/analysis/src/__tests__/__resources__/cfgraph/case33.cbl",
+    "clients/analysis/src/__tests__/__resources__/cfgraph/case35.cbl",
+    "clients/analysis/src/__tests__/__resources__/cfgraph/case39.cbl"
+   ],
+   "gap": 237,
+   "gap_blockers": [
+    [
+     "ASSIGN requiert un chemin littéral entre guillemets",
+     179
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     31
+    ],
+    [
+     "COPY: REPLACING ou point attendu",
+     8
+    ],
+    [
+     "expression attendue",
+     4
+    ],
+    [
+     "EXIT SECTION requiert une section de procédure",
+     3
+    ],
+    [
+     "EXIT PERFORM non pris en charge",
+     2
+    ],
+    [
+     "instruction non prise en charge: *",
+     2
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     2
+    ],
+    [
+     "FILE-CONTROL attendu",
+     1
+    ],
+    [
+     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
+     1
+    ],
+    [
+     "niveau de donnée attendu",
+     1
+    ],
+    [
+     "instruction non prise en charge: XML",
+     1
+    ]
+   ]
+  }
+ }
+}
