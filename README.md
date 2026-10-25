@@ -99,6 +99,7 @@ Ces résultats portent sur les entrées testées.
 
 | Domaine | Pris en charge |
 | --- | --- |
+| Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"` ; concaténation `&`, `Z"…"`, `N"…"` refusés |
 | Sources | Lecture en octets comme cobc (colonnes d'octets, BOM UTF-8 ignoré), en-tête IDENTIFICATION et PROCEDURE DIVISION facultatifs, INPUT-OUTPUT SECTION sans FILE-CONTROL si aucun SELECT ; détection du format comme cobc (colonne 7 de la première ligne, format fixe avec `-std=cobol85`), format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
 | Configuration | `ENVIRONMENT DIVISION`, `CONFIGURATION SECTION`, `SOURCE-COMPUTER` et `OBJECT-COMPUTER` avec nom machine seul |
@@ -229,6 +230,9 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
 - un nom introuvable prend ON EXCEPTION seulement s'il est sûrement absent : mot
   majuscule, ni routine système libcob (`SYSTEM`, `CBL_…`, `C$…`), ni source du
   chemin d'appel non convertie. Sinon la conversion ou l'exécution s'arrête.
+  Sans ON EXCEPTION, un module sûrement absent suit `cob_call_error` :
+  `libcob: error: module 'NOM' not found`, avertissements des fichiers ouverts,
+  code de sortie 1.
 
 Les programmes qui suivent `END PROGRAM` dans le même source sont des frères :
 ils sont dans l'exécutable et GnuCOBOL les trouve avant le chemin d'appel.
@@ -464,7 +468,10 @@ négatif dans une destination non signée, comme dans les cas GnuCOBOL testés.
 Les données numériques invalides et les limites de capacité intermédiaire
 restent des arrêts explicites ; elles ne sont pas absorbées par SIZE ERROR.
 
-Sans ces clauses, pour les destinations numériques non éditées, une division par zéro, une valeur hors de la PICTURE, un signe négatif dans un
+Sans ces clauses, une division par zéro dans une instruction arithmétique
+rend le résultat NaN comme `cob_decimal_div` : la destination garde sa valeur
+et l'exécution continue (dans une condition, elle reste un arrêt nommé).
+Pour les destinations numériques non éditées, une valeur hors de la PICTURE, un signe négatif dans un
 champ non signé ou une saisie numérique invalide provoque un arrêt explicite,
 avec la ligne COBOL et le code **70**. Les intermédiaires dépassant 1024 décimales
 ou 4096 chiffres sont aussi refusés. Ce choix conservateur diffère volontairement
@@ -665,23 +672,25 @@ Périmètre précis du runtime de fichiers :
 - Un enregistrement `01` par `FD`, sans `VALUE` : PIC X élémentaire ou groupe
   contenant des colonnes texte et numériques DISPLAY, avec FILLER et niveaux 88.
   Les champs COMP/COMP-3 dans LINE SEQUENTIAL sont refusés.
-- Texte ASCII imprimable, fins de ligne LF ou CRLF ; les lignes courtes sont
-  complétées par des espaces. Les espaces finaux sont retirés à l'écriture, sauf
-  avec `COB_LS_FIXED=1`. Les sauts de ligne écrits suivent la plateforme.
+- Octets quelconques comme `lineseq_read`/`lineseq_write` : fins de ligne LF ou
+  CRLF (un CR isolé est une donnée), lignes courtes complétées par des espaces,
+  espaces finaux retirés à l'écriture sauf avec `COB_LS_FIXED=1`. Avec
+  `COB_LS_VALIDATE` (défaut), un caractère de contrôle lu donne le statut 09 ;
+  à l'écriture, le statut 71 suit la macro `IS_BAD_CHAR (*p++)` de libcob, qui
+  juge un octet de contrôle avec les octets qui le suivent.
 - Statuts couverts : `00`, `04`, `05`, `10`, `30`, `35`, `37`, `41`, `42`, `46`,
   `47`, `48`. `FILE STATUS` doit être un champ `PIC XX` ou `PIC 99 DISPLAY`.
-  Sans `FILE STATUS`, un échec non traité provoque un arrêt explicite. `AT END`
-  traite la première fin de fichier ; la lecture suivante donne `46`.
-- `COB_LS_SPLIT` suit la valeur par défaut GnuCOBOL 3.2 (`true`). Le découpage des
-  lignes dépassant la taille du FD n'est pas implémenté et provoque un arrêt
-  nommé. Pour les tronquer avec le statut `04`, définir `COB_LS_SPLIT=0` pour
-  **les deux programmes**, comme dans l'exemple ci-dessous. Avec le découpage
-  actif, une dernière ligne exactement aussi longue que le FD sans délimiteur
-  est également refusée : le comportement du runtime GnuCOBOL doit être modélisé
-  séparément pour ce cas.
-- Limite de 1 Mio par ligne physique ; caractères de contrôle, données non ASCII,
-  `I-O`, `REWRITE`, verrouillage, redirections de noms par environnement, profils
-  de configuration externes et chemins SELECT identiques non pris en charge.
+  Sans `FILE STATUS` ni gestionnaire, une exception de fichier est
+  `cob_fatal_error` : message `libcob: error: … (status = nn) for file …` sur
+  stderr, avertissements `implicit CLOSE` des fichiers restés ouverts, code de
+  sortie 1 ; ces avertissements suivent aussi STOP RUN. `AT END` traite la
+  première fin de fichier ; la lecture suivante donne `46`.
+- `COB_LS_SPLIT` suit la valeur par défaut GnuCOBOL 3.2 (`true`) : la suite
+  d'une ligne trop longue devient l'enregistrement suivant (statut 06), avec
+  le recul `fseek` de libcob, qui relit le dernier octet d'une dernière ligne
+  pleine sans délimiteur. `COB_LS_SPLIT=0` tronque avec le statut `04`.
+- `I-O`, `REWRITE`, verrouillage, profils de configuration externes et chemins
+  SELECT identiques ouverts en même temps ne sont pas pris en charge en LINE SEQUENTIAL.
   Les accès concurrents et les alias de chemin ne sont pas validés.
 
 ```powershell

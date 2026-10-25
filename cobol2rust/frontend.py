@@ -228,8 +228,21 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 i += 1
             else:
                 raise CobolError(f"ligne {start}: littéral non terminé")
-            if not value.isascii():
-                raise CobolError(f"ligne {start}: seuls les littéraux ASCII sont pris en charge")
+            # One character per source byte (decode_source): a non-ASCII
+            # literal holds the bytes of its source text, as for cobc.
+            tokens.append(Token(value, start, True, token_start, i))
+        elif c in "xX" and i + 1 < len(source) and source[i + 1] in "\"'":
+            # X"hex": two hexadecimal digits per byte (scanner.l).
+            quote, start = source[i + 1], line
+            end = source.find(quote, i + 2)
+            newline = source.find("\n", i + 2)
+            if end < 0 or (0 <= newline < end):
+                raise CobolError(f"ligne {start}: littéral hexadécimal non terminé")
+            digits = source[i + 2:end]
+            if not digits or len(digits) % 2 or not all(d in "0123456789abcdefABCDEF" for d in digits):
+                raise CobolError(f"ligne {start}: littéral hexadécimal invalide: {digits!r}")
+            value = bytes.fromhex(digits).decode("latin-1")
+            i = end + 1
             tokens.append(Token(value, start, True, token_start, i))
         else:
             # A COBOL word may start with digits when it holds a letter (3-DIMENSION-TBL);
@@ -247,6 +260,10 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
+            if not match and c == "&":
+                tokens.append(Token("&", line, False, i, i + 1))
+                i += 1
+                continue
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
             text = match[0]
@@ -261,7 +278,16 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             elif match[0] == ")" and parentheses:
                 parentheses -= 1
     tokens.append(Token("<EOF>", line, False, len(source), len(source)))
-    return tokens
+    # literal: literal TOK_AMPER basic_literal, concatenated by cobc.
+    merged = []
+    for token in tokens:
+        if (token.string and len(merged) > 1 and merged[-1].text == "&" and not merged[-1].string
+                and merged[-2].string):
+            merged.pop()
+            first = merged.pop()
+            token = Token(first.text + token.text, first.line, True, first.start, token.end)
+        merged.append(token)
+    return merged
 
 
 def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> tuple[str, list[str]]:
@@ -451,6 +477,8 @@ class FileSpec:
     # ASSIGN data-name: (label, qualifiers) until validate_files, then the
     # field key read at each OPEN; `path` is then None.
     assign_field: object = None
+    # The SELECT name as written: libcob's select_name in its messages.
+    select_text: str = ""
 
 
 @dataclass
@@ -2172,7 +2200,7 @@ class Parser:
         self.files[name] = FileSpec(name, path, optional, status, organization=organization,
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
                                     record_key=record_key, alternate_keys=alternate_keys,
-                                    assign_field=assign_field)
+                                    assign_field=assign_field, select_text=select_text)
 
     # assign_device of parser.y: general devices keep the SELECT name as file
     # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.

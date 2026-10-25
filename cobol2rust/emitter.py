@@ -712,7 +712,8 @@ class Emitter:
         self.write(f"let handler: Option<usize> = {handler};")
         invalid = str(getattr(self, "io_invalid", False)).lower()
         result = "let eop = " if getattr(self, "io_eop", None) else ""
-        self.write(f"{result}file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some());")
+        name = f"&|| {self.handle(file_name, True)}.error_name()" if self.program.files[file_name].organization != "SORT" else "&|| Vec::new()"
+        self.write(f"{result}file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some(), {name});")
 
     def linage_values(self, file_name):
         """The LINAGE phrases as cob_get_int reads them at OPEN and WRITE."""
@@ -849,11 +850,17 @@ class Emitter:
             self.assignment(*a, move=op == "move")
         elif op == "compute":
             shared, items = a
+            opened = 0
             if shared is not None:
                 if self.kind(shared) != "number":
                     raise CobolError("calcul arithmétique requiert des nombres")
                 self.shared = self.unique()
-                self.write(f"let {self.shared} = {self.expression(shared)};")
+                if divides(shared):
+                    self.write(f"if let Some({self.shared}) = runtime::decimal_nan(|| {self.expression(shared)}) {{")
+                    self.indent += 1
+                    opened += 1
+                else:
+                    self.write(f"let {self.shared} = {self.expression(shared)};")
             # Each receiver is computed and stored in turn: its subscripts and
             # a single re-read operand see the receivers already stored.
             for ref, expr, rounded in items:
@@ -868,7 +875,21 @@ class Emitter:
                     self.indent -= 1
                     self.write("}")
                     continue
+                if divides(expr):
+                    # A division by zero leaves this receiver unchanged.
+                    value, shared = self.unique(), getattr(self, "shared", None)
+                    self.write(f"if let Some({value}) = runtime::decimal_nan(|| {self.expression(expr)}) {{")
+                    self.indent += 1
+                    self.shared = value
+                    self.assignment(Expr("shared", ()), [ref], rounded)
+                    self.shared = shared
+                    self.indent -= 1
+                    self.write("}")
+                    continue
                 self.assignment(expr, [ref], rounded)
+            for _ in range(opened):
+                self.indent -= 1
+                self.write("}")
         elif op == "accept":
             self.write(f"{self.reference(a[0])}.accept();")
         elif op == "accept_clock":
@@ -1120,12 +1141,13 @@ class Emitter:
                 values.append(f"storage_runtime::content_copy(&{view})" if mode == "CONTENT" else view)
             # A program not found raises EC-PROGRAM-NOT-FOUND, handled by
             # ON EXCEPTION; without it GnuCOBOL stops the run unit.
+            # cob_call_error without ON EXCEPTION: "module 'X' not found", exit 1.
             not_found = (f"pc = {exception};" if exception is not None
-                         else "runtime::fail(\"CALL of a program not found, without ON EXCEPTION\");")
+                         else "runtime::module_not_found({});")
             if target[0] == "literal" and target[1] not in self.called:
                 if not surely_absent(target[1], self.present):
                     raise CobolError(f"CALL {target[1]}: programme non converti ou routine système non pris en charge")
-                self.write(not_found)
+                self.write(not_found.format(f"b{quoted(target[1])}"))
                 return
             name = quoted(target[1]) if target[0] == "literal" else f"{self.reference(target[1])}.bytes()"
             if target[0] == "dynamic":
@@ -1142,7 +1164,7 @@ class Emitter:
                 self.write(f"Some(runtime::Outcome::Return) => pc = {success},")
             if target[0] == "dynamic":
                 present = ", ".join(quoted(name) for name in [*self.present, *sorted(self.called)])
-                self.write(f"None if runtime::surely_absent(&name, &[{present}]) => {{ {not_found} }}")
+                self.write(f"None if runtime::surely_absent(&name, &[{present}]) => {{ {not_found.format('name.as_bytes()')} }}")
             self.write("None => runtime::fail(\"CALL of a program absent from the conversion or recursive; not modelled\"),")
             self.indent -= 1
             self.write("}")
@@ -1552,17 +1574,17 @@ class Emitter:
             if spec.sort:
                 created = f"file_runtime::SortFile::new({spec.record_max})"
             elif spec.organization == "RELATIVE":
-                created = f"file_runtime::RelativeFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits})"
+                created = f"file_runtime::RelativeFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}).named({quoted(spec.select_text or name)})"
             elif spec.organization == "INDEXED":
                 keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()} }}"
                                  for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
-                created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}])"
+                created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]).named({quoted(spec.select_text or name)})"
             else:
                 linage = ".with_linage()" if spec.linage else ""
                 if spec.organization == "LINE SEQUENTIAL":
                     # finalize_file: a LINE SEQUENTIAL record_min is 0.
                     limits = f"0, {spec.record_max}"
-                created = f"file_runtime::CobolFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}"
+                created = f"file_runtime::CobolFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}.named({quoted(spec.select_text or name)})"
             registry = self.file_registry(name)
             if spec.external:
                 # cob_file_external_addr: the first program creates the file.
@@ -1769,7 +1791,7 @@ class Emitter:
         self.write(f'if status != 0 {{ runtime::fail(&format!("report WRITE status {{status:02}} not modelled")); }}')
         status = self.program.files[report.file].status
         destination = f"Some(&mut self.{self.names[status]})" if status else "None"
-        self.write(f"file_runtime::file_status(status, {destination}, false, false, false);")
+        self.write(f"file_runtime::file_status(status, {destination}, false, false, false, &|| self.{file}.error_name());")
         self.write("Vec::new()")
         self.indent -= 1
         self.write("}")
@@ -1806,6 +1828,13 @@ class Emitter:
         self.write("fn return_code(&self) -> Option<i64> {")
         self.write(f"    {'Some(' + self.register + '.integer(' + chr(34) + 'RETURN-CODE' + chr(34) + ') as i64)' if self.register else 'None'}")
         self.write("}")
+
+
+def divides(expr):
+    """Whether an arithmetic expression contains a division."""
+    if not isinstance(expr, Expr):
+        return False
+    return expr.op in {"/", "**"} or any(divides(arg) for arg in expr.args if isinstance(arg, Expr))
 
 
 def surely_absent(name, present):
@@ -1896,10 +1925,14 @@ def generate_unit(emitters):
             main_mapping = [{**item, "rust_line": item["rust_line"] + offset} for item in mapping]
         lines += body
     unchecked = "storage_runtime::set_unchecked_data(); " if getattr(emitters[0].program, "unchecked_data", False) else ""
-    if shared:
-        # The run unit's EXTERNAL and GLOBAL files are closed at its end.
-        lines.append(f"fn main() {{ {unchecked}let code = {{ let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); unit.exit_code }}; file_runtime::release_shared(); if code != 0 {{ std::process::exit(code); }} }}")
-    else:
-        # The program and its files are dropped (closed) before exit.
-        lines.append(f"fn main() {{ {unchecked}let code = {{ let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); unit.exit_code }}; if code != 0 {{ std::process::exit(code); }} }}")
+    run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit);"
+    # cob_terminate_routines: the warnings for files left open, then the files
+    # closed (dropped with the program), also after a fatal runtime error.
+    files = any(emitter.files for emitter in emitters)
+    messages = " file_runtime::exit_messages();" if files else ""
+    released = " file_runtime::release_shared();" if shared else ""
+    lines.append(f"fn main() {{ {unchecked}let code = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {{ {run}{messages} "
+                 "unit.exit_code })) { Ok(code) => code, "
+                 "Err(payload) if payload.is::<runtime::FatalExit>() => 1, Err(payload) => std::panic::resume_unwind(payload) };"
+                 f"{released} if code != 0 {{ std::process::exit(code); }} }}")
     return "\n".join(lines) + "\n", main_mapping

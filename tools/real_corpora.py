@@ -54,6 +54,58 @@ CORPORA = {
 }
 
 
+# Corpora of complete programs: --execute compiles, runs and compares their
+# accepted main programs with GnuCOBOL (levels 3 and 4 of COVERAGE.md).
+EXECUTED = ("carddemo", "zopeneditor-sample", "cobol-programming-course", "beg-cobol-for-programmers")
+
+
+def execute_source(name: str, source: str) -> dict:
+    """Run one accepted program natively and in Rust, empty stdin, with the
+    files of its own directory as input data (a copy, under a short name that
+    cobc accepts as a program file name)."""
+    from cobol2rust import frontend
+    from cobol2rust.frontend import CobolError
+    from cobol2rust.verification import verify
+    settings = CORPORA[name]
+    frontend.STD = settings["std"]
+    original = Path(source)
+    includes = [original.parent, *copy_dirs(CORPORA_DIR / name)]
+    with tempfile.TemporaryDirectory() as directory:
+        copy = Path(directory) / ("program" + original.suffix.lower())
+        copy.write_bytes(original.read_bytes())
+        try:
+            report = verify(copy, fmt=settings["format"], includes=includes, data_dir=original.parent,
+                            call_paths=[original.parent], std=settings["std"], release=True)
+        except CobolError as error:
+            return {"status": "refused", "diagnostic": normalize(str(error).splitlines()[0] if str(error) else "")}
+        except subprocess.TimeoutExpired:
+            return {"status": "timeout"}
+        except Exception as error:
+            return {"status": "error", "diagnostic": f"{type(error).__name__}: {error}"[:200]}
+    if report["match"]:
+        return {"status": "identical", "exit": report["cobol_exit"]}
+    reasons = []
+    if report["cobol_stdout"] != report["rust_stdout"]:
+        reasons.append("stdout")
+    if report["file_differences"]:
+        reasons.append("fichiers " + ", ".join(report["file_differences"][:5]))
+    if report["cobol_exit"] != report["rust_exit"] or report["cobol_exit"] not in {0, -2}:
+        reasons.append(f"sortie {report['cobol_exit']}/{report['rust_exit']}")
+    return {"status": "different", "reasons": reasons, "rust_stderr": report["rust_stderr"][-200:]}
+
+
+def execute_corpus(name: str, report: dict) -> dict:
+    rows = [row for row in report["results"] if row["status"] == "emission_accepted" and not row.get("subprogram")]
+    results = {}
+    for row in rows:
+        relative = Path(row["source"]).relative_to(CORPORA_DIR / name).as_posix()
+        results[relative] = execute_source(name, row["source"])
+        print(f"  {name}: {results[relative]['status']:9} {relative}", flush=True)
+    counts = Counter(result["status"] for result in results.values())
+    return {"programs": len(rows), **{key: counts.get(key, 0) for key in ("identical", "different", "refused", "timeout", "error")},
+            "results": results}
+
+
 def implementation_sha256() -> str:
     digest = hashlib.sha256()
     for path in sorted([*(ROOT / "cobol2rust").glob("*.py"), *(ROOT / "cobol2rust").glob("*.rs")]):
@@ -147,6 +199,18 @@ def cap_table(summary: dict) -> str:
     lines.append(f"| **Total** | | **{totals['sources']}** | **{totals['accepted']}** | "
                  f"**{totals.get('cobc_accepted', '—')}** | **{totals.get('gap', '—')}** | "
                  f"**{totals.get('accepted_where_cobc_refuses', '—')}** |")
+    execution = summary.get("execution")
+    if execution:
+        stale_note = "" if execution["implementation_sha256"] == summary["implementation_sha256"] else \
+            " — **antérieure au convertisseur actuel, à refaire avec `--execute`**"
+        lines += ["", f"Exécution comparée à cobc (niveaux 3-4) : {execution['measured_at']}, commit "
+                  f"`{(execution['git_head'] or '?')[:10]}`{stale_note}. Commande : "
+                  "`python3 tools/real_corpora.py --cobc --execute --record`.", "",
+                  "| Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: |"]
+        for name, entry in execution["corpora"].items():
+            lines.append(f"| {name} | {entry['programs']} | {entry['identical']} | {entry['different']} | "
+                         f"{entry['refused']} | {entry['timeout'] + entry['error']} |")
     gap = Counter()
     for entry in summary["corpora"].values():
         for diagnostic, count in entry.get("gap_blockers") or entry["blockers"]:
@@ -178,6 +242,8 @@ def main(argv=None) -> int:
     parser.add_argument("--cobc", action="store_true", help="mesurer aussi l'acceptation de cobc -fsyntax-only")
     parser.add_argument("--record", action="store_true",
                         help="enregistrer measurements/ et le tableau de CAP.md (tous les corpus requis)")
+    parser.add_argument("--execute", action="store_true",
+                        help="compiler, exécuter et comparer à cobc les programmes acceptés de " + ", ".join(EXECUTED))
     parser.add_argument("--check", action="store_true",
                         help="code 1 si la mesure enregistrée ne correspond plus au convertisseur actuel")
     args = parser.parse_args(argv)
@@ -216,11 +282,22 @@ def main(argv=None) -> int:
     totals = {key: sum(entry[key] for entry in corpora.values()) for key in ("sources", "accepted")}
     if args.cobc:
         totals.update({key: sum(entry[key] for entry in corpora.values()) for key in ("cobc_accepted", "gap", "accepted_where_cobc_refuses")})
-    summary = {"schema": 1, "measured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    measured_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    summary = {"schema": 1, "measured_at": measured_at,
                "git_head": git_head(), "implementation_sha256": implementation_sha256(),
                "cobc": cobc_version() if args.cobc else None,
-               "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
+               "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
                "totals": totals, "corpora": corpora}
+    if args.execute:
+        executed = {name: execute_corpus(name, reports[name]) for name in args.only if name in EXECUTED}
+        summary["execution"] = {"measured_at": measured_at, "git_head": summary["git_head"],
+                                "implementation_sha256": summary["implementation_sha256"],
+                                "scope": "stdin vide, fichiers du dossier du programme en entrée ; "
+                                         "stdout, fichiers finaux et code de sortie comparés à cobc",
+                                "corpora": executed}
+    elif SUMMARY.exists() and "execution" in json.loads(SUMMARY.read_text(encoding="utf-8")):
+        # The last execution stays in the record with its own date and hash.
+        summary["execution"] = json.loads(SUMMARY.read_text(encoding="utf-8"))["execution"]
     # Unrecorded working copy, for inspecting the gap between two records.
     (output / "summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     for name, entry in corpora.items():
@@ -228,6 +305,10 @@ def main(argv=None) -> int:
               f"  écart {entry.get('gap', '—'):>4}  à examiner {entry.get('accepted_where_cobc_refuses', '—')}")
     print(f"{'TOTAL':28} {totals['accepted']:5}/{totals['sources']:<5} cobc {totals.get('cobc_accepted', '—'):>5}"
           f"  écart {totals.get('gap', '—'):>4}  à examiner {totals.get('accepted_where_cobc_refuses', '—')}")
+    if args.execute:
+        for name, entry in summary["execution"]["corpora"].items():
+            print(f"exécution {name:18} {entry['identical']}/{entry['programs']} identiques, {entry['different']} divergents, "
+                  f"{entry['refused']} refusés, {entry['timeout']} délais, {entry['error']} erreurs")
     if args.record:
         if not args.cobc:
             parser.error("--record exige --cobc : l'écart à cobc fait partie du tableau de bord")
@@ -235,6 +316,8 @@ def main(argv=None) -> int:
         SUMMARY.write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         line = {"measured_at": summary["measured_at"], "git_head": summary["git_head"],
                 "implementation_sha256": summary["implementation_sha256"], "totals": totals,
+                "execution": {name: {key: entry[key] for key in ("programs", "identical", "different", "refused", "timeout", "error")}
+                              for name, entry in summary["execution"]["corpora"].items()} if args.execute else None,
                 "corpora": {name: {key: entry.get(key) for key in ("sources", "accepted", "cobc_accepted", "gap",
                                                        "accepted_where_cobc_refuses")}
                             for name, entry in corpora.items()}}

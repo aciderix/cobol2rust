@@ -18,12 +18,17 @@ pub struct CobolFile {
     /// `path` is the name cob_chk_file_mapping gave it at the last OPEN.
     assign: Vec<u8>,
     path: String,
+    /// The SELECT name as written (select_name) and libcob's file cache key.
+    select: String,
+    id: usize,
     optional: bool,
     organization: Organization,
     state: State,
     eof: bool,
     fixed: bool,
     split: bool,
+    /// COB_LS_VALIDATE: control characters give status 09 (READ) or 71 (WRITE).
+    validate: bool,
     needs_nl: bool,
     last_read_size: usize,
     last_open_mode: &'static str,
@@ -113,14 +118,16 @@ fn environment(key: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// cob_chk_file_env: DD_name, dd_name then name; `first` is file_open_name[0].
-fn file_env(src: &[u8], first: u8) -> Option<Vec<u8>> {
+/// `tried` receives each variable name tried, as libcob's file_open_env.
+fn file_env(src: &[u8], first: u8, tried: &mut Vec<u8>) -> Option<Vec<u8>> {
     if src.first() == Some(&b'.') || first == b'-' || first.is_ascii_digit() { return None; }
     let mangle = setting("COB_ENV_MANGLE", false);
     let name: Vec<u8> = src.iter()
         .map(|&b| if (mangle && !b.is_ascii_alphanumeric()) || (!mangle && b == b'.') { b'_' } else { b })
         .collect();
     for prefix in [&b"DD_"[..], b"dd_", b""] {
-        let Some(mut value) = environment(&[prefix, &name].concat()) else { continue };
+        *tried = [prefix, &name].concat();
+        let Some(mut value) = environment(tried) else { continue };
         if value.is_empty() { continue; }
         if matches!(value[0], b'"' | b'\'') {
             let len = value.len() - 1;
@@ -150,6 +157,10 @@ fn file_path() -> Option<Vec<u8>> {
 
 /// cob_chk_file_mapping (filename-mapping: yes), on a name accepted by cob_open.
 fn file_mapping(name: &[u8]) -> Vec<u8> {
+    file_mapping_tried(name, &mut Vec::new())
+}
+
+fn file_mapping_tried(name: &[u8], tried: &mut Vec<u8>) -> Vec<u8> {
     if has_acu_hyphen(name) { fail("ACUCOBOL -F/-D file names not modelled"); }
     let mut open = name.to_vec();
     let first = open[0];
@@ -162,7 +173,7 @@ fn file_mapping(name: &[u8]) -> Vec<u8> {
         }
         if open.get(start) == Some(&b'$') { start += 1; }
         // Not found: the name stays as is, with its leading quote or dollar.
-        if let Some(value) = file_env(&open[start..], first) {
+        if let Some(value) = file_env(&open[start..], first, tried) {
             open = value;
             if looks_absolute(&open) { return open; }
             if has_acu_hyphen(&open) { fail("ACUCOBOL -F/-D file names not modelled"); }
@@ -181,7 +192,7 @@ fn file_mapping(name: &[u8]) -> Vec<u8> {
         buffer.push(b'/');
         leading = true;
     } else if let Some(element) = elements.next() {
-        if let Some(value) = file_env(element, first) {
+        if let Some(value) = file_env(element, first, tried) {
             buffer = value;
             dollar = false;
         } else if !dollar {
@@ -194,7 +205,7 @@ fn file_mapping(name: &[u8]) -> Vec<u8> {
         if !leading { if !dollar { buffer.push(b'/'); } } else { leading = false; }
         dollar = element[0] == b'$';
         let name = if dollar { &element[1..] } else { element };
-        match if dollar { file_env(name, first) } else { None } {
+        match if dollar { file_env(name, first, tried) } else { None } {
             Some(value) => { buffer.extend(value); unresolved = None; },
             None if !dollar => { buffer.extend(name); unresolved = None; },
             None => unresolved = Some(element.to_vec()),
@@ -205,11 +216,105 @@ fn file_mapping(name: &[u8]) -> Vec<u8> {
     match file_path() { Some(prefix) => [&prefix[..], b"/", &buffer].concat(), None => buffer }
 }
 
+/// libcob's file_cache: the files in order of their first OPEN, latest
+/// first, with whether each is open (not closed, locked or a missing OPTIONAL).
+struct Cached { id: usize, select: String, assign: Vec<u8>, open: bool }
+thread_local! {
+    static FILE_CACHE: std::cell::RefCell<Vec<Cached>> = const { std::cell::RefCell::new(Vec::new()) };
+    static EXIT_MESSAGES_DONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+static NEXT_FILE_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+
+fn next_file_id() -> usize { NEXT_FILE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
+
+/// cob_cache_file, at an OPEN that passed the file name checks.
+fn cache_file(id: usize, select: &str, assign: &[u8]) {
+    crate::runtime::set_exit_hook(exit_messages);
+    FILE_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        match cache.iter_mut().find(|entry| entry.id == id) {
+            Some(entry) => entry.assign = assign.to_vec(),
+            None => cache.insert(0, Cached { id, select: select.to_string(), assign: assign.to_vec(), open: false }),
+        }
+    });
+}
+
+fn cache_open(id: usize, open: bool) {
+    FILE_CACHE.with(|cache| if let Some(entry) = cache.borrow_mut().iter_mut().find(|entry| entry.id == id) { entry.open = open; });
+}
+
+/// cob_exit_fileio_msg_only, once, before the files are closed at the end
+/// of the run unit: a warning for each file left open.
+pub fn exit_messages() {
+    if EXIT_MESSAGES_DONE.with(|done| done.replace(true)) { return; }
+    let mut err = io::stderr().lock();
+    FILE_CACHE.with(|cache| for entry in cache.borrow().iter().filter(|entry| entry.open) {
+        let _ = err.write_all(format!("libcob: warning: implicit CLOSE of {} ('", entry.select).as_bytes());
+        let _ = err.write_all(&entry.assign);
+        let _ = err.write_all(b"')\n");
+    });
+}
+
+/// cob_get_filename_print (file, 1): "select ('assign')", or with the name
+/// libcob leaves in file_open_env and the resolved name when they differ.
+fn filename_print(select: &str, assign: &[u8]) -> Vec<u8> {
+    let mut tried = assign.to_vec();
+    let resolved = if assign.is_empty() { Vec::new() } else { file_mapping_tried(assign, &mut tried) };
+    let mut text = format!("{select} ('").into_bytes();
+    text.extend(&tried);
+    if tried != resolved {
+        text.extend(b"' => ");
+        text.extend(&resolved);
+    } else {
+        text.push(b'\'');
+    }
+    text.push(b')');
+    text
+}
+
+/// cob_fatal_error (COB_FERROR_FILE): the standard error handler of a file
+/// without FILE STATUS, declaratives or AT END/INVALID KEY phrase.
+fn fatal_file_error(status: u8, name: Vec<u8>) -> ! {
+    let message = match status {
+        10 => "end of file", 14 => "key out of range", 21 => "key order not ascending",
+        22 => "record key already exists", 23 => "record key does not exist", 30 => "permanent file error",
+        31 => "inconsistent file name", 35 => "file does not exist", 37 => "permission denied",
+        39 => "mismatch of fixed file attributes", 41 => "file already open", 42 => "file not open",
+        43 => "READ must be executed first", 44 => "record overflow", 46 => "READ after unsuccessful READ/START",
+        47 => "READ/START not allowed, file not open for input", 48 => "WRITE not allowed, file not open for output",
+        49 => "DELETE/REWRITE not allowed, file not open for I-O", 51 => "record locked by another file connector",
+        57 => "LINAGE values invalid", 61 => "file sharing conflict", 71 => "invalid data in LINE SEQUENTIAL file",
+        91 => "runtime library is not configured for this operation", _ => "unknown file error",
+    };
+    crate::runtime::fatal_error(&[format!("{message} (status = {status:02}) for file ").as_bytes(), &name].concat())
+}
+
 /// cob_open checks on the ASSIGN name (status 31), then cob_chk_file_mapping.
 fn open_name(assign: &[u8]) -> Result<String, u8> {
     if assign.is_empty() { return Err(31); }
     if matches!(assign[0], b'"' | b'\'') && (assign.len() == 1 || assign[assign.len() - 1] != assign[0]) { return Err(31); }
     String::from_utf8(file_mapping(assign)).map_err(|_| fail("non UTF-8 file name not modelled"))
+}
+
+/// lineseq_write's "IS_BAD_CHAR (*p++)": the macro evaluates its argument in
+/// each comparison, so after a control byte it tests the following bytes
+/// against BS, ESC, FF, SI and TAB in turn, reading past the written size.
+fn write_bad_char(record: &[u8], size: usize) -> bool {
+    let byte = |p: usize| *record.get(p).unwrap_or_else(|| fail("LINE SEQUENTIAL validation reads past the record area; not modelled"));
+    let mut p = 0;
+    while p < size {
+        let first = byte(p);
+        p += 1;
+        if first >= b' ' { continue; }
+        let mut bad = true;
+        for allowed in [0x08, 0x1b, 0x0c, 0x0f, b'\t'] {
+            let next = byte(p);
+            p += 1;
+            if next == allowed { bad = false; break; }
+        }
+        if bad { return true; }
+    }
+    false
 }
 
 /// WRITE ADVANCING identifier: cobc adds cob_get_int of the item to the
@@ -252,8 +357,9 @@ impl CobolFile {
             }
         }
         let line = organization == Organization::LineSequential;
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, organization, state: State::Closed, eof: false,
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
+               validate: line && setting("COB_LS_VALIDATE", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
                linage: None }
     }
@@ -263,6 +369,12 @@ impl CobolFile {
         self.assign = assign_text(data);
         self
     }
+    pub fn named(mut self, select: &str) -> Self {
+        self.select = select.to_string();
+        self
+    }
+    /// The file in a libcob error message (cob_get_filename_print).
+    pub fn error_name(&self) -> Vec<u8> { filename_print(&self.select, &self.assign) }
 
     /// An FD with LINAGE: cobc makes the file LINE SEQUENTIAL.
     pub fn with_linage(mut self) -> Self {
@@ -375,6 +487,7 @@ impl CobolFile {
             }
         }
         if status < 10 { claim_path(&self.path); }
+        cache_open(self.id, status < 10 && !matches!(self.state, State::Missing));
         status
     }
 
@@ -387,6 +500,7 @@ impl CobolFile {
             _ => fail("unsupported file open mode"),
         };
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
+        cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
         if mode == "I-O" {
             if self.organization != Organization::Sequential { fail("OPEN I-O limited to SEQUENTIAL files"); }
@@ -456,6 +570,7 @@ impl CobolFile {
         }
         self.state = if lock { State::Locked } else { State::Closed };
         release_path(&self.path);
+        cache_open(self.id, false);
         self.eof = false;
         self.needs_nl = false;
         self.last_read_size = 0;
@@ -555,34 +670,49 @@ impl CobolFile {
             return 0;
         }
         let reader = match &mut self.state { State::Input(reader) => reader, _ => unreachable!() };
-        let mut line = Vec::new();
-        // Keep memory bounded even for an input with no record delimiter.
+        // lineseq_read, one getc at a time; a "fseek (fp, -k, SEEK_CUR)" moves
+        // back from the current position, also after a getc that hit EOF.
+        fn getc(reader: &mut BufReader<File>) -> Option<u8> {
+            let byte = *reader.fill_buf().unwrap_or_else(|e| fail(&format!("file read failed: {e}"))).first()?;
+            reader.consume(1);
+            Some(byte)
+        }
+        fn back(reader: &mut BufReader<File>, k: i64) {
+            reader.seek_relative(-k).unwrap_or_else(|e| fail(&format!("file seek failed: {e}")));
+        }
+        let mut data = Vec::new();
+        let mut status = 0;
         loop {
-            let available = reader.fill_buf().unwrap_or_else(|e| fail(&format!("file read failed: {e}")));
-            if available.is_empty() { break; }
-            let count = available.iter().position(|&b| b == b'\n').map(|p| p + 1).unwrap_or(available.len());
-            let ended = available[count - 1] == b'\n';
-            line.extend_from_slice(&available[..count]);
-            reader.consume(count);
-            if line.len() > 1024 * 1024 { fail("LINE SEQUENTIAL physical line exceeds 1 MiB"); }
-            if ended { break; }
+            let Some(mut n) = getc(reader) else {
+                if data.is_empty() { self.eof = true; return 10; }
+                break;
+            };
+            if n == b'\r' {
+                match getc(reader) {
+                    Some(b'\n') => n = b'\n',
+                    _ => back(reader, 1),
+                }
+            }
+            if n == b'\n' { break; }
+            if self.validate && n < b' ' && !matches!(n, 0x08 | 0x1b | 0x0c | 0x0f | b'\t') {
+                status = 9;
+            }
+            if data.len() < size {
+                data.push(n);
+                if data.len() == size && self.split {
+                    // A record too long: the balance becomes the next record.
+                    let mut k = 1;
+                    let mut next = getc(reader);
+                    if next == Some(b'\r') { next = getc(reader); k += 1; }
+                    if next != Some(b'\n') { back(reader, k); status = 6; }
+                    break;
+                }
+            } else if data.len() == size {
+                status = 4;
+            }
         }
-        if line.is_empty() { self.eof = true; return 10; }
-        let terminated = line.last() == Some(&b'\n');
-        if terminated {
-            line.pop();
-            if line.last() == Some(&b'\r') { line.pop(); }
-        }
-        if !line.iter().all(|b| (32..=126).contains(b)) {
-            fail("LINE SEQUENTIAL requires printable ASCII records");
-        }
-        if self.split && (line.len() > size || (!terminated && line.len() == size)) {
-            fail("split/unterminated full records unsupported; use COB_LS_SPLIT=0 for truncation semantics");
-        }
-        let status = if line.len() > size { 4 } else { 0 };
-        self.last_read_size = line.len().min(size);
-        let text = std::str::from_utf8(&line[..line.len().min(size)]).unwrap();
-        record.assign(&Value::text(text), false);
+        self.last_read_size = data.len();
+        record.assign(&Value::Bytes(data), false);
         status
     }
 
@@ -636,11 +766,11 @@ impl CobolFile {
             }
             return 0;
         }
-        if !bytes.iter().all(|b| (32..=126).contains(b)) {
-            fail("LINE SEQUENTIAL requires printable ASCII records");
-        }
-        let text = std::str::from_utf8(&bytes).unwrap();
-        let text = if self.fixed { text } else { text.trim_end_matches(' ') }.as_bytes().to_vec();
+        // lineseq_size: trailing spaces are not written, unless COB_LS_FIXED.
+        let kept = if self.fixed { bytes.len() } else { bytes.iter().rposition(|&b| b != b' ').map_or(0, |i| i + 1) };
+        let text = bytes[..kept].to_vec();
+        let area_bytes = area.bytes();
+        let bad = self.validate && write_bad_char(&area_bytes, kept);
         // cb_emit_write: a LINE SEQUENTIAL WRITE without ADVANCING is BEFORE 1 LINE.
         let advance = advancing.unwrap_or(Advance::BeforeLines(1));
         if let Advance::BeforeLines(count) | Advance::AfterLines(count) = advance {
@@ -659,6 +789,8 @@ impl CobolFile {
             if status != 0 { return status; }
             self.needs_nl = true;
         }
+        // lineseq_write validates after the AFTER advancing.
+        if bad { return 71; }
         self.output(&text);
         if self.linage.is_some() { self.output(b"\n"); }
         if matches!(advance, Advance::BeforeLines(_) | Advance::BeforePage) {
@@ -756,14 +888,15 @@ pub fn release_shared() {
 /// AT END covers every 1x status and INVALID KEY every 2x, like cobc's handlers.
 /// Returns libcob's END-OF-PAGE exception: a pending EOP is reported by
 /// the next 0x status, whatever the file.
-pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool) -> bool {
+pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool,
+                   name: &dyn Fn() -> Vec<u8>) -> bool {
     let eop = status < 10 && EOP.with(|eop| eop.replace(false));
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
         else { field.assign(&Value::number(&status), false); }
     } else if status >= 10 && !(status / 10 == 1 && eof_handled) && !(status / 10 == 2 && invalid_handled) && !declarative {
-        fail(&format!("unhandled file status {status:02}"));
+        fatal_file_error(status, name());
     }
     eop
 }
@@ -780,6 +913,9 @@ pub enum StartCondition { Equal, Greater, NotLess }
 pub struct RelativeFile {
     assign: Vec<u8>,
     path: String,
+    /// The SELECT name as written (select_name) and libcob's file cache key.
+    select: String,
+    id: usize,
     optional: bool,
     access: Access,
     record_min: usize,
@@ -830,7 +966,7 @@ impl RelativeFile {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported RELATIVE access mode"),
         };
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
                last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
     }
 
@@ -841,6 +977,12 @@ impl RelativeFile {
         self.assign = assign_text(data);
         self
     }
+    pub fn named(mut self, select: &str) -> Self {
+        self.select = select.to_string();
+        self
+    }
+    /// The file in a libcob error message (cob_get_filename_print).
+    pub fn error_name(&self) -> Vec<u8> { filename_print(&self.select, &self.assign) }
 
     /// Record size of the last READ (the slot's size field), for READ INTO.
     pub fn last_read_size(&self) -> usize { self.last_read_size }
@@ -850,6 +992,7 @@ impl RelativeFile {
     pub fn open(&mut self, mode: &str) -> u8 {
         let status = self.open_file(mode);
         if status < 10 { claim_path(&self.path); }
+        cache_open(self.id, status < 10 && !self.nonexistent);
         status
     }
 
@@ -861,6 +1004,7 @@ impl RelativeFile {
             _ => fail("unsupported file open mode"),
         };
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
+        cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
         self.nonexistent = false;
         self.end_of_file = false;
@@ -905,6 +1049,7 @@ impl RelativeFile {
         self.open_mode = "";
         self.locked = lock;
         release_path(&self.path);
+        cache_open(self.id, false);
         0
     }
 
@@ -1312,6 +1457,9 @@ impl Btree {
 pub struct IndexedFile {
     assign: Vec<u8>,
     path: String,
+    /// The SELECT name as written (select_name) and libcob's file cache key.
+    select: String,
+    id: usize,
     optional: bool,
     access: Access,
     record_min: usize,
@@ -1347,7 +1495,7 @@ impl IndexedFile {
             _ => fail("unsupported INDEXED access mode"),
         };
         let n = keys.len();
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
                last_open_mode: "", locked: false, nonexistent: false, end_of_file: false, begin_of_file: false,
                first_read: 0, read_done: false, last_read_size: 0, key: Vec::new(), data: None, key_index: 0,
                last_readkey: vec![Vec::new(); 2 * n], last_dupno: vec![0; n], rewrite_sec_key: vec![false; n],
@@ -1362,6 +1510,12 @@ impl IndexedFile {
         self.assign = assign_text(data);
         self
     }
+    pub fn named(mut self, select: &str) -> Self {
+        self.select = select.to_string();
+        self
+    }
+    /// The file in a libcob error message (cob_get_filename_print).
+    pub fn error_name(&self) -> Vec<u8> { filename_print(&self.select, &self.assign) }
 
     fn file_name(&self, index: usize) -> String {
         if index == 0 { self.path.clone() } else { format!("{}.{}", self.path, index) }
@@ -1396,8 +1550,10 @@ impl IndexedFile {
         self.begin_of_file = false;
         self.first_read = 2;
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
+        cache_file(self.id, &self.select, &self.assign);
         let status = self.indexed_open(mode);
         if status < 10 { claim_path(&self.path); }
+        cache_open(self.id, status < 10 && !self.nonexistent);
         status
     }
 
@@ -1450,6 +1606,7 @@ impl IndexedFile {
         self.open_mode = "";
         self.locked = lock;
         release_path(&self.path);
+        cache_open(self.id, false);
         0
     }
 

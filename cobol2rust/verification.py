@@ -94,7 +94,7 @@ def validate_file_paths(conversion, file_env=()):
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
            call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
-           no_ec_data_incompatible=False, file_env=None):
+           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
     files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
@@ -149,7 +149,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             if result.returncode:
                 raise CobolError(f"échec de compilation {Path(compiler).name}:\n{result.stderr.decode(errors='replace')}")
         try:
-            translated = build_rust(output)
+            translated = build_rust(output, release=True) if release else build_rust(output)
         except RuntimeError as exc:
             raise CobolError(str(exc)) from exc
         results, artifacts = [], []
@@ -168,7 +168,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             if name == "cobol":
                 environment["COB_LIBRARY_PATH"] = str(modules)
             result = subprocess.run([str(binary)], cwd=directory, env=environment,
-                                    input=stdin, capture_output=True, timeout=15)
+                                    input=stdin, capture_output=True, timeout=timeout)
             results.append(result)
             artifacts.append(snapshot(directory))
         a, b = results
@@ -187,11 +187,12 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "cobol_files": manifest(left), "rust_files": manifest(right),
                 # Both runs end normally, or both die of SIGINT (cob_raise on
                 # character 03 read by ACCEPT); other signals are never modelled.
-                # A RETURN-CODE exit status (cob_stop_run) also matches when
-                # neither run reported an error on stderr.
+                # Another exit status (RETURN-CODE, cob_fatal_error) matches
+                # only with the same stderr bytes (libcob's messages).
                 "match": a.stdout == b.stdout and a.returncode == b.returncode
-                         and (a.returncode in {0, -2} or (a.returncode > 0 and not a.stderr and not b.stderr))
+                         and (a.returncode in {0, -2} or (a.returncode > 0 and a.stderr == b.stderr))
                          and not differences,
+                "stderr_match": a.stderr == b.stderr,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),
                 "rust_stdout": b.stdout.decode("ascii", errors="backslashreplace"),
                 "cobol_exit": a.returncode, "rust_exit": b.returncode,

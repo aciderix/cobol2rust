@@ -18,6 +18,51 @@ pub struct SizeError;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Outcome { Return, Stop }
 
+/// Unwinds to main after a libcob runtime error (cob_hard_failure), so that
+/// the files are closed as cob_terminate_routines closes them; exit status 1.
+pub struct FatalExit;
+
+static EXIT_HOOK: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// The file runtime's cob_exit_fileio_msg_only, run before the files close.
+pub fn set_exit_hook(hook: fn()) { let _ = EXIT_HOOK.set(hook); }
+
+pub fn exit_hook() { if let Some(hook) = EXIT_HOOK.get() { hook(); } }
+
+/// cob_runtime_error then cob_hard_failure: "libcob: error: ..." on stderr.
+pub fn fatal_error(message: &[u8]) -> ! {
+    io::stdout().flush().ok();
+    {
+        let mut err = io::stderr().lock();
+        let _ = err.write_all(b"libcob: error: ");
+        let _ = err.write_all(message);
+        let _ = err.write_all(b"\n");
+    }
+    exit_hook();
+    std::panic::resume_unwind(Box::new(FatalExit))
+}
+
+/// cob_call_error: a CALL without ON EXCEPTION of a module not found.
+pub fn module_not_found(name: &[u8]) -> ! {
+    fatal_error(&[&b"module '"[..], name, b"' not found"].concat())
+}
+
+thread_local! {
+    /// Within an arithmetic statement without SIZE ERROR: whether a division
+    /// by zero made the result COB_DECIMAL_NAN.
+    static DECIMAL_NAN: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// The value of an arithmetic statement's expression, or None when a
+/// division by zero made it NaN: cob_decimal_get_field then leaves the
+/// receiver unchanged and the statement goes on (EC-SIZE-ZERO-DIVIDE).
+pub fn decimal_nan(expression: impl FnOnce() -> Value) -> Option<Value> {
+    let previous = DECIMAL_NAN.with(|nan| nan.replace(Some(false)));
+    let value = expression();
+    let nan = DECIMAL_NAN.with(|nan| nan.replace(previous)) == Some(true);
+    if nan { None } else { Some(value) }
+}
+
 /// cob_add_int on a receiver with trailing P positions: the int operand is
 /// first truncated to whole units of 10^positions, and a zero result leaves
 /// the receiver unstored. cob_sub_int adds the negated operand.
@@ -108,7 +153,14 @@ impl Number {
         if negative { Self::new(BigInt::from(1), 0).divide(raised).trimmed() } else { raised }
     }
     fn divide(self, other: Self) -> Self {
-        if other.n == BigInt::from(0) { fail("division by zero"); }
+        if other.n == BigInt::from(0) {
+            // cob_decimal_div: COB_DECIMAL_NAN inside an arithmetic statement.
+            if DECIMAL_NAN.with(|nan| nan.get().is_some()) {
+                DECIMAL_NAN.with(|nan| nan.set(Some(true)));
+                return Self::new(BigInt::from(0), 0);
+            }
+            fail("division by zero");
+        }
         if self.n == BigInt::from(0) { return Self::new(BigInt::from(0), 0); }
         let shift = 38 + other.scale.saturating_sub(self.scale);
         let scale = 38 + self.scale.saturating_sub(other.scale);

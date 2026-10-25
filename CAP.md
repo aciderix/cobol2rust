@@ -53,25 +53,36 @@ décide de la prochaine.
    lever les refus de sources que cobc accepte.
 2. **Preuve sur du code réel** : compiler, exécuter et comparer les
    programmes batch des corpus avec leurs données (niveaux 3 et 4 de
-   COVERAGE.md), pas seulement les accepter.
+   COVERAGE.md), pas seulement les accepter : `tools/real_corpora.py
+   --execute` (stdin vide, fichiers du dossier du programme). Étendre ensuite
+   avec de vrais jeux d'entrée (stdin, fichiers, variables DD).
 3. **Limites du modèle** : 38 chiffres comme cobc (aujourd'hui 18), champs
-   texte au-delà de 256 caractères, OCCURS et mémoire plus grands, COMP-5,
-   niveau 78, EXIT PERFORM, Report Writer avec ruptures de contrôle.
-4. **Profils de compilateur** : IBM Enterprise COBOL (`-std=ibm`, EBCDIC,
+   texte au-delà de 256 caractères, OCCURS et mémoire plus grands,
+   niveau 78, Report Writer avec ruptures de contrôle, ENTRY, comparaisons à
+   `ALL littéral`.
+4. **Profil des contrôles d'exécution** : sans `-debug`, cobc calcule avec
+   les données numériques invalides (COMP-3 ou DISPLAY corrompus) au lieu de
+   s'arrêter ; le runtime s'arrête aujourd'hui toujours (arrêt nommé). Porter
+   les deux comportements, choisis par le profil (`-debug`, `-fec=…`).
+5. **Performance** : le Rust généré est environ 16 fois plus lent que
+   GnuCOBOL en release (85 fois en debug) sur une boucle arithmétique
+   (CBLC2) ; une migration doit au moins approcher le natif (arithmétique à
+   précision fixe quand elle suffit, moins de copies de valeurs).
+6. **Profils de compilateur** : IBM Enterprise COBOL (`-std=ibm`, EBCDIC,
    binaire, ddnames), Micro Focus, ACUCOBOL ; un profil = options et
    représentation des données explicites.
-5. **Services de plateforme** : adaptateurs EXEC SQL (DB2), EXEC CICS,
+7. **Services de plateforme** : adaptateurs EXEC SQL (DB2), EXEC CICS,
    EXEC DLI (IMS), MQ, VSAM, avec un contrat documenté par adaptateur.
-6. **Corpus élargis** : testsuite GnuCOBOL (1346 cas `.at`), corpus métier
+8. **Corpus élargis** : testsuite GnuCOBOL (1346 cas `.at`), corpus métier
    de l'utilisateur dès qu'il en fournit, avec données et dialecte épinglés.
-7. **Parcours sans sources** : binaire GnuCOBOL vers Rust, cible étroite
+9. **Parcours sans sources** : binaire GnuCOBOL vers Rust, cible étroite
    d'abord.
 
 ## Mesure
 
-Générée par `tools/real_corpora.py --cobc --record`, ne pas éditer à la main.
-Les paramètres de chaque corpus sont figés dans l'outil ; niveau 2 de preuve
-seulement (émission acceptée).
+Générée par `tools/real_corpora.py --cobc --record` (et `--execute` pour la
+partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
+sont figés dans l'outil.
 
 <!-- mesure:début -->
 Dernière mesure : 2026-10-25T12:32:35+00:00 (commit `7c4ab9bc65`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.

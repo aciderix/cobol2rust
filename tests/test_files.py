@@ -78,18 +78,17 @@ class FileFrontendTests(unittest.TestCase):
 
 @unittest.skipUnless(find_tool("cargo"), "Cargo required")
 class FileRuntimeTests(unittest.TestCase):
-    def test_unmodelled_input_aborts_instead_of_changing_data(self):
-        with tempfile.TemporaryDirectory() as temp:
-            directory = Path(temp)
-            project = directory / "rust"
-            convert(ROOT / "tests" / "fixtures" / "file_read.cob", project)
-            binary = build_rust(project)
-            for data, diagnostic in ((b"A\x01\n", "printable ASCII"), (b"ABCDE\n", "split/unterminated"), (b"TAIL", "split/unterminated")):
-                with self.subTest(data=data):
-                    (directory / "records.txt").write_bytes(data)
-                    result = subprocess.run([str(binary)], cwd=directory, env=compiler_env(find_tool("rustc")), capture_output=True, timeout=10)
-                    self.assertEqual(result.returncode, 70)
-                    self.assertIn(diagnostic, result.stderr.decode())
+    def test_control_bytes_long_and_unterminated_lines_read_like_libcob(self):
+        # lineseq_read: control bytes give status 09, a long line continues
+        # in the next record (COB_LS_SPLIT), a full last line re-reads its
+        # last byte after fseek from EOF; the same inputs as cobc.
+        if not find_tool("cobc"):
+            self.skipTest("GnuCOBOL required")
+        for data in (b"A\x01\n", b"ABCDE\n", b"TAIL"):
+            with self.subTest(data=data), tempfile.TemporaryDirectory() as temp:
+                (Path(temp) / "records.txt").write_bytes(data)
+                report = verify(ROOT / "tests" / "fixtures" / "file_read.cob", data_dir=Path(temp))
+                self.assertTrue(report["match"], report)
 
 
 @unittest.skipUnless(find_tool("cargo") and find_tool("cobc"), "Cargo and GnuCOBOL required")
