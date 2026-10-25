@@ -496,11 +496,11 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENABLE DISABLE RECEIVE SEND PURGE".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 def source_format(source: str, fmt="auto"):
@@ -543,6 +543,9 @@ class Parser:
         self.in_debugging = False
         # REPORT SECTION: RD name -> ReportSpec, in FD REPORT clause order.
         self.reports = {}
+        # COMMUNICATION SECTION: CD name -> its record keys.
+        self.cds = {}
+        self.debugged_cds = set()
         # USE FOR DEBUGGING on data items: key -> (section, ALL REFERENCES),
         # start_debug after END DECLARATIVES, and the statements being parsed
         # (cb_check_field_debug fills each one's debug_check list).
@@ -753,6 +756,13 @@ class Parser:
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
         if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
             self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
+        bound = getattr(descriptor, "parse_size", None)
+        if bound is not None and start is not None:
+            # cb_build_identifier's check of constant positions.
+            if start.op == "number" and int(start.args[0]) > bound or (
+                    length is not None and length.op == "number" and start.op == "number"
+                    and int(start.args[0]) + int(length.args[0]) - 1 > bound):
+                self.error(f"length of '{descriptor.label}' out of bounds")
         ref = DataRef(key, tuple(indices), start, length)
         if self.debug_frames and not conditions and not self.debug_frames[-1]["suspended"]:
             self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
@@ -831,16 +841,19 @@ class Parser:
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
-                while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT"):
+                while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
+                        and not self.at("COMMUNICATION"):
                     self.declaration()
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
                 self.in_linkage = True
-                while not self.at("PROCEDURE") and not self.at("REPORT"):
+                while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION"):
                     self.declaration()
                 self.in_linkage = False
+            if self.accept("COMMUNICATION"):
+                self.communication_section()
             if self.accept("REPORT"):
                 self.report_section()
         self.report_records()
@@ -1073,6 +1086,112 @@ class Parser:
                 raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
         return program
 
+    def communication_section(self):
+        """_communication_section: cobc parses the CD entries but implements
+        none of them (CB_PENDING); outside -std=cobol85 the section is
+        unconformable. Each CD's 01 records are static storage that cobc never
+        initializes (their VALUE clauses are ignored); the later ones redefine
+        the first (cb_finalize_cd)."""
+        self.expect("SECTION")
+        self.expect(".")
+        if STD != "cobol85":
+            self.error("COMMUNICATION SECTION non conforme hors -std=cobol85")
+        while self.accept("CD"):
+            name = self.user_word(self.name())
+            if name in self.cds or name in self.files or self.candidates(name):
+                self.error(f"nom de CD dupliqué: {name}")
+            self.accept("FOR")
+            initial = self.accept("INITIAL")
+            if self.accept("I-O"):
+                pass
+            elif not (self.accept("INPUT") or (not initial and self.accept("OUTPUT"))):
+                self.error("CD FOR [INITIAL] INPUT, OUTPUT ou I-O attendu")
+            if not self.at("."):
+                self.error("clauses de CD non prises en charge")
+            self.expect(".")
+            records = []
+            self.in_communication = True
+            while not self.t.string and self.t.key in {"01", "1"}:
+                self.data_stack = []
+                key = self.declaration(file_record=True)
+                while not self.t.string and self.t.key.isdigit() and self.t.key not in {"01", "1", "77"}:
+                    self.declaration(file_record=True)
+                if records:
+                    self.fields[key].redefines = records[0]
+                records.append(key)
+            self.in_communication = False
+            if not records:
+                self.error("CD record missing")
+            self.cds[name] = records
+
+    def cd_name(self):
+        name = self.name()
+        if name not in self.cds:
+            self.error(f"nom de CD attendu: {name}")
+        return name
+
+    def communication_statement(self, verb, line):
+        """ENABLE, DISABLE, PURGE, RECEIVE and SEND: begin_statement only, so
+        each sets DEBUG-LINE and does nothing else; the NO DATA and WITH DATA
+        statements of RECEIVE are parsed and dropped."""
+        if verb in {"ENABLE", "DISABLE"}:
+            if self.accept("INPUT"):
+                self.accept("TERMINAL")
+            elif self.accept("I-O"):
+                self.expect("TERMINAL")
+            else:
+                self.accept("OUTPUT")
+            self.cd_name()
+            if self.accept("WITH") or self.at("KEY"):
+                self.expect("KEY")
+                self.take() if self.t.string else self.variable()
+        elif verb == "PURGE":
+            self.cd_name()
+        elif verb == "RECEIVE":
+            self.cd_name()
+            if not (self.accept("MESSAGE") or self.accept("SEGMENT")):
+                self.error("RECEIVE requiert MESSAGE ou SEGMENT")
+            self.expect("INTO")
+            self.variable()
+            seen = set()
+            while True:
+                if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
+                    phrase = "NO"
+                    self.take()
+                elif self.at("DATA") or (self.at("WITH") and self.tokens[self.i + 1].key == "DATA"):
+                    phrase = "WITH"
+                    self.accept("WITH")
+                else:
+                    break
+                if phrase in seen:
+                    self.error(f"{phrase} DATA dupliqué")
+                seen.add(phrase)
+                self.expect("DATA")
+                self.block({"END-RECEIVE", "NO", "DATA", "WITH"})
+            self.accept("END-RECEIVE")
+        else:
+            self.cd_name()
+            if self.accept("FROM"):
+                self.variable()
+            if self.at("WITH") or self.at("ESI") or self.at("EMI") or self.at("EGI"):
+                self.accept("WITH")
+                if not (self.accept("ESI") or self.accept("EMI") or self.accept("EGI")):
+                    self.variable()
+                if self.at("BEFORE") or self.at("AFTER"):
+                    self.take()
+                    self.accept("ADVANCING")
+                    if not self.accept("PAGE"):
+                        if self.t.string:
+                            self.error("ADVANCING de SEND requiert un entier, un identificateur ou un mnémonique")
+                        if self.t.key in self.mnemonics:
+                            self.take()
+                        else:
+                            self.take() if self.t.text.isdigit() else self.variable()
+                            self.accept("LINE") or self.accept("LINES")
+                if self.accept("REPLACING"):
+                    self.accept("LINE")
+        return Stmt("continue", (), line)
+
     def inherited_uses(self, own_modes):
         """cobc.c "Set up USE GLOBAL handlers": for each OPEN mode without a
         USE of its own, a contained program takes the GLOBAL USE of the first
@@ -1204,6 +1323,9 @@ class Parser:
                     word = tokens[j].key
                     if not tokens[j].string and word in self.files:
                         size = max(size, self.files[word].record_max)
+                    elif not tokens[j].string and word in self.cds:
+                        # cb_resolve_debug_refs: the CD's record size.
+                        size = max(size, self.fields[self.cds[word][0]].size)
                     elif not tokens[j].string and tokens[j - 1].key not in {"OF", "IN"}:
                         keys = self.candidates(word)
                         if len(keys) == 1:
@@ -1226,6 +1348,12 @@ class Parser:
         from .layout import layout_fields
         added = {key: f for key, f in self.fields.items() if key not in before}
         extent = layout_fields(added)
+        # The procedure division is parsed with DFLT_DEBUG_CONTENTS_SIZE (30):
+        # cb_resolve_debug_refs only resizes DEBUG-CONTENTS afterwards, so the
+        # LENGTH of the register and literal reference modifications use it.
+        for f in added.values():
+            if f.label in {"DEBUG-ITEM", "DEBUG-CONTENTS"}:
+                f.parse_size = f.size - (size - 30)
         for f in added.values():
             f.offset += memory_size
         return memory_size + extent
@@ -1257,6 +1385,14 @@ class Parser:
                     targets.append(("references", self.debugging_item(section, True), line))
                 elif not self.t.string and self.t.key in self.files:
                     targets.append(("file", self.file_name(), line))
+                elif not self.t.string and self.t.key in self.cds:
+                    # flag_field_debug of the CD: its statements generate
+                    # nothing, so the section is never performed for it.
+                    name = self.take().key
+                    if name in self.debugged_cds:
+                        self.error(f"duplicate DEBUGGING target: '{name}'")
+                    self.debugged_cds.add(name)
+                    targets.append(("cd", name, line))
                 elif not self.t.string and self.candidates(self.t.key):
                     targets.append(("item", self.debugging_item(section, False), line))
                 else:
@@ -2251,7 +2387,7 @@ class Parser:
                 f = self.fields[arg.args[0].name]
                 if not f.depending and not any(self.fields[k].depending for k in self.fields
                                                 if k.startswith(arg.args[0].name + ".")):
-                    return Expr("number", (str(f.size),))
+                    return Expr("number", (str(getattr(f, "parse_size", f.size)),))
             if arg.op != "function":
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         return Expr("function", (name.key, tuple(args)))
@@ -2753,6 +2889,8 @@ class Parser:
         if verb == "DISPLAY":
             values = []
             while self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}:
+                if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
+                    break  # scanner.l folds NO DATA (RECEIVE) into one token
                 values.append(self.expr())
             if not values:
                 self.error("DISPLAY sans opérande")
@@ -2772,6 +2910,13 @@ class Parser:
             self.accept("END-DISPLAY")
             return Stmt("display", (values, newline, device), line)
         if verb == "ACCEPT":
+            if not self.t.string and self.t.key in self.cds:
+                # ACCEPT cd-name [MESSAGE] COUNT: CB_PENDING, nothing generated.
+                self.take()
+                self.accept("MESSAGE")
+                self.expect("COUNT")
+                self.accept("END-ACCEPT")
+                return Stmt("continue", (), line)
             # parser.y accept_body: an identifier, not a target_identifier.
             name = self.variable()
             if self.accept("FROM"):
@@ -3157,6 +3302,8 @@ class Parser:
             return self.unstring_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
+        if verb in {"ENABLE", "DISABLE", "PURGE", "RECEIVE", "SEND"}:
+            return self.communication_statement(verb, line)
         if verb == "NEXT":
             self.expect("SENTENCE")
             return Stmt("next_sentence", (), line)

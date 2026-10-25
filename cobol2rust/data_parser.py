@@ -488,9 +488,11 @@ def declaration(p, file_record=False):
         if initial is not None:
             if not initial.string and figurative != "0":
                 p.error("VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE")
-            if file_record or redefines or any(a.redefines or a.file_record for a in ancestors):
-                p.error("VALUE de groupe sur FD/REDEFINES non pris en charge")
-            group_value = (initial.text, figurative)
+            if not getattr(p, "in_communication", False):
+                if file_record or redefines or any(a.redefines or a.file_record for a in ancestors):
+                    p.error("VALUE de groupe sur FD/REDEFINES non pris en charge")
+                group_value = (initial.text, figurative)
+            # CD records are static storage that cobc never initializes.
         if has_usage:
             group_usage = usage
             usage = "DISPLAY"
@@ -564,6 +566,10 @@ def declaration(p, file_record=False):
         p.error("SIGN requiert une PICTURE numérique signée USAGE DISPLAY")
     if justified and (kind != "text" or alnum_edit or not picture):
         p.error("JUSTIFIED limité aux PIC X/A élémentaires")
+    if initial is not None and getattr(p, "in_communication", False):
+        if kind != "edited" and picture and (kind == "text") != initial.string:
+            p.error("VALUE incompatible avec la PICTURE")
+        initial = None
     explicit_value = initial is not None
     if initial is not None:
         if file_record or redefines:

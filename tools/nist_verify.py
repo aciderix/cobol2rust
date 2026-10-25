@@ -45,9 +45,14 @@ def runner_env(name: str) -> dict:
     if name in RUNNER_CLOCK:
         environment["COB_CURRENT_DATE"] = RUNNER_CLOCK[name]
     return environment
+# report.pl executes DB103M a second time with the runtime DEBUG switch off;
+# its REPORT log is the first run's, report.txt has a line for each run.
+RERUN_ENV = {"DB103M": {"COB_SET_DEBUG": "N"}}
 # report.pl only compiles these programs: their execution is not part of the suite.
 COMPILE_ONLY = {"NC401M", "RL301M", "RL401M", "IC401M", "IX301M", "IX401M", "SQ303M",
                 "SQ401M", "ST301M", "RW301M", "RW302M", "DB205A"}
+# tests/cobol85/Makefile.am: "currently untested modules: CM" (never run).
+UNTESTED_MODULES = {"CM"}
 
 
 def module_programs(corpus: Path, module: str) -> list[Path]:
@@ -117,12 +122,14 @@ def runner_counts(native_logs: Path, name: str) -> dict | None:
     summary = native_logs / name[:2] / "report.txt"
     if not summary.exists():
         return None
-    for line in summary.read_text(encoding="utf-8", errors="replace").splitlines():
-        fields = line.split()
-        if fields and fields[0].split(".")[0] == name and len(fields) >= 6 and fields[1].isdigit():
-            keys = ("total", "pass", "fail", "deleted", "inspect")
-            return dict(zip(keys, map(int, fields[1:6])))
-    return None
+    keys = ("total", "pass", "fail", "deleted", "inspect")
+    runs = [dict(zip(keys, map(int, fields[1:6])))
+            for fields in map(str.split, summary.read_text(encoding="utf-8", errors="replace").splitlines())
+            if fields and fields[0].split(".")[0] == name and len(fields) >= 6 and fields[1].isdigit()]
+    if not runs:
+        return None
+    # The executions of a program re-run by report.pl add up.
+    return {key: sum(run[key] for run in runs) for key in keys}
 
 
 def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
@@ -131,7 +138,7 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     # The runner compiles <module>/lib/*.CBL as modules beside the programs.
     call_paths = [path for path in [corpus / name[:2] / "lib"] if path.is_dir()]
     work.mkdir(parents=True)
-    if name in COMPILE_ONLY:
+    if name in COMPILE_ONLY or name[:2] in UNTESTED_MODULES:
         convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
         build_rust(work / "rust")
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
@@ -154,6 +161,14 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
         entry["report_matches_runner"] = bool(rust_report) and rust_report["sha256"] == expected
     entry["runner_counts"] = runner_counts(native_logs, name)
     entry["passed"] = report["match"] and entry.get("report_matches_runner", rust_report is None)
+    if name in RERUN_ENV:
+        rerun = verify(source, fmt="fixed", includes=copybooks,
+                       stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
+                       data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
+                       runtime_env={**runner_env(name), **RERUN_ENV[name]}, debugging_lines=name in DEBUGGING_LINES,
+                       cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE)
+        entry["rerun_match"] = rerun["match"]
+        entry["passed"] = entry["passed"] and rerun["match"]
     return entry
 
 

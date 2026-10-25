@@ -719,6 +719,18 @@ ouvert sur un `FILE *` fermé : un nouvel OPEN rend 41, toute autre opération e
 un arrêt nommé. Une écriture dans LINAGE-COUNTER et l'OPEN INPUT d'un fichier
 LINAGE restent refusés.
 
+La COMMUNICATION SECTION suit cobc 3.2, qui l'analyse sans l'implémenter
+(`CB_PENDING`) : acceptée seulement avec `--std cobol85` (non conforme sinon),
+`CD nom FOR [INITIAL] INPUT | OUTPUT | [INITIAL] I-O` sans autre clause, puis ses
+enregistrements 01 (stockage statique jamais initialisé : VALUE ignoré, les
+suivants redéfinissent le premier). ENABLE, DISABLE, PURGE, RECEIVE (ses
+instructions NO DATA et WITH DATA sont analysées puis abandonnées), SEND et
+`ACCEPT cd MESSAGE COUNT` ne font que mettre à jour DEBUG-LINE ; un CD cible de
+USE FOR DEBUGGING ne déclenche donc rien mais agrandit DEBUG-CONTENTS. Comme la
+PROCEDURE DIVISION est analysée avec la taille par défaut de 30 octets, `FUNCTION
+LENGTH` de DEBUG-CONTENTS ou DEBUG-ITEM et les positions constantes d'une
+modification de référence utilisent cette taille, comme dans cobc.
+
 Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
 `REPORT [IS] r` (un seul rapport par fichier, sans enregistrement décrit) rend le
 fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
