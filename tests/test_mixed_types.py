@@ -52,15 +52,16 @@ class MixedTypeTests(unittest.TestCase):
                      "evaluate t when zero continue end-evaluate."):
             with self.subTest(body=body):
                 self.emit(data, body)
-        with self.assertRaises(CobolError):
-            self.emit(data, 'evaluate w when "12" continue end-evaluate.')
+        # cob_cmp_alnum of the item's digits with the literal (mixed_literal_compare.cob).
+        self.emit(data, 'evaluate w when "12" continue end-evaluate.')
 
-    def test_direct_text_literals_with_unmodelled_native_optimizations_are_rejected(self):
-        # n = "1230" with PIC S99V99 is folded by cobc (comparison_folding.cob).
+    def test_direct_text_literals_compare_by_digits_unless_folded(self):
+        # compare_field_literal folds n = "1230" with PIC S99V99; the others
+        # are cob_cmp_alnum of the stored digits (mixed_literal_compare.cob).
         for data, condition in (("01 n pic 999.", 'n = "12"'),
                                 ("01 n pic 999.", '"0012" = n'),
                                 ("01 n pic 999.", 'n = "12A"')):
-            with self.subTest(data=data, condition=condition), self.assertRaises(CobolError):
+            with self.subTest(data=data, condition=condition):
                 self.emit(data, f"if {condition} continue end-if.")
 
     def test_mixed_condition_values_and_direct_edited_comparisons_are_rejected(self):

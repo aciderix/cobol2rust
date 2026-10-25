@@ -200,6 +200,8 @@ class Emitter:
             return f"{self.shared}.clone()"
         if op == "linage":
             return f"self.{self.files[args[0]]}.linage_counter()"
+        if op == "clock":
+            return f"runtime::clock_value({quoted(args[0])})"
         if op == "report_counter":
             report, which = args
             if report == self.report_context:
@@ -307,6 +309,8 @@ class Emitter:
                   "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation"}
         if name == "CURRENT-DATE":
             return "runtime::intrinsic::current_date()"
+        if name == "RANDOM":
+            return f"runtime::intrinsic::random({'Some(&' + values[0] + ')' if values else 'None'})"
         if name in {"PI", "E"}:
             return f"runtime::intrinsic::{'pi_value' if name == 'PI' else 'e'}()"
         if name in rust:
@@ -360,7 +364,8 @@ class Emitter:
                 text = literal.args[0]
                 data, scale = text.replace(".", ""), len(text.split(".")[1]) if "." in text else 0
             elif literal.op == "text":
-                data, scale = literal.args[0].rstrip(" "), 0
+                # The digit test reads the whole literal, trailing spaces included.
+                data, scale = literal.args[0], 0
             else:
                 continue
             if field.scale < 0 or not data or not data.isascii() or not data.isdigit():
@@ -429,9 +434,9 @@ class Emitter:
             descriptor = self.program.fields[ref.name]
             if descriptor.usage == "INDEX":
                 raise CobolError("comparaison mixte d'index non prise en charge")
-            if text.op == "text" and (descriptor.scale or not text.args[0].isascii() or
-                                      not text.args[0].isdigit() or len(text.args[0]) != descriptor.digits):
-                raise CobolError("comparaison mixte avec littéral texte limitée aux entiers et chiffres de même largeur; copier le littéral vers PIC X pour éviter les optimisations natives non modélisées")
+            # cob_cmp: cob_cmp_alnum of the item's digits (COB_FIELD_DATA, an
+            # overpunched sign removed) with the literal, unless
+            # compare_field_literal folded the condition (folded_comparison).
             number_value = self.reference(ref) + ".comparison_text()"
         elif number.op == "number":
             number_value = f"Value::text({quoted(number.args[0].replace('.', ''))})"
@@ -801,6 +806,16 @@ class Emitter:
                 self.assignment(expr, [ref], rounded)
         elif op == "accept":
             self.write(f"{self.reference(a[0])}.accept();")
+        elif op == "accept_clock":
+            ref, kind = a
+            field = self.program.fields[ref.name]
+            if ref.start is not None:
+                raise CobolError(f"ACCEPT FROM {kind} vers une sous-chaîne non pris en charge")
+            if field.kind == "text":
+                # cob_move to an alphanumeric field (cob_move_to_group_as_alnum for a group).
+                self.alphanumeric_move(ref, f"runtime::clock_digits({quoted(kind)})")
+            else:
+                self.assignment(Expr("clock", (kind,)), [ref], False, move=True)
         elif op == "accept_omitted":
             self.write("runtime::accept_omitted();")
         elif op == "initialize" and a[2]:

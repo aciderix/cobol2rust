@@ -1886,7 +1886,10 @@ class Parser:
                 for item in self.fields.values():
                     if item.depending and item.name.startswith(key + "."):
                         if spec.sort:
-                            self.error("SD avec OCCURS DEPENDING ON non pris en charge")
+                            # cob_file_sort_using/giving move each record at the
+                            # sort record's maximum size; RELEASE and RETURN of
+                            # its current length are not modelled.
+                            spec.variable_sort = True
                         low = min(low, item.offset - self.fields[key].offset + item.size * item.occurs_min)
             spec.record_min, spec.record_max = min([low, *sizes]), max([high, *sizes])
             if spec.record_min != spec.record_max and spec.organization == "LINE SEQUENTIAL":
@@ -2083,6 +2086,7 @@ class Parser:
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
+        "RANDOM": (0, "number"),
     }
 
     def function_call(self):
@@ -2098,6 +2102,8 @@ class Parser:
                 if self.at(")"):
                     continue
                 args.append(self.expr())
+        if name.key == "RANDOM":
+            count = len(args) if len(args) <= 1 else 0
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
                 or (name.key == "NUMVAL-C" and len(args) > 2):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
@@ -2283,7 +2289,7 @@ class Parser:
     DEBUG_SUSPENDED = {"GO", "PERFORM", "WRITE", "REWRITE"}
     # Statements whose receiving operands are marked (target_identifier):
     # elsewhere a debugged item is refused.
-    DEBUG_STATEMENTS = {"move", "compute", "arithmetic", "if", "display"}
+    DEBUG_STATEMENTS = {"move", "compute", "arithmetic", "if", "display", "accept_clock"}
 
     def statement(self):
         if not self.start_debug:
@@ -2453,12 +2459,16 @@ class Parser:
             files = [f.name for f in self.files.values() if f.sort and record.name in f.records]
             if not files or record.indices or record.start is not None:
                 self.error("RELEASE requiert un enregistrement SD")
+            if getattr(self.files[files[0]], "variable_sort", False):
+                self.error("RELEASE d'un SD avec OCCURS DEPENDING ON non pris en charge")
             value = self.expr() if self.accept("FROM") else None
             return Stmt("release", (files[0], record, value), line)
         if verb == "RETURN":
             name = self.file_name()
             if not self.files[name].sort:
                 self.error("RETURN requiert un fichier SD")
+            if getattr(self.files[name], "variable_sort", False):
+                self.error("RETURN d'un SD avec OCCURS DEPENDING ON non pris en charge")
             self.accept("RECORD")
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
@@ -2643,8 +2653,22 @@ class Parser:
             self.accept("END-DISPLAY")
             return Stmt("display", (values, newline, device), line)
         if verb == "ACCEPT":
+            # parser.y accept_body: an identifier, not a target_identifier.
             name = self.variable()
             if self.accept("FROM"):
+                if not self.t.string and self.t.key in {"DATE", "DAY", "DAY-OF-WEEK", "TIME"}:
+                    # cb_emit_accept_date/day/day_of_week/time: the clock moved
+                    # as a binary field (DAY-OF-WEEK a one-character alphanumeric).
+                    kind = self.take().key
+                    if kind == "DATE" and self.accept("YYYYMMDD"):
+                        kind = "DATE YYYYMMDD"
+                    elif kind == "DAY" and self.accept("YYYYDDD"):
+                        kind = "DAY YYYYDDD"
+                    field = self.fields[name.name]
+                    if field.usage == "INDEX" or field.index_for:
+                        self.error(f"ACCEPT FROM {kind} vers un index non pris en charge")
+                    self.accept("END-ACCEPT")
+                    return Stmt("accept_clock", (name, kind), line)
                 # cb_emit_accept_mnemonic: CONSOLE and SYSIN read as plain ACCEPT.
                 source = self.take().key
                 if self.mnemonics.get(source, self.DEVICES.get(source)) not in {"stdin", "console"}:

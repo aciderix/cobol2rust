@@ -249,7 +249,7 @@ def main(argv=None):
     verification.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
-    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT ou COB_SWITCH_n identique pour les deux programmes")
+    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE ou COB_SWITCH_n identique pour les deux programmes")
     verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")

@@ -99,11 +99,11 @@ Ces résultats portent sur les entrées testées.
 | Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
 | MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ou numérique DISPLAY ; groupe source copié brut vers numérique/édité |
-| Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |
+| Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un champ numérique (`cob_cmp_alnum` des chiffres stockés, sauf repli de `compare_field_literal`) |
 | Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03, SIGINT pour libcob, est un arrêt nommé) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
-| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
+| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
 | Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
@@ -118,8 +118,7 @@ Sont notamment refusés : tables variables à offsets ou strides variables,
 niveaux 66/78,
 REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
 images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
-fonctions intrinsèques hors liste ci-dessous (RANDOM, dont la graine sans
-argument dépend de l'heure et le générateur est celui de GMP), appels externes,
+fonctions intrinsèques hors liste ci-dessous, appels externes,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
 fichiers à enregistrements variables, SQL embarqué et CICS. Les formats binaires autres que les enregistrements
 SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
@@ -264,8 +263,28 @@ SORT et MERGE (SD, clés ASCENDING/DESCENDING, USING/GIVING de fichiers
 séquentiels fixes ou SEQUENTIAL variables sans DEPENDING, INPUT/OUTPUT
 PROCEDURE, RELEASE, RETURN) reproduisent le tri stable de libcob ; un USING
 variable copie la taille lue et un GIVING écrit `record_max`, comme
-`cob_copy_check`. SORT … COLLATING SEQUENCE littérale et SD à OCCURS DEPENDING
-restent refusés.
+`cob_copy_check`. Un SD à OCCURS DEPENDING est accepté pour USING/GIVING, où
+libcob déplace chaque enregistrement à la taille maximale du SD ; RELEASE et
+RETURN d'un tel SD, et SORT … COLLATING SEQUENCE littérale, restent refusés.
+
+## Horloge, ACCEPT FROM DATE et FUNCTION RANDOM
+
+`ACCEPT x FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK` et `TIME`
+reprennent `cob_accept_date`… (valeur déplacée comme un champ binaire de 6, 8,
+5, 7 ou 8 chiffres, DAY-OF-WEEK comme un caractère alphanumérique) et
+FUNCTION CURRENT-DATE ; l'heure vient de `cob_get_current_datetime` : heure
+locale (fuseau UTC seul modélisé), nanosecondes toujours lues comme
+`clock_gettime` sous Linux, et `COB_CURRENT_DATE` porté de
+`check_current_date` (date, heure, nanosecondes, décalage `Z`/`±hh[:]mm`,
+gabarits `YYYY`/`MM`/…, normalisation `mktime`). Une valeur invalide de
+`COB_CURRENT_DATE` (libcob l'ignore avec un avertissement) et la forme
+`@secondes` sont des arrêts nommés. `verify --runtime-env COB_CURRENT_DATE=…`
+fixe l'horloge des deux programmes. `FUNCTION RANDOM [(graine)]` reproduit le
+Mersenne Twister de GMP 6.3 utilisé par libcob (`gmp_randseed_ui`,
+`mpf_urandomb` de 63 bits, `mpf_get_d` tronqué, conversion exacte du double) ;
+sans graine au premier appel, libcob tire la graine de l'heure et de l'adresse
+du module, valeur non reproductible : le port prend l'heure et une adresse du
+programme Rust, ce qui donne une suite native possible.
 
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
 

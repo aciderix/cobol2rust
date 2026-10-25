@@ -28,6 +28,9 @@ from cobol2rust.verification import verify
 RUNNER_FLAGS = ["-std=cobol85", "--debug"]
 # report.pl compiles these programs with -fdebugging-line ($cobc_flags).
 DEBUGGING_LINES = {"SM206A"}
+# Programs that print the clock: both runs use the moment of the reference
+# run, read from its log (NC214M: DATE 261023, DAY 26296, TIME 15092270).
+RUNNER_CLOCK = {"NC214M": "2026/10/23 15:09:22.700000000"}
 # report.pl $cobc_flags{DB201A} = "-fno-ec=data-incompatible".
 NO_EC_DATA_INCOMPATIBLE = {"DB201A"}
 # report.pl $raw_input, written with `echo "..." > $exe.inp` (so plus "\n").
@@ -38,7 +41,10 @@ RUNNER_ENV = {"COB_SWITCH_1": "ON", "COB_SWITCH_2": "OFF"}
 
 def runner_env(name: str) -> dict:
     """report.pl: the runtime DEBUG switch is on for the DB module, except DB102A."""
-    return {**RUNNER_ENV, "COB_SET_DEBUG": "Y" if name[:2] == "DB" and name != "DB102A" else "N"}
+    environment = {**RUNNER_ENV, "COB_SET_DEBUG": "Y" if name[:2] == "DB" and name != "DB102A" else "N"}
+    if name in RUNNER_CLOCK:
+        environment["COB_CURRENT_DATE"] = RUNNER_CLOCK[name]
+    return environment
 # report.pl only compiles these programs: their execution is not part of the suite.
 COMPILE_ONLY = {"NC401M", "RL301M", "RL401M", "IC401M", "IX301M", "IX401M", "SQ303M",
                 "SQ401M", "ST301M", "RW301M", "RW302M", "DB205A"}

@@ -889,35 +889,59 @@ pub mod intrinsic {
     pub fn e() -> Value { result(exp(&Float::int(1))) }
     pub fn pi_value() -> Value { result(pi()) }
 
-    /// cob_intr_current_date: YYYYMMDDhhmmsscc and the UTC offset of the
-    /// local time zone, here only modelled for UTC.
+    /// cob_intr_current_date: YYYYMMDDhhmmsscc and the UTC offset.
     pub fn current_date() -> Value {
-        if std::env::var_os("COB_CURRENT_DATE").is_some() { fail("COB_CURRENT_DATE not modelled"); }
-        let utc = match std::env::var("TZ") {
-            Ok(tz) => matches!(tz.trim_start_matches(':'), "UTC" | "UTC0" | "GMT" | "GMT0" | "Etc/UTC" | "Etc/GMT" | "UCT" | "Zulu" | ""),
-            Err(_) => match std::fs::read("/etc/localtime") {
-                Err(_) => true,
-                // A TZif file without transitions and with one offset 0 type.
-                Ok(data) => data.len() >= 50 && &data[..4] == b"TZif"
-                    && data[32..36] == [0, 0, 0, 0] && data[36..40] == [0, 0, 0, 1] && data[44..48] == [0, 0, 0, 0],
-            },
-        };
-        if !utc { fail("CURRENT-DATE in a local time zone other than UTC not modelled"); }
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));
-        let seconds = now.as_secs() as i64;
-        let (days, rest) = (seconds.div_euclid(86400), seconds.rem_euclid(86400));
-        // Civil date of a day count (days from 1970-01-01).
-        let z = days + 719468;
-        let era = z.div_euclid(146097);
-        let doe = z - era * 146097;
-        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        let mp = (5 * doy + 2) / 153;
-        let day = doy - (153 * mp + 2) / 5 + 1;
-        let month = if mp < 10 { mp + 3 } else { mp - 9 };
-        let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
-        Value::text(&format!("{year:04}{month:02}{day:02}{:02}{:02}{:02}{:02}+0000",
-                             rest / 3600, rest % 3600 / 60, rest % 60, now.subsec_nanos() / 10_000_000))
+        let t = super::current_datetime();
+        let (hours, minutes) = (t.utc_offset / 60, t.utc_offset.abs() % 60);
+        Value::text(&format!("{:04}{:02}{:02}{:02}{:02}{:02}{:02}{}{:02}{:02}", t.year, t.month, t.day, t.hour, t.minute,
+                             t.second, t.nanosecond / 10_000_000, if t.utc_offset < 0 { '-' } else { '+' }, hours.abs(), minutes))
+    }
+    /// cob_intr_random with GMP's Mersenne Twister (gmp_randinit_mt,
+    /// gmp_randseed_ui, mpf_urandomb of 63 bits, mpf_get_d), the double
+    /// converted exactly by cob_decimal_set_double.
+    pub fn random(seed: Option<&Value>) -> Value {
+        thread_local! {
+            static STATE: std::cell::RefCell<(i32, Option<super::MersenneTwister>)> = const { std::cell::RefCell::new((1, None)) };
+        }
+        let mut value = 0u64;
+        STATE.with(|state| {
+            let (needs_seeding, generator) = &mut *state.borrow_mut();
+            let mut seeded = 0u64;
+            if let Some(seed) = seed {
+                // cob_get_llint; a negative seed sets EC-ARGUMENT-FUNCTION and seeds 0.
+                let n = seed.num().units(0, false);
+                if n.sign() != Sign::Minus {
+                    seeded = u64::try_from(&n).unwrap_or_else(|_| fail("RANDOM seed beyond 64 bits not modelled"));
+                }
+                *needs_seeding += 1;
+            } else if *needs_seeding != 0 {
+                // First call without a seed: libcob uses the seconds past
+                // midnight times bits of the module's address, a value no
+                // run can reproduce; any such seed is a native outcome.
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let address = (&*state as *const _ as u64) & 0xFFFFF;
+                seeded = (now % 86400).wrapping_mul(address);
+                *needs_seeding = 2;
+            }
+            if *needs_seeding != 0 {
+                let mut mt = generator.take().unwrap_or_default();
+                mt.seed(seeded);
+                *generator = Some(mt);
+                *needs_seeding = 0;
+            }
+            let mt = generator.as_mut().unwrap();
+            // _gmp_rand of 63 bits in a 64-bit limb, then shifted up one bit.
+            let low = mt.next() as u64;
+            let high = (mt.next() as u64) & 0x7FFF_FFFF;
+            value = (low | high << 32) << 1;
+        });
+        if value == 0 { return int_of(0); }
+        // mpn_get_d truncates to the 53 bits of a double: value / 2^64.
+        let mantissa = value & !((1u64 << (64 - value.leading_zeros()).saturating_sub(53)) - 1);
+        let exact = BigInt::from(mantissa) * BigInt::from(5u32).pow(64);
+        let digits = format!("{:0>64}", exact.to_string());
+        let fraction = digits.trim_end_matches('0');
+        Value::number(&format!("0.{fraction}"))
     }
     pub fn sin(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).0) }
     pub fn cos(v: &Value) -> Value { result(sin_cos(&Float::of(&v.num())).1) }
@@ -1106,4 +1130,301 @@ pub mod intrinsic {
     }
     #[allow(dead_code)]
     fn unused(_: &BigInt) -> BigInt { absolute(&BigInt::from(0)) }
+}
+
+/// struct cob_time of cob_get_current_datetime.
+#[derive(Clone, Copy)]
+pub struct CobTime {
+    pub year: i64, pub month: i64, pub day: i64, pub hour: i64, pub minute: i64, pub second: i64,
+    pub nanosecond: i64, pub day_of_week: i64, pub day_of_year: i64, pub utc_offset: i64,
+}
+
+/// Days from 1970-01-01 of a proleptic Gregorian date (month 1..12, any day).
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+/// The broken-down UTC time of a second count (gmtime, which is localtime in UTC).
+fn broken_down(seconds: i64) -> CobTime {
+    let (days, rest) = (seconds.div_euclid(86400), seconds.rem_euclid(86400));
+    let z = days + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + if month <= 2 { 1 } else { 0 };
+    CobTime { year, month, day, hour: rest / 3600, minute: rest % 3600 / 60, second: rest % 60, nanosecond: 0,
+              // 1970-01-01 was a Thursday; libcob counts Monday as 1.
+              day_of_week: (days + 3).rem_euclid(7) + 1, day_of_year: days - days_from_civil(year, 1, 1) + 1, utc_offset: 0 }
+}
+
+/// mktime in UTC: normalize the fields (30 Feb is 2 March, second 60 the next minute).
+fn normalized(t: &CobTime) -> CobTime {
+    let months = t.year * 12 + t.month - 1;
+    let seconds = (days_from_civil(months.div_euclid(12), months.rem_euclid(12) + 1, 1) + t.day - 1) * 86400
+        + t.hour * 3600 + t.minute * 60 + t.second;
+    broken_down(seconds)
+}
+
+/// The local time zone, modelled only when it is UTC.
+fn utc_only(what: &str) {
+    let utc = match std::env::var("TZ") {
+        Ok(tz) => matches!(tz.trim_start_matches(':'), "UTC" | "UTC0" | "GMT" | "GMT0" | "Etc/UTC" | "Etc/GMT" | "UCT" | "Zulu" | ""),
+        Err(_) => match std::fs::read("/etc/localtime") {
+            Err(_) => true,
+            // A TZif file without transitions and with one offset 0 type.
+            Ok(data) => data.len() >= 50 && &data[..4] == b"TZif"
+                && data[32..36] == [0, 0, 0, 0] && data[36..40] == [0, 0, 0, 1] && data[44..48] == [0, 0, 0, 0],
+        },
+    };
+    if !utc { fail(&format!("{what} in a local time zone other than UTC not modelled")); }
+}
+
+/// cob_time_constant: the parts COB_CURRENT_DATE fixes (None: from the clock),
+/// with the day of week and of year when the whole date is given.
+#[derive(Clone, Copy, Default)]
+struct TimeConstant {
+    year: Option<i64>, month: Option<i64>, day: Option<i64>, hour: Option<i64>, minute: Option<i64>,
+    second: Option<i64>, nanosecond: Option<i64>, calculated: Option<(i64, i64)>, offset: Option<i64>,
+}
+
+/// check_current_date: COB_CURRENT_DATE "YYYY/MM/DD hh:mm:ss.nnnnnnnnn+hhmm",
+/// each part optional from the right or written as a template (YYYY, MM, ...).
+fn check_current_date(text: &str, now: &CobTime) -> TimeConstant {
+    let p: Vec<u8> = text.bytes().collect();
+    let mut i = 0;
+    while i < p.len() && (p[i] == b'\'' || p[i] == b'"' || p[i].is_ascii_whitespace()) { i += 1; }
+    if p.get(i) == Some(&b'@') { fail("COB_CURRENT_DATE as seconds since the epoch not modelled"); }
+    let at = |i: usize| p.get(i).copied().unwrap_or(0);
+    let mut invalid = false;
+    // One numeric part of `width` digits (or 2 or 4 for the year), else a template letter.
+    let mut part = |i: &mut usize, width: usize, letter: u8, invalid: &mut bool, year: bool| -> Option<i64> {
+        let mut value = 0;
+        let mut count = 0;
+        while at(*i) != 0 && at(*i).is_ascii_digit() {
+            value = value * 10 + (at(*i) - b'0') as i64;
+            *i += 1;
+            count += 1;
+            if count == width { break; }
+        }
+        if count == width || (year && count == 2) {
+            return Some(if year && value < 100 { value + 2000 } else { value });
+        }
+        if at(*i) == letter { while at(*i) == letter { *i += 1; } } else { *invalid = true; }
+        None
+    };
+    let (mut yr, mut mm, mut dd, mut hh, mut mi, mut ss, mut ns) = (None, None, None, None, None, None, None);
+    if at(i) != 0 {
+        yr = part(&mut i, 4, b'Y', &mut invalid, true);
+        if at(i) == b'/' || at(i) == b'-' { i += 1; }
+    }
+    if at(i) != 0 {
+        mm = part(&mut i, 2, b'M', &mut invalid, false);
+        if mm.is_some_and(|m| !(1..=12).contains(&m)) { invalid = true; }
+        if at(i) == b'/' || at(i) == b'-' { i += 1; }
+    }
+    if at(i) != 0 {
+        dd = part(&mut i, 2, b'D', &mut invalid, false);
+        if dd.is_some_and(|d| !(1..=31).contains(&d)) { invalid = true; }
+    }
+    if at(i) != 0 {
+        while at(i).is_ascii_whitespace() { i += 1; }
+        hh = part(&mut i, 2, b'H', &mut invalid, false);
+        if hh.is_some_and(|h| h > 23) { invalid = true; }
+        if at(i) == b':' || at(i) == b'-' { i += 1; }
+    }
+    if at(i) != 0 {
+        mi = part(&mut i, 2, b'M', &mut invalid, false);
+        if mi.is_some_and(|m| m > 59) { invalid = true; }
+        if at(i) == b':' || at(i) == b'-' { i += 1; }
+    }
+    if !matches!(at(i), 0 | b'Z' | b'+' | b'-') {
+        ss = part(&mut i, 2, b'S', &mut invalid, false);
+        if ss.is_some_and(|s| s > 60) { invalid = true; }
+    }
+    if !matches!(at(i), 0 | b'Z' | b'+' | b'-') {
+        if at(i) == b'.' || at(i) == b':' { i += 1; }
+        let mut value = 0;
+        let mut count = 0;
+        while at(i).is_ascii_digit() && count < 9 { value = value * 10 + (at(i) - b'0') as i64; i += 1; count += 1; }
+        ns = Some(value);
+    }
+    let mut offset = None;
+    if at(i) == b'Z' {
+        offset = Some(0);
+    } else if at(i) == b'+' || at(i) == b'-' {
+        // snprintf into a 7-byte buffer, its result being the full length.
+        let rest = &p[i..];
+        let mut length = rest.len();
+        let mut zone: Vec<u8> = rest.iter().copied().take(6).collect();
+        if length == 3 {
+            zone.extend(b"00");
+        } else if length >= 5 && zone[3] == b':' {
+            zone.truncate(3);
+            zone.extend(rest[4..].iter().take(2));
+            length -= 1;
+        }
+        let digits: Vec<i64> = zone[1..].iter().take(4).take_while(|b| b.is_ascii_digit()).map(|b| (*b - b'0') as i64).collect();
+        if length > 5 || digits.len() != 4 {
+            invalid = true;
+        } else {
+            let minutes = digits[0] * 600 + digits[1] * 60 + digits[2] * 10 + digits[3];
+            offset = Some(if zone[0] == b'-' { -minutes } else { minutes });
+        }
+    }
+    if invalid { fail(&format!("invalid COB_CURRENT_DATE '{text}' (libcob warns and ignores it) not modelled")); }
+    let mut tm = *now;
+    if let Some(v) = ss { tm.second = v; }
+    if let Some(v) = mi { tm.minute = v; }
+    if let Some(v) = hh { tm.hour = v; }
+    if let Some(v) = yr { tm.year = v; }
+    if let Some(v) = mm { tm.month = v; }
+    if let Some(v) = dd { tm.day = v; }
+    let tm = normalized(&tm);
+    TimeConstant {
+        year: yr.map(|_| tm.year), month: mm.map(|_| tm.month), day: dd.map(|_| tm.day),
+        hour: hh.map(|_| tm.hour), minute: mi.map(|_| tm.minute), second: ss.map(|_| tm.second), nanosecond: ns,
+        calculated: (yr.is_some() && mm.is_some() && dd.is_some()).then_some((tm.day_of_week, tm.day_of_year)),
+        offset,
+    }
+}
+
+/// cob_get_current_datetime: the local time (UTC only) with its nanoseconds
+/// (on Linux clock_gettime gives them whatever the resolution asked: only
+/// the Windows branch drops them), then the parts COB_CURRENT_DATE fixes.
+pub fn current_datetime() -> CobTime {
+    utc_only("the current date and time");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));
+    let mut t = broken_down(now.as_secs() as i64);
+    t.nanosecond = now.subsec_nanos() as i64;
+    // cob_init reads COB_CURRENT_DATE once.
+    static CONSTANT: std::sync::OnceLock<Option<TimeConstant>> = std::sync::OnceLock::new();
+    let constant = *CONSTANT.get_or_init(|| std::env::var("COB_CURRENT_DATE").ok().map(|text| check_current_date(&text, &t)));
+    if let Some(c) = constant {
+        if let Some(v) = c.hour { t.hour = v; }
+        if let Some(v) = c.minute { t.minute = v; }
+        if let Some(v) = c.second { t.second = v; }
+        if let Some(v) = c.nanosecond { t.nanosecond = v; }
+        if let Some(v) = c.offset { t.utc_offset = v; }
+        if let Some((day_of_week, day_of_year)) = c.calculated {
+            (t.year, t.month, t.day, t.day_of_week, t.day_of_year) = (c.year.unwrap(), c.month.unwrap(), c.day.unwrap(), day_of_week, day_of_year);
+        } else if c.year.is_some() || c.month.is_some() || c.day.is_some() {
+            if let Some(v) = c.year { t.year = v; }
+            if let Some(v) = c.month { t.month = v; }
+            if let Some(v) = c.day { t.day = v; }
+            // mktime of the mixed date: day of week and of year.
+            let n = normalized(&t);
+            (t.day_of_week, t.day_of_year) = (n.day_of_week, n.day_of_year);
+        }
+    }
+    t
+}
+
+/// cob_accept_date/_yyyymmdd, cob_accept_day/_yyyyddd, cob_accept_day_of_week
+/// and cob_accept_time: the value and the digits of the binary field moved
+/// (DAY-OF-WEEK is a one-character alphanumeric source).
+fn clock(kind: &str) -> (i64, usize) {
+    match kind {
+        "DATE" => { let t = current_datetime(); (t.day + t.month * 100 + t.year % 100 * 10000, 6) },
+        "DATE YYYYMMDD" => { let t = current_datetime(); (t.day + t.month * 100 + t.year * 10000, 8) },
+        "DAY" => { let t = current_datetime(); (t.day_of_year + t.year % 100 * 1000, 5) },
+        "DAY YYYYDDD" => { let t = current_datetime(); (t.day_of_year + t.year * 1000, 7) },
+        "DAY-OF-WEEK" => (current_datetime().day_of_week, 1),
+        "TIME" => {
+            let t = current_datetime();
+            (t.nanosecond / 10_000_000 + t.second * 100 + t.minute * 10000 + t.hour * 1000000, 8)
+        },
+        _ => fail("ACCEPT FROM clock register not modelled"),
+    }
+}
+
+/// The clock register moved to a numeric receiver.
+pub fn clock_value(kind: &str) -> Value { Value::number(&clock(kind).0.to_string()) }
+
+/// The clock register moved to an alphanumeric or group receiver: its digits.
+pub fn clock_digits(kind: &str) -> Vec<u8> {
+    let (value, digits) = clock(kind);
+    format!("{value:0digits$}").into_bytes()
+}
+
+/// GMP 6.3 rand/randmt.c and randmts.c: the Mersenne Twister state.
+pub struct MersenneTwister { mt: [u32; 624], mti: usize }
+
+impl Default for MersenneTwister {
+    fn default() -> Self { Self { mt: [0; 624], mti: 0 } }
+}
+
+impl MersenneTwister {
+    fn recalc(&mut self) {
+        const N: usize = 624;
+        const M: usize = 397;
+        let twist = |y: u32| (y >> 1) ^ if y & 1 != 0 { 0x9908_B0DF } else { 0 };
+        let mt = &mut self.mt;
+        for kk in 0..N - M {
+            let y = (mt[kk] & 0x8000_0000) | (mt[kk + 1] & 0x7FFF_FFFF);
+            mt[kk] = mt[kk + M] ^ twist(y);
+        }
+        for kk in N - M..N - 1 {
+            let y = (mt[kk] & 0x8000_0000) | (mt[kk + 1] & 0x7FFF_FFFF);
+            mt[kk] = mt[kk - (N - M)] ^ twist(y);
+        }
+        let y = (mt[N - 1] & 0x8000_0000) | (mt[0] & 0x7FFF_FFFF);
+        mt[N - 1] = mt[M - 1] ^ twist(y);
+    }
+
+    /// randseed_mt: seed mod (2^19937-20027) + 2, mangle_seed's power
+    /// 1074888996 reduced the way GMP does (by 2^19937 = 20023), then the
+    /// result split in 32-bit words, warmed up by WARM_UP = 2000 outputs.
+    fn seed(&mut self, seed: u64) {
+        let modulus = (BigInt::from(1) << 19937u32) - 20027;
+        let mut r: BigInt = BigInt::from(seed) % &modulus + 2;
+        let base = r.clone();
+        let mask = (BigInt::from(1) << 19937u32) - 1;
+        let reduce = |r: &mut BigInt| loop {
+            let t: BigInt = &*r >> 19937u32;
+            if t.sign() == Sign::NoSign { break; }
+            *r = (&*r & &mask) + t * 20023;
+        };
+        let mut e: u64 = 0x4011_8124;
+        let mut bit: u64 = 0x2000_0000;
+        while bit != 0 {
+            r = &r * &r;
+            reduce(&mut r);
+            if e & bit != 0 {
+                e ^= bit;
+                r = &r * &base;
+                reduce(&mut r);
+            }
+            bit >>= 1;
+        }
+        let top: BigInt = (BigInt::from(1) << 19936u32) & &r;
+        self.mt = [0; 624];
+        self.mt[0] = if top.sign() != Sign::NoSign { 0x8000_0000 } else { 0 };
+        let r: BigInt = r & ((BigInt::from(1) << 19936u32) - 1);
+        let (_, words) = r.to_u32_digits();
+        for (slot, word) in self.mt[1..].iter_mut().zip(words) { *slot = word; }
+        for _ in 0..2000 / 624 { self.recalc(); }
+        self.mti = 2000 % 624;
+    }
+
+    /// NEXT_RANDOM: one tempered output.
+    fn next(&mut self) -> u32 {
+        if self.mti >= 624 { self.recalc(); self.mti = 0; }
+        let mut y = self.mt[self.mti];
+        self.mti += 1;
+        y ^= y >> 11;
+        y ^= (y << 7) & 0x9D2C_5680;
+        y ^= (y << 15) & 0xEFC6_0000;
+        y ^= y >> 18;
+        y
+    }
 }

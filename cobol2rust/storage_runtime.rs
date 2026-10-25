@@ -423,7 +423,9 @@ impl View {
             _ => fail("numeric text operation requires a numeric source"),
         };
         if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
-        if comparison && (scale < 0 || scale as u32 > digits) { fail("alphanumeric comparison of a P-scaled item not modelled"); }
+        // cob_cmp_alnum reads the stored digits of a DISPLAY item, P positions
+        // not included; other usages go through a DISPLAY copy of their digits.
+        if comparison && (scale < 0 || scale as u32 > digits) && !usage.is_display() { fail("alphanumeric comparison of a P-scaled item not modelled"); }
         if !comparison && scale > 0 { fail("numeric MOVE to alphanumeric requires an integer source"); }
         if scale < 0 && !usage.is_display() { fail("P-scaled binary or packed MOVE to alphanumeric not modelled"); }
         let bytes = match usage {
@@ -453,7 +455,7 @@ impl View {
                 // its storage is not valid numeric data. Trailing P positions
                 // follow as zeros (cob_move_display_to_alphanum).
                 let mut bytes = bytes;
-                bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize));
+                if !comparison { bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize)); }
                 bytes
             },
             Usage::Packed | Usage::Binary | Usage::Index => {
