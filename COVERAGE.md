@@ -726,3 +726,14 @@ COLUMN, SOURCE, VALUE, LINE-COUNTER et PAGE-COUNTER. Émission acceptée :
 **430/458** ; revérification : **405/406 programmes principaux conformes**,
 9343 PASS, 0 FAIL (`build/nist-verify-report.json`,
 `build/coverage-nist-report.json`).
+
+## Progression : USE FOR DEBUGGING sur articles
+
+Port de `cb_check_field_debug` (liste `debug_check` de chaque instruction,
+émise après son corps sous `cob_debugging_mode`), des cas inline de codegen.c
+(`output_goto`, `output_perform`, `output_perform_until`, `output_cond_debug`)
+et de typeck.c (pas de PERFORM VARYING, enregistrement de WRITE/REWRITE) ;
+option `--fno-ec-data-incompatible` pour DB201A. Émission acceptée :
+**434/458** ; revérification : **409/410 programmes principaux conformes**,
+9438 PASS, 0 FAIL (`build/nist-verify-debug-items.json`,
+`build/coverage-nist-debug-items.json`).

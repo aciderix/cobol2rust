@@ -114,6 +114,18 @@ conformes (REPORT et fichier de rapport identiques à cobc). NIST **430/458**,
 listes `debug_check` de cobc), FD GLOBAL/EXTERNAL et USE GLOBAL
 (IC227A/233A/234A).
 
+Dernière étape : USE FOR DEBUGGING sur articles. `Parser.debug_fields`
+(clé -> section, ALL REFERENCES), `start_debug` après END DECLARATIVES,
+`Parser.statement` empile un cadre par instruction (`debug_frames`, suspendu
+pour GO/PERFORM/WRITE/REWRITE comme parser.y), `reference` y inscrit chaque
+identifiant, `target_variable` marque les receveurs ; `Stmt.debug_checks`
+(nom, référence, section). `ControlGraph._debug_checks` (sous `debug_gate`),
+`_field_debug` et `_condition_debug` pour les cas inline ; nœud
+`debug_blank` (`storage_runtime::fill_spaces`). `NO_EC_DATA_INCOMPATIBLE` /
+`storage_runtime::set_unchecked_data`. NIST **434/458**, 409/410. Prochains
+blocages : FD GLOBAL/EXTERNAL et USE GLOBAL (IC227A/233A/234A), RANDOM,
+NC103A, NC214M, ST137A, SQ401M.
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

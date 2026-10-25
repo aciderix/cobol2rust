@@ -1,5 +1,21 @@
 # Validation — 22 octobre 2026
 
+## USE FOR DEBUGGING sur articles — 25 octobre 2026
+
+- **347 tests découverts : 346 réussis, un test PE Windows ignoré.**
+- **119/119 comparaisons locales conformes** ; nouvelle fixture
+  `debugging_items.cob` (receveurs et ALL REFERENCES, IF débogué après ses
+  branches, PERFORM VARYING/AFTER/UNTIL, GO TO DEPENDING, sous-scripts et
+  qualificatifs, WRITE d'un enregistrement surveillé), en default et cobol85,
+  commutateur de débogage actif ; MOVE sans `cob_check_numeric` vérifié avec
+  `-fno-ec=data-incompatible`.
+- NIST : **434/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **409/410 programmes principaux conformes** (9438 PASS, 0 FAIL, 16 DELETED,
+  118 INSPECT) : `build/nist-verify-debug-items.json`,
+  `build/coverage-nist-debug-items.json`. 4 programmes ajoutés : DB201A
+  (avec `-fno-ec=data-incompatible` comme report.pl), DB202A, DB203A, DB303M.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
 ## Report Writer — 24 octobre 2026
 
 - **341 tests découverts : 340 réussis, un test PE Windows ignoré.**
