@@ -16,10 +16,16 @@ La couverture universelle est désormais l'objectif de développement. La
 cap de ce qui est effectivement accepté, compilé et vérifié.
 
 Sur la branche de développement, la suite NIST CCVS85 est couverte telle que
-GnuCOBOL 3.2 l'exécute : les 427 programmes principaux que son runner traite
-donnent en Rust des REPORT identiques octet pour octet (9610 PASS, 0 FAIL, le
-bilan natif exact) ; seuls 7 programmes du module CM, que cobc ne compile pas,
-restent refusés ([VALIDATION.md](VALIDATION.md)).
+GnuCOBOL 3.2 l'exécute : 451/458 sources acceptées ; sur les 427 programmes
+vérifiés, 413 sont exécutés et donnent en Rust des REPORT identiques octet pour
+octet (9610 PASS, 0 FAIL, le bilan natif exact) et 14, que le runner natif ne
+fait que compiler, sont seulement compilés ; les 7 refus sont des programmes
+CM que cobc ne compile pas non plus ([VALIDATION.md](VALIDATION.md)).
+
+**Ce résultat ne mesure pas la couverture du COBOL réel.** Sur six corpus
+publics épinglés (2458 sources, dont l'application mainframe CardDemo), le
+convertisseur accepte 230 sources là où cobc en accepte 738 ; CardDemo reste à
+0/44. Le cap du projet et sa mesure sont dans [CAP.md](CAP.md).
 
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur

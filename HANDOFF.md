@@ -1,5 +1,10 @@
 # Handoff — COBOL vers Rust
 
+> **Reprise : lire d'abord [CAP.md](CAP.md).** Depuis le 25 octobre 2026, le
+> prochain chantier se choisit dans la mesure des corpus réels
+> (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
+> NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
+
 État au 25 octobre 2026 : version **0.4.0** livrée, branche
 `claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
 

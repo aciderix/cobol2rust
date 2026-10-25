@@ -1,5 +1,16 @@
 # Validation — 22 octobre 2026
 
+## Mesure de référence des corpus réels — 25 octobre 2026
+
+Nouvelle boussole (CAP.md). `tools/real_corpora.py --cobc --record`, six corpus
+publics épinglés, format `auto` (heuristique de cobol2rust d'alors, règle
+de cobc côté cobc), copybooks de chaque corpus :
+**230/2458 sources acceptées, cobc 738, écart 518** (sources que cobc accepte
+et que cobol2rust refuse). CardDemo 0/44 (cobc 14), zopeneditor-sample 0/5
+(cobc 5). 15 sources sont acceptées alors que cobc les refuse (IF vide,
+indicateur invalide en colonne 7…) : à examiner comme défauts de rigueur.
+Niveau 2 de preuve seulement. Fichiers : `measurements/real-corpora.json`.
+
 ## Fin de la première partie : couverture NIST du runner natif — 25 octobre 2026
 
 - **369 tests découverts : 368 réussis, un test PE Windows ignoré.**
@@ -12,7 +23,9 @@
   **427/427 programmes principaux conformes** (dont 14 que report.pl compile
   seulement, et le module CM que la suite n'exécute pas) : **9610 PASS, 0 FAIL,
   20 DELETED, 118 INSPECT, total 9748**, exactement le bilan natif de
-  `summary.txt`. Rapports : `build/nist-verify-final.json`,
+  `summary.txt`. Précision : 413 de ces programmes sont exécutés et comparés ;
+  les 14 autres (12 que report.pl compile seulement, plus CM201M et CM303M du
+  module CM jamais exécuté) sont seulement convertis et compilés. Rapports : `build/nist-verify-final.json`,
   `build/coverage-nist-final.json`. 13 programmes ajoutés : CM201M, CM303M,
   DB205A, DB304M, IC227A, IC233A, IC234A, IC401M, NC401M, OBNC1M, RW301M,
   RW302M, SQ401M ; DB103M est vérifié dans ses deux exécutions (COB_SET_DEBUG

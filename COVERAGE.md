@@ -1,5 +1,10 @@
 # Objectif : couverture universelle du COBOL vers Rust
 
+> **Indicateur principal depuis le 25 octobre 2026 : les corpus réels**
+> (tableau de [CAP.md](CAP.md), `tools/real_corpora.py`). Les sections NIST
+> ci-dessous décrivent la première partie ; NIST est désormais un test de
+> non-régression, pas une mesure de la couverture du COBOL existant.
+
 L'objectif demandé est une **garantie universelle de conversion COBOL vers
 Rust**, couvrant tout le COBOL existant, au-delà du sous-ensemble de la version
 0.4.0. Cet objectif guide le développement ; il ne
