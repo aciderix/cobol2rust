@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .frontend import CobolError, Expr, ProcedureBlock, Program, Stmt
+from .frontend import CobolError, DataRef, Expr, ProcedureBlock, Program, Stmt
 
 
 @dataclass
@@ -199,11 +199,87 @@ class ControlGraph:
         return position
 
     def _statement(self, stmt: Stmt, after: int, block: int) -> int:
+        checks = getattr(stmt, "debug_checks", None)
+        if checks and self.debug and block not in self.debug_blocks:
+            after = self._debug_checks(checks, after, block)
         position = self._lower(stmt, after, block)
         # The "call" of a PERFORM or SORT procedure belongs to that statement.
         if self.debug and block not in self.debug_blocks and stmt.op not in {"sentence_end", "debug_contents", "call"}:
             # output_stmt: DEBUG-LINE takes the line of each statement begun.
             position = self._add("debug_line", (stmt.line, position))
+        return position
+
+    def _debug_register(self, label: str) -> DataRef:
+        return DataRef(next(key for key, f in self.program.fields.items()
+                            if f.label == label and key.split(".")[0] == "DEBUG-ITEM"))
+
+    def _debug_checks(self, checks, after: int, block: int) -> int:
+        """output_debug_stmts: under cob_debugging_mode, for each item of the
+        statement's debug_check list DEBUG-NAME, DEBUG-CONTENTS, DEBUG-SUB-1..3
+        (the subscripts, else spaces), then its debugging section."""
+        position = after
+        for name, ref, section in reversed(checks):
+            entry, checkpoint = self._target(section)
+            position = self._perform(section, entry, checkpoint, position, block)
+            for number in (3, 2, 1):
+                sub = self._debug_register(f"DEBUG-SUB-{number}")
+                if number <= len(ref.indices):
+                    move = Stmt("move", (ref.indices[number - 1], [sub], False))
+                    position = self._add("execute", (move, position))
+                else:
+                    position = self._add("debug_blank", (sub, position))
+            position = self._add("debug_contents", (("field", ref), position))
+            position = self._add("debug_name", (name, position))
+        return self._add("debug_gate", (position, after))
+
+    def _field_debug(self, ref: DataRef, after: int, block: int, all_references=False) -> int:
+        """The inline debugging of codegen.c (PERFORM VARYING, UNTIL, GO TO
+        DEPENDING) and typeck.c (WRITE/REWRITE record): DEBUG-NAME (the item's
+        name), DEBUG-CONTENTS and the debugging section, without the switch test."""
+        debug = getattr(self.program, "debug_fields", {}).get(ref.name) if self.debug else None
+        if debug is None or (all_references and not debug[1]):
+            return after
+        section = debug[0]
+        entry, checkpoint = self._target(section)
+        position = self._perform(section, entry, checkpoint, after, block)
+        position = self._add("debug_contents", (("field", ref), position))
+        label = self.program.fields[ref.name].label
+        return self._add("debug_name", (self.program.spelling.get(label, label), position))
+
+    def _condition_debug(self, condition: Expr, after: int, block: int) -> int:
+        """output_cond_debug of a PERFORM UNTIL condition: with DEBUGGING MODE
+        each relation is cob_cmp (left, right), and each debugged item among
+        its operands is debugged; an arithmetic operand makes it
+        cob_decimal_cmp and an index a subtraction, with no field argument."""
+        if not self.debug or not getattr(self.program, "debug_fields", None):
+            return after
+        debugged = lambda e: e.op == "var" and e.args[0].name in self.program.debug_fields
+        def refs(e):
+            if e.op in {"and", "or"}:
+                return refs(e.args[0]) + refs(e.args[1])
+            if e.op == "not":
+                return refs(e.args[0])
+            if e.op.startswith("cmp"):
+                left, right = e.args
+                if any(x.op in {"+", "-", "*", "/", "**", "unary+", "unary-", "function"} for x in (left, right)):
+                    if any(debugged(x) for x in _vars(left) + _vars(right)):
+                        raise CobolError("USE FOR DEBUGGING : article débogué dans une comparaison arithmétique de PERFORM UNTIL non pris en charge")
+                    return []
+                operands = [x for x in (left, right) if x.op == "var"]
+                if any(self.program.fields[x.args[0].name].usage == "INDEX" or self.program.fields[x.args[0].name].index_for
+                       for x in operands):
+                    return []
+                for x in operands:
+                    if debugged(x) and x.args[0].start is not None:
+                        raise CobolError("USE FOR DEBUGGING d'une référence modifiée non pris en charge")
+                return [x.args[0] for x in operands if debugged(x)]
+            if any(debugged(x) for x in _vars(e)) or (e.op == "condition" and
+                                                       self.program.conditions[e.args[0].name].parent in self.program.debug_fields):
+                raise CobolError("USE FOR DEBUGGING : condition de PERFORM UNTIL sur un article débogué non prise en charge")
+            return []
+        position = after
+        for ref in reversed(refs(condition)):
+            position = self._field_debug(ref, position, block)
         return position
 
     def _file_debug(self, name: str, block: int, after: int, contents=None) -> int | None:
@@ -247,6 +323,17 @@ class ControlGraph:
             for part in reversed(args[0]):
                 position = self._statement(Stmt(op, ([part],), stmt.line), position, block)
             return position
+        if op in {"write", "rewrite"} and self.debug and block not in self.debug_blocks \
+                and args[1] in getattr(self.program, "debug_fields", {}) and not getattr(stmt, "record_debugged", False):
+            # cb_emit_write/rewrite: the FROM move, then the debugged record
+            # (DEBUG-CONTENTS by MOVE), then the I/O.
+            plain = Stmt(op, (args[0], args[1], None, *args[3:]), stmt.line)
+            plain.record_debugged = True
+            node = self._lower(plain, after, block)
+            node = self._field_debug(DataRef(args[1]), node, block)
+            if args[2] is not None:
+                node = self._add("execute", (Stmt("assign", (args[2], [args[1]], False), stmt.line), node), stmt)
+            return node
         if op in {"open", "close", "write", "rewrite", "delete", "start"}:
             name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
             invalid = valid = None
@@ -328,7 +415,11 @@ class ControlGraph:
             targets, controller = args
             if not targets:
                 return after
-            return self._add("goto", ([self._goto(name, block) for name in targets], controller, after), stmt)
+            node = self._add("goto", ([self._goto(name, block) for name in targets], controller, after), stmt)
+            if controller is not None:
+                # output_goto: an ALL REFERENCES DEPENDING item before the switch.
+                node = self._field_debug(controller, node, block, all_references=True)
+            return node
         if op == "alter":
             source, target = args
             if self._monitored(source):
@@ -389,9 +480,10 @@ class ControlGraph:
         if mode == "until":
             condition, test_after = control
             test = self._add("branch", (), stmt)
-            entry = self._body(body, test, block)
+            check = self._condition_debug(condition, test, block)
+            entry = self._body(body, check, block)
             self.nodes[test] = Node("branch", (condition, after, entry), stmt)
-            return entry if test_after else test
+            return entry if test_after else check
         if mode == "varying":
             levels, test_after = control
             for var, _, step, _ in levels:
@@ -402,6 +494,8 @@ class ControlGraph:
 
             def initialize(level, continuation):
                 var, start, _, _ = levels[level]
+                # output_perform: the item set FROM, then debugged.
+                continuation = self._field_debug(var, continuation, block)
                 return self._add("execute", (Stmt("assign", (start, [var], False), stmt.line), continuation), stmt)
 
             # Mirror cobc's output_perform_until: each level is a loop whose
@@ -411,17 +505,31 @@ class ControlGraph:
                 var, _, step, condition = levels[level]
                 head = self._add("jump", (), stmt)
                 test = self._add("branch", (), stmt)
+                check = self._condition_debug(condition, test, block)
                 increment = self._add("varying_step", (), stmt)
-                inner_exit = test if test_after else increment
+                inner_exit = check if test_after else increment
                 if level + 1 < len(levels):
                     inner = level_loop(level + 1, inner_exit)
                 else:
                     inner = self._body(body, inner_exit, block)
-                first = test if not test_after else inner
+                first = check if not test_after else inner
                 self.nodes[head] = Node("jump", (initialize(level + 1, first) if level + 1 < len(levels) else first,), stmt)
                 self.nodes[test] = Node("branch", (condition, exit_node, increment if test_after else inner), stmt)
-                self.nodes[increment] = Node("varying_step", (var, step, head), stmt)
+                # cb_build_perform_varying: the step ADD, then the item debugged
+                # (not inside a debugging section).
+                stepped = head if block in self.debug_blocks else self._field_debug(var, head, block)
+                self.nodes[increment] = Node("varying_step", (var, step, stepped), stmt)
                 return head
 
             return initialize(0, level_loop(0, after))
         self._error(stmt, f"mode PERFORM inconnu: {mode}")
+
+
+def _vars(e) -> list:
+    """The data references of an expression tree."""
+    if not isinstance(e, Expr):
+        return []
+    if e.op == "var":
+        return [e]
+    return [v for a in e.args for v in (_vars(a) if isinstance(a, Expr) else
+                                        [x for y in a for x in _vars(y)] if isinstance(a, (list, tuple)) else [])]

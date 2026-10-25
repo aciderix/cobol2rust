@@ -57,6 +57,8 @@ DEBUGGING_LINES = False
 # items without VALUE (defaultbyte: init); "cobol85" keeps segment numbers
 # and leaves such items as allocated (defaultbyte: none).
 STD = "default"
+# cobc -fno-ec=data-incompatible: MOVE from DISPLAY data without cob_check_numeric.
+NO_EC_DATA_INCOMPATIBLE = False
 STANDARDS = ("default", "cobol85")
 
 
@@ -537,6 +539,12 @@ class Parser:
         self.in_debugging = False
         # REPORT SECTION: RD name -> ReportSpec, in FD REPORT clause order.
         self.reports = {}
+        # USE FOR DEBUGGING on data items: key -> (section, ALL REFERENCES),
+        # start_debug after END DECLARATIVES, and the statements being parsed
+        # (cb_check_field_debug fills each one's debug_check list).
+        self.debug_fields = {}
+        self.start_debug = False
+        self.debug_frames = []
 
     @property
     def t(self):
@@ -734,7 +742,10 @@ class Parser:
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
         if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
             self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
-        return DataRef(key, tuple(indices), start, length)
+        ref = DataRef(key, tuple(indices), start, length)
+        if self.debug_frames and not conditions and not self.debug_frames[-1]["suspended"]:
+            self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
+        return ref
 
     def parse(self):
         if not (self.accept("IDENTIFICATION") or self.accept("ID")):
@@ -889,6 +900,8 @@ class Parser:
                 continue
             if declaratives and self.at("END") and self.tokens[self.i + 1].key == "DECLARATIVES":
                 self.take(); self.take(); self.expect(".")
+                # needs_field_debug: field debugging starts after the declaratives.
+                self.start_debug = bool(self.debug_fields)
                 if current_section is None:
                     self.error("DECLARATIVES requiert au moins une section USE")
                 sections[current_section] = (sections[current_section][0], len(blocks))
@@ -984,6 +997,8 @@ class Parser:
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
         program.reports = self.reports
+        program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
+        program.debug_fields = self.debug_fields if self.debugging_mode else {}
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
         # their PICTURE; none (cobol85.conf) leaves the storage as allocated.
@@ -1124,11 +1139,11 @@ class Parser:
                         self.accept("OF")
                     else:
                         self.accept("OF")
-                    targets.append(("references", self.variable(), line))
+                    targets.append(("references", self.debugging_item(section, True), line))
                 elif not self.t.string and self.t.key in self.files:
                     targets.append(("file", self.file_name(), line))
                 elif not self.t.string and self.candidates(self.t.key):
-                    targets.append(("item", self.variable(), line))
+                    targets.append(("item", self.debugging_item(section, False), line))
                 else:
                     targets.append(("procedure", self.procedure_reference(), line))
             self.expect(".")
@@ -1156,6 +1171,22 @@ class Parser:
                 by_file[name] = section
         self.expect(".")
         return None
+
+    def debugging_item(self, section, all_references):
+        """debugging_target on a data item (flag_field_debug, flag_all_debug
+        with ALL REFERENCES): its section, known before the statements."""
+        # identifier_1 without its subscript check: a table item is named alone.
+        label, qualifiers = self.name(), []
+        while self.accept("OF") or self.accept("IN"):
+            qualifiers.append(self.name())
+        ref = DataRef(self.resolve(label, qualifiers))
+        if self.at("("):
+            self.error("USE FOR DEBUGGING sur un article indicé ou modifié non pris en charge")
+        if self.debugging_mode:
+            if ref.name in self.debug_fields:
+                self.error(f"duplicate DEBUGGING target: '{self.fields[ref.name].label}'")
+            self.debug_fields[ref.name] = (section, all_references)
+        return ref.name
 
     def apply_renames(self):
         """compute_size and cb_validate_renames_item for level 66 items."""
@@ -1257,8 +1288,6 @@ class Parser:
                     if value in program.debug_files:
                         raise CobolError(f"ligne {line}: duplicate DEBUGGING target: '{value}'")
                     program.debug_files[value] = section
-                elif kind in {"item", "references"}:
-                    raise CobolError(f"ligne {line}: USE FOR DEBUGGING sur un identifiant non pris en charge")
         for section, targets in debug_sections.items():
             for kind, value, line in targets:
                 if kind != "procedure":
@@ -2248,7 +2277,72 @@ class Parser:
             result.append(self.statement())
         return result
 
+    # parser.y turns field debugging off while these statements are parsed
+    # (PERFORM until its inline statements); their own code generation
+    # handles the debugged items.
+    DEBUG_SUSPENDED = {"GO", "PERFORM", "WRITE", "REWRITE"}
+    # Statements whose receiving operands are marked (target_identifier):
+    # elsewhere a debugged item is refused.
+    DEBUG_STATEMENTS = {"move", "compute", "arithmetic", "if", "display"}
+
     def statement(self):
+        if not self.start_debug:
+            return self.statement_body()
+        parent = self.debug_frames[-1] if self.debug_frames else None
+        inherited = False if parent is None else parent["inherited"] if parent["verb"] == "PERFORM" else parent["suspended"]
+        verb = None if self.t.string else self.t.key
+        frame = {"verb": verb, "inherited": inherited, "suspended": inherited or verb in self.DEBUG_SUSPENDED, "refs": []}
+        self.debug_frames.append(frame)
+        try:
+            stmt = self.statement_body()
+        finally:
+            self.debug_frames.pop()
+        debugged = [r for r in frame["refs"] if r[0] in self.debug_fields]
+        if not debugged:
+            return stmt
+        if stmt.op not in self.DEBUG_STATEMENTS or (stmt.op == "arithmetic" and (stmt.args[2] or stmt.args[3])):
+            raise CobolError(f"ligne {stmt.line}: USE FOR DEBUGGING : article débogué dans cette instruction non pris en charge")
+        # cb_check_field_debug: an ALL REFERENCES item at each reference, the
+        # others as receiving operands; each item once per statement.
+        checks, seen = [], set()
+        for key, qualifiers, ref, target in debugged:
+            if not (target or self.debug_fields[key][1]) or key in seen:
+                continue
+            if ref.start is not None:
+                raise CobolError(f"ligne {stmt.line}: USE FOR DEBUGGING d'une référence modifiée non pris en charge")
+            seen.add(key)
+            name = self.spelling(self.fields[key].label)
+            for qualifier in qualifiers:
+                if len(name) >= 30:
+                    break
+                if qualifier in self.files:
+                    raise CobolError(f"ligne {stmt.line}: USE FOR DEBUGGING d'un enregistrement qualifié par son fichier non pris en charge")
+                name += f" OF {self.spelling(qualifier)}"
+            checks.append((name, ref, self.debug_fields[key][0]))
+        if checks:
+            stmt.debug_checks = checks
+        return stmt
+
+    def spelling(self, key):
+        """A name as cobc's word table keeps it: its first occurrence."""
+        for token in self.tokens:
+            if not token.string and token.key == key:
+                return token.text
+        return key
+
+    def debug_target(self):
+        """target_identifier: the reference just parsed is a receiving operand."""
+        if self.debug_frames and self.debug_frames[-1]["refs"]:
+            key, qualifiers, ref, _ = self.debug_frames[-1]["refs"][-1]
+            self.debug_frames[-1]["refs"][-1] = (key, qualifiers, ref, True)
+
+    def debug_source(self):
+        """Undo debug_target when a GIVING phrase shows an operand was a source."""
+        if self.debug_frames and self.debug_frames[-1]["refs"]:
+            key, qualifiers, ref, _ = self.debug_frames[-1]["refs"][-1]
+            self.debug_frames[-1]["refs"][-1] = (key, qualifiers, ref, False)
+
+    def statement_body(self):
         line = self.t.line
         verb = self.take().key
         if verb == "SET":
@@ -2636,6 +2730,8 @@ class Parser:
                 receivers = self.rounded_receivers()
                 giving = self.accept("GIVING")
                 if giving:
+                    # ADD a TO b GIVING c: b is an x, not an arithmetic_x.
+                    self.debug_source()
                     if len(receivers) != 1 or receivers[0][1]:
                         self.error(f"{verb} ... GIVING requiert un seul opérande sans ROUNDED avant GIVING")
                     second = Expr("var", (receivers[0][0],))
@@ -3029,10 +3125,15 @@ class Parser:
         return pairs
 
     def rounded_receivers(self):
-        receivers = [(self.variable(), self.accept("ROUNDED"))]
+        receivers = [(self.target_variable(), self.accept("ROUNDED"))]
         while not self.t.string and self.candidates(self.t.key):
-            receivers.append((self.variable(), self.accept("ROUNDED")))
+            receivers.append((self.target_variable(), self.accept("ROUNDED")))
         return receivers
+
+    def target_variable(self):
+        ref = self.variable()
+        self.debug_target()
+        return ref
 
     def string_operand(self, delimiter=False):
         """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative."""
@@ -3486,7 +3587,7 @@ class Parser:
             if len(receivers) != 1:
                 self.error("REMAINDER requiert un seul quotient GIVING")
             quotient = receivers[0][0]
-            remainder = self.variable()
+            remainder = self.target_variable()
             q = self.fields[quotient.name]
             if q.kind not in {"number", "edited"} or quotient.start is not None:
                 self.error("REMAINDER requiert un quotient numérique")
@@ -3559,9 +3660,9 @@ class Parser:
         return Stmt("compute", (shared, items), line)
 
     def targets(self):
-        names = [self.variable()]
+        names = [self.target_variable()]
         while not self.t.string and self.candidates(self.t.key):
-            names.append(self.variable())
+            names.append(self.target_variable())
         return names
 
     def validate_calls(self, program):

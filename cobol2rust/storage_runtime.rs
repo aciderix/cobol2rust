@@ -47,6 +47,14 @@ impl Usage {
 /// The digits of DISPLAY storage and its sign, as cob_real_get_sign reads
 /// them: an overpunch 'p'..'y' on the sign digit, or a separate byte where
 /// only '-' is negative. Unsigned items have no sign position.
+static UNCHECKED_DATA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The program was compiled with -fno-ec=data-incompatible: no
+/// cob_check_numeric before a MOVE from numeric DISPLAY data.
+pub fn set_unchecked_data() { UNCHECKED_DATA.store(true, std::sync::atomic::Ordering::Relaxed); }
+
+fn unchecked_data() -> bool { UNCHECKED_DATA.load(std::sync::atomic::Ordering::Relaxed) }
+
 fn display_digits(bytes: &[u8], usage: Usage, signed: bool) -> (Vec<u8>, bool) {
     let mut digits = bytes.to_vec();
     if !signed || digits.is_empty() { return (digits, false); }
@@ -421,6 +429,18 @@ impl View {
         let bytes = match usage {
             Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {
                 let mut bytes = self.raw();
+                let separate = matches!(usage, Usage::SignLeadingSeparate | Usage::SignTrailingSeparate);
+                if signed && !comparison && separate && self.number().is_err() && unchecked_data() {
+                    // -fno-ec=data-incompatible: no cob_check_numeric, and
+                    // cob_move_display_to_alphanum copies the digit bytes as
+                    // they are; COB_PUT_SIGN then writes '+' unless the sign
+                    // byte read was '-'.
+                    let position = if matches!(usage, Usage::SignLeadingSeparate) { 0 } else { bytes.len() - 1 };
+                    let sign = if bytes[position] == b'-' { b'-' } else { b'+' };
+                    self.memory.borrow_mut()[self.offset + position] = sign;
+                    bytes.remove(position);
+                    return Value::Bytes(bytes);
+                }
                 if signed {
                     // GnuCOBOL normalizes some malformed sign encodings and
                     // can mutate the sender. Keep those cases outside this

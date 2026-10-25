@@ -79,7 +79,8 @@ def validate_file_paths(conversion):
 
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
-           call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None):
+           call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
+           no_ec_data_incompatible=False):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
     files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
@@ -104,7 +105,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible)
         validate_file_paths(conversion)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
@@ -113,7 +114,9 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             raise CobolError(f"options cobc incohérentes avec le dialecte converti: {std}")
         if std != "default" and not any(flag.startswith("-std") for flag in cobc_flags):
             cobc_flags = [f"-std={std}", *cobc_flags]
-        options = [*cobc_flags, *(["-fdebugging-line"] if debugging_lines else []), "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
+        options = [*cobc_flags, *(["-fdebugging-line"] if debugging_lines else []),
+                   *(["-fno-ec=data-incompatible"] if no_ec_data_incompatible else []),
+                   "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
             options.extend(["-I", str(Path(include).resolve())])
         commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]

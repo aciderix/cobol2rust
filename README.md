@@ -368,7 +368,21 @@ zone de séquence (colonnes 1-6) est ignorée quel que soit son contenu.
 `SOURCE-COMPUTER ... WITH DEBUGGING MODE` et `USE FOR DEBUGGING` (procédures,
 ALL PROCEDURES, fichiers) suivent cobc 3.2 ; les sections de débogage ne
 s'exécutent qu'avec `COB_SET_DEBUG` vrai à l'exécution, comme libcob. La
-surveillance d'identifiants est refusée.
+surveillance d'articles (`USE FOR DEBUGGING ON [ALL REFERENCES OF] article`)
+suit `cb_check_field_debug` : après MOVE, COMPUTE, ADD/SUBTRACT/MULTIPLY/DIVIDE
+sans SIZE ERROR, IF et DISPLAY, sous le commutateur, DEBUG-NAME (nom et
+qualificatifs écrits), DEBUG-CONTENTS, DEBUG-SUB-1..3 (sous-scripts ou espaces)
+puis la section, une fois par article et par instruction, pour un receveur ou
+pour toute référence avec ALL ; l'IF est débogué après ses branches comme dans
+le C de cobc. GO TO DEPENDING (ALL), PERFORM VARYING/AFTER (valeur initiale,
+pas, comparaisons de l'UNTIL en `cob_cmp`) et l'enregistrement d'un WRITE ou
+REWRITE suivent le code inline de codegen.c/typeck.c. Un article surveillé dans
+une autre instruction, un article indicé ou une référence modifiée sont
+refusés. `--fno-ec-data-incompatible` (convert, verify) reproduit
+`cobc -fno-ec=data-incompatible` : sans `cob_check_numeric`, le MOVE vers
+alphanumérique d'un article à signe séparé invalide copie ses chiffres tels
+quels et réécrit l'octet de signe (`COB_PUT_SIGN`) ; sans l'option ce cas reste
+un arrêt nommé, comme `--debug` arrête cobc.
 `--std {default,cobol85}` (convert, verify) choisit le dialecte cobc modélisé ;
 `verify --std cobol85` compile aussi l'original avec `-std=cobol85`. Seule
 différences modélisées à ce jour : `section-segments` (numéros de segment

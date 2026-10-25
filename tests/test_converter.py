@@ -88,7 +88,7 @@ class FrontendTests(unittest.TestCase):
         declaratives = ("declaratives. d section. use for debugging on {}. p. display debug-name. "
                         "end declaratives. m section. a. stop run.")
         data = "01 x pic x. 01 t. 02 e pic x occurs 2."
-        for target in ("x", "all references of x", "p", "d", "missing", "all procedures a"):
+        for target in ("e (1)", "x x", "p", "d", "missing", "all procedures a"):
             source = ("identification division.\nprogram-id. t.\nenvironment division.\nconfiguration section.\n"
                       "source-computer. c with debugging mode.\ndata division. working-storage section.\n"
                       + data + "\nprocedure division.\n" + declaratives.format(target))

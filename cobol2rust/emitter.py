@@ -1213,12 +1213,18 @@ class Emitter:
         elif op == "debug_name":
             self.alphanumeric_move(self.debug_item("DEBUG-NAME"), self.byte_vector(a[0]))
             self.write(f"pc = {a[1]};")
+        elif op == "debug_blank":
+            self.write(f"storage_runtime::fill_spaces(&{self.reference(a[0])});")
+            self.write(f"pc = {a[1]};")
         elif op == "debug_line":
             self.alphanumeric_move(self.debug_item("DEBUG-LINE"), self.byte_vector(f"{a[0]:6d}"[-6:]))
             self.write(f"pc = {a[1]};")
         elif op == "debug_contents":
             contents, continuation = a
-            if isinstance(contents, tuple):
+            if isinstance(contents, tuple) and contents[0] == "field":
+                # output_debug_item: the item's bytes, or MOVE of a record.
+                source = f"{self.reference(contents[1])}.bytes()"
+            elif isinstance(contents, tuple):
                 record = self.names[self.program.files[contents[1]].record]
                 source = f"self.{record}.bytes()"
             else:
@@ -1692,5 +1698,6 @@ def generate_unit(emitters):
         if position == 0:
             main_mapping = [{**item, "rust_line": item["rust_line"] + offset} for item in mapping]
         lines += body
-    lines.append(f"fn main() {{ let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }}")
+    unchecked = "storage_runtime::set_unchecked_data(); " if getattr(emitters[0].program, "unchecked_data", False) else ""
+    lines.append(f"fn main() {{ {unchecked}let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }}")
     return "\n".join(lines) + "\n", main_mapping
