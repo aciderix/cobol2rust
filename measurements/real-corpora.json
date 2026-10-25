@@ -1,16 +1,16 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T11:38:12+00:00",
- "git_head": "9eca7a97d0c6406f2484f704a4c7ce662d938a0f",
- "implementation_sha256": "b3fa281ac432daff54a577cde827cc62c692763c148b1a8881f1e62a1475d608",
+ "measured_at": "2026-10-25T12:09:52+00:00",
+ "git_head": "e642f351907d7a763a037868436f14c98e4caa73",
+ "implementation_sha256": "c6868534f324f79825a0bd5ffb3d3c10f3919d90c0166cbf5eb87938d6d0ae97",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
  "totals": {
   "sources": 2458,
-  "accepted": 626,
+  "accepted": 678,
   "cobc_accepted": 738,
-  "gap": 122,
-  "accepted_where_cobc_refuses": 10
+  "gap": 60,
+  "accepted_where_cobc_refuses": 0
  },
  "corpora": {
   "carddemo": {
@@ -22,7 +22,7 @@
     "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)"
    },
    "sources": 44,
-   "accepted": 7,
+   "accepted": 8,
    "internal_errors": 0,
    "blockers": [
     [
@@ -77,7 +77,33 @@
    "cobc_accepted": 14,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 7,
+   "gap": 6,
+   "gap_sources": [
+    [
+     "app/app-authorization-ims-db2-mq/cbl/DBUNLDGS.CBL",
+     "USAGE/clause non pris en charge"
+    ],
+    [
+     "app/app-authorization-ims-db2-mq/cbl/PAUDBLOD.CBL",
+     "USAGE/clause non pris en charge"
+    ],
+    [
+     "app/app-authorization-ims-db2-mq/cbl/PAUDBUNL.CBL",
+     "USAGE/clause non pris en charge"
+    ],
+    [
+     "app/cbl/CBACT01C.cbl",
+     "RECORDING MODE limité à F pour des enregistrements fixes"
+    ],
+    [
+     "app/cbl/CBTRN02C.cbl",
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "app/cbl/CSUTLDTC.cbl",
+     "USAGE/clause non pris en charge"
+    ]
+   ],
    "gap_blockers": [
     [
      "USAGE/clause non pris en charge",
@@ -89,10 +115,6 @@
     ],
     [
      "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
-     1
-    ],
-    [
-     "FILE-CONTROL attendu",
      1
     ]
    ]
@@ -114,7 +136,7 @@
      3
     ],
     [
-     "FILE-CONTROL attendu",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
      2
     ]
    ],
@@ -122,13 +144,35 @@
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
    "gap": 5,
+   "gap_sources": [
+    [
+     "COBOL/SAM1.cbl",
+     "RECORDING MODE limité à F pour des enregistrements fixes"
+    ],
+    [
+     "COBOL/SAM1LIB.cbl",
+     "RECORDING MODE limité à F pour des enregistrements fixes"
+    ],
+    [
+     "COBOL/SAM2.cbl",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC"
+    ],
+    [
+     "multiroot/sam/SAM1.cbl",
+     "RECORDING MODE limité à F pour des enregistrements fixes"
+    ],
+    [
+     "multiroot/sam/SAM2.cbl",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC"
+    ]
+   ],
    "gap_blockers": [
     [
      "RECORDING MODE limité à F pour des enregistrements fixes",
      3
     ],
     [
-     "FILE-CONTROL attendu",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
      2
     ]
    ]
@@ -166,6 +210,12 @@
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
    "gap": 1,
+   "gap_sources": [
+    [
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/COBOL.cobol",
+     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine"
+    ]
+   ],
    "gap_blockers": [
     [
      "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
@@ -182,27 +232,27 @@
     "kind": "livre, programmes complets"
    },
    "sources": 113,
-   "accepted": 43,
+   "accepted": 55,
    "internal_errors": 0,
    "blockers": [
     [
      "PROCEDURE attendu",
-     22
+     23
     ],
     [
-     "niveau 88 de groupe limité aux littéraux alphanumériques",
-     21
+     "instruction non prise en charge: *",
+     4
     ],
     [
-     "IDENTIFICATION DIVISION attendue",
-     2
+     "clause RD CONTROL non prise en charge",
+     3
     ],
     [
      "caractère non pris en charge '?'",
      2
     ],
     [
-     "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa3 in position 157: invalid start byte",
+     "seuls les littéraux ASCII sont pris en charge",
      2
     ],
     [
@@ -218,6 +268,10 @@
      2
     ],
     [
+     "END PROGRAM ne correspond pas au PROGRAM-ID",
+     2
+    ],
+    [
      "niveau de donnée attendu",
      2
     ],
@@ -228,24 +282,55 @@
     [
      "entrée SPECIAL-NAMES non prise en charge: SPACE",
      1
-    ],
-    [
-     "expression non prise en charge: INSPECT",
-     1
     ]
    ],
    "cobc_accepted": 65,
-   "accepted_where_cobc_refuses": 2,
-   "accepted_where_cobc_refuses_sources": [
-    "978-1-4302-6253-4_Coughlan_Ch16/Listing16-3.cbl",
-    "978-1-4302-6253-4_Coughlan_Ch16/Listing16-4.cbl"
-   ],
-   "gap": 24,
-   "gap_blockers": [
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 10,
+   "gap_sources": [
     [
-     "niveau 88 de groupe limité aux littéraux alphanumériques",
-     16
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-1.cbl",
+     "entrée SPECIAL-NAMES non prise en charge: SPACE"
     ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-9.cbl",
+     "PROCEDURE attendu"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-7.cbl",
+     "fichier non déclaré: COUNTYDETAILS"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-8.cbl",
+     "fichier non déclaré: COUNTYDETAILS"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-2.cbl",
+     "cible INSPECT littérale ou fonction non prise en charge"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-3.cbl",
+     "cible INSPECT littérale ou fonction non prise en charge"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-4.cbl",
+     "END-IF ou point attendu"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch16/Listing16-2.cbl",
+     "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-1.cbl",
+     "clause RD CONTROL non prise en charge"
+    ],
+    [
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-2.cbl",
+     "clause RD CONTROL non prise en charge"
+    ]
+   ],
+   "gap_blockers": [
     [
      "fichier non déclaré: COUNTYDETAILS",
      2
@@ -255,11 +340,15 @@
      2
     ],
     [
+     "clause RD CONTROL non prise en charge",
+     2
+    ],
+    [
      "entrée SPECIAL-NAMES non prise en charge: SPACE",
      1
     ],
     [
-     "IDENTIFICATION DIVISION attendue",
+     "PROCEDURE attendu",
      1
     ],
     [
@@ -281,7 +370,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 258,
+   "accepted": 289,
    "internal_errors": 0,
    "blockers": [
     [
@@ -289,20 +378,20 @@
      209
     ],
     [
-     "niveau de donnée attendu",
-     33
-    ],
-    [
-     "PROCEDURE attendu",
-     31
-    ],
-    [
      "LABEL RECORDS limité à OMITTED ou STANDARD",
      24
     ],
     [
+     "PROCEDURE attendu",
+     14
+    ],
+    [
      "expression attendue",
      14
+    ],
+    [
+     "niveau de donnée attendu",
+     13
     ],
     [
      "expression non prise en charge: ALL",
@@ -334,38 +423,114 @@
     ]
    ],
    "cobc_accepted": 311,
-   "accepted_where_cobc_refuses": 5,
-   "accepted_where_cobc_refuses_sources": [
-    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionGreater.cbl",
-    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionGreaterOrEqual.cbl",
-    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionLess.cbl",
-    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionLessOrEqual.cbl",
-    "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionNotEqualChar.cbl"
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 22,
+   "gap_sources": [
+    [
+     "src/test/resources/gov/nist/CM303M.CBL",
+     "COMMUNICATION SECTION non conforme hors -std=cobol85"
+    ],
+    [
+     "src/test/resources/gov/nist/DB304M.CBL",
+     "COMMUNICATION SECTION non conforme hors -std=cobol85"
+    ],
+    [
+     "src/test/resources/gov/nist/EXEC85.CBL",
+     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/call/FunctionCall.cbl",
+     "expression non prise en charge: :"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/data/linkage/DataDescription01.cbl",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: ITEMS"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/data/localstorage/DataDescription02.cbl",
+     "PROCEDURE attendu"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
+     "PROCEDURE attendu"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/data/screen/ScreenFiller.cbl",
+     "PROCEDURE attendu"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/environment/configuration/ConfigurationSectionWrongOrder.cbl",
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/environment/configuration/EmptyConfigurationSectionParagraphs.cbl",
+     "entrée SPECIAL-NAMES non prise en charge: <EOF>"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/asg/procedure/stop/StopStatementGiving.cbl",
+     "instruction non prise en charge: GIVING"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/ast/variable/AddToStatement.cbl",
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/ast/variable/FunctionCall.cbl",
+     "expression non prise en charge: :"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/ast/variable/Literal.cbl",
+     "expression non prise en charge: X"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/ast/variable/XoptsApost.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/ast/variable/XoptsSpApost.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/preprocessor/fixed/CompilerDirective.cbl",
+     "indicateur fixe '$' non pris en charge"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblOpts.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblXoptsApost.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/preprocessor/variable/CompilerOptions.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "src/test/resources/io/proleap/cobol/preprocessor/variable/ProcessXoptsApost.cbl",
+     "IDENTIFICATION DIVISION attendue"
+    ]
    ],
-   "gap": 58,
    "gap_blockers": [
-    [
-     "PROCEDURE attendu",
-     19
-    ],
-    [
-     "niveau de donnée attendu",
-     18
-    ],
     [
      "IDENTIFICATION DIVISION attendue",
      6
+    ],
+    [
+     "PROCEDURE attendu",
+     3
     ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
      2
     ],
     [
-     "paragraphe CONFIGURATION non pris en charge",
-     2
-    ],
-    [
-     "FILE-CONTROL attendu",
+     "expression non prise en charge: :",
      2
     ],
     [
@@ -373,11 +538,15 @@
      1
     ],
     [
-     "expression non prise en charge: :",
+     "clause SELECT non prise en charge",
      1
     ],
     [
-     "clause SELECT non prise en charge",
+     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: ITEMS",
+     1
+    ],
+    [
+     "paragraphe CONFIGURATION non pris en charge",
      1
     ],
     [
@@ -389,7 +558,11 @@
      1
     ],
     [
-     "clause ENVIRONMENT DIVISION non prise en charge",
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
+     1
+    ],
+    [
+     "expression non prise en charge: X",
      1
     ]
    ]
@@ -403,12 +576,12 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 307,
+   "accepted": 315,
    "internal_errors": 0,
    "blockers": [
     [
      "clause ENVIRONMENT DIVISION non prise en charge",
-     354
+     355
     ],
     [
      "IDENTIFICATION DIVISION attendue",
@@ -423,10 +596,6 @@
      68
     ],
     [
-     "expression attendue",
-     24
-    ],
-    [
      "clause SELECT non prise en charge",
      20
     ],
@@ -436,6 +605,10 @@
     ],
     [
      "instruction non prise en charge: EXEC",
+     16
+    ],
+    [
+     "expression attendue",
      16
     ],
     [
@@ -451,23 +624,81 @@
      10
     ],
     [
-     "PROCEDURE attendu",
+     "instruction non prise en charge: FIND",
      10
     ]
    ],
    "cobc_accepted": 331,
-   "accepted_where_cobc_refuses": 3,
-   "accepted_where_cobc_refuses_sources": [
-    "clients/analysis/src/__tests__/__resources__/cfgraph/case33.cbl",
-    "clients/analysis/src/__tests__/__resources__/cfgraph/case35.cbl",
-    "clients/analysis/src/__tests__/__resources__/cfgraph/case39.cbl"
-   ],
-   "gap": 27,
-   "gap_blockers": [
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 16,
+   "gap_sources": [
     [
-     "expression attendue",
-     6
+     "clients/analysis/src/__tests__/__resources__/cfgraph/case43.cbl",
+     "EXIT SECTION requiert une section de procédure"
     ],
+    [
+     "clients/analysis/src/__tests__/__resources__/cfgraph/case44.cbl",
+     "EXIT SECTION requiert une section de procédure"
+    ],
+    [
+     "clients/analysis/src/__tests__/__resources__/cfgraph/case45.cbl",
+     "EXIT SECTION requiert une section de procédure"
+    ],
+    [
+     "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
+     "instruction non prise en charge: OF"
+    ],
+    [
+     "tests/test_files/Cobol85PositiveTestsSuite/positive/EXEC84.2.cbl",
+     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
+    ],
+    [
+     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN01C.cbl",
+     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE"
+    ],
+    [
+     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN02C.cbl",
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CSUTLDTC.cbl",
+     "USAGE/clause non pris en charge"
+    ],
+    [
+     "tests/test_files/project/HELLO-WORLD.cbl",
+     "CALL identifiant requiert un champ alphanumérique"
+    ],
+    [
+     "tests/test_files/project/HOVER.CBL",
+     "nom de donnée réservé ou dupliqué: TERMS-RECORD"
+    ],
+    [
+     "tests/test_files/project/TEST10.CBL",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "tests/test_files/project/TEST14.CBL",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "tests/test_files/project/TEST15.CBL",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "tests/test_files/project/XML2.cbl",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "tests/test_files/project/xmls1.cbl",
+     "USAGE/clause non pris en charge"
+    ],
+    [
+     "tests/test_files/project/xmlup.cbl",
+     "expression non prise en charge: xml"
+    ]
+   ],
+   "gap_blockers": [
     [
      "instruction non prise en charge: XML",
      4
@@ -477,23 +708,11 @@
      3
     ],
     [
-     "EXIT PERFORM non pris en charge",
-     2
-    ],
-    [
      "USAGE/clause non pris en charge",
      2
     ],
     [
-     "PROCEDURE attendu",
-     2
-    ],
-    [
      "instruction non prise en charge: OF",
-     1
-    ],
-    [
-     "FILE-CONTROL attendu",
      1
     ],
     [
@@ -510,6 +729,14 @@
     ],
     [
      "CALL identifiant requiert un champ alphanumérique",
+     1
+    ],
+    [
+     "nom de donnée réservé ou dupliqué: TERMS-RECORD",
+     1
+    ],
+    [
+     "expression non prise en charge: xml",
      1
     ]
    ]

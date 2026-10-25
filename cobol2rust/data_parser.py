@@ -224,7 +224,20 @@ def declaration(p, file_record=False):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
-            if group_condition and not p.t.string:
+            if group_condition and not p.t.string and (p.at("ALL") or p.t.key in {
+                    "QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES", "ZERO", "ZEROS", "ZEROES"}
+                    or p.t.key in getattr(p, "symbolic", {})):
+                # cob_cmp of the group with a figurative constant or ALL literal
+                # repeats it over the group's size, known once it is laid out.
+                p.accept("ALL")
+                token = literal(p)
+                if p.at("THRU") or p.at("THROUGH"):
+                    p.error("plage THRU de figuratives au niveau 88 de groupe non prise en charge")
+                p.group_fills.append((key, len(values), token.text))
+                values.append((None, None))
+                p.accept(",")
+                continue
+            if group_condition and not p.t.string and p.t.key not in {"SPACE", "SPACES"}:
                 p.error("niveau 88 de groupe limité aux littéraux alphanumériques")
             if p.accept("ALL") or figurative:
                 # ALL literal and figurative constants: repeated over the item.

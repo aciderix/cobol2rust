@@ -269,7 +269,7 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     path = path.resolve()
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
-    source = path.read_text(encoding="utf-8-sig")
+    source = decode_source(path.read_bytes())
     # The format detected on the main source also applies to its copybooks.
     fmt = source_format(source, fmt)
     text = normalize(source, fmt)
@@ -509,6 +509,12 @@ INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
+def decode_source(data: bytes) -> str:
+    """cobc reads sources as bytes (columns are byte columns) and skips a
+    UTF-8 BOM (ppopen_get_file): one latin-1 character per byte."""
+    return data[3:].decode("latin-1") if data.startswith(b"\xef\xbb\xbf") else data.decode("latin-1")
+
+
 def source_format(source: str, fmt="auto"):
     """ppopen_get_file: in reference-format auto, the character in column 7 of
     the first source line within the first 20 bytes decides; a non-indicator
@@ -517,7 +523,11 @@ def source_format(source: str, fmt="auto"):
         return fmt
     if STD == "cobol85":
         return "fixed"
-    buffer = bytearray(source.lstrip("\ufeff").encode("utf-8")[:20])
+    try:
+        data = source.encode("latin-1")
+    except UnicodeEncodeError:
+        data = source.lstrip("\ufeff").encode("utf-8")
+    buffer = bytearray(data[:20])
     last, line_pos, pos = " ", 0, 0
     while len(buffer) - pos > 7:
         if buffer[pos] == 10:
@@ -563,6 +573,9 @@ class Parser:
         self.symbolic = {}
         self.same_records = []
         self.renames = []
+        # Level 88 of a group with a figurative or ALL value: (condition,
+        # value index, text) filled to the group's size after layout.
+        self.group_fills = []
         # SOURCE-COMPUTER ... WITH DEBUGGING MODE (current_program->flag_debugging).
         self.debugging_mode = False
         # PROGRAM COLLATING SEQUENCE with a literal alphabet: its weights, and
@@ -819,11 +832,17 @@ class Parser:
             self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
         return ref
 
+    def program_end(self):
+        """_procedure_division may be empty: the program ends here."""
+        return self.at("<EOF>") or (self.at("END") and self.tokens[self.i + 1].key == "PROGRAM")
+
     def parse(self):
-        if not (self.accept("IDENTIFICATION") or self.accept("ID")):
+        # _identification_header: the header itself is optional.
+        if self.accept("IDENTIFICATION") or self.accept("ID"):
+            self.expect("DIVISION")
+            self.expect(".")
+        elif not self.at("PROGRAM-ID"):
             self.error("IDENTIFICATION DIVISION attendue")
-        self.expect("DIVISION")
-        self.expect(".")
         self.expect("PROGRAM-ID")
         self.expect(".")
         entry_name = self.t.text
@@ -838,6 +857,8 @@ class Parser:
                 else:
                     common = True
             self.accept("PROGRAM")
+        if common and not self.level:
+            self.error("COMMON may only be used in a contained program")
         self.expect(".")
         if self.accept("ENVIRONMENT"):
             self.environment_division()
@@ -893,14 +914,15 @@ class Parser:
                 self.expect(".")
                 self.data_stack = []
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
-                        and not self.at("COMMUNICATION"):
+                        and not self.at("COMMUNICATION") and not self.program_end():
                     self.declaration()
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
                 self.in_linkage = True
-                while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION"):
+                while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION") \
+                        and not self.program_end():
                     self.declaration()
                 self.in_linkage = False
             if self.accept("COMMUNICATION"):
@@ -929,6 +951,11 @@ class Parser:
                 self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        for key, index, text in self.group_fills:
+            condition = self.conditions[key]
+            size = self.fields[condition.parent].size
+            token = Token((text * size)[:size], self.t.line, True)
+            condition.values[index] = (token, token)
         self.apply_renames()
         self.validate_files()
         memory_size = self.debug_item(memory_size)
@@ -940,10 +967,12 @@ class Parser:
             if file_name in self.files:
                 self.error(f"fichier homonyme d'un fichier GLOBAL non pris en charge: {file_name}")
             self.files[file_name] = spec
-        self.expect("PROCEDURE")
-        self.expect("DIVISION")
         using = []
-        if self.accept("USING"):
+        procedure = not self.program_end()
+        if procedure:
+            self.expect("PROCEDURE")
+            self.expect("DIVISION")
+        if procedure and self.accept("USING"):
             while not self.at("."):
                 if self.accept("BY"):
                     if not self.accept("REFERENCE"):
@@ -957,7 +986,8 @@ class Parser:
                 using.append(key)
             if not using:
                 self.error("USING requiert au moins un paramètre")
-        self.expect(".")
+        if procedure:
+            self.expect(".")
         entry, paragraphs = [], {}
         blocks = [ProcedureBlock(None, None, entry)]
         sections, segments = {}, {}
@@ -1000,7 +1030,8 @@ class Parser:
                 break
             if self.accept("END"):
                 self.expect("PROGRAM")
-                if self.name() != name:
+                # cobc compares the names as written, case included.
+                if self.t.text != entry_name or self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
                 ended = True
@@ -1114,7 +1145,7 @@ class Parser:
                 child.siblings = []
             self.expect("END")
             self.expect("PROGRAM")
-            if self.name() != name:
+            if self.t.text != entry_name or self.name() != name:
                 self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
             self.expect(".")
             if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
@@ -1692,19 +1723,22 @@ class Parser:
                         self.high_value = chr(high)
                 else:
                     self.check_identity_alphabet(token, alphabet, "PROGRAM COLLATING SEQUENCE")
-            if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
+            if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")) and not self.program_end():
                 self.error("paragraphe CONFIGURATION non pris en charge")
         if self.accept("INPUT-OUTPUT"):
             self.expect("SECTION")
             self.expect(".")
-            self.expect("FILE-CONTROL")
-            self.expect(".")
+            # _file_control_header: optional when no SELECT follows (a SELECT
+            # without it is "FILE-CONTROL header missing", an error).
+            if self.at("FILE-CONTROL") or self.at("SELECT"):
+                self.expect("FILE-CONTROL")
+                self.expect(".")
             while self.at("SELECT"):
                 self.file_control()
             if self.accept("I-O-CONTROL"):
                 self.expect(".")
                 self.io_control()
-        if not (self.at("DATA") or self.at("PROCEDURE")):
+        if not (self.at("DATA") or self.at("PROCEDURE") or self.program_end()):
             self.error("clause ENVIRONMENT DIVISION non prise en charge")
 
     DEVICES = {"SYSIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout", "SYSLIST": "stdout", "SYSLST": "stdout",
@@ -3161,8 +3195,15 @@ class Parser:
             cond = self.condition()
             self.accept("THEN")
             yes = self.block({"ELSE", "END-IF"})
+            # if_else_statements: each branch needs a statement; an empty true
+            # branch before ELSE is a missing-statement (an error with -std=cobol85).
+            otherwise = self.accept("ELSE")
+            if not yes and (not otherwise or STD == "cobol85"):
+                self.error("IF without imperative statement")
             # Without END-IF, a further ELSE belongs to an enclosing IF.
-            no = self.block({"END-IF", "ELSE"}) if self.accept("ELSE") else []
+            no = self.block({"END-IF", "ELSE"}) if otherwise else []
+            if otherwise and not no:
+                self.error("ELSE without imperative statement")
             if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
@@ -3208,7 +3249,7 @@ class Parser:
             # An all-digit word is a procedure name unless TIMES follows it.
             numeric_name = (not self.t.string and re.fullmatch(r"\d+", self.t.key)
                             and self.tokens[self.i + 1].key != "TIMES")
-            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH", "TEST"} | VERBS and not self.t.string
+            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH", "TEST", "FOREVER"} | VERBS and not self.t.string
                                 and not self.candidates(self.t.key)
                                 and re.fullmatch(r"[A-Z_][A-Z_0-9-]*|\d[A-Z0-9-]*[A-Z][A-Z_0-9-]*", self.t.key)):
                 target = [self.procedure_reference()]
@@ -3223,7 +3264,15 @@ class Parser:
                 else:
                     self.expect("BEFORE")
             mode, control = "once", ()
-            if self.accept("UNTIL"):
+            if self.at("UNTIL") and self.tokens[self.i + 1].key == "EXIT" and not self.tokens[self.i + 1].string:
+                # cond_or_exit: UNTIL EXIT is cb_build_perform_forever.
+                self.take(); self.take()
+                mode = "forever"
+            elif self.at("FOREVER") and self.tokens[self.i + 1].key != "TIMES" and self.accept("FOREVER"):
+                if test_after:
+                    self.error("WITH TEST requiert UNTIL ou VARYING")
+                mode = "forever"
+            elif self.accept("UNTIL"):
                 mode, control = "until", (self.condition(), test_after)
             elif self.accept("VARYING"):
                 # VARYING ... [AFTER ...]: one level per identifier, BY 1 by default.
@@ -3253,7 +3302,12 @@ class Parser:
                                               Stmt("loop", (mode, control, body), line)],), line)
             else:
                 # An inline PERFORM without TIMES/UNTIL/VARYING runs once.
-                body = self.block({"END-PERFORM"})
+                # perform_stack: EXIT PERFORM is only valid inside one.
+                self.inline_performs = getattr(self, "inline_performs", 0) + 1
+                try:
+                    body = self.block({"END-PERFORM"})
+                finally:
+                    self.inline_performs -= 1
                 self.expect("END-PERFORM")
             return Stmt("loop", (mode, control, body), line)
         if verb == "EVALUATE":
@@ -3429,8 +3483,13 @@ class Parser:
                 return Stmt("exit_section", (), line)
             if self.accept("PROGRAM"):
                 return Stmt("exit_program", (), line)
-            if self.at("PERFORM") or self.at("CYCLE"):
-                self.error(f"EXIT {self.t.key} non pris en charge")
+            if self.accept("PERFORM"):
+                cycle = self.accept("CYCLE")
+                if not getattr(self, "inline_performs", 0):
+                    self.error("EXIT PERFORM is only valid with inline PERFORM")
+                if self.debugging_mode:
+                    self.error("EXIT PERFORM sous DEBUGGING MODE non modélisé")
+                return Stmt("exit_perform", (bool(cycle),), line)
             if not self.t.string and self.t.key in BOUNDARIES:
                 return Stmt("continue", (), line)
             self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")

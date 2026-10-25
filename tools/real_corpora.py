@@ -126,6 +126,8 @@ def summarize(name: str, report: dict, cobc: dict | None, commit: str | None) ->
                          Path(row["source"]).relative_to(CORPORA_DIR / name).as_posix()
                          for row in accepted if cobc.get(row["source"]) is False),
                      gap=len(gap),
+                     gap_sources=sorted([Path(row["source"]).relative_to(CORPORA_DIR / name).as_posix(),
+                                         normalize(row.get("diagnostic", row["status"]))] for row in gap),
                      gap_blockers=Counter(normalize(row.get("diagnostic", row["status"])) for row in gap).most_common(12))
     return entry
 
@@ -219,6 +221,8 @@ def main(argv=None) -> int:
                "cobc": cobc_version() if args.cobc else None,
                "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
                "totals": totals, "corpora": corpora}
+    # Unrecorded working copy, for inspecting the gap between two records.
+    (output / "summary.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     for name, entry in corpora.items():
         print(f"{name:28} {entry['accepted']:5}/{entry['sources']:<5} cobc {entry.get('cobc_accepted', '—'):>5}"
               f"  écart {entry.get('gap', '—'):>4}  à examiner {entry.get('accepted_where_cobc_refuses', '—')}")

@@ -74,30 +74,30 @@ Les paramètres de chaque corpus sont figés dans l'outil ; niveau 2 de preuve
 seulement (émission acceptée).
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T11:38:12+00:00 (commit `9eca7a97d0`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T12:09:52+00:00 (commit `e642f35190`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 7 | 14 | 7 | 0 |
+| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 8 | 14 | 6 | 0 |
 | zopeneditor-sample | application exemple IBM | 5 | 0 | 5 | 5 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
-| beg-cobol-for-programmers | livre, programmes complets | 113 | 43 | 65 | 24 | 2 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 258 | 311 | 58 | 5 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 307 | 331 | 27 | 3 |
-| **Total** | | **2458** | **626** | **738** | **122** | **10** |
+| beg-cobol-for-programmers | livre, programmes complets | 113 | 55 | 65 | 10 | 0 |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 289 | 311 | 22 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 315 | 331 | 16 | 0 |
+| **Total** | | **2458** | **678** | **738** | **60** | **0** |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 21 × PROCEDURE attendu
-2. 18 × niveau de donnée attendu
-3. 16 × niveau 88 de groupe limité aux littéraux alphanumériques
-4. 7 × IDENTIFICATION DIVISION attendue
-5. 6 × USAGE/clause non pris en charge
-6. 6 × FILE-CONTROL attendu
-7. 6 × expression attendue
-8. 4 × RECORDING MODE limité à F pour des enregistrements fixes
-9. 4 × instruction non prise en charge: XML
-10. 3 × EXIT SECTION requiert une section de procédure
+1. 6 × USAGE/clause non pris en charge
+2. 6 × IDENTIFICATION DIVISION attendue
+3. 4 × RECORDING MODE limité à F pour des enregistrements fixes
+4. 4 × PROCEDURE attendu
+5. 4 × instruction non prise en charge: XML
+6. 3 × nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire
+7. 3 × EXIT SECTION requiert une section de procédure
+8. 2 × article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC
+9. 2 × fichier non déclaré: COUNTYDETAILS
+10. 2 × cible INSPECT littérale ou fonction non prise en charge
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -111,3 +111,11 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   ASSIGN complet (`assign_clause`, `validate_assign_name`) et résolution des
   noms à l'OPEN (`cob_chk_file_mapping`, `COB_FILE_PATH`) : **230 → 626**
   acceptées, écart 518 → 122, CardDemo 0 → 7/44. NIST inchangé (451/458).
+- 2026-10-25 — En-tête IDENTIFICATION et PROCEDURE DIVISION facultatifs,
+  INPUT-OUTPUT SECTION vide, niveau 88 de groupe avec figuratives,
+  EXIT PERFORM [CYCLE], PERFORM UNTIL EXIT / FOREVER ; rigueur alignée sur
+  cobc (lecture en octets, IF/ELSE sans instruction, COMMON hors programme
+  contenu, END PROGRAM sensible à la casse) : **626 → 678** acceptées,
+  écart 122 → 60, **à examiner 10 → 0** (plus aucune source acceptée que
+  cobc refuse). Prochains : COMP-5 et RETURN-CODE, RECORDING MODE V,
+  comparaisons à `ALL littéral`, Report Writer avec ruptures (CONTROLS).

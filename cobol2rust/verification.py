@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .cli import convert
-from .frontend import CobolError, source_format
+from .frontend import CobolError, decode_source, source_format
 from .toolchain import CACHE_ROOT, build_rust, compiler_env, find_tool
 
 INDEXED_MAGIC = b"cobol2rust-btree-1\n"
@@ -125,7 +125,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
         validate_file_paths(conversion, file_env)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
-        fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
+        fmt = source_format(decode_source(source.read_bytes()), fmt)
         if any(flag.startswith("-std") and flag != f"-std={std}" for flag in cobc_flags):
             raise CobolError(f"options cobc incohérentes avec le dialecte converti: {std}")
         if std != "default" and not any(flag.startswith("-std") for flag in cobc_flags):

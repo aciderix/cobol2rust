@@ -180,7 +180,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     organizations = sorted({f.organization for f in program.files.values()})
     report = {"schema_version": 1, "tool_version": __version__, "program": program.name,
               "source": str(source.resolve()), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-              "expanded_sha256": hashlib.sha256(expanded.encode("utf-8")).hexdigest(),
+              "expanded_sha256": hashlib.sha256(expanded.encode("latin-1")).hexdigest(),
               "copybook_sha256": {path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in copies},
               "copybooks": copies, "fields": [asdict(f) for f in program.fields.values()],
               "paragraphs": list(program.paragraphs), "source_map": mapping,
@@ -218,7 +218,8 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     if program.files or any(sub.files for _, sub, _, _ in subprograms):
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    (output / "expanded.cob").write_text(expanded + "\n", encoding="utf-8")
+    # One character per source byte: expanded.cob keeps the original bytes.
+    (output / "expanded.cob").write_text(expanded + "\n", encoding="latin-1")
     (output / "conversion.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return report
 
