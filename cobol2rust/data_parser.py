@@ -12,8 +12,9 @@ FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "B
 
 def literal(p):
     negative = p.accept("-")
-    if not negative:
-        p.accept("+")
+    positive = not negative and p.accept("+")
+    # validate_move: an explicit sign needs a signed receiver.
+    p.literal_signed = bool(negative or positive)
     token = p.take()
     if token.string:
         if negative:
@@ -327,6 +328,7 @@ def declaration(p, file_record=False):
     if key in p.fields or label in VERBS or label in {"ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES"}:
         p.error(f"nom de donnée réservé ou dupliqué: {label}")
     picture, usage, initial = "", "DISPLAY", None
+    value_signed = indexed_seen = False
     fixed_binary = None
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
@@ -342,6 +344,9 @@ def declaration(p, file_record=False):
         matches = [f for f in siblings if f.label == target]
         if not matches or matches[-1].level != level:
             p.error("REDEFINES requiert un champ précédent au même niveau")
+        if matches[-1].redefines:
+            # indirect-redefines: no (default.conf).
+            p.error(f"'{target}' is not the original definition")
         # Restrict to a contiguous redefine family; indirect redefines are dialect-dependent.
         last = siblings[-1]
         if last.name != matches[-1].name and last.redefines != matches[-1].name:
@@ -378,6 +383,8 @@ def declaration(p, file_record=False):
             # ASCENDING/DESCENDING KEY: the keys of SEARCH ALL, in order.
             if not table:
                 p.error("KEY requiert OCCURS")
+            if indexed_seen:
+                p.error("INDEXED should follow ASCENDING/DESCENDING")
             descending = p.take().key == "DESCENDING"
             p.accept("KEY"); p.accept("IS")
             search_keys.append((descending, p.name()))
@@ -387,6 +394,7 @@ def declaration(p, file_record=False):
         elif p.accept("INDEXED"):
             if not table:
                 p.error("INDEXED BY requiert OCCURS")
+            indexed_seen = True
             p.accept("BY")
             names = [p.name()]
             while p.t.key not in {"PIC", "PICTURE", "VALUE", "USAGE", "ASCENDING", "DESCENDING", ".", "<EOF>"} | USAGES:
@@ -410,6 +418,7 @@ def declaration(p, file_record=False):
                 else chr(p.symbolic[p.t.key]) if p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key)
                 else None)
             initial = literal(p)
+            value_signed = p.literal_signed
             if repeated:
                 # VALUE ALL literal repeats the literal over the item.
                 if figurative == "0":
@@ -608,6 +617,8 @@ def declaration(p, file_record=False):
             p.error("VALUE sur FD/REDEFINES non pris en charge")
         if kind != "edited" and (kind == "text") != initial.string:
             p.error("VALUE incompatible avec la PICTURE")
+        if kind == "number" and value_signed and not signed:
+            p.error("data item not signed")
     else:
         initial = Token("" if kind == "text" else "0", p.t.line, kind == "text")
     linkage = getattr(p, "in_linkage", False)

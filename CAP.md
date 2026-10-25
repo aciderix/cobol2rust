@@ -73,8 +73,10 @@ décide de la prochaine.
    représentation des données explicites.
 7. **Services de plateforme** : adaptateurs EXEC SQL (DB2), EXEC CICS,
    EXEC DLI (IMS), MQ, VSAM, avec un contrat documenté par adaptateur.
-8. **Corpus élargis** : testsuite GnuCOBOL (1346 cas `.at`), corpus métier
-   de l'utilisateur dès qu'il en fournit, avec données et dialecte épinglés.
+8. **Corpus élargis** : testsuite GnuCOBOL mesurée depuis le 25 octobre
+   2026 (`tools/extract_testsuite.py` : 1135 sources de 954 tests compilés
+   sans option, sur 1344 tests `AT_SETUP`) ; corpus métier de l'utilisateur
+   dès qu'il en fournit, avec données et dialecte épinglés.
 9. **Parcours sans sources** : binaire GnuCOBOL vers Rust, cible étroite
    d'abord.
 
@@ -85,7 +87,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T19:30:07+00:00 (commit `16497e1f09`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T23:23:25+00:00 (commit `63ea97f8d6`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -95,9 +97,10 @@ Dernière mesure : 2026-10-25T19:30:07+00:00 (commit `16497e1f09`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| **Total** | | **2458** | **724** | **738** | **14** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 246 | 879 | 633 | 0 |
+| **Total** | | **3593** | **970** | **1617** | **647** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T19:30:07+00:00, commit `16497e1f09`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T23:23:25+00:00, commit `63ea97f8d6`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -108,15 +111,16 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T19:30:07+00:00, commit `
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 4 × instruction non prise en charge: XML
-2. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
-3. 2 × PROCEDURE attendu
-4. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
-5. 1 × indicateur fixe '$' non pris en charge
-6. 1 × instruction non prise en charge: OF
-7. 1 × CALL identifiant requiert un champ alphanumérique
-8. 1 × USAGE/clause non pris en charge
-9. 1 × expression non prise en charge: xml
+1. 89 × USAGE/clause non pris en charge
+2. 51 × expression non prise en charge: NO
+3. 37 × niveau de donnée attendu
+4. 22 × niveaux pris en charge: 01-49, 66, 77 et 88
+5. 21 × PIC numérique limité à 18 chiffres
+6. 18 × . attendu
+7. 17 × CALL USING limité aux identifiants BY REFERENCE/CONTENT
+8. 14 × clause SELECT non prise en charge
+9. 13 × paragraphe CONFIGURATION non pris en charge
+10. 12 × DISPLAY accepte uniquement champs et littéraux simples
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -215,3 +219,18 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   acceptées, écart 23 → 14 (restent : XML, SCREEN, COMMUNICATION hors
   cobol85, `$SET`, CALL d'un nom en casse mixte ou d'un numérique). Exécution
   inchangée. Émission NIST 451/458.
+- 2026-10-25 — Nouveau corpus `gnucobol-testsuite` : les programmes des tests
+  de cobc 3.2 compilés sans option (`tools/extract_testsuite.py`, dérivé de
+  l'archive GnuCOBOL épinglée). Mesure initiale 256/1135, cobc 879, et 13
+  sources acceptées que cobc refuse, toutes corrigées : bornes constantes de
+  référence et d'indice, VALUE signé sur non signé, REDEFINES d'une
+  redéfinition, INDEXED avant ASCENDING, WHEN vide avant WHEN OTHER, GO TO
+  vers/depuis DECLARATIVES (cobol85), noms de programme invalides
+  (`cobc_check_valid_name`), mot commençant par `_`, littéral de plus de 8191
+  caractères (160 en cobol85), mot quelconque après `STOP RUN` pris comme
+  statut. La règle du WHEN vide a révélé un bogue ancien : `WHEN 'A' WHEN 'B'
+  instr` donnait une branche vide au premier WHEN quand le second commençait
+  par un littéral (corrigé, fixture `evaluate_literal_when` comparée à cobc).
+  Résultat : **970/3593** acceptées, cobc 1617, à examiner 13 → 0 ; six
+  corpus d'origine inchangés à 724/2458 (écart 14) ; écart de la testsuite
+  633. Exécution inchangée. Émission NIST 451/458.

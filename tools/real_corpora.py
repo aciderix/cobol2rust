@@ -51,6 +51,8 @@ CORPORA = {
     "beg-cobol-for-programmers": {"format": "auto", "std": "default", "kind": "livre, programmes complets"},
     "proleap-cobol-parser": {"format": "auto", "std": "default", "kind": "tests de parseur (fragments, dialectes)"},
     "che4z-lsp-for-cobol": {"format": "auto", "std": "default", "kind": "tests de serveur de langage IBM"},
+    # tools/extract_testsuite.py: AT_DATA programs of tests compiled without options.
+    "gnucobol-testsuite": {"format": "auto", "std": "default", "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"},
 }
 
 
@@ -266,8 +268,15 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     pins = {entry["name"]: entry.get("commit") for entry in json.loads(manifest_path.read_text())["corpora"]}
-    from fetch_corpora import REPOSITORIES
+    from fetch_corpora import GNUCOBOL, REPOSITORIES
     for name in args.only:
+        if name == "gnucobol-testsuite":
+            # Derived from the pinned GnuCOBOL archive by extract_testsuite.py.
+            if not (CORPORA_DIR / name / "manifest.json").exists():
+                print("testsuite absente : lancer python3 tools/extract_testsuite.py", file=sys.stderr)
+                return 2
+            pins[name] = f"gnucobol-3.2.tar.xz sha256 {GNUCOBOL[1][:16]}"
+            continue
         if pins.get(name) != REPOSITORIES[name][1]:
             print(f"{name} : commit {pins.get(name)} différent de l'épinglage {REPOSITORIES[name][1]}", file=sys.stderr)
             return 2

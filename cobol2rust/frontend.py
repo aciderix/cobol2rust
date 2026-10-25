@@ -236,6 +236,9 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 raise CobolError(f"ligne {start}: littéral non terminé")
             # One character per source byte (decode_source): a non-ASCII
             # literal holds the bytes of its source text, as for cobc.
+            limit = 160 if STD == "cobol85" else 8191   # literal-length
+            if len(value) > limit:
+                raise CobolError(f"ligne {start}: invalid literal: literal length exceeds {limit} characters")
             tokens.append(Token(value, start, True, token_start, i))
         elif c in "zZ" and i + 1 < len(source) and source[i + 1] in "\"'":
             # Z"text": the text and a terminating NUL (scan_z).
@@ -274,6 +277,9 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                       and (source[i + 1].isdigit() or source[i + 1] == "." and source[i + 2:i + 3].isdigit())
                       and (tokens[-1].string or tokens[-1].text == ")"
                            or re.fullmatch(r"[+-]?[A-Za-z0-9_.][A-Za-z0-9_.-]*", tokens[-1].text)))
+            if c == "_":
+                # scanner.l: a word cannot begin with an underscore.
+                raise CobolError(f"ligne {line}: invalid symbol '_' - skipping word")
             match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
@@ -877,6 +883,8 @@ class Parser:
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
         if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
             self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
+        if deferred is None and descriptor.size > 0 and getattr(descriptor, "parse_size", None) is None:
+            self.check_constant_positions(label, descriptor, indices, start, length)
         bound = getattr(descriptor, "parse_size", None)
         if bound is not None and start is not None:
             # cb_build_identifier's check of constant positions.
@@ -888,6 +896,56 @@ class Parser:
         if self.debug_frames and not conditions and not self.debug_frames[-1]["suspended"]:
             self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
         return ref
+
+    # cobc.c cob_csyns: C keywords and libcob symbols a PROGRAM-ID cannot be.
+    C_KEYWORDS = set("""NULL P_cancel P_initialize P_ret_initialize P_switch _Bool _Complex _Imaginary _float128
+        alignof asm auto bool break case catch char class const const_cast continue default delete do double
+        dynamic_cast else enum exit_function exit_program explicit extern false float for frame_pointer frame_stack
+        friend goto if inline int long mutable namespace new offsetof operator private protected public register
+        reinterpret_cast restrict return short signed sizeof static static_cast struct switch template this throw
+        true try typedef typeid typename typeof union unsigned using virtual void volatile wchar_t""".split())
+
+    def check_valid_name(self, name):
+        """cobc_check_valid_name of a PROGRAM-ID (PROGRAM_ID_NAME)."""
+        reason = (" - name contains a directory separator" if "/" in name or "\\" in name
+                  else " - name cannot be empty" if not name
+                  else " - length exceeds maximum" if len(name) > 31
+                  else " - name cannot begin with space or hyphen" if name[0] in "- "
+                  else " - name cannot begin with 'cob_' or 'COB_'" if len(name) > 3 and name[:4] in {"cob_", "COB_"}
+                  else " - name duplicates a 'C' keyword" if name in self.C_KEYWORDS else None)
+        if reason:
+            self.error(f"invalid PROGRAM-ID '{name}'{reason}")
+
+    @staticmethod
+    def literal_integer(expr):
+        """cb_get_int of a numeric literal, or None for another operand."""
+        sign = -1 if expr.op == "unary-" else 1
+        if expr.op in {"unary+", "unary-"}:
+            expr = expr.args[0]
+        if expr.op != "number" or getattr(expr, "figurative_zero", False) or "." in expr.args[0]:
+            return None
+        return sign * int(expr.args[0])
+
+    def check_constant_positions(self, label, descriptor, indices, start, length):
+        """cb_build_identifier: literal subscripts within 1..OCCURS of each
+        dimension, literal reference modification within the item."""
+        for index, (_, count) in zip(indices, descriptor.dimensions):
+            n = self.literal_integer(index)
+            if n is not None and (n < 1 or n > count):
+                self.error(f"subscript of '{label}' out of bounds: {n}")
+        if start is None:
+            return
+        size = descriptor.size
+        length_value = None if length is None else self.literal_integer(length)
+        if length_value is not None and (length_value < 1 or length_value > size):
+            self.error(f"length of '{label}' out of bounds: {length_value}")
+        offset = self.literal_integer(start)
+        if offset is None:
+            return
+        if offset < 1 or (not (length is None and offset == size) and offset > size):
+            self.error(f"offset of '{label}' out of bounds: {offset}")
+        if length_value is not None and length_value > size - offset + 1:
+            self.error(f"length of '{label}' out of bounds: {length_value}")
 
     def program_end(self):
         """_procedure_division may be empty: the program ends here."""
@@ -903,7 +961,9 @@ class Parser:
         self.expect("PROGRAM-ID")
         self.expect(".")
         entry_name = self.program_name = self.t.text
-        name = self.name()
+        self.check_valid_name(entry_name)
+        # program_id_name: a word or an alphanumeric literal.
+        name = self.take().text if self.t.string else self.name()
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
         common = initial = False
@@ -3539,11 +3599,15 @@ class Parser:
                     for test in tests[1:]:
                         line_test = Expr("and", (line_test, test))
                     condition = line_test if condition is None else Expr("or", (condition, line_test))
-                    if self.at("WHEN") and not self.tokens[self.i + 1].string and self.tokens[self.i + 1].key != "OTHER":
+                    if self.at("WHEN") and (self.tokens[self.i + 1].string or self.tokens[self.i + 1].key != "OTHER"):
                         self.take()
                         continue
                     break
-                branches.append((condition, self.block(stops)))
+                body = self.block(stops)
+                if not body and self.at("WHEN"):
+                    # WHEN OTHER cannot join the WHEN list of a group (parser.y).
+                    self.error("WHEN without imperative statement")
+                branches.append((condition, body))
             if not branches and not otherwise:
                 self.error("EVALUATE requiert au moins un WHEN")
             self.accept("END-EVALUATE")
@@ -3595,6 +3659,10 @@ class Parser:
                 status = self.expr() if self.operand_start() else Expr("number", ("1" if error else "0",))
             elif self.t.string or (not self.at(".") and self.operand_start()):
                 status = self.expr()
+            elif not self.t.string and self.t.key not in BOUNDARIES and re.fullmatch(r"[A-Z0-9][A-Z0-9_-]*", self.t.key):
+                # stop_returning x (RM extension): any word is taken as the
+                # status operand, an undefined one is an error.
+                self.error(f"'{self.t.text}' is not defined")
             return Stmt("stop", (status,), line)
         if verb == "GOBACK":
             return Stmt("goback", (), line)
@@ -4426,6 +4494,8 @@ class Parser:
         return names
 
     def validate_calls(self, program):
+        in_declaratives = False
+
         def walk(stmts, section=None):
             for s in stmts:
                 if s.op == "sort":
@@ -4447,6 +4517,14 @@ class Parser:
                         ranges = [program.procedure_range(name) for name in targets]
                     except CobolError as error:
                         raise CobolError(f"ligne {s.line}: {error}") from None
+                    # cb_resolve_procedures: references into and out of DECLARATIVES.
+                    for name, (start, _) in zip(targets, ranges):
+                        target_in_declaratives = start < program.main_block
+                        label = program.blocks[start].label or name if program.blocks else name
+                        if s.op == "goto" and target_in_declaratives and not in_declaratives:
+                            raise CobolError(f"ligne {s.line}: invalid reference to '{label}' (in DECLARATIVES)")
+                        if in_declaratives and not target_in_declaratives and STD == "cobol85":
+                            raise CobolError(f"ligne {s.line}: '{label}' is not in DECLARATIVES")
                 elif s.op == "loop":
                     walk(s.args[2], section)
                 elif s.op == "if":
@@ -4472,7 +4550,8 @@ class Parser:
                 elif s.op == "search_all":
                     walk(s.args[2] or [], section); walk(s.args[4], section)
         if program.blocks:
-            for block in program.blocks:
+            for index, block in enumerate(program.blocks):
+                in_declaratives = index < program.main_block
                 walk(block.body, block.section)
         else:
             walk(program.entry)

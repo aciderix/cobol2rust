@@ -33,6 +33,25 @@ class RealFormsFrontendTests(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(CobolError):
                 Parser(source).parse()
 
+    def test_refusals_of_the_gnucobol_testsuite(self):
+        # Sources cobc 3.2 refuses that cobol2rust used to accept.
+        cases = {
+            "out of bounds": program("01 t. 02 e occurs 3 pic x.", "display e(4) t(3:2). stop run."),
+            "not signed": program("01 n pic 9 value -1.", "stop run."),
+            "original definition": program("01 a pic x. 01 b redefines a pic x. 01 c redefines b pic x.",
+                                           "stop run."),
+            "INDEXED should follow": program("01 t. 02 e occurs 3 indexed by i ascending key k. 03 k pic x.",
+                                             "stop run."),
+            "WHEN without imperative": program("01 n pic 9.",
+                                               "evaluate n when 1 when other display n end-evaluate. stop run."),
+            "is not defined": program("01 n pic 9.", "stop run\nnext-para. stop run."),
+            "invalid PROGRAM-ID": "identification division. program-id. cob_x.\nprocedure division. stop run.",
+            "literal length": program("01 n pic 9.", 'display "' + "x" * 8192 + '". stop run.'),
+        }
+        for message, source in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
+                Parser(source).parse()
+
     def test_parser_forms_cobc_accepts(self):
         # Configuration paragraphs in any order or empty, a missing period
         # before the next SELECT, two 01 items of one name (a warning).
@@ -56,7 +75,8 @@ class RealFormsFrontendTests(unittest.TestCase):
 class RealFormsNativeTests(unittest.TestCase):
     def test_fixtures_match_cobc(self):
         for name in ("table_sort", "scope_and_function_forms", "numeric_record", "compiler_options",
-                     "exit_implicit_section", "indexed_missing_key", "stop_run_status"):
+                     "exit_implicit_section", "indexed_missing_key", "stop_run_status",
+                     "evaluate_literal_when"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

@@ -39,6 +39,19 @@ facultatifs, `comp5`, `return_code` (CALL, CANCEL, code de sortie 44) et
 23 octobre alors que la référence native a été régénérée le 25 ; l'outil lit
 désormais l'horloge dans le journal de référence et NC214M passe.
 
+## Testsuite GnuCOBOL comme septième corpus — 25 octobre 2026
+
+`tools/extract_testsuite.py` extrait de l'archive GnuCOBOL 3.2 épinglée les
+programmes des tests `AT_SETUP` dont la première compilation est `$COMPILE`
+ou `$COMPILE_ONLY` sans option : 954 tests, 1135 sources (exclus : 298 avec
+options, 87 sans compilation, 5 dont le programme n'est pas dans les
+`AT_DATA`). Mesure (`tools/real_corpora.py --cobc --execute --record`) :
+**970/3593 sources acceptées, cobc 1617, 0 acceptée que cobc refuse** ; la
+testsuite seule 246/1135 (cobc 879). Les six autres corpus restent à 724/2458
+et l'exécution comparée est inchangée (CardDemo 8/8, zopeneditor 3/3, cours
+10/12, livre 52/61). Niveau 2 de preuve pour la testsuite (pas d'exécution
+comparée : ses sorties attendues dépendent souvent d'options de test).
+
 ## Mesure de référence des corpus réels — 25 octobre 2026
 
 Nouvelle boussole (CAP.md). `tools/real_corpora.py --cobc --record`, six corpus

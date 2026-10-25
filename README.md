@@ -24,8 +24,10 @@ CM que cobc ne compile pas non plus ([VALIDATION.md](VALIDATION.md)).
 
 **Ce résultat ne mesure pas la couverture du COBOL réel.** Sur six corpus
 publics épinglés (2458 sources, dont l'application mainframe CardDemo), le
-convertisseur accepte 230 sources là où cobc en accepte 738 ; CardDemo reste à
-0/44. Le cap du projet et sa mesure sont dans [CAP.md](CAP.md).
+convertisseur accepte 724 sources là où cobc en accepte 738 (CardDemo 14/14
+des sources que cobc accepte) ; sur la testsuite de GnuCOBOL 3.2 (1135
+sources), 246 contre 879. Accepter n'est pas exécuter à l'identique : le cap
+du projet et sa mesure, exécution comprise, sont dans [CAP.md](CAP.md).
 
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur

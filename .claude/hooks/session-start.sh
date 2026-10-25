@@ -38,6 +38,17 @@ if [ ! -f .tools/corpora/manifest.json ]; then
     }
 fi
 
+# Programmes de la testsuite GnuCOBOL, corpus de la mesure (tools/extract_testsuite.py).
+if [ ! -f .tools/corpora/gnucobol-testsuite/manifest.json ]; then
+    src=.tools/corpora/gnucobol-3.2/tests/testsuite.src
+    [ -d "$src" ] || src=/opt/src/gnucobol-3.2/tests/testsuite.src
+    if [ -d "$src" ]; then
+        step "programmes de la testsuite GnuCOBOL"
+        python3 tools/extract_testsuite.py --source "$src" >> "$LOG" 2>&1 \
+            || echo "[session-start] AVERTISSEMENT : extraction de la testsuite échouée, voir $LOG"
+    fi
+fi
+
 # Référence du runner NIST natif (~15 min) : en arrière-plan, sans bloquer la session.
 if [ ! -f .tools/nist-native-gnucobol-3.2/summary.log ] && [ -f .tools/nist-ccvs85/manifest.json ]; then
     step "référence NIST native lancée en arrière-plan (build/nist-native.log)"
