@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T15:23:20+00:00",
- "git_head": "99454c7dcf0a04e9c36ba69eb5a101982a27dd92",
- "implementation_sha256": "ecd35783fac9e0d632f482fc69ba788d65c00d1fa6bd64983a2111791b89a5c4",
+ "measured_at": "2026-10-25T18:18:38+00:00",
+ "git_head": "0f4cf12bba98105c89a19a55de98ef83ebc1650f",
+ "implementation_sha256": "f16b83fb2df5cb12e8ca703d6b35cb72f309909fbf969392dffed43ab249448d",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
-  "accepted": 703,
+  "accepted": 713,
   "cobc_accepted": 738,
-  "gap": 35,
+  "gap": 25,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -223,7 +223,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 293,
+   "accepted": 300,
    "internal_errors": 0,
    "blockers": [
     [
@@ -235,7 +235,7 @@
      24
     ],
     [
-     "PROCEDURE attendu",
+     "niveau de donnée attendu",
      14
     ],
     [
@@ -243,20 +243,16 @@
      14
     ],
     [
-     "niveau de donnée attendu",
-     13
+     "expression non prise en charge: ALL",
+     12
     ],
     [
-     "expression non prise en charge: ALL",
+     "PROCEDURE attendu",
      12
     ],
     [
      "instruction non prise en charge: EXEC",
      12
-    ],
-    [
-     "IDENTIFICATION DIVISION attendue",
-     10
     ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
@@ -273,12 +269,16 @@
     [
      "indicateur fixe 'A' non pris en charge",
      5
+    ],
+    [
+     "IF without imperative statement",
+     5
     ]
    ],
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 18,
+   "gap": 11,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -295,10 +295,6 @@
     [
      "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
      "clause SELECT non prise en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/data/localstorage/DataDescription02.cbl",
-     "PROCEDURE attendu"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
@@ -325,45 +321,17 @@
      "expression non prise en charge: Z"
     ],
     [
-     "src/test/resources/io/proleap/cobol/ast/variable/XoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/XoptsSpApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
      "src/test/resources/io/proleap/cobol/preprocessor/fixed/CompilerDirective.cbl",
      "indicateur fixe '$' non pris en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblOpts.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblXoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CompilerOptions.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/ProcessXoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
     ]
    ],
    "gap_blockers": [
     [
-     "IDENTIFICATION DIVISION attendue",
-     6
+     "COMMUNICATION SECTION non conforme hors -std=cobol85",
+     2
     ],
     [
      "PROCEDURE attendu",
-     3
-    ],
-    [
-     "COMMUNICATION SECTION non conforme hors -std=cobol85",
      2
     ],
     [
@@ -405,7 +373,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 317,
+   "accepted": 320,
    "internal_errors": 0,
    "blockers": [
     [
@@ -414,7 +382,7 @@
     ],
     [
      "IDENTIFICATION DIVISION attendue",
-     246
+     239
     ],
     [
      "caractère non pris en charge '|'",
@@ -445,35 +413,23 @@
      12
     ],
     [
+     "USAGE/clause non pris en charge",
+     11
+    ],
+    [
      "instruction non prise en charge: OBTAIN",
      11
     ],
     [
      "instruction non prise en charge: FIND",
      10
-    ],
-    [
-     "copybook introuvable: LGCMAREA",
-     10
     ]
    ],
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 14,
+   "gap": 11,
    "gap_sources": [
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case43.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case44.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case45.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
     [
      "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
      "instruction non prise en charge: OF"
@@ -525,10 +481,6 @@
      4
     ],
     [
-     "EXIT SECTION requiert une section de procédure",
-     3
-    ],
-    [
      "instruction non prise en charge: OF",
      1
     ],
@@ -560,9 +512,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T15:23:20+00:00",
-  "git_head": "99454c7dcf0a04e9c36ba69eb5a101982a27dd92",
-  "implementation_sha256": "ecd35783fac9e0d632f482fc69ba788d65c00d1fa6bd64983a2111791b89a5c4",
+  "measured_at": "2026-10-25T18:18:38+00:00",
+  "git_head": "0f4cf12bba98105c89a19a55de98ef83ebc1650f",
+  "implementation_sha256": "f16b83fb2df5cb12e8ca703d6b35cb72f309909fbf969392dffed43ab249448d",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

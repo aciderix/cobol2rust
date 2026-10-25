@@ -121,7 +121,7 @@ gamma. continue.
     def test_segmented_sections_and_unsupported_exit_variants_are_rejected(self):
         # Segment numbers only matter to independent ALTERed paragraphs.
         Parser(program("area-a section 1. continue. area-b section 50. continue.")).parse()
-        for body in ("area-a section 100. continue.", "exit section.",
+        for body in ("area-a section 100. continue.",
                      # EXIT PERFORM is only valid within an inline PERFORM.
                      "exit perform.", "exit perform cycle."):
             with self.subTest(body=body), self.assertRaises(CobolError):

@@ -454,7 +454,11 @@ class ControlGraph:
         if op == "exit_section":
             section = self.blocks[block].section
             if section is None:
-                self._error(stmt, "EXIT SECTION requiert une section explicite")
+                # Paragraphs outside a SECTION belong to cobc's implicit
+                # "MAIN SECTION": its exit label precedes the next SECTION.
+                following = next((index for index in range(block + 1, len(self.blocks))
+                                  if self.blocks[index].section is not None), len(self.blocks))
+                return self._add("jump", (self._following(following),), stmt)
             return self._add("jump", (self.section_checkpoints[section],), stmt)
         if op == "stop":
             return self._add("stop_run", (), stmt)

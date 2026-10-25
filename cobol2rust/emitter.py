@@ -1745,44 +1745,7 @@ class Emitter:
             if field.linkage:
                 # No address until a CALL passes the item (NULL for cobc).
                 self.write(f"result.{self.names[name]} = storage_runtime::unbind(&result.{self.names[name]});")
-        for name, field in self.program.fields.items():
-            if not field.picture or field.file_record or field.linkage:
-                continue
-            if self.external_root(name) is not None:
-                # cob_external_addr storage is not initialized (cob_malloc);
-                # an inherited GLOBAL item is initialized by its program.
-                if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
-                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
-                continue
-            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
-                continue
-            cursor = field
-            while cursor and not cursor.redefines:
-                cursor = self.program.fields.get(cursor.parent)
-            if cursor:
-                continue
-            constructor = "text" if field.initial.string else "number"
-            initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
-            value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
-            self.write(f"result.{self.names[name]}.declare(&{value});")
-        # A group VALUE fills the whole group as alphanumeric data after its
-        # leaves, on every occurrence: GnuCOBOL gives it precedence.
-        for name, field in self.program.fields.items():
-            if field.group_value is None:
-                continue
-            if self.external_root(name) is not None:
-                if self.program.fields[self.external_root(name)].external:
-                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
-                continue
-            if any(other.depending for key, other in self.program.fields.items()
-                   if key == name or key.startswith(name + ".")):
-                raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
-            text, fill = field.group_value
-            if isinstance(fill, tuple):
-                text = (fill[1] * field.size)[:field.size]
-            elif fill in {"0", '"', "\xff", "\x00"}:
-                text = fill * field.size
-            self.write(f"result.{self.names[name]}.declare(&{text_value(text)});")
+        self.initialize("result", lambda field: True)
         self.write("result")
         self.indent -= 1
         self.write("}")
@@ -1943,6 +1906,47 @@ class Emitter:
         self.indent -= 1
         self.write("}")
 
+    def initialize(self, receiver, selected):
+        """The VALUE or PICTURE initialization of the selected items."""
+        for name, field in self.program.fields.items():
+            if not field.picture or field.file_record or field.linkage or not selected(field):
+                continue
+            if self.external_root(name) is not None:
+                # cob_external_addr storage is not initialized (cob_malloc);
+                # an inherited GLOBAL item is initialized by its program.
+                if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
+                continue
+            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
+                continue
+            cursor = field
+            while cursor and not cursor.redefines:
+                cursor = self.program.fields.get(cursor.parent)
+            if cursor:
+                continue
+            constructor = "text" if field.initial.string else "number"
+            initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
+            value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
+            self.write(f"{receiver}.{self.names[name]}.declare(&{value});")
+        # A group VALUE fills the whole group as alphanumeric data after its
+        # leaves, on every occurrence: GnuCOBOL gives it precedence.
+        for name, field in self.program.fields.items():
+            if field.group_value is None or not selected(field):
+                continue
+            if self.external_root(name) is not None:
+                if self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
+                continue
+            if any(other.depending for key, other in self.program.fields.items()
+                   if key == name or key.startswith(name + ".")):
+                raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
+            text, fill = field.group_value
+            if isinstance(fill, tuple):
+                text = (fill[1] * field.size)[:field.size]
+            elif fill in {"0", '"', "\xff", "\x00"}:
+                text = fill * field.size
+            self.write(f"{receiver}.{self.names[name]}.declare(&{text_value(text)});")
+
     def call_method(self, graph):
         """Bind each USING item of the entry and its subordinates to the CALL
         arguments (output_entry_function); an item the entry or the CALL does
@@ -1975,6 +1979,13 @@ class Emitter:
                            f"{field.offset - root.offset}, &self.{rust}) }} else {{ storage_runtime::unbind(&self.{rust}) }};")
             self.indent -= 1
             self.write("}")
+        local = [name for name, field in fields.items() if getattr(field, "local", False) and field.parent is None]
+        for name in local:
+            # LOCAL-STORAGE: fresh storage (zeroed) initialized at each entry.
+            size = fields[name].size
+            self.write(f"self.{self.names[name]}.assign_text_move(&Value::Bytes(vec![0; {size}]), true);")
+        if local:
+            self.initialize("self", lambda field: getattr(field, "local", False))
         # RETURN-CODE keeps its value between CALLs: codegen.c clears it with
         # the program's first initialization only (VALUE ZERO here).
         if len(entries) > 1:

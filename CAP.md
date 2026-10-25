@@ -85,7 +85,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T15:23:20+00:00 (commit `99454c7dcf`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T18:18:38+00:00 (commit `0f4cf12bba`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -93,11 +93,11 @@ Dernière mesure : 2026-10-25T15:23:20+00:00 (commit `99454c7dcf`, cobc (GnuCOBO
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 62 | 65 | 3 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 293 | 311 | 18 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 317 | 331 | 14 | 0 |
-| **Total** | | **2458** | **703** | **738** | **35** | **0** |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 300 | 311 | 11 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 320 | 331 | 11 | 0 |
+| **Total** | | **2458** | **713** | **738** | **25** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:23:20+00:00, commit `99454c7dcf`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T18:18:38+00:00, commit `0f4cf12bba`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -108,16 +108,16 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:23:20+00:00, commit `
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 6 × IDENTIFICATION DIVISION attendue
-2. 4 × instruction non prise en charge: XML
-3. 3 × PROCEDURE attendu
-4. 3 × EXIT SECTION requiert une section de procédure
-5. 2 × clause RD CONTROL non prise en charge
-6. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
-7. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
-8. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
-9. 1 × clause SELECT non prise en charge
-10. 1 × paragraphe CONFIGURATION non pris en charge
+1. 4 × instruction non prise en charge: XML
+2. 2 × clause RD CONTROL non prise en charge
+3. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
+4. 2 × PROCEDURE attendu
+5. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
+6. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
+7. 1 × clause SELECT non prise en charge
+8. 1 × paragraphe CONFIGURATION non pris en charge
+9. 1 × entrée SPECIAL-NAMES non prise en charge: <EOF>
+10. 1 × instruction non prise en charge: GIVING
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -190,3 +190,11 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   programmes interactifs). Émission NIST 451/458. Restent dans le livre :
   Report Writer avec CONTROLS (18-1, 18-2), CALL d'un nom en casse mixte
   (16-2, qui pourrait désigner un symbole C du processus).
+- 2026-10-25 — Lignes IBM `CBL`/`PROCESS` ignorées comme pplex.l, EXIT
+  SECTION de la section implicite « MAIN SECTION » de cobc (sortie avant la
+  première SECTION), LOCAL-STORAGE SECTION (initialisée à chaque CALL) :
+  **703 → 713** acceptées, écart 35 → 25 ; exécution inchangée (CardDemo 8/8,
+  zopeneditor 3/3, cours 10/12, livre 52/59). Émission NIST 451/458.
+  Prochain chantier de code réel : Report Writer avec CONTROLS (livre
+  18-1/18-2, port de reportio.c) ; le reste de l'écart est fait de
+  fragments de tests de parseur (XML, SCREEN, COMMUNICATION, dialectes).

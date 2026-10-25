@@ -72,10 +72,11 @@ beta. stop run.
                 Emitter(Parser(program(f"go alpha beta depending on {controller}.\n"
                                        "alpha. stop run. beta. stop run.", declaration)).parse()).generate()
 
-    def test_exit_section_requires_a_containing_section(self):
+    def test_exit_section_outside_a_section_exits_the_implicit_one(self):
+        # cobc's implicit "MAIN SECTION" (tests/fixtures/exit_implicit_section.cob).
         for body in ("exit section.", "alpha. exit section.",
                      "perform 2 times exit section end-perform."):
-            with self.subTest(body=body), self.assertRaises(CobolError):
+            with self.subTest(body=body):
                 Parser(program(body)).parse()
         parsed = Parser(program("stop run. area-a section. exit section.")).parse()
         self.assertEqual(parsed.blocks[1].body[0].op, "exit_section")

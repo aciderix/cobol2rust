@@ -126,6 +126,9 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 continue
             if indicator != "-" and quotation is not None and not consecutive and line.strip():
                 raise CobolError(f"ligne {number}: littéral fixe non terminé; indicateur '-' attendu")
+            if indicator != "-" and COMPILER_OPTIONS.match(line):
+                result.append("")
+                continue
             # Documentary prose may contain arbitrary quotes and COPY words.
             # Filter it before literal continuation and token processing, while
             # keeping genuine literal continuations outside the filter.
@@ -164,7 +167,7 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 if not debugging_lines and re.search(r"(?<![\w-])DEBUGGING[\s,;]+MODE(?![\w-])", "\n".join(recent), re.I):
                     debugging_lines = True
             continue
-        result.append("" if documentary.is_comment(line, fmt, line=number) else line)
+        result.append("" if COMPILER_OPTIONS.match(line) or documentary.is_comment(line, fmt, line=number) else line)
     return "\n".join(result)
 
 
@@ -541,6 +544,11 @@ INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+
+
+# pplex.l: an IBM CBL/PROCESS statement of compiler options is ignored to
+# the end of its line (with only separators, or a space after the word).
+COMPILER_OPTIONS = re.compile(r"[ ]*(?:PROCESS|CBL)(?:[ ,;]*$|[ ])", re.I)
 
 
 def decode_source(data: bytes) -> str:
@@ -951,8 +959,22 @@ class Parser:
                 self.expect(".")
                 self.data_stack = []
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
+                        and not self.at("COMMUNICATION") and not self.at("LOCAL-STORAGE") and not self.program_end():
+                    self.declaration()
+            if self.accept("LOCAL-STORAGE"):
+                # Allocated and initialized at each entry of the program
+                # (codegen.c: cob_cache_malloc and initialization of LOCAL).
+                self.expect("SECTION")
+                self.expect(".")
+                self.data_stack = []
+                before = set(self.fields)
+                while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
                         and not self.at("COMMUNICATION") and not self.program_end():
                     self.declaration()
+                for key in set(self.fields) - before:
+                    if self.fields[key].external:
+                        self.error("EXTERNAL invalide en LOCAL-STORAGE")
+                    self.fields[key].local = True
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
@@ -4365,8 +4387,6 @@ class Parser:
                         ranges = [program.procedure_range(name) for name in targets]
                     except CobolError as error:
                         raise CobolError(f"ligne {s.line}: {error}") from None
-                elif s.op == "exit_section" and section is None:
-                    raise CobolError(f"ligne {s.line}: EXIT SECTION requiert une section de procédure")
                 elif s.op == "loop":
                     walk(s.args[2], section)
                 elif s.op == "if":

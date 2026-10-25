@@ -2,7 +2,8 @@
 (cob_table_sort), INSPECT of a literal or function, reference modification
 of a function result, an IF ended by an enclosing scope terminator, comment
 entries without IDENTIFICATION DIVISION, CLASS with figurative constants, an
-FD with a numeric record."""
+FD with a numeric record, CBL/PROCESS lines, EXIT SECTION of the implicit
+MAIN SECTION, LOCAL-STORAGE."""
 from __future__ import annotations
 
 import unittest
@@ -42,10 +43,16 @@ class RealFormsFrontendTests(unittest.TestCase):
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
 class RealFormsNativeTests(unittest.TestCase):
     def test_fixtures_match_cobc(self):
-        for name in ("table_sort", "scope_and_function_forms", "numeric_record"):
+        for name in ("table_sort", "scope_and_function_forms", "numeric_record", "compiler_options",
+                     "exit_implicit_section"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)
+
+    def test_local_storage_is_initialized_at_each_call(self):
+        report = verify(FIXTURES / "local_storage.cob", call_paths=[FIXTURES / "local_storage_calls"])
+        self.assertTrue(report["match"], report)
+        self.assertIn("persisting 3 fresh 6", report["rust_stdout"])
 
 
 if __name__ == "__main__":
