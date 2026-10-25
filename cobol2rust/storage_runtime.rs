@@ -905,6 +905,50 @@ impl View {
 
 /// Bind a LINKAGE item to a CALL argument: the item keeps its description and
 /// addresses the argument's storage `delta` bytes after the argument start.
+/// cob_table_sort: glibc's qsort (a merge sort, stable) of the active
+/// occurrences; each key (offset in the element, size, kind, numeric,
+/// descending) by cob_numeric_cmp, or by memcmp or the program collating
+/// sequence (sort_compare, sort_compare_collate).
+pub fn table_sort(table: &Value, keys: &[(usize, usize, Kind, bool, bool)]) {
+    let view = match table { Value::View(view) => view, _ => fail("SORT requires a table") };
+    let (stride, count) = match view.dimensions.as_slice() {
+        [(stride, count)] => (*stride, *count),
+        _ => fail("SORT of a table with several dimensions not modelled"),
+    };
+    let size = view.size;
+    if stride != size { fail("SORT of a table with a stride unlike its element size not modelled"); }
+    let mut elements: Vec<Vec<u8>> = {
+        let memory = view.mem();
+        (0..count).map(|i| memory[view.offset + i * stride..view.offset + i * stride + size].to_vec()).collect()
+    };
+    let key = |element: &[u8], offset: usize, length: usize, kind: Kind| View {
+        memory: Rc::new(RefCell::new(element[offset..offset + length].to_vec())), offset: 0, size: length, kind,
+        dimensions: vec![], initializers: vec![] };
+    elements.sort_by(|a, b| {
+        for &(offset, length, kind, numeric, descending) in keys {
+            let order = if numeric {
+                let integer = matches!(kind, Kind::Numeric { digits, .. } if digits < 19);
+                key(a, offset, length, kind).operand_value(integer).compare(&key(b, offset, length, kind).operand_value(integer))
+            } else {
+                crate::runtime::collated_cmp(&a[offset..offset + length], &b[offset..offset + length])
+            };
+            if order != std::cmp::Ordering::Equal { return if descending { order.reverse() } else { order }; }
+        }
+        std::cmp::Ordering::Equal
+    });
+    let mut memory = view.mem_mut();
+    for (i, element) in elements.iter().enumerate() {
+        memory[view.offset + i * stride..view.offset + i * stride + size].copy_from_slice(element);
+    }
+}
+
+/// The temporary alphanumeric field of a literal or a function result.
+pub fn temporary(value: &Value) -> Value {
+    let bytes = value.bytes();
+    let size = bytes.len();
+    Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size, kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+}
+
 /// A LINKAGE item that the CALL (or ENTRY) did not pass: no storage.
 pub fn unbind(item: &Value) -> Value {
     match item {

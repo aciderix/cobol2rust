@@ -102,7 +102,7 @@ class Emitter:
             return "text" if e.args[0].start is not None else self.program.fields[e.args[0].name].kind
         if e.op in {"number", "text"}:
             return e.op
-        if e.op == "all":
+        if e.op in {"all", "refmod"}:
             return "text"
         if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class"}:
             return "bool"
@@ -255,6 +255,10 @@ class Emitter:
             return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
         if op == "function":
             return self.function(*args)
+        if op == "refmod":
+            value, start, length = args
+            length = f"Some(&({self.expression(length)}))" if length is not None else "None"
+            return f"runtime::refmod(&({self.expression(value)}), &({self.expression(start)}), {length})"
         if op == "alpha_class":
             # cob_is_alpha/upper/lower: spaces and letters of the C library's
             # classification; bytes above 127 depend on the locale.
@@ -577,7 +581,9 @@ class Emitter:
                     # cb_build_move_high / cb_build_move_low: memset of the item.
                     conversions[-1] = ("bytes", expr.args[0].encode("latin-1") * field.size)
                     continue
-                if destination == "number" and expr.op != "var":
+                # A function result or its reference modification is an
+                # alphanumeric temporary: cob_move as from an item.
+                if destination == "number" and expr.op not in {"var", "refmod", "function"}:
                     usage = self.storage_usage(field)
                     if usage in {"Display", "SignLeading"} and field.scale == 0 and expr.op == "text":
                         # cb_build_move_literal: the literal's bytes, right
@@ -956,6 +962,14 @@ class Emitter:
                     values.append(self.expression(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
             self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
+        elif op == "table_sort":
+            # cob_table_sort_init_key per key, then cob_table_sort of the
+            # active occurrences.
+            table, keys = a
+            entries = ", ".join(f"({offset}, {self.program.fields[name].size}, {self.storage_kind(self.program.fields[name])}, "
+                                f"{str(self.program.fields[name].kind == 'number').lower()}, {str(descending).lower()})"
+                                for descending, name, offset in keys)
+            self.write(f"storage_runtime::table_sort(&{self.reference(DataRef(table))}, &[{entries}]);")
         elif op in {"assign", "move"}:
             self.assignment(*a, move=op == "move")
         elif op == "compute":
@@ -1170,20 +1184,26 @@ class Emitter:
     def inspect(self, target, clauses):
         """cb_emit_inspect: init, then per item cob_inspect_start, BEFORE/AFTER
         in source order and the operation; TALLYING and REPLACING each finish."""
-        field = self.program.fields[target.name]
-        if target.start is None and field.kind == "number" and field.usage != "DISPLAY":
-            raise CobolError("INSPECT d'un champ binaire, packé ou index non pris en charge")
+        if isinstance(target, Expr):
+            # A literal or a function: TALLYING over a temporary field.
+            subject = self.unique()
+            self.write(f"let {subject} = storage_runtime::temporary(&({self.expression(target)}));")
+        else:
+            field = self.program.fields[target.name]
+            if target.start is None and field.kind == "number" and field.usage != "DISPLAY":
+                raise CobolError("INSPECT d'un champ binaire, packé ou index non pris en charge")
+            subject = self.reference(target)
         modes = {"all": "All", "leading": "Leading", "first": "First", "trailing": "Trailing"}
         for clause in clauses:
             self.write("{")
             self.indent += 1
             if clause[0] == "converting":
                 _, source, to, region = clause
-                self.write(f"let mut inspect = storage_runtime::Inspect::init_converting(&{self.reference(target)});")
+                self.write(f"let mut inspect = storage_runtime::Inspect::init_converting(&{subject});")
                 items = [("convert", source, to, region)]
             else:
                 replacing = clause[0] == "replacing"
-                self.write(f"let mut inspect = storage_runtime::Inspect::init(&{self.reference(target)}, {str(replacing).lower()});")
+                self.write(f"let mut inspect = storage_runtime::Inspect::init(&{subject}, {str(replacing).lower()});")
                 items = clause[1]
             for item in items:
                 region = item[3]

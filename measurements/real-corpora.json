@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T15:01:36+00:00",
- "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
- "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
+ "measured_at": "2026-10-25T15:23:20+00:00",
+ "git_head": "99454c7dcf0a04e9c36ba69eb5a101982a27dd92",
+ "implementation_sha256": "ecd35783fac9e0d632f482fc69ba788d65c00d1fa6bd64983a2111791b89a5c4",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
-  "accepted": 693,
+  "accepted": 703,
   "cobc_accepted": 738,
-  "gap": 45,
+  "gap": 35,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -101,7 +101,7 @@
     "kind": "cours IBM Enterprise COBOL"
    },
    "sources": 32,
-   "accepted": 11,
+   "accepted": 12,
    "internal_errors": 0,
    "blockers": [
     [
@@ -113,10 +113,6 @@
      3
     ],
     [
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
-     1
-    ],
-    [
      "conversion implicite numérique/texte non prise en charge: GROSS-PAY",
      1
     ]
@@ -124,19 +120,9 @@
    "cobc_accepted": 12,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 1,
-   "gap_sources": [
-    [
-     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/COBOL.cobol",
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine"
-    ]
-   ],
-   "gap_blockers": [
-    [
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
-     1
-    ]
-   ]
+   "gap": 0,
+   "gap_sources": [],
+   "gap_blockers": []
   },
   "beg-cobol-for-programmers": {
    "kind": "livre, programmes complets",
@@ -147,12 +133,12 @@
     "kind": "livre, programmes complets"
    },
    "sources": 113,
-   "accepted": 55,
+   "accepted": 62,
    "internal_errors": 0,
    "blockers": [
     [
      "PROCEDURE attendu",
-     24
+     23
     ],
     [
      "instruction non prise en charge: *",
@@ -175,14 +161,6 @@
      2
     ],
     [
-     "fichier non déclaré: COUNTYDETAILS",
-     2
-    ],
-    [
-     "cible INSPECT littérale ou fonction non prise en charge",
-     2
-    ],
-    [
      "END PROGRAM ne correspond pas au PROGRAM-ID",
      2
     ],
@@ -195,43 +173,23 @@
      2
     ],
     [
-     "entrée SPECIAL-NAMES non prise en charge: SPACE",
+     "instruction non prise en charge: LISTING",
+     1
+    ],
+    [
+     "expression non prise en charge: INSPECT",
+     1
+    ],
+    [
+     "littéral multiligne non pris en charge",
      1
     ]
    ],
    "cobc_accepted": 65,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 10,
+   "gap": 3,
    "gap_sources": [
-    [
-     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-1.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: SPACE"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-9.cbl",
-     "PROCEDURE attendu"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-7.cbl",
-     "fichier non déclaré: COUNTYDETAILS"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-8.cbl",
-     "fichier non déclaré: COUNTYDETAILS"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-2.cbl",
-     "cible INSPECT littérale ou fonction non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-3.cbl",
-     "cible INSPECT littérale ou fonction non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-4.cbl",
-     "END-IF ou point attendu"
-    ],
     [
      "978-1-4302-6253-4_Coughlan_Ch16/Listing16-2.cbl",
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge"
@@ -247,28 +205,8 @@
    ],
    "gap_blockers": [
     [
-     "fichier non déclaré: COUNTYDETAILS",
-     2
-    ],
-    [
-     "cible INSPECT littérale ou fonction non prise en charge",
-     2
-    ],
-    [
      "clause RD CONTROL non prise en charge",
      2
-    ],
-    [
-     "entrée SPECIAL-NAMES non prise en charge: SPACE",
-     1
-    ],
-    [
-     "PROCEDURE attendu",
-     1
-    ],
-    [
-     "END-IF ou point attendu",
-     1
     ],
     [
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
@@ -285,7 +223,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 291,
+   "accepted": 293,
    "internal_errors": 0,
    "blockers": [
     [
@@ -340,7 +278,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 20,
+   "gap": 18,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -353,10 +291,6 @@
     [
      "src/test/resources/gov/nist/EXEC85.CBL",
      "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/call/FunctionCall.cbl",
-     "expression non prise en charge: :"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
@@ -385,10 +319,6 @@
     [
      "src/test/resources/io/proleap/cobol/asg/procedure/stop/StopStatementGiving.cbl",
      "instruction non prise en charge: GIVING"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/FunctionCall.cbl",
-     "expression non prise en charge: :"
     ],
     [
      "src/test/resources/io/proleap/cobol/ast/variable/Literal.cbl",
@@ -434,10 +364,6 @@
     ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
-     2
-    ],
-    [
-     "expression non prise en charge: :",
      2
     ],
     [
@@ -634,9 +560,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T15:01:36+00:00",
-  "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
-  "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
+  "measured_at": "2026-10-25T15:23:20+00:00",
+  "git_head": "99454c7dcf0a04e9c36ba69eb5a101982a27dd92",
+  "implementation_sha256": "ecd35783fac9e0d632f482fc69ba788d65c00d1fa6bd64983a2111791b89a5c4",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -704,8 +630,8 @@
     }
    },
    "cobol-programming-course": {
-    "programs": 11,
-    "identical": 9,
+    "programs": 12,
+    "identical": 10,
     "different": 0,
     "refused": 0,
     "timeout": 2,
@@ -726,6 +652,10 @@
       "status": "timeout"
      },
      "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBLC2.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/COBOL.cobol": {
       "status": "identical",
       "exit": 0
      },
@@ -756,8 +686,8 @@
     }
    },
    "beg-cobol-for-programmers": {
-    "programs": 52,
-    "identical": 45,
+    "programs": 59,
+    "identical": 52,
     "different": 1,
     "refused": 0,
     "timeout": 6,
@@ -780,6 +710,10 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch04/Listing4-2 Add two numbers.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-1.cbl": {
       "status": "identical",
       "exit": 0
      },
@@ -816,6 +750,10 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch05/Listing5-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-9.cbl": {
       "status": "identical",
       "exit": 0
      },
@@ -942,6 +880,14 @@
       "status": "identical",
       "exit": 1
      },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-7.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-9.cbl": {
       "status": "identical",
       "exit": 0
@@ -952,6 +898,18 @@
      },
      "978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl": {
       "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-2.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-4.cbl": {
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch15/Listing15-6.cbl": {
       "status": "identical",

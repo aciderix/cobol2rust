@@ -44,7 +44,6 @@ class InspectSyntaxTests(unittest.TestCase):
                      'inspect x tallying n for all 5.',
                      'inspect x tallying n for all p.',
                      'inspect x tallying e for characters.',
-                     'inspect "ABC" tallying n for characters.',
                      'inspect backward x tallying n for characters.'):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(DATA, body)).parse()).generate()

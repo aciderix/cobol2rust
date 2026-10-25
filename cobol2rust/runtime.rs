@@ -86,6 +86,20 @@ pub fn surely_absent(name: &str, present: &[&str]) -> bool {
         && name != "SYSTEM" && name != "EXTFH" && !present.contains(&name)
 }
 
+/// Reference modification of a function result (cb_build_intrinsic): its
+/// bytes from start, for length or to the end; beyond the result GnuCOBOL
+/// would read other storage (a named stop here).
+pub fn refmod(value: &Value, start: &Value, length: Option<&Value>) -> Value {
+    let bytes = value.bytes();
+    let size = bytes.len() as i128;
+    let start = start.integer("reference modification");
+    let length = match length { Some(length) => length.integer("reference modification"), None => size - start + 1 };
+    if start < 1 || length < 1 || start - 1 + length > size {
+        fail("reference modification beyond the function result not modelled");
+    }
+    Value::Bytes(bytes[(start - 1) as usize..(start - 1 + length) as usize].to_vec())
+}
+
 pub fn fail(message: &str) -> ! {
     eprintln!("cobol2rust: COBOL line {}: {}", COBOL_LINE.load(Ordering::Relaxed), message);
     std::process::exit(70)

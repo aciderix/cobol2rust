@@ -85,39 +85,39 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T15:01:36+00:00 (commit `1c167ab0f8`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T15:23:20+00:00 (commit `99454c7dcf`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 14 | 14 | 0 | 0 |
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
-| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
-| beg-cobol-for-programmers | livre, programmes complets | 113 | 55 | 65 | 10 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 291 | 311 | 20 | 0 |
+| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
+| beg-cobol-for-programmers | livre, programmes complets | 113 | 62 | 65 | 3 | 0 |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 293 | 311 | 18 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 317 | 331 | 14 | 0 |
-| **Total** | | **2458** | **693** | **738** | **45** | **0** |
+| **Total** | | **2458** | **703** | **738** | **35** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:01:36+00:00, commit `1c167ab0f8`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:23:20+00:00, commit `99454c7dcf`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
 | zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
-| cobol-programming-course | 11 | 9 | 0 | 0 | 2 |
-| beg-cobol-for-programmers | 52 | 45 | 1 | 0 | 6 |
+| cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
+| beg-cobol-for-programmers | 59 | 52 | 1 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 6 × IDENTIFICATION DIVISION attendue
-2. 4 × PROCEDURE attendu
-3. 4 × instruction non prise en charge: XML
+2. 4 × instruction non prise en charge: XML
+3. 3 × PROCEDURE attendu
 4. 3 × EXIT SECTION requiert une section de procédure
-5. 2 × fichier non déclaré: COUNTYDETAILS
-6. 2 × cible INSPECT littérale ou fonction non prise en charge
-7. 2 × clause RD CONTROL non prise en charge
-8. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
-9. 2 × expression non prise en charge: :
-10. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
+5. 2 × clause RD CONTROL non prise en charge
+6. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
+7. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
+8. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
+9. 1 × clause SELECT non prise en charge
+10. 1 × paragraphe CONFIGURATION non pris en charge
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -179,3 +179,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   liste des blocages limitée à l'écart. Prochains : SORT de table
   (`cob_table_sort`), en-tête IDENTIFICATION absent suivi d'AUTHOR, INSPECT
   d'une fonction, Report Writer avec CONTROLS.
+- 2026-10-25 — SORT de table (`cob_table_sort` : tri fusion stable de la
+  glibc, clé lue à son offset dans son parent comme `cb_emit_sort_init`),
+  INSPECT d'un littéral ou d'une fonction (TALLYING), sous-chaîne d'un
+  résultat de fonction, IF clos par le terminateur englobant, entrées
+  documentaires après PROGRAM-ID sans en-tête, CLASS avec figuratives, FD à
+  enregistrement numérique : **693 → 703** acceptées, écart 45 → 35 ; cours
+  **12/12** et livre 55 → 62/113 (cobc 65). Exécution identique à cobc : cours
+  10/12, livre 45 → **52/59** (Listing13-6 : indice hors bornes ; 6 délais de
+  programmes interactifs). Émission NIST 451/458. Restent dans le livre :
+  Report Writer avec CONTROLS (18-1, 18-2), CALL d'un nom en casse mixte
+  (16-2, qui pourrait désigner un symbole C du processus).

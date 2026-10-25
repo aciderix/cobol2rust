@@ -793,3 +793,16 @@ corpus réels : 685 → 693/2458 ; CardDemo 14/44 et zopeneditor 5/5, autant
 que cobc. Les modules acceptés ne sont pas exécutés par la mesure (ils
 attendent un appelant) ; un accès à un paramètre non transmis est un arrêt
 nommé, là où GnuCOBOL lit une adresse indéterminée.
+
+## Progression : SORT de table et formes du livre
+
+Port de `cob_table_sort` (tri fusion stable de `qsort` en glibc 2.39, clés
+numériques par `cob_numeric_cmp`, autres par `memcmp` ou la séquence de
+classement du programme, offset de clé relatif à son parent comme
+`cb_emit_sort_init`, clé OCCURS par défaut, élément entier pour KEY sans nom),
+INSPECT TALLYING d'un littéral ou d'une fonction (`cb_emit_inspect`),
+sous-chaîne d'un résultat de fonction, IF terminé par le terminateur d'une
+instruction englobante, entrées documentaires sans IDENTIFICATION DIVISION,
+CLASS avec figuratives, FD à enregistrement numérique. Fixtures
+`table_sort`, `scope_and_function_forms`, `numeric_record` identiques à cobc.
+Corpus réels : 703/2458 acceptées (cobc 738) ; cours 12/12, livre 62/113.

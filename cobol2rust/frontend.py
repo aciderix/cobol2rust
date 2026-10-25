@@ -932,8 +932,11 @@ class Parser:
                         while self.t.key.isdigit() and self.t.key not in {"01", "1", "77"}:
                             self.declaration(file_record=True)
                         descriptor = self.fields[key]
-                        if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
-                            self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
+                        # The record area holds the bytes; a numeric or edited
+                        # record is a view of them like any other.
+                        if record.key not in {"01", "1"} or descriptor.table or descriptor.redefines or (
+                                descriptor.kind == "number" and descriptor.usage == "INDEX"):
+                            self.error("FD requiert un enregistrement 01 sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
                             # LINE SEQUENTIAL records must also share one size (validate_files).
                             if spec.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL", "RELATIVE", "INDEXED", "SORT"}:
@@ -1970,7 +1973,7 @@ class Parser:
                     self.expect("ALPHANUMERIC")
                 self.accept("IS")
                 members = set()
-                while self.t.string or self.t.key[:1].isdigit():
+                while self.t.string or self.t.key[:1].isdigit() or self.t.key in INSPECT_FIGURATIVES:
                     low = ordinal_or_text()
                     if self.accept("THRU") or self.accept("THROUGH"):
                         high = ordinal_or_text()
@@ -2538,13 +2541,29 @@ class Parser:
     }
 
     def function_call(self):
+        """FUNCTION name [(exp_list)] [(start:[length])]: a reference
+        modification of an alphanumeric result (func_args _func_refmod)."""
+        result = self.function_value()
+        if not self.at("("):
+            return result
+        self.take()
+        start = self.expr()
+        self.expect(":")
+        length = None if self.at(")") else self.expr()
+        self.expect(")")
+        if not (result.op == "text" or (result.op == "function" and self.FUNCTIONS[result.args[0]][1] == "text")):
+            self.error("modification de référence d'une FUNCTION numérique non prise en charge")
+        return Expr("refmod", (result, start, length))
+
+    def function_value(self):
         """FUNCTION name [(exp_list)]: arguments separated by spaces or commas."""
         name = self.take()
         if name.string or name.key not in self.FUNCTIONS:
             self.error(f"FUNCTION {name.text} non prise en charge")
         count, _ = self.FUNCTIONS[name.key]
         args = []
-        if self.accept("("):
+        # A function without arguments: "(" starts a reference modification.
+        if self.at("(") and (count != 0 or name.key == "RANDOM" or self.tokens[self.i + 1].key == ")") and self.accept("("):
             while not self.accept(")"):
                 self.accept(",")
                 if self.at(")"):
@@ -2555,8 +2574,6 @@ class Parser:
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
                 or (name.key == "NUMVAL-C" and len(args) > 2):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
-        if self.at("("):
-            self.error("modification de référence d'une FUNCTION non prise en charge")
         if name.key == "WHEN-COMPILED":
             # cb_set_intr_when_compiled: a literal of the compilation time,
             # hundredths and local UTC offset included.
@@ -3322,7 +3339,11 @@ class Parser:
             no = self.block({"END-IF", "ELSE"}) if otherwise else []
             if otherwise and not no:
                 self.error("ELSE without imperative statement")
-            if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
+            # Without END-IF, the IF also ends where its branch does: at the
+            # scope terminator or WHEN of an enclosing statement (block).
+            ended = self.at(".") or self.at("ELSE") or self.at("WHEN") or (
+                not self.t.string and self.t.key.startswith("END-") and self.t.key in BOUNDARIES)
+            if not self.accept("END-IF") and not ended:
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
         if verb == "ALTER":
@@ -3914,9 +3935,18 @@ class Parser:
     def inspect_statement(self, line):
         if self.at("BACKWARD"):
             self.error("INSPECT BACKWARD non pris en charge (cobc: PENDING)")
-        if self.t.string or not self.candidates(self.t.key):
+        if self.t.string or (self.at("FUNCTION") and not self.candidates("FUNCTION")):
+            # send_identifier: a literal or an alphanumeric function, for
+            # TALLYING only (cb_emit_inspect).
+            target = self.expr(primary=True)
+            if target.op == "function" and self.FUNCTIONS[target.args[0]][1] != "text":
+                self.error("cible INSPECT fonction numérique invalide")
+            if target.op not in {"text", "function"}:
+                self.error("cible INSPECT littérale ou fonction non prise en charge")
+        elif not self.candidates(self.t.key):
             self.error("cible INSPECT littérale ou fonction non prise en charge")
-        target = self.variable()
+        else:
+            target = self.variable()
         clauses = []
         if self.accept("TALLYING"):
             items, counter, previous = [], None, None
@@ -3956,6 +3986,8 @@ class Parser:
             if previous not in {"characters", "value"}:
                 self.error("TALLYING clause is incomplete")
             clauses.append(("tallying", tuple(items)))
+        if isinstance(target, Expr) and (self.at("REPLACING") or self.at("CONVERTING")):
+            self.error(f"invalid target for {self.t.key}")
         if self.accept("REPLACING"):
             items, mode = [], None
             while True:
@@ -4078,6 +4110,64 @@ class Parser:
                 keys.append((value, key) if descending else (key, value))
         return Stmt("search_all", (table.name, index, at_end, keys, whens[0][1]), line)
 
+    def table_sort_statement(self, line):
+        """SORT table [ON ASCENDING|DESCENDING KEY [names]]... (sort_merge_body,
+        cb_emit_sort_init): without KEY the first OCCURS KEY, with KEY and no
+        names the element itself; each key read at its offset in its parent."""
+        def qualified_name():  # qualified_word
+            label, qualifiers = self.name(), []
+            while self.accept("OF") or self.accept("IN"):
+                qualifiers.append(self.name())
+            return DataRef(self.resolve(label, tuple(qualifiers)))
+        ref = qualified_name()
+        table = self.fields[ref.name]
+        if self.at("(") or len(table.dimensions) != 1 or not table.table:
+            self.error("SORT limité à une table à une dimension, sans indice")
+        keys, phrase = [], False
+        while self.accept("ON") or self.at("ASCENDING") or self.at("DESCENDING"):
+            if not (self.at("ASCENDING") or self.at("DESCENDING")):
+                self.error("ASCENDING ou DESCENDING attendu")
+            phrase = True
+            descending = self.take().key == "DESCENDING"
+            self.accept("KEY")
+            self.accept("IS")
+            named = False
+            while not self.t.string and self.candidates(self.t.key) and not self.at("ON"):
+                key = qualified_name()
+                if not (key.name == ref.name or key.name.startswith(ref.name + ".")):
+                    self.error("clé de SORT de table requise dans l'élément, sans indice")
+                keys.append((descending, key.name))
+                named = True
+            if not named:
+                keys.append((descending, ref.name))
+        if not phrase:
+            if not table.search_keys:
+                self.error("table SORT requires KEY phrase")
+            descending, label = table.search_keys[0]
+            keys.append((descending, self.key_field(ref.name, label)))
+        if self.accept("WITH") or self.at("DUPLICATES"):
+            # glibc's qsort is a merge sort: equal keys keep their order.
+            self.expect("DUPLICATES")
+            self.accept("IN")
+            self.accept("ORDER")
+        if self.accept("COLLATING") or self.at("SEQUENCE"):
+            self.expect("SEQUENCE")
+            self.accept("IS")
+            self.check_identity_alphabet(self.t, self.name(), "SORT COLLATING SEQUENCE")
+        if self.at("INPUT") or self.at("USING") or self.at("OUTPUT") or self.at("GIVING"):
+            self.error("USING invalid with table SORT")
+        sort_keys = []
+        for descending, name in keys:
+            f = self.fields[name]
+            # cb_emit_sort_init: the key's offset in its parent, not in the element.
+            offset = f.offset - (self.fields[f.parent].offset if f.parent else 0)
+            if f.kind == "number" and f.usage == "INDEX":
+                self.error("clé de SORT de table USAGE INDEX non prise en charge")
+            if offset + f.size > table.size:
+                self.error("clé de SORT de table lue hors de l'élément non prise en charge")
+            sort_keys.append((descending, name, offset))
+        return Stmt("table_sort", (ref.name, sort_keys), line)
+
     def key_field(self, table, label):
         names = [name for name, f in self.fields.items()
                  if f.label == label and (name == table or name.startswith(table + "."))]
@@ -4089,6 +4179,8 @@ class Parser:
         """SORT/MERGE sd ON ASCENDING/DESCENDING KEY ... as cobc emits it:
         cob_file_sort_init and keys, USING files or a PERFORM of the input
         procedure, GIVING files or a PERFORM of the output procedure, close."""
+        if verb == "SORT" and not self.t.string and self.t.key not in self.files and self.candidates(self.t.key):
+            return self.table_sort_statement(line)
         name = self.file_name()
         spec = self.files[name]
         if not spec.sort:
