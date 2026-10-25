@@ -46,7 +46,6 @@ class CallTests(unittest.TestCase):
         cases = [
             # GnuCOBOL gives this NOT ON EXCEPTION to the DISPLAY, not to the CALL.
             program("01 n pic 9.", 'call "X" on exception display "A" not on exception display "B" end-call. stop run.'),
-            subprogram("S", "01 a pic 9. 01 b pic 9.", "a", "goback."),
             subprogram("S", "01 a pic 9 value 1.", "a", "goback."),
             program("01 n pic 9.", 'call "X" using by value n. stop run.'),
             program("01 n pic 9.", 'call "X" returning n. stop run.'),
@@ -70,9 +69,12 @@ class CallTests(unittest.TestCase):
         with self.assertRaises(CobolError):
             Parser(text.replace("end program SIB.", "end program SIB.\n" + text.split("end program")[0])).parse()
 
-    def test_main_program_with_using_is_refused(self):
-        with self.assertRaises(CobolError):
-            Emitter(Parser(subprogram("S", "01 a pic 9.", "a", "goback.")).parse()).generate()
+    def test_main_program_with_using_is_a_module(self):
+        # cobc -x refuses it; it runs as cobcrun runs it (tests/test_entry.py),
+        # a LINKAGE item outside USING has no address.
+        rust, _ = Emitter(Parser(subprogram("S", "01 a pic 9. 01 b pic 9.", "a", "goback.")).parse()).generate()
+        self.assertIn("program.call(&mut unit, Vec::new());", rust)
+        self.assertIn("storage_runtime::unbind", rust)
 
     def test_program_id_must_match_called_name(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -85,19 +85,19 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T14:30:05+00:00 (commit `dcf6440596`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T15:01:36+00:00 (commit `1c167ab0f8`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 10 | 14 | 4 | 0 |
-| zopeneditor-sample | application exemple IBM | 5 | 3 | 5 | 2 | 0 |
+| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 14 | 14 | 0 | 0 |
+| zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 55 | 65 | 10 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 290 | 311 | 21 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 316 | 331 | 15 | 0 |
-| **Total** | | **2458** | **685** | **738** | **53** | **0** |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 291 | 311 | 20 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 317 | 331 | 14 | 0 |
+| **Total** | | **2458** | **693** | **738** | **45** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T14:30:05+00:00, commit `dcf6440596`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:01:36+00:00, commit `1c167ab0f8`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,13 +111,13 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 6 × IDENTIFICATION DIVISION attendue
 2. 4 × PROCEDURE attendu
 3. 4 × instruction non prise en charge: XML
-4. 3 × instruction non prise en charge: ENTRY
-5. 3 × USAGE/clause non pris en charge
-6. 3 × EXIT SECTION requiert une section de procédure
-7. 2 × article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC
-8. 2 × fichier non déclaré: COUNTYDETAILS
-9. 2 × cible INSPECT littérale ou fonction non prise en charge
-10. 2 × clause RD CONTROL non prise en charge
+4. 3 × EXIT SECTION requiert une section de procédure
+5. 2 × fichier non déclaré: COUNTYDETAILS
+6. 2 × cible INSPECT littérale ou fonction non prise en charge
+7. 2 × clause RD CONTROL non prise en charge
+8. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
+9. 2 × expression non prise en charge: :
+10. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -167,3 +167,15 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   livre **41 → 45/52**, CardDemo 8/8, zopeneditor 3/3. Acceptation statique
   inchangée (685/2458), NIST 451/458. Restent : indices hors bornes
   (Listing13-6), DISPLAY signé ou binaire invalide, programmes interactifs.
+- 2026-10-25 — ENTRY (`emit_entry`, `output_entry_function` : point
+  d'entrée trouvé une fois le module chargé), programme à PROCEDURE DIVISION
+  USING converti seul comme module (`cobc -m`, exécuté comme par `cobcrun`),
+  articles LINKAGE sans adresse (hors USING, non transmis : arrêt nommé au
+  premier accès), `LENGTH OF` (`cb_build_length`), DEPENDING ON qualifié :
+  **685 → 693** acceptées, écart 53 → 45, **CardDemo 10 → 14/44 et
+  zopeneditor 3 → 5/5, tous deux à égalité avec cobc**. NIST complet sur
+  l'étape précédente : 427/427, 9610 PASS ; émission 451/458. Outil de
+  mesure : horloge figée pour l'exécution (SAM1 divergeait d'une seconde) et
+  liste des blocages limitée à l'écart. Prochains : SORT de table
+  (`cob_table_sort`), en-tête IDENTIFICATION absent suivi d'AUTHOR, INSPECT
+  d'une fonction, Report Writer avec CONTROLS.

@@ -781,3 +781,15 @@ identiques (CardDemo 8/8, zopeneditor 3/3, cours 9/11, livre 45/52) ; les
 autres sont un indice hors bornes et des programmes interactifs sans jeu
 d'entrée (délai). Avec `--runtime-checks`, toute donnée invalide reste un arrêt
 nommé.
+
+## Progression : ENTRY, modules et LENGTH OF
+
+Port de `emit_entry` et `output_entry_function` (ENTRY littéral avec USING,
+liaison par point d'entrée, nom résolu une fois le module chargé comme par
+`cob_resolve`), d'un programme à PROCEDURE DIVISION USING exécuté comme
+module (`cobc -m` puis `cobcrun`, sans argument), d'un article LINKAGE sans
+adresse, de `cb_build_length` et de DEPENDING ON qualifié. Acceptation des
+corpus réels : 685 → 693/2458 ; CardDemo 14/44 et zopeneditor 5/5, autant
+que cobc. Les modules acceptés ne sont pas exécutés par la mesure (ils
+attendent un appelant) ; un accès à un paramètre non transmis est un arrêt
+nommé, là où GnuCOBOL lit une adresse indéterminée.

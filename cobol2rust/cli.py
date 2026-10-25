@@ -77,8 +77,6 @@ def run_unit(source: Path, fmt, includes, call_paths):
     """
     expanded, copies = load_source(source, list(includes), fmt)
     main = Parser(expanded).parse()
-    if main.using:
-        raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
     directories = [Path(path) for path in call_paths]
     units = {}
     # Programs after the main one in its source are in the executable itself:
@@ -151,9 +149,12 @@ def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
     called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
     present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
                for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
-    emitters = [Emitter(main, called=called, present=present)]
+    entries = [name for program in (main, *(sub for _, sub, _, _ in subprograms))
+               for name, _ in getattr(program, "entries", [])]
+    emitters = [Emitter(main, called=called, present=present, entries=entries)]
     for index, (_, sub, _, _) in enumerate(subprograms, 1):
-        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present))
+        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present,
+                                entries=entries))
     rust, mapping = generate_unit(emitters)
     return main, expanded, copies, subprograms, rust, mapping
 
@@ -195,6 +196,8 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
               "files": [asdict(f) for f in program.files.values()],
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
+              # PROCEDURE DIVISION USING: a module, run as cobcrun runs it.
+              "module": program.entry_name if program.using else None,
               "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
                                "in_main_source": Path(path).resolve() == Path(source).resolve(),
                                "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),

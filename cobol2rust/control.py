@@ -26,6 +26,8 @@ class ControlGraph:
         # Inline PERFORMs being lowered: (exit_label, cycle_label) targets of
         # EXIT PERFORM and EXIT PERFORM CYCLE (codegen.c output_perform).
         self.performs: list[tuple[int, int]] = []
+        # ENTRY name: its position (an entry of the program's function).
+        self.entry_points: dict[str, int] = {}
         self._end = self._add("end")
         # cobc's static label_N of each paragraph modified by ALTER.
         self.alter_slots = {name: slot for slot, name in enumerate(program.alters)}
@@ -308,6 +310,11 @@ class ControlGraph:
         if op == "sentence_end":
             self._sentence = after
             return after
+        if op == "entry":
+            # emit_entry: a label; with DEBUGGING MODE its "START PROGRAM".
+            position = self._add("debug_contents", ("START PROGRAM", after)) if self.debug else after
+            self.entry_points[args[0]] = position
+            return position
         if op == "next_sentence":
             return self._add("jump", (self._sentence,), stmt)
         if op == "if":

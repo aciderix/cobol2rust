@@ -106,7 +106,7 @@ Ces résultats portent sur les entrées testées.
 | Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
 | Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` |
 | Édition numérique | Signe fixe `+`/`-`, `9` et point décimal explicite ; `Z` initiaux suivis de `9` obligatoires ; rendu depuis une source numérique, copie brute vers texte |
-| Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON`, `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
+| Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON` (objet qualifié `OF`/`IN` compris), `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, y compris de groupe avec figurative ou `ALL` (répétée sur la taille du groupe), listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
 | Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` ; `COMP-5` / `COMPUTATIONAL-5` et `BINARY-CHAR/SHORT/LONG/DOUBLE [SIGNED/UNSIGNED]` en binaire réel petit-boutiste : valeur bornée par la taille et non la PICTURE (repli modulo 2^(8×taille) sans SIZE ERROR, SIZE ERROR sur la capacité en bits), affichage `cob_print_realbin` ; `NOT ON SIZE ERROR` seul vers COMP-5 refusé |
 | Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
@@ -118,7 +118,7 @@ Ces résultats portent sur les entrées testées.
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
 | Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
 | Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
-| Registres | `RETURN-CODE` (BINARY-LONG par programme, partagé par les programmes contenus, recopié de l'appelé après CALL, conservé entre les CALL, code de sortie de STOP RUN et du GOBACK principal) |
+| Registres | `LENGTH [OF]` d'un article, d'un littéral ou d'une fonction (`cb_build_length` : littéral pour une taille fixe, somme sur l'OCCURS DEPENDING actif sinon, FUNCTION LENGTH pour une sous-chaîne) ; `RETURN-CODE` (BINARY-LONG par programme, partagé par les programmes contenus, recopié de l'appelé après CALL, conservé entre les CALL, code de sortie de STOP RUN et du GOBACK principal) |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
@@ -224,7 +224,24 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   et ferme ses fichiers ouverts ; CALL ou CANCEL d'un programme actif s'arrête ;
 - les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
   de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
-  son argument s'arrête au lieu de lire la mémoire voisine ;
+  son argument s'arrête au lieu de lire la mémoire voisine ; un article que
+  le CALL ne transmet pas (moins d'arguments, article hors du USING de
+  l'entrée, LINKAGE hors de tout USING) n'a pas d'adresse, comme le NULL de
+  cobc, et son premier accès est un arrêt nommé (`LINKAGE item not passed by
+  caller`) ;
+- `ENTRY 'nom' [USING …]` (`emit_entry`, `output_entry_function`) ajoute un
+  point d'entrée : un CALL de ce nom commence à l'instruction ENTRY avec ses
+  paramètres, que le programme traverse sinon comme une étiquette. Comme pour
+  les modules de cobc, le nom n'est trouvé qu'une fois le programme chargé par
+  un CALL de son PROGRAM-ID ; avant, c'est EC-PROGRAM-NOT-FOUND. ENTRY est
+  refusé dans un programme contenu, en cobol85, avec convention d'appel ou
+  FOR GO TO ;
+- un programme principal avec PROCEDURE DIVISION USING est un module (cobc
+  refuse `-x`) : il s'exécute comme `cobcrun` l'appelle, sans argument ;
+  EXIT PROGRAM et GOBACK terminent alors l'unité avec RETURN-CODE. `verify` le
+  compile avec `cobc -m` et le lance par `cobcrun`. cobcrun ne lui passe
+  aucune adresse (le C lit un paramètre indéterminé) : le Rust s'arrête au
+  premier accès à un paramètre ;
 - EXIT PROGRAM est sans effet dans le programme principal, GOBACK y vaut STOP RUN ;
   STOP RUN dans un appelé termine toute l'unité ;
 - un nom introuvable prend ON EXCEPTION seulement s'il est sûrement absent : mot
@@ -266,8 +283,8 @@ sa procédure, FD
 EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
 GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
 GLOBAL, plusieurs programmes dans un source appelé,
-EXTERNAL AS et VALUE d'un article EXTERNAL, LINKAGE hors de USING, VALUE en
-LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
+EXTERNAL AS et VALUE d'un article EXTERNAL, VALUE en LINKAGE, SET ADDRESS OF,
+et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
 
 ## NEXT SENTENCE et PICTURE P

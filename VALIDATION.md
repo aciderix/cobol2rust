@@ -1,5 +1,20 @@
 # Validation — 22 octobre 2026
 
+## Données invalides, ENTRY et modules — 25 octobre 2026
+
+- Vérification NIST complète sur 1c167ab (données invalides sans contrôles,
+  routine de comparaison de cobc) : **427/427 conformes, 9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT** (`build/nist-verify-1c167ab.json`) ; émission
+  451/458.
+- Code réel (`tools/real_corpora.py --cobc --execute --record`, horloge
+  figée à `2026/10/25 12:00:00.00`) : CardDemo 8/8 identiques, zopeneditor
+  3/3, cours 9/11 (2 délais, boucles aussi infinies en natif), livre 45/52
+  (Listing13-6 : indice hors bornes ; 6 délais de programmes interactifs).
+- Nouvelles fixtures natives : `invalid_numeric_data`,
+  `invalid_numeric_compare`, `invalid_numeric_move`, `entry_statement`,
+  `entry_not_loaded` (avec `entry_calls/ENTSUB.cob`), `module_using`
+  (exécuté par `cobcrun`), `length_of`.
+
 ## Exécution comparée sur code réel — 25 octobre 2026
 
 `tools/real_corpora.py --cobc --execute --record` compile, exécute (stdin

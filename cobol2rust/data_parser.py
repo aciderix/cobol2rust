@@ -371,6 +371,8 @@ def declaration(p, file_record=False):
             if variable:
                 p.expect("DEPENDING"); p.accept("ON")
                 depending = p.name()
+                while p.accept("OF") or p.accept("IN"):
+                    depending += "\0" + p.name()
         elif p.at("ASCENDING") or p.at("DESCENDING"):
             # ASCENDING/DESCENDING KEY: the keys of SEARCH ALL, in order.
             if not table:

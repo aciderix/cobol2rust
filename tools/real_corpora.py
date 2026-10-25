@@ -59,9 +59,14 @@ CORPORA = {
 EXECUTED = ("carddemo", "zopeneditor-sample", "cobol-programming-course", "beg-cobol-for-programmers")
 
 
+# Both runs read the same clock (libcob check_current_date): a program that
+# shows ACCEPT FROM DATE/TIME would otherwise differ across a second boundary.
+EXECUTION_CLOCK = "2026/10/25 12:00:00.00"
+
+
 def execute_source(name: str, source: str) -> dict:
-    """Run one accepted program natively and in Rust, empty stdin, with the
-    files of its own directory as input data (a copy, under a short name that
+    """Run one accepted program natively and in Rust, empty stdin, a fixed
+    clock (EXECUTION_CLOCK), with the files of its own directory as input data (a copy, under a short name that
     cobc accepts as a program file name)."""
     from cobol2rust import frontend
     from cobol2rust.frontend import CobolError
@@ -75,7 +80,8 @@ def execute_source(name: str, source: str) -> dict:
         copy.write_bytes(original.read_bytes())
         try:
             report = verify(copy, fmt=settings["format"], includes=includes, data_dir=original.parent,
-                            call_paths=[original.parent], std=settings["std"], release=True)
+                            call_paths=[original.parent], std=settings["std"], release=True,
+                            runtime_env={"COB_CURRENT_DATE": EXECUTION_CLOCK})
         except CobolError as error:
             return {"status": "refused", "diagnostic": normalize(str(error).splitlines()[0] if str(error) else "")}
         except subprocess.TimeoutExpired:
@@ -213,7 +219,8 @@ def cap_table(summary: dict) -> str:
                          f"{entry['refused']} | {entry['timeout'] + entry['error']} |")
     gap = Counter()
     for entry in summary["corpora"].values():
-        for diagnostic, count in entry.get("gap_blockers") or entry["blockers"]:
+        # Without cobc, every refusal; with it, only the gap (maybe none).
+        for diagnostic, count in entry["gap_blockers"] if "gap_blockers" in entry else entry["blockers"]:
             gap[diagnostic] += count
     lines += ["", "Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :", ""]
     lines += [f"{rank}. {count} × {diagnostic}" for rank, (diagnostic, count) in enumerate(gap.most_common(10), 1)]

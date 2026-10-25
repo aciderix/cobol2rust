@@ -536,7 +536,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENABLE DISABLE RECEIVE SEND PURGE".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
@@ -879,7 +879,7 @@ class Parser:
             self.error("IDENTIFICATION DIVISION attendue")
         self.expect("PROGRAM-ID")
         self.expect(".")
-        entry_name = self.t.text
+        entry_name = self.program_name = self.t.text
         name = self.name()
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
@@ -974,7 +974,8 @@ class Parser:
 
         for descriptor in self.fields.values():
             if descriptor.depending:
-                descriptor.depending = self.resolve(descriptor.depending)
+                label, *qualifiers = descriptor.depending.split("\0")
+                descriptor.depending = self.resolve(label, tuple(qualifiers))
         # SAME RECORD AREA (finalize_file): the records of the later FDs
         # redefine the record area of the first FD of the group.
         order = list(self.fields)
@@ -1008,21 +1009,10 @@ class Parser:
             self.expect("PROCEDURE")
             self.expect("DIVISION")
         if procedure and self.accept("USING"):
-            while not self.at("."):
-                if self.accept("BY"):
-                    if not self.accept("REFERENCE"):
-                        self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
-                if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
-                    self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
-                key = self.resolve(self.name())
-                field = self.fields[key]
-                if not field.linkage or field.parent is not None or field.redefines or key in using:
-                    self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
-                using.append(key)
-            if not using:
-                self.error("USING requiert au moins un paramètre")
+            using = self.using_list(lambda: self.at("."))
         if procedure:
             self.expect(".")
+        self.entries = []
         entry, paragraphs = [], {}
         blocks = [ProcedureBlock(None, None, entry)]
         sections, segments = {}, {}
@@ -1125,10 +1115,6 @@ class Parser:
             self.error("END DECLARATIVES attendu")
         if current_section is not None:
             sections[current_section] = (sections[current_section][0], len(blocks))
-        unbound = [f.label for f in self.fields.values()
-                   if f.linkage and f.parent is None and not f.redefines and f.name not in using]
-        if unbound:
-            self.error(f"article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: {unbound[0]}")
         if not self.debugging_mode:
             # Without DEBUGGING MODE the USE FOR DEBUGGING sections are not
             # compiled (skip_statements).
@@ -1141,6 +1127,7 @@ class Parser:
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
+        program.entries = self.entries
         program.segments = segments
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
@@ -2413,6 +2400,8 @@ class Parser:
             left = Expr("linage", (self.linage_file(),))
         elif not t.string and t.key in {"LINE-COUNTER", "PAGE-COUNTER"}:
             left = Expr("report_counter", (self.counter_report(t.key), t.key))
+        elif not t.string and t.key == "LENGTH" and not self.candidates(t.key):
+            left = self.length_of()
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -2596,6 +2585,78 @@ class Parser:
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         return Expr("function", (name.key, tuple(args)))
 
+    def using_list(self, ended):
+        """PROCEDURE DIVISION / ENTRY USING: distinct 01/77 LINKAGE items."""
+        using = []
+        while not ended():
+            if self.accept("BY"):
+                if not self.accept("REFERENCE"):
+                    self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
+            if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
+                self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
+            key = self.resolve(self.name())
+            field = self.fields[key]
+            if not field.linkage or field.parent is not None or field.redefines or key in using:
+                self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
+            using.append(key)
+        if not using:
+            self.error("USING requiert au moins un paramètre")
+        return using
+
+    def entry_statement(self, line):
+        """ENTRY literal [USING ...] (entry_body, emit_entry): another entry
+        point of the program, a label where the program runs through it."""
+        if self.level:
+            self.error("ENTRY is invalid in nested program")
+        if STD == "cobol85":
+            self.error("ENTRY statement does not conform to COBOL 85")
+        if not self.t.string:
+            self.error("ENTRY limité à un littéral sans convention d'appel ni FOR GO TO")
+        name = self.take().text
+        if not name or name in {self.program_name, *(entry for entry, _ in self.entries)}:
+            self.error(f"ENTRY '{name}' duplicated")
+        using = []
+        if self.accept("USING"):
+            using = self.using_list(lambda: self.t.string or self.t.key in BOUNDARIES
+                                    or not (self.at("BY") or self.candidates(self.t.key)))
+        self.entries.append((name, using))
+        return Stmt("entry", (name,), line)
+
+    def length_of(self):
+        """LENGTH [OF] (length_of_register): cb_build_length, a literal for a
+        fixed item or literal, FUNCTION LENGTH for a reference modification
+        or a function, otherwise the cb_build_length_1 sum over the ODO."""
+        self.accept("OF")
+        if self.t.string:
+            return Expr("number", (str(len(self.take().text.encode("latin-1"))),))
+        if not self.t.string and self.t.key == "FUNCTION":
+            self.take()
+            return Expr("function", ("LENGTH", (self.function_call(),)))
+        ref = self.variable()
+        if ref.start is not None:
+            return Expr("function", ("LENGTH", (Expr("var", (ref,)),)))
+        return self.field_length(ref.name)
+
+    def field_length(self, name):
+        """cb_build_length_1: the size of a fixed item; the sizes of the
+        children of a variable one, an ODO table counted by its object."""
+        f = self.fields[name]
+
+        def variable(item):  # cb_field_variable_size
+            return any(self.fields[c].depending or variable(self.fields[c]) for c in item.children)
+        if not variable(f):
+            return Expr("number", (str(getattr(f, "parse_size", f.size)),))
+        total = None
+        for child in f.children:
+            c = self.fields[child]
+            size = self.field_length(child)
+            if c.depending:
+                size = Expr("*", (size, Expr("var", (DataRef(c.depending),))))
+            elif c.occurs > 1:
+                size = Expr("*", (size, Expr("number", (str(c.occurs),))))
+            total = size if total is None else Expr("+", (total, size))
+        return total
+
     def operand_start(self):
         """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
         t = self.t
@@ -2603,6 +2664,8 @@ class Parser:
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
         if k in {"FUNCTION", "LINAGE-COUNTER", "LINE-COUNTER", "PAGE-COUNTER"}:
+            return True
+        if k == "LENGTH" and not self.candidates(k):
             return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
@@ -3526,6 +3589,8 @@ class Parser:
             return self.unstring_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
+        if verb == "ENTRY":
+            return self.entry_statement(line)
         if verb in {"ENABLE", "DISABLE", "PURGE", "RECEIVE", "SEND"}:
             return self.communication_statement(verb, line)
         if verb == "NEXT":

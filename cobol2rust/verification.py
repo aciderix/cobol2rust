@@ -139,15 +139,25 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                    "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
             options.extend(["-I", str(Path(include).resolve())])
-        commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
         # Called programs become modules loaded by name, as GnuCOBOL's
         # default dynamic CALL does; only the converted ones are provided.
         modules = work / "modules"
         modules.mkdir()
+        module = conversion.get("module")
+        library = ".dll" if os.name == "nt" else ".so"
+        if module:
+            # PROCEDURE DIVISION USING: cobc -x refuses it; cobcrun runs the
+            # module without arguments.
+            cobcrun = find_tool("cobcrun")
+            if not cobcrun:
+                raise CobolError("cobcrun requis pour vérifier un module (PROCEDURE DIVISION USING)")
+            commands = [([cobc, "-m", *options, str(source.resolve()), "-o", str(modules / (module + library))], cobc)]
+        else:
+            commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
         for sub in conversion["subprograms"]:
             if sub["in_main_source"]:
                 continue
-            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + (".dll" if os.name == "nt" else ".so")))], cobc))
+            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + library))], cobc))
         for command, compiler in commands:
             result = subprocess.run(command, cwd=work, env=compiler_env(compiler), capture_output=True, timeout=60)
             if result.returncode:
@@ -171,7 +181,8 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             environment.update(file_env)
             if name == "cobol":
                 environment["COB_LIBRARY_PATH"] = str(modules)
-            result = subprocess.run([str(binary)], cwd=directory, env=environment,
+            command = [cobcrun, module] if name == "cobol" and module else [str(binary)]
+            result = subprocess.run(command, cwd=directory, env=environment,
                                     input=stdin, capture_output=True, timeout=timeout)
             results.append(result)
             artifacts.append(snapshot(directory))

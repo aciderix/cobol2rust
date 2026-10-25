@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T14:30:05+00:00",
- "git_head": "dcf6440596bd1fcee645b7bb425d133fe73f6fb1",
- "implementation_sha256": "b7e2355113d2b431f2ddaaeffcc1c01f6cc63477e967132f8913da4a4d8eb74e",
+ "measured_at": "2026-10-25T15:01:36+00:00",
+ "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
+ "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
-  "accepted": 685,
+  "accepted": 693,
   "cobc_accepted": 738,
-  "gap": 53,
+  "gap": 45,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -22,7 +22,7 @@
     "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)"
    },
    "sources": 44,
-   "accepted": 10,
+   "accepted": 14,
    "internal_errors": 0,
    "blockers": [
     [
@@ -34,15 +34,7 @@
      7
     ],
     [
-     "instruction non prise en charge: ENTRY",
-     3
-    ],
-    [
      "copybook introuvable: CMQGMOV",
-     2
-    ],
-    [
-     "USAGE/clause non pris en charge",
      2
     ],
     [
@@ -68,40 +60,18 @@
     [
      "clé INDEXED EXPORT-SEQUENCE-NUM hors de l'enregistrement de EXPORT-INPUT ou dans une table",
      1
-    ]
-   ],
-   "cobc_accepted": 14,
-   "accepted_where_cobc_refuses": 0,
-   "accepted_where_cobc_refuses_sources": [],
-   "gap": 4,
-   "gap_sources": [
-    [
-     "app/app-authorization-ims-db2-mq/cbl/DBUNLDGS.CBL",
-     "instruction non prise en charge: ENTRY"
-    ],
-    [
-     "app/app-authorization-ims-db2-mq/cbl/PAUDBLOD.CBL",
-     "instruction non prise en charge: ENTRY"
-    ],
-    [
-     "app/app-authorization-ims-db2-mq/cbl/PAUDBUNL.CBL",
-     "instruction non prise en charge: ENTRY"
-    ],
-    [
-     "app/cbl/CSUTLDTC.cbl",
-     "USAGE/clause non pris en charge"
-    ]
-   ],
-   "gap_blockers": [
-    [
-     "instruction non prise en charge: ENTRY",
-     3
     ],
     [
      "USAGE/clause non pris en charge",
      1
     ]
-   ]
+   ],
+   "cobc_accepted": 14,
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 0,
+   "gap_sources": [],
+   "gap_blockers": []
   },
   "zopeneditor-sample": {
    "kind": "application exemple IBM",
@@ -112,34 +82,15 @@
     "kind": "application exemple IBM"
    },
    "sources": 5,
-   "accepted": 3,
+   "accepted": 5,
    "internal_errors": 0,
-   "blockers": [
-    [
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
-     2
-    ]
-   ],
+   "blockers": [],
    "cobc_accepted": 5,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 2,
-   "gap_sources": [
-    [
-     "COBOL/SAM2.cbl",
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC"
-    ],
-    [
-     "multiroot/sam/SAM2.cbl",
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC"
-    ]
-   ],
-   "gap_blockers": [
-    [
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
-     2
-    ]
-   ]
+   "gap": 0,
+   "gap_sources": [],
+   "gap_blockers": []
   },
   "cobol-programming-course": {
    "kind": "cours IBM Enterprise COBOL",
@@ -334,7 +285,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 290,
+   "accepted": 291,
    "internal_errors": 0,
    "blockers": [
     [
@@ -389,7 +340,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 21,
+   "gap": 20,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -410,10 +361,6 @@
     [
      "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
      "clause SELECT non prise en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/data/linkage/DataDescription01.cbl",
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: ITEMS"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/data/localstorage/DataDescription02.cbl",
@@ -502,10 +449,6 @@
      1
     ],
     [
-     "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: ITEMS",
-     1
-    ],
-    [
      "paragraphe CONFIGURATION non pris en charge",
      1
     ],
@@ -536,7 +479,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 316,
+   "accepted": 317,
    "internal_errors": 0,
    "blockers": [
     [
@@ -591,7 +534,7 @@
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 15,
+   "gap": 14,
    "gap_sources": [
     [
      "clients/analysis/src/__tests__/__resources__/cfgraph/case43.cbl",
@@ -616,10 +559,6 @@
     [
      "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN01C.cbl",
      "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE"
-    ],
-    [
-     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CSUTLDTC.cbl",
-     "USAGE/clause non pris en charge"
     ],
     [
      "tests/test_files/project/HELLO-WORLD.cbl",
@@ -664,10 +603,6 @@
      3
     ],
     [
-     "USAGE/clause non pris en charge",
-     2
-    ],
-    [
      "instruction non prise en charge: OF",
      1
     ],
@@ -688,6 +623,10 @@
      1
     ],
     [
+     "USAGE/clause non pris en charge",
+     1
+    ],
+    [
      "expression non prise en charge: xml",
      1
     ]
@@ -695,9 +634,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T14:30:05+00:00",
-  "git_head": "dcf6440596bd1fcee645b7bb425d133fe73f6fb1",
-  "implementation_sha256": "b7e2355113d2b431f2ddaaeffcc1c01f6cc63477e967132f8913da4a4d8eb74e",
+  "measured_at": "2026-10-25T15:01:36+00:00",
+  "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
+  "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

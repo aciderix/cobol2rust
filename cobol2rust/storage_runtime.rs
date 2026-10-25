@@ -337,6 +337,18 @@ fn edit_internal(symbols: &[(u8, u32)], size: usize, digits: &[u8], scale: i32, 
 }
 
 impl View {
+    /// The storage of the item; an unbound LINKAGE item (not passed by the
+    /// caller, a NULL address for GnuCOBOL) is a named stop.
+    fn mem(&self) -> std::cell::Ref<'_, Vec<u8>> {
+        let memory = self.memory.borrow();
+        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
+        memory
+    }
+    fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
+        let memory = self.memory.borrow_mut();
+        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
+        memory
+    }
     pub fn resolved(&self) {
         if !self.dimensions.is_empty() { fail("array reference requires all subscripts"); }
     }
@@ -367,7 +379,7 @@ impl View {
     }
     fn raw(&self) -> Vec<u8> {
         self.resolved();
-        self.memory.borrow()[self.offset..self.offset + self.size].to_vec()
+        self.mem()[self.offset..self.offset + self.size].to_vec()
     }
     fn number(&self) -> Result<Value, &'static str> {
         let (digits, scale, signed, usage) = match self.kind {
@@ -537,7 +549,7 @@ impl View {
                     // byte read was '-'.
                     let position = if matches!(usage, Usage::SignLeadingSeparate) { 0 } else { bytes.len() - 1 };
                     let sign = if bytes[position] == b'-' { b'-' } else { b'+' };
-                    self.memory.borrow_mut()[self.offset + position] = sign;
+                    self.mem_mut()[self.offset + position] = sign;
                     bytes.remove(position);
                     return Value::Bytes(bytes);
                 }
@@ -580,7 +592,7 @@ impl View {
             let mut result = bytes;
             result.resize(self.size, b' ');
             result.truncate(self.size);
-            self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
+            self.mem_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
             return;
         }
         if let Kind::Numeric { scale, digits, .. } = self.kind {
@@ -591,7 +603,7 @@ impl View {
                 let (result, negative, _) = text_move_digits(&bytes, digits as usize, scale as usize);
                 let result = display_bytes(result, signed && negative, usage, signed);
                 if result.len() != self.size { fail("unsupported DISPLAY storage for text MOVE"); }
-                self.memory.borrow_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
+                self.mem_mut()[self.offset..self.offset + self.size].copy_from_slice(&result);
                 return;
             }
         }
@@ -627,7 +639,7 @@ impl View {
         let negative = number.n.sign() == Sign::Minus;
         let digits = absolute(&number.n).to_string();
         let mut bytes = edit(symbols, self.size, digits.as_bytes(), number.scale as i32, negative, blank_zero);
-        self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+        self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
     /// Numeric MOVE: excess decimals are truncated, the magnitude is reduced
     /// modulo the PICTURE capacity (binary included) without SIZE ERROR, and an
@@ -673,7 +685,7 @@ impl View {
             Usage::Binary | Usage::Index | Usage::Native | Usage::Register => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
-        self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+        self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
     pub fn assign(&mut self, source: &Value, rounded: bool) {
         self.resolved();
@@ -761,7 +773,7 @@ impl View {
                 }
             },
         };
-        self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+        self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
         if truncated_negative_zero { self.mark_negative_zero(); }
     }
     /// cob_move_edited_to_display: the digits of a numeric-edited sender,
@@ -806,7 +818,7 @@ impl View {
                 let ascii = format!("{:0>width$}", units.to_string(), width = places as usize).into_bytes();
                 let mut bytes = display_bytes(ascii, negative && signed, usage, signed);
                 if bytes.len() != self.size { fail("unsupported DISPLAY storage for de-editing MOVE"); }
-                self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+                self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
             },
             _ => {
                 // indirect_move through a signed DISPLAY temporary of 76 digits, 38 decimals.
@@ -829,7 +841,7 @@ impl View {
                 let kept = absolute(&units) % power(digits);
                 let ascii = format!("{:0>width$}", kept.to_string(), width = digits as usize).into_bytes();
                 let mut bytes = display_bytes(ascii, negative && signed, usage, signed);
-                self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
+                self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
                 true
             },
             _ => { self.assign(source, false); false },
@@ -893,6 +905,15 @@ impl View {
 
 /// Bind a LINKAGE item to a CALL argument: the item keeps its description and
 /// addresses the argument's storage `delta` bytes after the argument start.
+/// A LINKAGE item that the CALL (or ENTRY) did not pass: no storage.
+pub fn unbind(item: &Value) -> Value {
+    match item {
+        Value::View(template) => Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: template.size,
+            kind: template.kind, dimensions: template.dimensions.clone(), initializers: template.initializers.clone() }),
+        _ => crate::runtime::fail("LINKAGE item requires storage"),
+    }
+}
+
 pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
     let (source, template) = match (argument, item) {
         (Value::View(source), Value::View(template)) => (source, template),
@@ -913,7 +934,7 @@ pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
 pub fn content_copy(argument: &Value) -> Value {
     match argument {
         Value::View(source) => {
-            let bytes = source.memory.borrow()[source.offset..source.offset + source.size].to_vec();
+            let bytes = source.mem()[source.offset..source.offset + source.size].to_vec();
             Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size: source.size, kind: source.kind,
                                dimensions: vec![], initializers: source.initializers.clone() })
         },
@@ -1000,12 +1021,13 @@ impl Inspect {
     fn common(target: &Value) -> Self {
         let view = match target { Value::View(view) => view, _ => fail("INSPECT requires a data item") };
         view.resolved();
+        drop(view.mem());
         let mut sign = None;
         if let Kind::Numeric { signed: true, usage, .. } = view.kind {
             match usage {
                 Usage::Display | Usage::SignLeading => {
                     let position = view.offset + if matches!(usage, Usage::SignLeading) { 0 } else { view.size - 1 };
-                    let mut memory = view.memory.borrow_mut();
+                    let mut memory = view.mem_mut();
                     let byte = memory[position];
                     let value = if byte.is_ascii_digit() || byte == b' ' { 1 }
                         else if (b'p'..=b'y').contains(&byte) { memory[position] = byte & !0x40; -1 }
@@ -1260,6 +1282,7 @@ impl StringInto {
     pub fn init(target: &Value, pointer: Option<i128>) -> Self {
         let view = match target { Value::View(view) => view, _ => fail("STRING INTO requires a data item") };
         view.resolved();
+        drop(view.mem());
         let mut s = StringInto { memory: view.memory.clone(), offset: view.offset, size: view.size, position: 0, overflow: false, delimiter: None };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
@@ -1411,7 +1434,7 @@ pub fn fill_spaces(item: &Value) {
     match item {
         Value::View(view) => {
             view.resolved();
-            view.memory.borrow_mut()[view.offset..view.offset + view.size].iter_mut().for_each(|b| *b = b' ');
+            view.mem_mut()[view.offset..view.offset + view.size].iter_mut().for_each(|b| *b = b' ');
         },
         _ => fail("DELIMITER IN requires a data item"),
     }

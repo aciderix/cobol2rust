@@ -33,14 +33,20 @@ def byte_pattern_bytes(text):
 
 
 class Emitter:
-    def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=()):
+    def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=(), entries=()):
         self.program = program
         from .frontend import Parser
         self.program_functions = Parser.FUNCTIONS
         self.struct = struct
         self.subprogram = subprogram
+        # A main program with PROCEDURE DIVISION USING is a module (cobc
+        # refuses -x): it runs as cobcrun calls it, without arguments.
+        self.module = not subprogram and bool(program.using)
         # CALL targets converted with this run unit (literal names).
         self.called = set(called or ())
+        # ENTRY names of the run unit: unresolved until their program is loaded.
+        self.entry_names = set(entries)
+        self.called |= self.entry_names
         # Programs of the call path left unconverted: a CALL of one cannot be modelled.
         self.present = sorted(set(present) - self.called)
         self.names = {name: f"f{i}" for i, name in enumerate(program.fields)}
@@ -1234,7 +1240,11 @@ class Emitter:
                 self.exit_code()
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "exit_program":
-            self.write("return runtime::Outcome::Return;" if self.subprogram else f"pc = {a[0]};")
+            if self.module:
+                self.exit_code()
+                self.write("return runtime::Outcome::Stop;")
+            else:
+                self.write("return runtime::Outcome::Return;" if self.subprogram else f"pc = {a[0]};")
         elif op == "call_program":
             target, arguments, continuation, exception, success = a
             values = []
@@ -1267,8 +1277,10 @@ class Emitter:
             else:
                 self.write(f"Some(runtime::Outcome::Return) => pc = {success},")
             if target[0] == "dynamic":
-                present = ", ".join(quoted(name) for name in [*self.present, *sorted(self.called)])
+                present = ", ".join(quoted(name) for name in [*self.present, *sorted(self.called - self.entry_names)])
                 self.write(f"None if runtime::surely_absent(&name, &[{present}]) => {{ {not_found.format('name.as_bytes()')} }}")
+            elif target[1] in self.entry_names:
+                self.write(f"None => {{ {not_found.format(f'b{quoted(target[1])}')} }}")
             self.write("None => runtime::fail(\"CALL of a program absent from the conversion or recursive; not modelled\"),")
             self.indent -= 1
             self.write("}")
@@ -1625,8 +1637,6 @@ class Emitter:
 
     def program_lines(self):
         """Struct and impl of this program; `generate_unit` adds the run unit."""
-        if self.program.using and not self.subprogram:
-            raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
         graph = ControlGraph(self.program, self.blocks)
         self.write(f"struct {self.struct} {{")
         self.indent += 1
@@ -1712,6 +1722,10 @@ class Emitter:
         self.indent -= 1
         self.write("};")
         for name, field in self.program.fields.items():
+            if field.linkage:
+                # No address until a CALL passes the item (NULL for cobc).
+                self.write(f"result.{self.names[name]} = storage_runtime::unbind(&result.{self.names[name]});")
+        for name, field in self.program.fields.items():
             if not field.picture or field.file_record or field.linkage:
                 continue
             if self.external_root(name) is not None:
@@ -1752,18 +1766,23 @@ class Emitter:
         self.write("result")
         self.indent -= 1
         self.write("}")
-        if self.subprogram:
-            self.call_method()
+        if self.subprogram or self.module:
+            self.call_method(graph)
         for name in self.reports:
             self.report_events(self.program.reports[name])
         uses = getattr(self.program, "global_uses", None)
-        if uses:
-            # While the program runs, its contained programs reach its GLOBAL
-            # USE procedures through an alias sharing its storage and files.
+        if uses or graph.entry_points:
             self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
-            self.write(f"    unit.uses.push(({quoted(self.program.entry_name)}, Some(Box::new(self.alias()))));")
-            self.write(f"    let outcome = self.run_from(unit, {graph.entry});")
-            self.write("    unit.uses.pop();")
+            self.write(f"    self.run_at(unit, {graph.entry})")
+            self.write("}")
+            self.write("fn run_at(&mut self, unit: &mut RunUnit, start: usize) -> runtime::Outcome {")
+            if uses:
+                # While the program runs, its contained programs reach its GLOBAL
+                # USE procedures through an alias sharing its storage and files.
+                self.write(f"    unit.uses.push(({quoted(self.program.entry_name)}, Some(Box::new(self.alias()))));")
+            self.write("    let outcome = self.run_from(unit, start);")
+            if uses:
+                self.write("    unit.uses.pop();")
             self.write("    outcome")
             self.write("}")
             self.write("fn run_from(&mut self, unit: &mut RunUnit, start: usize) -> runtime::Outcome {")
@@ -1780,7 +1799,7 @@ class Emitter:
             # COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol.
             separators = "b',', b'.'" if decimal_comma else "b'.', b','"
             self.write(f"let _symbols = runtime::SymbolGuard::new({separators}, {ord(currency)});")
-        self.write(f"let mut pc: usize = {'start' if uses else graph.entry};")
+        self.write(f"let mut pc: usize = {'start' if uses or graph.entry_points else graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source
         # site, including when PERFORM re-enters that site recursively.
@@ -1904,28 +1923,45 @@ class Emitter:
         self.indent -= 1
         self.write("}")
 
-    def call_method(self):
-        """Bind each USING item and its subordinates to the CALL arguments."""
+    def call_method(self, graph):
+        """Bind each USING item of the entry and its subordinates to the CALL
+        arguments (output_entry_function); an item the entry or the CALL does
+        not pass has no storage (a NULL address for GnuCOBOL)."""
         self.write("fn call(&mut self, unit: &mut RunUnit, arguments: Vec<Value>) -> runtime::Outcome {")
+        self.write("    self.call_entry(unit, arguments, 0)")
+        self.write("}")
+        self.write("fn call_entry(&mut self, unit: &mut RunUnit, arguments: Vec<Value>, entry: usize) -> runtime::Outcome {")
         self.indent += 1
-        using = self.program.using
-        if using:
-            self.write(f"if arguments.len() < {len(using)} {{ runtime::fail(\"CALL with fewer arguments than PROCEDURE DIVISION USING not modelled\"); }}")
+        entries = [(graph.entry, self.program.using)] + [(graph.entry_points[name], using)
+                                                         for name, using in getattr(self.program, "entries", [])]
         fields = self.program.fields
-        for name, field in fields.items():
-            if not field.linkage:
-                continue
-            root = field
-            while root.parent:
-                root = fields[root.parent]
-            while root.redefines:
-                root = fields[root.redefines]
-            index = using.index(root.name)
-            rust = self.names[name]
-            self.write(f"self.{rust} = storage_runtime::rebind(&arguments[{index}], {field.offset - root.offset}, &self.{rust});")
+        for number, (_, using) in enumerate(entries):
+            self.write(f"if entry == {number} {{")
+            self.indent += 1
+            for name, field in fields.items():
+                if not field.linkage:
+                    continue
+                root = field
+                while root.parent:
+                    root = fields[root.parent]
+                while root.redefines:
+                    root = fields[root.redefines]
+                rust = self.names[name]
+                if root.name not in using:
+                    self.write(f"self.{rust} = storage_runtime::unbind(&self.{rust});")
+                    continue
+                index = using.index(root.name)
+                self.write(f"self.{rust} = if arguments.len() > {index} {{ storage_runtime::rebind(&arguments[{index}], "
+                           f"{field.offset - root.offset}, &self.{rust}) }} else {{ storage_runtime::unbind(&self.{rust}) }};")
+            self.indent -= 1
+            self.write("}")
         # RETURN-CODE keeps its value between CALLs: codegen.c clears it with
         # the program's first initialization only (VALUE ZERO here).
-        self.write("self.run(unit)")
+        if len(entries) > 1:
+            starts = ", ".join(str(position) for position, _ in entries)
+            self.write(f"self.run_at(unit, [{starts}][entry])")
+        else:
+            self.write("self.run(unit)")
         self.indent -= 1
         self.write("}")
         self.write("/// The program's return value: its RETURN-CODE.")
@@ -1970,12 +2006,16 @@ def generate_unit(emitters):
     unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
+        if getattr(emitter.program, "entries", None):
+            # Its ENTRY names resolve once its module is loaded (by a CALL).
+            unit.append(f"    p{index}_loaded: bool,")
     if global_uses:
         # The active programs with USE GLOBAL, innermost last.
         unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
     unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {", "            returned: None, exit_code: 0,"]
-    for index, _ in enumerate(subprograms, 1):
-        unit.append(f"            p{index}: None, p{index}_active: false,")
+    for index, emitter in enumerate(subprograms, 1):
+        loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
+        unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
     if global_uses:
         unit.append("            uses: Vec::new(),")
     unit += ["        }", "    }",
@@ -1990,16 +2030,22 @@ def generate_unit(emitters):
             kept = "program.cancel_files();" if cancels_files(emitter) else "drop(program);"
         else:
             kept = f"self.p{index} = Some(program);"
-        unit += [f"            {quoted(emitter.program.entry_name)} => {{",
-                 f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
-                 f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
-                 f"                self.p{index}_active = true;",
-                 "                let outcome = program.call(self, arguments);",
-                 "                self.returned = program.return_code();",
-                 f"                self.p{index}_active = false;",
-                 f"                {kept}",
-                 "                Some(outcome)",
-                 "            }"]
+        entries = getattr(emitter.program, "entries", [])
+        for number, name in enumerate([emitter.program.entry_name, *(entry for entry, _ in entries)]):
+            guard = f" if self.p{index}_loaded" if number else ""
+            unit += [f"            {quoted(name)}{guard} => {{",
+                     f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
+                     f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
+                     f"                self.p{index}_active = true;",
+                     *([f"                self.p{index}_loaded = true;"] if entries else []),
+                     f"                let outcome = program.call_entry(self, arguments, {number});",
+                     "                self.returned = program.return_code();",
+                     f"                self.p{index}_active = false;",
+                     f"                {kept}",
+                     "                Some(outcome)",
+                     "            }"]
+    for name, _ in getattr(emitters[0].program, "entries", []):
+        unit.append(f"            {quoted(name)} => runtime::fail(\"CALL of an active program (recursion) not modelled\"),")
     unit += ["            _ => None,", "        }", "    }",
              "    /// CANCEL: the next CALL finds the program in its initial state.",
              "    fn cancel(&mut self, name: &str) {",
@@ -2031,7 +2077,9 @@ def generate_unit(emitters):
     unchecked = "storage_runtime::set_unchecked_data(); " if getattr(emitters[0].program, "unchecked_data", False) else ""
     if getattr(emitters[0].program, "runtime_checks", False):
         unchecked += "storage_runtime::set_runtime_checks(); "
-    run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit);"
+    # A module runs as cobcrun calls it: its main entry, no arguments.
+    start = "program.call(&mut unit, Vec::new());" if emitters[0].module else "program.run(&mut unit);"
+    run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); {start}"
     # cob_terminate_routines: the warnings for files left open, then the files
     # closed (dropped with the program), also after a fatal runtime error.
     files = any(emitter.files for emitter in emitters)
