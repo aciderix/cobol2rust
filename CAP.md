@@ -74,30 +74,30 @@ Les paramètres de chaque corpus sont figés dans l'outil ; niveau 2 de preuve
 seulement (émission acceptée).
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T11:22:24+00:00 (commit `80ec66776f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T11:38:12+00:00 (commit `9eca7a97d0`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 0 | 14 | 14 | 0 |
+| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 7 | 14 | 7 | 0 |
 | zopeneditor-sample | application exemple IBM | 5 | 0 | 5 | 5 | 0 |
-| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 5 | 12 | 7 | 0 |
+| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 43 | 65 | 24 | 2 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 85 | 311 | 231 | 5 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 97 | 331 | 237 | 3 |
-| **Total** | | **2458** | **230** | **738** | **518** | **10** |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 258 | 311 | 58 | 5 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 307 | 331 | 27 | 3 |
+| **Total** | | **2458** | **626** | **738** | **122** | **10** |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 351 × ASSIGN requiert un chemin littéral entre guillemets
-2. 43 × IDENTIFICATION DIVISION attendue
-3. 26 × COPY: REPLACING ou point attendu
-4. 20 × PROCEDURE attendu
-5. 19 × niveau de donnée attendu
-6. 16 × niveau 88 de groupe limité aux littéraux alphanumériques
-7. 4 × expression attendue
-8. 3 × littéral multiligne non pris en charge
-9. 3 × EXIT SECTION requiert une section de procédure
-10. 2 × fichier non déclaré: COUNTYDETAILS
+1. 21 × PROCEDURE attendu
+2. 18 × niveau de donnée attendu
+3. 16 × niveau 88 de groupe limité aux littéraux alphanumériques
+4. 7 × IDENTIFICATION DIVISION attendue
+5. 6 × USAGE/clause non pris en charge
+6. 6 × FILE-CONTROL attendu
+7. 6 × expression attendue
+8. 4 × RECORDING MODE limité à F pour des enregistrements fixes
+9. 4 × instruction non prise en charge: XML
+10. 3 × EXIT SECTION requiert une section de procédure
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -105,4 +105,9 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 Une ligne par étape : date, ce qui a été levé, total accepté avant → après.
 
 - 2026-10-25 — Mise en place du cap, de l'outil `tools/real_corpora.py` et
-  de la mesure de référence (avant toute extension du convertisseur).
+  de la mesure de référence (avant toute extension du convertisseur) :
+  230/2458, cobc 738, écart 518.
+- 2026-10-25 — Détection du format portée de cobc (`ppopen_get_file`),
+  ASSIGN complet (`assign_clause`, `validate_assign_name`) et résolution des
+  noms à l'OPEN (`cob_chk_file_mapping`, `COB_FILE_PATH`) : **230 → 626**
+  acceptées, écart 518 → 122, CardDemo 0 → 7/44. NIST inchangé (451/458).

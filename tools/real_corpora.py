@@ -190,7 +190,7 @@ def main(argv=None) -> int:
         print("corpus absents : lancer python3 tools/fetch_corpora.py --output .tools/corpora --without-gnucobol",
               file=sys.stderr)
         return 2
-    pins = {entry["name"]: entry["commit"] for entry in json.loads(manifest_path.read_text())["corpora"]}
+    pins = {entry["name"]: entry.get("commit") for entry in json.loads(manifest_path.read_text())["corpora"]}
     from fetch_corpora import REPOSITORIES
     for name in args.only:
         if pins.get(name) != REPOSITORIES[name][1]:
@@ -221,9 +221,9 @@ def main(argv=None) -> int:
                "totals": totals, "corpora": corpora}
     for name, entry in corpora.items():
         print(f"{name:28} {entry['accepted']:5}/{entry['sources']:<5} cobc {entry.get('cobc_accepted', '—'):>5}"
-              f"  écart {entry.get('gap', '—')}")
+              f"  écart {entry.get('gap', '—'):>4}  à examiner {entry.get('accepted_where_cobc_refuses', '—')}")
     print(f"{'TOTAL':28} {totals['accepted']:5}/{totals['sources']:<5} cobc {totals.get('cobc_accepted', '—'):>5}"
-          f"  écart {totals.get('gap', '—')}")
+          f"  écart {totals.get('gap', '—'):>4}  à examiner {totals.get('accepted_where_cobc_refuses', '—')}")
     if args.record:
         if not args.cobc:
             parser.error("--record exige --cobc : l'écart à cobc fait partie du tableau de bord")

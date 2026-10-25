@@ -28,7 +28,9 @@ class FileFrontendTests(unittest.TestCase):
         select = 'select f assign to "data.txt" organization line sequential file status fs.'
         cases = [
             file_program(select=select.replace("line sequential", "indexed")),
-            file_program(select=select.replace('"data.txt"', "path-name")),
+            # ASSIGN TO an undeclared word is a file name since cobc's
+            # assign_clause port (tests/test_assign.py); a level 88 is refused.
+            file_program(select=select.replace('"data.txt"', "path-ok"), storage="01 fs pic xx. 88 path-ok value 'ok'."),
             file_program(fd="fd f. 01 rec. 05 item-a pic 9(8) comp-3."),
             file_program(fd="fd f. 01 rec pic 9(8)."),
             file_program(fd='fd f. 01 rec pic x(8) value "ABC".'),

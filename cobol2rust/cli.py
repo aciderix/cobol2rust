@@ -250,6 +250,8 @@ def main(argv=None):
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
     verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE ou COB_SWITCH_n identique pour les deux programmes")
+    verification.add_argument("--file-env", action="append", default=[], metavar="NAME=CHEMIN",
+                              help="nom de fichier externe (DD_nom, dd_nom, nom ou COB_FILE_PATH), chemin relatif, pour les deux programmes")
     verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
@@ -279,15 +281,17 @@ def main(argv=None):
             from .verification import verify
             if args.output and args.output.exists():
                 raise CobolError(f"rapport existant: {args.output}")
-            environment = {}
-            for item in args.runtime_env:
-                if "=" not in item:
-                    raise CobolError("--runtime-env requiert NAME=VALUE")
-                key, value = item.split("=", 1)
-                environment[key] = value
+            environment, file_env = {}, {}
+            for option, items, target in (("--runtime-env", args.runtime_env, environment),
+                                          ("--file-env", args.file_env, file_env)):
+                for item in items:
+                    if "=" not in item:
+                        raise CobolError(f"{option} requiert NAME=VALUE")
+                    key, value = item.split("=", 1)
+                    target[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
                             args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
-                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible)
+                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():

@@ -14,6 +14,9 @@ pub enum Advance { BeforeLines(u32), AfterLines(u32), BeforePage, AfterPage }
 enum Organization { LineSequential, Sequential }
 
 pub struct CobolFile {
+    /// ASSIGN name (literal, or the item read by `assign` before OPEN);
+    /// `path` is the name cob_chk_file_mapping gave it at the last OPEN.
+    assign: Vec<u8>,
     path: String,
     optional: bool,
     organization: Organization,
@@ -94,6 +97,121 @@ fn setting(name: &str, default: bool) -> bool {
     }
 }
 
+/// cob_field_to_string: the ASSIGN item without its trailing spaces and NULs,
+/// read as a C string; longer than COB_FILE_MAX gives an empty name.
+pub fn assign_text(data: &[u8]) -> Vec<u8> {
+    let end = data.iter().rposition(|&b| b != b' ' && b != 0).map_or(0, |i| i + 1);
+    if end > 4096 { return Vec::new(); }
+    data[..end].split(|&b| b == 0).next().unwrap_or_default().to_vec()
+}
+
+fn environment(key: &[u8]) -> Option<Vec<u8>> {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    if key.is_empty() { return None; }
+    if key.contains(&b'=') { fail("file name mapping through a variable name containing '=' not modelled"); }
+    std::env::var_os(std::ffi::OsStr::from_bytes(key)).map(|value| value.into_vec())
+}
+
+/// cob_chk_file_env: DD_name, dd_name then name; `first` is file_open_name[0].
+fn file_env(src: &[u8], first: u8) -> Option<Vec<u8>> {
+    if src.first() == Some(&b'.') || first == b'-' || first.is_ascii_digit() { return None; }
+    let mangle = setting("COB_ENV_MANGLE", false);
+    let name: Vec<u8> = src.iter()
+        .map(|&b| if (mangle && !b.is_ascii_alphanumeric()) || (!mangle && b == b'.') { b'_' } else { b })
+        .collect();
+    for prefix in [&b"DD_"[..], b"dd_", b""] {
+        let Some(mut value) = environment(&[prefix, &name].concat()) else { continue };
+        if value.is_empty() { continue; }
+        if matches!(value[0], b'"' | b'\'') {
+            let len = value.len() - 1;
+            if len > 0 && value[len] == value[0] { value = value[1..len].to_vec(); }
+        }
+        return Some(value);
+    }
+    None
+}
+
+fn looks_absolute(name: &[u8]) -> bool {
+    let name = if matches!(name.first(), Some(b'"' | b'\'')) { &name[1..] } else { name };
+    matches!(name.first(), Some(b'/' | b'\\'))
+}
+
+fn has_acu_hyphen(name: &[u8]) -> bool {
+    name.len() > 2 && name[0] == b'-' && matches!(name[1], b'F' | b'D' | b'f' | b'd') && name[2].is_ascii_whitespace()
+}
+
+/// COB_FILE_PATH; libcob expands ${...} in it, which is not modelled.
+fn file_path() -> Option<Vec<u8>> {
+    use std::os::unix::ffi::OsStringExt;
+    let value = std::env::var_os("COB_FILE_PATH")?.into_vec();
+    if value.is_empty() || value.contains(&b'$') { fail("COB_FILE_PATH empty or with variables not modelled"); }
+    Some(value)
+}
+
+/// cob_chk_file_mapping (filename-mapping: yes), on a name accepted by cob_open.
+fn file_mapping(name: &[u8]) -> Vec<u8> {
+    if has_acu_hyphen(name) { fail("ACUCOBOL -F/-D file names not modelled"); }
+    let mut open = name.to_vec();
+    let first = open[0];
+    let separators = |b: &u8| *b == b'/' || *b == b'\\';
+    if !looks_absolute(&open) && !open.iter().any(separators) {
+        let mut start = 0;
+        if matches!(first, b'"' | b'\'') {
+            let len = open.len() - 1;
+            if open[len] == first { open.truncate(len); start = 1; }
+        }
+        if open.get(start) == Some(&b'$') { start += 1; }
+        // Not found: the name stays as is, with its leading quote or dollar.
+        if let Some(value) = file_env(&open[start..], first) {
+            open = value;
+            if looks_absolute(&open) { return open; }
+            if has_acu_hyphen(&open) { fail("ACUCOBOL -F/-D file names not modelled"); }
+        }
+        return match file_path() { Some(prefix) => [&prefix[..], b"/", &open].concat(), None => open };
+    }
+    let mut src = &open[..];
+    if matches!(first, b'"' | b'\'') && src[src.len() - 1] == first { src = &src[1..src.len() - 1]; }
+    let mut dollar = src.first() == Some(&b'$');
+    if dollar { src = &src[1..]; }
+    // strtok (orig, "/\\"): elements between separators, empty ones skipped.
+    let mut elements = src.split(separators).filter(|element| !element.is_empty());
+    let mut buffer = Vec::new();
+    let mut leading = false;
+    if matches!(src.first(), Some(b'/' | b'\\')) {
+        buffer.push(b'/');
+        leading = true;
+    } else if let Some(element) = elements.next() {
+        if let Some(value) = file_env(element, first) {
+            buffer = value;
+            dollar = false;
+        } else if !dollar {
+            buffer = element.to_vec();
+        }
+    }
+    let mut unresolved: Option<Vec<u8>> = None;
+    for element in elements {
+        // The slash depends on the previous element's dollar, as in libcob.
+        if !leading { if !dollar { buffer.push(b'/'); } } else { leading = false; }
+        dollar = element[0] == b'$';
+        let name = if dollar { &element[1..] } else { element };
+        match if dollar { file_env(name, first) } else { None } {
+            Some(value) => { buffer.extend(value); unresolved = None; },
+            None if !dollar => { buffer.extend(name); unresolved = None; },
+            None => unresolved = Some(element.to_vec()),
+        }
+    }
+    if let Some(element) = unresolved { buffer.extend(element); }
+    if looks_absolute(&buffer) { return buffer; }
+    match file_path() { Some(prefix) => [&prefix[..], b"/", &buffer].concat(), None => buffer }
+}
+
+/// cob_open checks on the ASSIGN name (status 31), then cob_chk_file_mapping.
+fn open_name(assign: &[u8]) -> Result<String, u8> {
+    if assign.is_empty() { return Err(31); }
+    if matches!(assign[0], b'"' | b'\'') && (assign.len() == 1 || assign[assign.len() - 1] != assign[0]) { return Err(31); }
+    String::from_utf8(file_mapping(assign)).map_err(|_| fail("non UTF-8 file name not modelled"))
+}
+
 /// WRITE ADVANCING identifier: cobc adds cob_get_int of the item to the
 /// option word, so only 0..65535 keeps the LINES flag intact.
 pub fn advance_lines(value: &Value) -> u32 {
@@ -120,8 +238,8 @@ impl CobolFile {
             "SEQUENTIAL" => Organization::Sequential,
             _ => fail("unsupported file organization"),
         };
-        // Unknown profile/remapping settings must not silently change the reference behavior.
-        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF"] {
+        // Unknown profile settings must not silently change the reference behavior.
+        for key in ["COB_RUNTIME_CONFIG", "COB_UNIX_LF"] {
             if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
         }
         if organization == Organization::LineSequential {
@@ -133,14 +251,17 @@ impl CobolFile {
                 if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
             }
         }
-        for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
-            if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
-        }
         let line = organization == Organization::LineSequential;
-        Self { path: path.into(), optional, organization, state: State::Closed, eof: false,
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
                linage: None }
+    }
+
+    /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
+    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
+        self.assign = assign_text(data);
+        self
     }
 
     /// An FD with LINAGE: cobc makes the file LINE SEQUENTIAL.
@@ -265,6 +386,7 @@ impl CobolFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         self.read_done = false;
         if mode == "I-O" {
             if self.organization != Organization::Sequential { fail("OPEN I-O limited to SEQUENTIAL files"); }
@@ -656,6 +778,7 @@ pub enum StartCondition { Equal, Greater, NotLess }
 /// (8 bytes, little endian) holding the record size, then `record_max` bytes.
 /// A zero size, including a hole read as zeros, marks an empty slot.
 pub struct RelativeFile {
+    assign: Vec<u8>,
     path: String,
     optional: bool,
     access: Access,
@@ -702,21 +825,22 @@ fn key_number(key: &Value) -> i64 {
 
 impl RelativeFile {
     pub fn new(path: &str, optional: bool, access: &str, record_min: usize, record_max: usize) -> Self {
-        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH"] {
-            if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
-        }
-        for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
-            if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
-        }
+        if std::env::var_os("COB_RUNTIME_CONFIG").is_some() { fail("file runtime setting not supported: COB_RUNTIME_CONFIG"); }
         let access = match access {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported RELATIVE access mode"),
         };
-        Self { path: path.into(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
                last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+
+    /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
+    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
+        self.assign = assign_text(data);
+        self
+    }
 
     /// Record size of the last READ (the slot's size field), for READ INTO.
     pub fn last_read_size(&self) -> usize { self.last_read_size }
@@ -736,6 +860,7 @@ impl RelativeFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         self.read_done = false;
         self.nonexistent = false;
         self.end_of_file = false;
@@ -1185,6 +1310,7 @@ impl Btree {
 /// alternate btree ("name.N") its key to the prime key (and, WITH
 /// DUPLICATES, a native little-endian u32 duplicate number).
 pub struct IndexedFile {
+    assign: Vec<u8>,
     path: String,
     optional: bool,
     access: Access,
@@ -1213,18 +1339,15 @@ pub struct IndexedFile {
 
 impl IndexedFile {
     pub fn new(path: &str, optional: bool, access: &str, record_min: usize, record_max: usize, keys: Vec<IndexKey>) -> Self {
-        for key in ["COB_RUNTIME_CONFIG", "COB_FILE_PATH", "DB_HOME", "COB_BDB_HOME"] {
+        for key in ["COB_RUNTIME_CONFIG", "DB_HOME", "COB_BDB_HOME"] {
             if std::env::var_os(key).is_some() { fail(&format!("file runtime setting not supported: {key}")); }
-        }
-        for key in [path.to_string(), format!("DD_{path}"), format!("dd_{path}")] {
-            if std::env::var_os(&key).is_some() { fail("file name environment remapping not supported"); }
         }
         let access = match access {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported INDEXED access mode"),
         };
         let n = keys.len();
-        Self { path: path.into(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
+        Self { assign: path.as_bytes().to_vec(), path: String::new(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
                last_open_mode: "", locked: false, nonexistent: false, end_of_file: false, begin_of_file: false,
                first_read: 0, read_done: false, last_read_size: 0, key: Vec::new(), data: None, key_index: 0,
                last_readkey: vec![Vec::new(); 2 * n], last_dupno: vec![0; n], rewrite_sec_key: vec![false; n],
@@ -1233,6 +1356,12 @@ impl IndexedFile {
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
     pub fn last_read_size(&self) -> usize { self.last_read_size }
+
+    /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
+    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
+        self.assign = assign_text(data);
+        self
+    }
 
     fn file_name(&self, index: usize) -> String {
         if index == 0 { self.path.clone() } else { format!("{}.{}", self.path, index) }
@@ -1266,6 +1395,7 @@ impl IndexedFile {
         self.end_of_file = false;
         self.begin_of_file = false;
         self.first_read = 2;
+        match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         let status = self.indexed_open(mode);
         if status < 10 { claim_path(&self.path); }
         status

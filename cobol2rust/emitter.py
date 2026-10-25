@@ -671,6 +671,19 @@ class Emitter:
             return "None"
         return f"Some(&{'mut ' if mutable else ''}self.{self.names[key]})"
 
+    @staticmethod
+    def assign_literal(spec):
+        # ASSIGN data-name: the name is read from the item before each OPEN.
+        return quoted(spec.path.text) if spec.path else '""'
+
+    def assign_name(self, file_name):
+        """cob_pre_open: an ASSIGN data item gives the file name at each OPEN."""
+        key = self.program.files[file_name].assign_field
+        if key:
+            name = self.unique()
+            self.write(f"let {name} = {self.reference(DataRef(key))}.bytes();")
+            self.write(f"{self.handle(file_name)}.assign(&{name});")
+
     def file_status(self, file_name, status, eof_handled=False):
         name = self.program.files[file_name].status
         destination = f"Some(&mut self.{self.names[name]})" if name else "None"
@@ -730,6 +743,7 @@ class Emitter:
         elif op == "open":
             for mode, name in a[0]:
                 self.linage_values(name)
+                self.assign_name(name)
                 self.write(f"let status = {self.handle(name)}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
@@ -1159,6 +1173,7 @@ class Emitter:
             sort, sorter = self.files[name], self.handle(name)
             for using in files:
                 rust, handle = self.files[using], self.handle(using)
+                self.assign_name(using)
                 self.write(f"if {handle}.open(\"INPUT\") < 10 {{")
                 self.indent += 1
                 self.write(f"while {handle}.read(&mut self.{rust}_area, None) < 10 {{")
@@ -1181,6 +1196,7 @@ class Emitter:
             opened = self.unique()
             self.write(f"let mut {opened} = vec![false; {len(files)}];")
             for index, giving in enumerate(files):
+                self.assign_name(giving)
                 self.write(f"{opened}[{index}] = {self.handle(giving)}.open(\"OUTPUT\") < 10;")
             initially = self.unique()
             self.write(f"let {initially} = {opened}.clone();")
@@ -1500,17 +1516,17 @@ class Emitter:
             if spec.sort:
                 created = f"file_runtime::SortFile::new({spec.record_max})"
             elif spec.organization == "RELATIVE":
-                created = f"file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits})"
+                created = f"file_runtime::RelativeFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits})"
             elif spec.organization == "INDEXED":
                 keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()} }}"
                                  for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
-                created = f"file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}])"
+                created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}])"
             else:
                 linage = ".with_linage()" if spec.linage else ""
                 if spec.organization == "LINE SEQUENTIAL":
                     # finalize_file: a LINE SEQUENTIAL record_min is 0.
                     limits = f"0, {spec.record_max}"
-                created = f"file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}"
+                created = f"file_runtime::CobolFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}"
             registry = self.file_registry(name)
             if spec.external:
                 # cob_file_external_addr: the first program creates the file.

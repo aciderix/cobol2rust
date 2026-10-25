@@ -99,7 +99,7 @@ Ces résultats portent sur les entrées testées.
 
 | Domaine | Pris en charge |
 | --- | --- |
-| Sources | Format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
+| Sources | Détection du format comme cobc (colonne 7 de la première ligne, format fixe avec `-std=cobol85`), format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
 | Configuration | `ENVIRONMENT DIVISION`, `CONFIGURATION SECTION`, `SOURCE-COMPUTER` et `OBJECT-COMPUTER` avec nom machine seul |
 | Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
@@ -644,13 +644,23 @@ Le vérificateur prépare **deux dossiers distincts**, y copie les données de
 `--data-dir` et y lance chaque programme. Il conserve les données originales et
 compare les noms et les octets de tous les fichiers finaux, y compris les entrées
 modifiées. Les empreintes et les différences sont enregistrées dans le rapport.
-Le vérificateur accepte seulement les chemins ASSIGN relatifs sans `..` ; la
+Le vérificateur accepte seulement les chemins ASSIGN et `--file-env` relatifs sans `..` ; la
 conversion seule peut conserver un chemin absolu. L'exécution n'est pas un bac
 à sable pour des sources non fiables.
 
 Périmètre précis du runtime de fichiers :
 
-- `ORGANIZATION LINE SEQUENTIAL` explicite ; `ASSIGN TO` avec chemin littéral.
+- `ORGANIZATION LINE SEQUENTIAL` explicite ou imposée par un périphérique.
+- `ASSIGN` comme cobc (`assign_clause`) : littéral ; nom non déclaré pris comme
+  nom de fichier tel qu'écrit (`implicit-assign-dynamic-var`) ; donnée lue à
+  chaque OPEN (`ASSIGN TO donnée`, `ASSIGN USING`, `DYNAMIC`) ; `EXTERNAL` et
+  `-std=cobol85` sans les étiquettes `UT-S-` ; périphériques DISK/DISC/TAPE/
+  RANDOM (nom du SELECT sans nom) et CARD-READER… (LINE SEQUENTIAL). Refusés :
+  DISPLAY, KEYBOARD, PRINTER, LINE ADVANCING FILE, DISK FROM.
+- Noms résolus à l'OPEN comme `cob_chk_file_mapping` : `DD_nom`, `dd_nom`,
+  `nom`, éléments `$VAR` des chemins et préfixe `COB_FILE_PATH`, avec les
+  particularités de libcob vérifiées ; nom vide ou mal cité : statut 31.
+  `verify --file-env NOM=chemin` fournit ces variables aux deux exécutions.
 - Un enregistrement `01` par `FD`, sans `VALUE` : PIC X élémentaire ou groupe
   contenant des colonnes texte et numériques DISPLAY, avec FILLER et niveaux 88.
   Les champs COMP/COMP-3 dans LINE SEQUENTIAL sont refusés.

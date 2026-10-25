@@ -269,7 +269,10 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     path = path.resolve()
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
-    text = normalize(path.read_text(encoding="utf-8-sig"), fmt)
+    source = path.read_text(encoding="utf-8-sig")
+    # The format detected on the main source also applies to its copybooks.
+    fmt = source_format(source, fmt)
+    text = normalize(source, fmt)
     # COPY is expanded at token boundaries; strings and comments cannot become directives.
     toks = lex(text)
     copies = []
@@ -445,6 +448,9 @@ class FileSpec:
     external: bool = False
     is_global: bool = False
     global_owner: str | None = None
+    # ASSIGN data-name: (label, qualifiers) until validate_files, then the
+    # field key read at each OPEN; `path` is then None.
+    assign_field: object = None
 
 
 @dataclass
@@ -504,7 +510,30 @@ BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY 
 
 
 def source_format(source: str, fmt="auto"):
-    return ("fixed" if any(re.match(r"^\d{6}[ */-]", x) for x in source.splitlines()) else "free") if fmt == "auto" else fmt
+    """ppopen_get_file: in reference-format auto, the character in column 7 of
+    the first source line within the first 20 bytes decides; a non-indicator
+    switches to free format. -std=cobol85 has the cobol85 (fixed) format."""
+    if fmt != "auto":
+        return fmt
+    if STD == "cobol85":
+        return "fixed"
+    buffer = bytearray(source.lstrip("\ufeff").encode("utf-8")[:20])
+    last, line_pos, pos = " ", 0, 0
+    while len(buffer) - pos > 7:
+        if buffer[pos] == 10:
+            line_pos = 0
+        elif buffer[pos] == 9:
+            buffer[pos] = 32
+            line_pos += 1
+            while line_pos % 8:
+                line_pos += 1
+        elif buffer[pos] != 13:
+            line_pos += 1
+        if line_pos >= 7:
+            last = chr(buffer[pos])
+            break
+        pos += 1
+    return "fixed" if last in " -dD*/\\$" else "free"
 
 
 class Parser:
@@ -694,6 +723,28 @@ class Parser:
     def candidates(self, label, conditions=False):
         registry = self.conditions if conditions else self.fields
         return [key for key, value in registry.items() if value.label == label and not getattr(value, "filler", False)]
+
+    def validate_assign_name(self, spec):
+        """validate_assign_name of typeck.c, on ASSIGN [TO] data-name."""
+        label, qualifiers, required, word = spec.assign_field
+        if label in self.files:
+            self.error(f"ASSIGN {label} : redéfinition d'un nom de fichier")
+        if self.candidates(label, True):
+            self.error(f"ASSIGN data item '{label}' is invalid")
+        if label in self.indexes:
+            self.error(f"ASSIGN vers un index non pris en charge: {label}")
+        if not self.candidates(label):
+            if required:
+                self.error(f"ASSIGN DYNAMIC/USING : donnée non déclarée {label}")
+            # implicit-assign-dynamic-var: a PIC X(4096) item holding the word
+            # as written; nothing else can name it, so it is that literal.
+            spec.path, spec.assign_field = Token(word.text, word.line, True), None
+            return
+        key = self.resolve(label, qualifiers)
+        field = self.fields[key]
+        if field.dimensions:
+            self.error(f"ASSIGN vers une donnée de table non pris en charge: {label}")
+        spec.assign_field = key
 
     def resolve(self, label, qualifiers=(), conditions=False):
         registry = self.conditions if conditions else self.fields
@@ -1938,9 +1989,10 @@ class Parser:
         self.expect("SELECT")
         optional = self.accept("OPTIONAL")
         name = self.user_word(self.name())
+        select_text = self.tokens[self.i - 1].text
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
-        path = None
+        path, assign_field = None, None
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
         relative_key, record_key, alternate_keys = None, None, []
 
@@ -1968,14 +2020,12 @@ class Parser:
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
         while not self.at("."):
-            if self.accept("ASSIGN") and path is None:
+            if self.at("ASSIGN") and path is None and assign_field is None:
                 # SELECT clauses come in any order (file_control_entry).
-                self.accept("TO")
-                path = self.take()
-                if not path.string:
-                    self.error("ASSIGN requiert un chemin littéral entre guillemets")
-                if not path.text or any(ord(c) < 32 for c in path.text):
-                    self.error("chemin ASSIGN vide ou invalide")
+                self.take()
+                path, assign_field, assign_organization = self.assign_clause(name, select_text)
+                if assign_organization and not organization_seen:
+                    organization = assign_organization
             elif self.accept("PADDING"):
                 # Obsolete in default.conf: cobc warns and ignores it.
                 self.accept("CHARACTER")
@@ -2054,7 +2104,7 @@ class Parser:
                 self.accept("AREA") or self.accept("AREAS")
             else:
                 self.error("clause SELECT non prise en charge")
-        if path is None:
+        if path is None and assign_field is None:
             self.error("ASSIGN attendu")
         self.expect(".")
         if organization != "RELATIVE" and relative_key:
@@ -2067,12 +2117,77 @@ class Parser:
             self.error("ACCESS RANDOM/DYNAMIC requiert RELATIVE KEY")
         self.files[name] = FileSpec(name, path, optional, status, organization=organization,
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
-                                    record_key=record_key, alternate_keys=alternate_keys)
+                                    record_key=record_key, alternate_keys=alternate_keys,
+                                    assign_field=assign_field)
+
+    # assign_device of parser.y: general devices keep the SELECT name as file
+    # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.
+    GENERAL_DEVICES = {"DISC", "DISK", "TAPE", "RANDOM"}
+    LINE_DEVICES = {"CARD-PUNCH", "CARD-READER", "CASSETTE", "INPUT", "INPUT-OUTPUT", "MAGNETIC-TAPE", "OUTPUT"}
+
+    def assign_clause(self, file_name, select_text):
+        """assign_clause of parser.y, after ASSIGN: returns (literal token or
+        None, (label, qualifiers, required) of a data item or None, organization
+        forced by the device or None)."""
+        from .reserved import RESERVED
+        self.accept("TO")
+        # _ext_clause: EXTERNAL makes the word a file name, DYNAMIC a variable;
+        # without it, assign-clause (dynamic, external with -std=cobol85).
+        kind = "external" if self.accept("EXTERNAL") else "dynamic" if self.accept("DYNAMIC") else None
+        explicit = kind is not None
+        kind = kind or ("external" if STD == "cobol85" else "default")
+        if explicit and STD == "cobol85":
+            self.error("ASSIGN EXTERNAL/DYNAMIC non conforme à -std=cobol85")
+        if self.at("LINE") and self.tokens[self.i + 1].key == "ADVANCING":
+            self.error("ASSIGN LINE ADVANCING FILE non pris en charge")
+        organization, device = None, None
+        if not self.t.string and self.t.key in {"DISPLAY", "KEYBOARD", "PRINTER", "PRINTER-1", "PRINT"}:
+            self.error(f"ASSIGN TO {self.t.key} (périphérique spécial) non pris en charge")
+        if not self.t.string and self.t.key in self.GENERAL_DEVICES | self.LINE_DEVICES:
+            device = self.take().key
+            if device in self.LINE_DEVICES:
+                organization = "LINE SEQUENTIAL"
+            if device == "DISK" and self.at("FROM"):
+                self.error("ASSIGN DISK FROM non pris en charge")
+        if self.at("USING") or self.at("VARYING"):
+            if explicit:
+                self.error("EXTERNAL/DYNAMIC cannot be used with USING/VARYING")
+            self.take()
+            if STD == "cobol85":
+                self.error("ASSIGN USING/VARYING non conforme à -std=cobol85")
+            kind = "required"
+        if self.t.string:
+            if explicit:
+                self.error("EXTERNAL/DYNAMIC cannot be used with literals")
+            path = self.take()
+            if not path.text or any(ord(c) < 32 for c in path.text):
+                self.error("chemin ASSIGN vide ou invalide")
+            return path, None, organization
+        if self.t.key in RESERVED or self.t.key in {".", "SELECT"}:
+            if kind == "required" or device is None:
+                self.error("nom ASSIGN attendu")
+            # flag_fileid: the file name is the SELECT name (cb_validate_one).
+            return Token(select_text, self.t.line, True), None, organization
+        word = self.t
+        label, qualifiers = self.name(), []
+        while self.accept("OF") or self.accept("IN"):
+            qualifiers.append(self.name())
+        if kind == "external":
+            if qualifiers:
+                self.error("ASSIGN EXTERNAL qualifié non pris en charge")
+            # build_external_assignment_name: labels before the last '-' are dropped.
+            return Token(word.text.rsplit("-", 1)[-1], word.line, True), None, organization
+        if label == file_name and not qualifiers:
+            # cb_build_assignment_name: the file's own name is a literal.
+            return Token(word.text, word.line, True), None, organization
+        return None, (label, tuple(qualifiers), kind == "required" or kind == "dynamic", word), organization
 
     def validate_files(self):
         for spec in self.files.values():
             if not spec.record:
                 self.error(f"FD manquant pour {spec.name}")
+            if spec.assign_field:
+                self.validate_assign_name(spec)
             if spec.name in self.fields:
                 self.error(f"nom ambigu entre fichier et donnée: {spec.name}")
             if spec.status:

@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T11:22:24+00:00",
- "git_head": "80ec66776fa3678f7e36f1bc0c475c16e017508a",
- "implementation_sha256": "b3ceda67814cd5beb4f0f451dcc0c8330ec16b238b1547f18dfbc284b242bb62",
+ "measured_at": "2026-10-25T11:38:12+00:00",
+ "git_head": "9eca7a97d0c6406f2484f704a4c7ce662d938a0f",
+ "implementation_sha256": "b3fa281ac432daff54a577cde827cc62c692763c148b1a8881f1e62a1475d608",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
  "totals": {
   "sources": 2458,
-  "accepted": 230,
+  "accepted": 626,
   "cobc_accepted": 738,
-  "gap": 518,
+  "gap": 122,
   "accepted_where_cobc_refuses": 10
  },
  "corpora": {
@@ -22,45 +22,77 @@
     "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)"
    },
    "sources": 44,
-   "accepted": 0,
+   "accepted": 7,
    "internal_errors": 0,
    "blockers": [
     [
-     "COPY: REPLACING ou point attendu",
-     36
+     "copybook introuvable: DFHAID",
+     14
+    ],
+    [
+     "copybook introuvable: DFHBMSCA",
+     7
+    ],
+    [
+     "USAGE/clause non pris en charge",
+     5
     ],
     [
      "copybook introuvable: CMQGMOV",
      2
     ],
     [
-     "littéral multiligne non pris en charge",
-     2
-    ],
-    [
-     "caractère non pris en charge '?'",
-     2
-    ],
-    [
-     "copybook introuvable: DFHBMSCA",
+     "instruction non prise en charge: EXEC",
      1
     ],
     [
-     "caractère non pris en charge '!'",
+     "copybook introuvable: CMQODV",
+     1
+    ],
+    [
+     "niveau de donnée attendu",
+     1
+    ],
+    [
+     "VALUE sur FD/REDEFINES non pris en charge",
+     1
+    ],
+    [
+     "RECORDING MODE limité à F pour des enregistrements fixes",
+     1
+    ],
+    [
+     "clé INDEXED EXPORT-SEQUENCE-NUM hors de l'enregistrement de EXPORT-OUTPUT ou dans une table",
+     1
+    ],
+    [
+     "clé INDEXED EXPORT-SEQUENCE-NUM hors de l'enregistrement de EXPORT-INPUT ou dans une table",
+     1
+    ],
+    [
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
      1
     ]
    ],
    "cobc_accepted": 14,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 14,
+   "gap": 7,
    "gap_blockers": [
     [
-     "COPY: REPLACING ou point attendu",
-     13
+     "USAGE/clause non pris en charge",
+     4
     ],
     [
-     "littéral multiligne non pris en charge",
+     "RECORDING MODE limité à F pour des enregistrements fixes",
+     1
+    ],
+    [
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
+     1
+    ],
+    [
+     "FILE-CONTROL attendu",
      1
     ]
    ]
@@ -78,8 +110,12 @@
    "internal_errors": 0,
    "blockers": [
     [
-     "COPY: REPLACING ou point attendu",
-     5
+     "RECORDING MODE limité à F pour des enregistrements fixes",
+     3
+    ],
+    [
+     "FILE-CONTROL attendu",
+     2
     ]
    ],
    "cobc_accepted": 5,
@@ -88,8 +124,12 @@
    "gap": 5,
    "gap_blockers": [
     [
-     "COPY: REPLACING ou point attendu",
-     5
+     "RECORDING MODE limité à F pour des enregistrements fixes",
+     3
+    ],
+    [
+     "FILE-CONTROL attendu",
+     2
     ]
    ]
   },
@@ -102,53 +142,33 @@
     "kind": "cours IBM Enterprise COBOL"
    },
    "sources": 32,
-   "accepted": 5,
+   "accepted": 11,
    "internal_errors": 0,
    "blockers": [
     [
-     "IDENTIFICATION DIVISION attendue",
-     17
-    ],
-    [
-     "littéral multiligne non pris en charge",
-     3
+     ". attendu",
+     16
     ],
     [
      "caractère non pris en charge '#'",
      3
     ],
     [
-     "caractère non pris en charge '&'",
+     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
      1
     ],
     [
-     "caractère non pris en charge '$'",
-     1
-    ],
-    [
-     "caractère non pris en charge '|'",
-     1
-    ],
-    [
-     "instruction non prise en charge: **",
+     "conversion implicite numérique/texte non prise en charge: GROSS-PAY",
      1
     ]
    ],
    "cobc_accepted": 12,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 7,
+   "gap": 1,
    "gap_blockers": [
     [
-     "IDENTIFICATION DIVISION attendue",
-     5
-    ],
-    [
-     "caractère non pris en charge '|'",
-     1
-    ],
-    [
-     "instruction non prise en charge: **",
+     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
      1
     ]
    ]
@@ -202,7 +222,7 @@
      2
     ],
     [
-     "caractère non pris en charge '$'",
+     "indicateur fixe '$' non pris en charge",
      2
     ],
     [
@@ -261,13 +281,9 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 85,
+   "accepted": 258,
    "internal_errors": 0,
    "blockers": [
-    [
-     "ASSIGN requiert un chemin littéral entre guillemets",
-     216
-    ],
     [
      "indicateur fixe 'C' non pris en charge",
      209
@@ -278,11 +294,19 @@
     ],
     [
      "PROCEDURE attendu",
-     32
+     31
+    ],
+    [
+     "LABEL RECORDS limité à OMITTED ou STANDARD",
+     24
     ],
     [
      "expression attendue",
      14
+    ],
+    [
+     "expression non prise en charge: ALL",
+     12
     ],
     [
      "instruction non prise en charge: EXEC",
@@ -290,7 +314,7 @@
     ],
     [
      "IDENTIFICATION DIVISION attendue",
-     11
+     10
     ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
@@ -307,10 +331,6 @@
     [
      "indicateur fixe 'A' non pris en charge",
      5
-    ],
-    [
-     "PROGRAM-ID attendu",
-     5
     ]
    ],
    "cobc_accepted": 311,
@@ -322,15 +342,11 @@
     "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionLessOrEqual.cbl",
     "src/test/resources/io/proleap/cobol/asg/valuestmt/relation/ConditionNotEqualChar.cbl"
    ],
-   "gap": 231,
+   "gap": 58,
    "gap_blockers": [
     [
-     "ASSIGN requiert un chemin littéral entre guillemets",
-     172
-    ],
-    [
      "PROCEDURE attendu",
-     20
+     19
     ],
     [
      "niveau de donnée attendu",
@@ -346,6 +362,10 @@
     ],
     [
      "paragraphe CONFIGURATION non pris en charge",
+     2
+    ],
+    [
+     "FILE-CONTROL attendu",
      2
     ],
     [
@@ -365,11 +385,11 @@
      1
     ],
     [
-     "invalid expression: unfinished expression",
+     "instruction non prise en charge: GIVING",
      1
     ],
     [
-     "instruction non prise en charge: GIVING",
+     "clause ENVIRONMENT DIVISION non prise en charge",
      1
     ]
    ]
@@ -383,56 +403,56 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 97,
+   "accepted": 307,
    "internal_errors": 0,
    "blockers": [
     [
      "clause ENVIRONMENT DIVISION non prise en charge",
-     351
+     354
     ],
     [
      "IDENTIFICATION DIVISION attendue",
-     315
+     246
     ],
     [
      "caractère non pris en charge '|'",
      231
     ],
     [
-     "ASSIGN requiert un chemin littéral entre guillemets",
-     216
-    ],
-    [
      "COPY: REPLACING ou point attendu",
-     88
+     68
     ],
     [
      "expression attendue",
-     22
+     24
     ],
     [
-     "littéral multiligne non pris en charge",
-     11
+     "clause SELECT non prise en charge",
+     20
+    ],
+    [
+     "seuls les littéraux ASCII sont pris en charge",
+     18
+    ],
+    [
+     "instruction non prise en charge: EXEC",
+     16
+    ],
+    [
+     "expression non prise en charge: ALL",
+     12
     ],
     [
      "instruction non prise en charge: OBTAIN",
      11
     ],
     [
+     "USAGE/clause non pris en charge",
+     10
+    ],
+    [
      "PROCEDURE attendu",
      10
-    ],
-    [
-     "instruction non prise en charge: FIND",
-     10
-    ],
-    [
-     "copybook introuvable: LGCMAREA",
-     10
-    ],
-    [
-     "BY attendu dans COPY REPLACING",
-     8
     ]
    ],
    "cobc_accepted": 331,
@@ -442,22 +462,14 @@
     "clients/analysis/src/__tests__/__resources__/cfgraph/case35.cbl",
     "clients/analysis/src/__tests__/__resources__/cfgraph/case39.cbl"
    ],
-   "gap": 237,
+   "gap": 27,
    "gap_blockers": [
     [
-     "ASSIGN requiert un chemin littéral entre guillemets",
-     179
-    ],
-    [
-     "IDENTIFICATION DIVISION attendue",
-     31
-    ],
-    [
-     "COPY: REPLACING ou point attendu",
-     8
-    ],
-    [
      "expression attendue",
+     6
+    ],
+    [
+     "instruction non prise en charge: XML",
      4
     ],
     [
@@ -469,12 +481,16 @@
      2
     ],
     [
-     "instruction non prise en charge: *",
+     "USAGE/clause non pris en charge",
      2
     ],
     [
-     "littéral multiligne non pris en charge",
+     "PROCEDURE attendu",
      2
+    ],
+    [
+     "instruction non prise en charge: OF",
+     1
     ],
     [
      "FILE-CONTROL attendu",
@@ -485,11 +501,15 @@
      1
     ],
     [
-     "niveau de donnée attendu",
+     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE",
      1
     ],
     [
-     "instruction non prise en charge: XML",
+     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
+     1
+    ],
+    [
+     "CALL identifiant requiert un champ alphanumérique",
      1
     ]
    ]
