@@ -1,5 +1,10 @@
 # Handoff — COBOL vers Rust
 
+> **Reprise : lire d'abord [CAP.md](CAP.md).** Depuis le 25 octobre 2026, le
+> prochain chantier se choisit dans la mesure des corpus réels
+> (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
+> NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
+
 État au 25 octobre 2026 : version **0.4.0** livrée, branche
 `claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
 
@@ -860,8 +865,11 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
 4. **SIZE ERROR.** Division par zéro et dépassement de PICTURE sont récupérables
    par le chemin contrôlé. L'arrondi précède le contrôle, et une erreur laisse
    la destination intacte. Un résultat négatif non signé perd son signe dans ce
-   chemin, conformément aux essais. Une donnée numérique invalide reste un
-   arrêt nommé ; ne pas intercepter globalement les erreurs pour la masquer.
+   chemin, conformément aux essais. Une donnée numérique invalide est un
+   arrêt nommé avec `--runtime-checks` (cobc `-debug`) ; sans, elle se lit
+   comme libcob (`View::operand_value`, lecture décimale ou entière selon la
+   routine de comparaison de cobc). Ne pas intercepter globalement les
+   erreurs pour la masquer.
 5. **Index.** Initialement 1, ordinaux signés de 32 bits, affichage signé avec
    au moins 9 chiffres. SET UP/DOWN évalue son opérande pour chaque destination :
    si le premier index sert d'opérande, sa nouvelle valeur affecte le second.

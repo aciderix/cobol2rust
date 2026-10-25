@@ -1,0 +1,7 @@
+short
+exactly8
+much-longer-than-eight
+abcd
+nulx
+été
+full-end

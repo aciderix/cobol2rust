@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -68,13 +69,17 @@ def inventory(root: Path) -> dict:
     return dict(sorted(counts.items()))
 
 
-def fetch_gnucobol_testsuite(output: Path) -> dict:
+def fetch_gnucobol_testsuite(output: Path, local: Path | None = None) -> dict:
     """Keep the GnuCOBOL 3.2 sources: testsuite (.at) and libcob reference runtime."""
     url, expected = GNUCOBOL
     archive = output / "gnucobol-3.2.tar.xz"
-    with build_opener(HTTPSRedirectsOnly()).open(url, timeout=120) as response:
-        with archive.open("xb") as stream:
-            shutil.copyfileobj(response, stream)
+    if local and local.is_file():
+        # Archive already downloaded by install_gnucobol.sh: same pinned digest.
+        shutil.copyfile(local, archive)
+    else:
+        with build_opener(HTTPSRedirectsOnly()).open(url, timeout=120) as response:
+            with archive.open("xb") as stream:
+                shutil.copyfileobj(response, stream)
     check_digest(archive, expected)
     destination = output / "gnucobol-3.2"
     destination.mkdir()
@@ -92,7 +97,7 @@ def fetch_gnucobol_testsuite(output: Path) -> dict:
             "testsuite_files": len(tests), "testsuite_cases": setups}
 
 
-def fetch(output: Path, names: list[str], with_gnucobol: bool) -> dict:
+def fetch(output: Path, names: list[str], with_gnucobol: bool, gnucobol_archive: Path | None = None) -> dict:
     output = output.absolute()
     if output.exists() or output.is_symlink():
         raise ValueError(f"Le dossier de sortie doit être inexistant : {output}")
@@ -106,7 +111,7 @@ def fetch(output: Path, names: list[str], with_gnucobol: bool) -> dict:
                         "description": description, "cobol_files": inventory(output / name)})
     if with_gnucobol:
         print("Téléchargement vérifié : gnucobol-3.2.tar.xz", flush=True)
-        entries.append(fetch_gnucobol_testsuite(output))
+        entries.append(fetch_gnucobol_testsuite(output, gnucobol_archive))
     manifest = {
         "corpora": entries, "programs_executed": False, "conformance_claimed": False,
         "notices": "Dépôts conservés avec leurs licences d'origine, hors des sources du projet ; "
@@ -125,9 +130,12 @@ def main(argv=None) -> int:
                         help="sous-ensemble de dépôts")
     parser.add_argument("--without-gnucobol", action="store_true",
                         help="ne pas récupérer les sources et la testsuite GnuCOBOL 3.2")
+    parser.add_argument("--gnucobol-archive", type=Path,
+                        default=Path(os.environ.get("WORK", "/opt/src")) / "gnucobol-3.2.tar.xz",
+                        help="archive locale déjà téléchargée (empreinte vérifiée), sinon téléchargement")
     args = parser.parse_args(argv)
     try:
-        manifest = fetch(args.output, args.only, not args.without_gnucobol)
+        manifest = fetch(args.output, args.only, not args.without_gnucobol, args.gnucobol_archive)
     except (OSError, ValueError, RuntimeError, URLError, tarfile.TarError, subprocess.TimeoutExpired) as exc:
         print(f"Récupération des corpus échouée : {exc}", file=sys.stderr)
         return 1

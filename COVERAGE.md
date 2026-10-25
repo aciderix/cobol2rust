@@ -1,5 +1,10 @@
 # Objectif : couverture universelle du COBOL vers Rust
 
+> **Indicateur principal depuis le 25 octobre 2026 : les corpus réels**
+> (tableau de [CAP.md](CAP.md), `tools/real_corpora.py`). Les sections NIST
+> ci-dessous décrivent la première partie ; NIST est désormais un test de
+> non-régression, pas une mesure de la couverture du COBOL existant.
+
 L'objectif demandé est une **garantie universelle de conversion COBOL vers
 Rust**, couvrant tout le COBOL existant, au-delà du sous-ensemble de la version
 0.4.0. Cet objectif guide le développement ; il ne
@@ -761,3 +766,30 @@ ne compile pas) ; revérification : **427/427 programmes principaux
 conformes**, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT, le bilan exact du
 runner natif (`build/nist-verify-final.json`, `build/coverage-nist-final.json`).
 
+## Progression : données invalides sans contrôles d'exécution
+
+Sans `-debug`, libcob calcule avec les données numériques invalides : port de
+`COB_D2I` et des cas X"FF"/X"00" de `cob_decimal_set_display`, du packé lu
+par quartets, de la sélection de cobc pour les comparaisons
+(`cb_build_cond_default`, `cb_check_num_cond`, `cb_build_optim_cond`,
+`cob_numeric_cmp`), des copies de `cb_build_move_field`, de
+`cb_build_move_high/low`, de l'affichage par `cob_move_display_to_edited` et
+des clés de `cob_file_sort_compare`. Fixtures `invalid_numeric_data`,
+`invalid_numeric_compare`, `invalid_numeric_move` identiques à cobc. Sur code
+réel (`tools/real_corpora.py --execute`) : 65/74 programmes acceptés
+identiques (CardDemo 8/8, zopeneditor 3/3, cours 9/11, livre 45/52) ; les
+autres sont un indice hors bornes et des programmes interactifs sans jeu
+d'entrée (délai). Avec `--runtime-checks`, toute donnée invalide reste un arrêt
+nommé.
+
+## Progression : ENTRY, modules et LENGTH OF
+
+Port de `emit_entry` et `output_entry_function` (ENTRY littéral avec USING,
+liaison par point d'entrée, nom résolu une fois le module chargé comme par
+`cob_resolve`), d'un programme à PROCEDURE DIVISION USING exécuté comme
+module (`cobc -m` puis `cobcrun`, sans argument), d'un article LINKAGE sans
+adresse, de `cb_build_length` et de DEPENDING ON qualifié. Acceptation des
+corpus réels : 685 → 693/2458 ; CardDemo 14/44 et zopeneditor 5/5, autant
+que cobc. Les modules acceptés ne sont pas exécutés par la mesure (ils
+attendent un appelant) ; un accès à un paramètre non transmis est un arrêt
+nommé, là où GnuCOBOL lit une adresse indéterminée.

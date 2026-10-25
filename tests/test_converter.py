@@ -38,7 +38,7 @@ class FrontendTests(unittest.TestCase):
             program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
-            program("stop run.", "01 n pic 9(2) comp-5."),
+            program("stop run.", "01 n usage comp-1."),
             program("stop run.", "01 n pic 9(19)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("stop run.", "01 n pic 9. 01 n pic 9."),
@@ -200,7 +200,9 @@ class RuntimeTests(unittest.TestCase):
         rustc = find_tool("rustc")
         # A DISPLAY receiver truncates like cob_decimal_get_display; binary
         # overflow depends on cobc's native add routines and stops.
-        cases = [("compute n = 1 / 0 stop run.", b"", "division by zero", "01 n pic 99."),
+        # A division by zero is NaN in an arithmetic statement (divide_by_zero
+        # fixture); in a condition it is not modelled and stops.
+        cases = [("if n / 0 > 1 display 'x' end-if stop run.", b"", "division by zero", "01 n pic 99."),
                  ("compute n = 100 stop run.", b"", "overflow", "01 n pic 99 comp.")]
         for body, stdin, diagnostic, data in cases:
             with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:

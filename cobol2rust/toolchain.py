@@ -35,14 +35,15 @@ def compiler_env(tool: str) -> dict:
     return env
 
 
-def build_rust(project: Path) -> Path:
+def build_rust(project: Path, release: bool = False) -> Path:
     cargo = find_tool("cargo")
     if not cargo:
         raise RuntimeError("Cargo introuvable")
     target = CACHE_ROOT / "rust-target"
-    command = [cargo, "build", "--quiet", "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(target)]
+    command = [cargo, "build", "--quiet", *(["--release"] if release else []),
+               "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(target)]
     p = subprocess.run(command, env=compiler_env(cargo), capture_output=True, timeout=120)
     if p.returncode:
         raise RuntimeError("Rust compile:\n" + p.stderr.decode(errors="replace"))
     manifest = tomllib.loads((project / "Cargo.toml").read_text(encoding="utf-8"))
-    return target / "debug" / (manifest["package"]["name"] + (".exe" if os.name == "nt" else ""))
+    return target / ("release" if release else "debug") / (manifest["package"]["name"] + (".exe" if os.name == "nt" else ""))

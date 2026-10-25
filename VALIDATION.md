@@ -1,5 +1,55 @@
 # Validation — 22 octobre 2026
 
+## Données invalides, ENTRY et modules — 25 octobre 2026
+
+- Vérification NIST complète sur 1c167ab (données invalides sans contrôles,
+  routine de comparaison de cobc) : **427/427 conformes, 9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT** (`build/nist-verify-1c167ab.json`) ; émission
+  451/458.
+- Code réel (`tools/real_corpora.py --cobc --execute --record`, horloge
+  figée à `2026/10/25 12:00:00.00`) : CardDemo 8/8 identiques, zopeneditor
+  3/3, cours 9/11 (2 délais, boucles aussi infinies en natif), livre 45/52
+  (Listing13-6 : indice hors bornes ; 6 délais de programmes interactifs).
+- Nouvelles fixtures natives : `invalid_numeric_data`,
+  `invalid_numeric_compare`, `invalid_numeric_move`, `entry_statement`,
+  `entry_not_loaded` (avec `entry_calls/ENTSUB.cob`), `module_using`
+  (exécuté par `cobcrun`), `length_of`.
+
+## Exécution comparée sur code réel — 25 octobre 2026
+
+`tools/real_corpora.py --cobc --execute --record` compile, exécute (stdin
+vide, fichiers du dossier du programme, build release) et compare à cobc les
+programmes acceptés : CardDemo 8/8 identiques, zopeneditor 3/3, cours 8/11
+(1 divergent : COMP-3 invalide ; 2 boucles infinies aussi en natif), livre
+41/52 (5 divergents, 6 délais de programmes interactifs). Nouvelles fixtures
+natives : `call_not_found`, `call_not_found_dynamic`, `file_exit_messages`,
+`divide_by_zero`, `line_sequential_split`, `line_sequential_bad_char`,
+`non_ascii_literals`, `literal_concatenation`. Vérification NIST complète sur
+566aece : 427/427, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT.
+
+## Corpus réels après les premières étapes du cap — 25 octobre 2026
+
+`tools/real_corpora.py --cobc --record` : **685/2458** acceptées (référence
+230), cobc 738, écart 53, aucune source acceptée que cobc refuse. Nouvelles
+preuves natives : `assign_names`, `assign_mapping` (variables DD_, $VAR,
+COB_FILE_PATH), `group_condition_figurative`, `exit_perform`, en-têtes
+facultatifs, `comp5`, `return_code` (CALL, CANCEL, code de sortie 44) et
+`return_code_nested` (code 23). Vérification NIST complète sur le commit
+7c4ab9b : 426/427, seul NC214M divergeait à cause de l'horloge figée du
+23 octobre alors que la référence native a été régénérée le 25 ; l'outil lit
+désormais l'horloge dans le journal de référence et NC214M passe.
+
+## Mesure de référence des corpus réels — 25 octobre 2026
+
+Nouvelle boussole (CAP.md). `tools/real_corpora.py --cobc --record`, six corpus
+publics épinglés, format `auto` (heuristique de cobol2rust d'alors, règle
+de cobc côté cobc), copybooks de chaque corpus :
+**230/2458 sources acceptées, cobc 738, écart 518** (sources que cobc accepte
+et que cobol2rust refuse). CardDemo 0/44 (cobc 14), zopeneditor-sample 0/5
+(cobc 5). 15 sources sont acceptées alors que cobc les refuse (IF vide,
+indicateur invalide en colonne 7…) : à examiner comme défauts de rigueur.
+Niveau 2 de preuve seulement. Fichiers : `measurements/real-corpora.json`.
+
 ## Fin de la première partie : couverture NIST du runner natif — 25 octobre 2026
 
 - **369 tests découverts : 368 réussis, un test PE Windows ignoré.**
@@ -12,7 +62,9 @@
   **427/427 programmes principaux conformes** (dont 14 que report.pl compile
   seulement, et le module CM que la suite n'exécute pas) : **9610 PASS, 0 FAIL,
   20 DELETED, 118 INSPECT, total 9748**, exactement le bilan natif de
-  `summary.txt`. Rapports : `build/nist-verify-final.json`,
+  `summary.txt`. Précision : 413 de ces programmes sont exécutés et comparés ;
+  les 14 autres (12 que report.pl compile seulement, plus CM201M et CM303M du
+  module CM jamais exécuté) sont seulement convertis et compilés. Rapports : `build/nist-verify-final.json`,
   `build/coverage-nist-final.json`. 13 programmes ajoutés : CM201M, CM303M,
   DB205A, DB304M, IC227A, IC233A, IC234A, IC401M, NC401M, OBNC1M, RW301M,
   RW302M, SQ401M ; DB103M est vérifié dans ses deux exécutions (COB_SET_DEBUG

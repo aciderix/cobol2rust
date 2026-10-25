@@ -122,10 +122,11 @@ gamma. continue.
         # Segment numbers only matter to independent ALTERed paragraphs.
         Parser(program("area-a section 1. continue. area-b section 50. continue.")).parse()
         for body in ("area-a section 100. continue.", "exit section.",
-                     "perform 2 times exit perform end-perform.",
-                     "perform 2 times exit perform cycle end-perform."):
+                     # EXIT PERFORM is only valid within an inline PERFORM.
+                     "exit perform.", "exit perform cycle."):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Parser(program(body)).parse()
+        Parser(program("perform 2 times exit perform end-perform.")).parse()
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

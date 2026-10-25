@@ -9,6 +9,7 @@ from cobol2rust.cli import convert
 from cobol2rust.emitter import Emitter
 from cobol2rust.frontend import CobolError, Parser
 from cobol2rust.toolchain import ROOT, build_rust, compiler_env, find_tool
+from cobol2rust.verification import verify
 from tests.test_converter import program
 from cobol2rust.audit import audit
 
@@ -140,12 +141,18 @@ class StructureRuntimeTests(unittest.TestCase):
             source = root / "source.cob"
             source.write_text(program('move "XX" to raw-a compute n = bad-a + 1 on size error display "CAUGHT" end-compute stop run.',
                                       "01 raw-a pic xx. 01 bad-a redefines raw-a pic 99. 01 n pic 99."), encoding="utf-8")
-            convert(source, root / "rust")
+            # With runtime checks (cobc -debug) the invalid data is a stop.
+            convert(source, root / "rust", runtime_checks=True)
             binary = build_rust(root / "rust")
             result = subprocess.run([str(binary)], capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 70)
             self.assertIn(b"invalid DISPLAY numeric data", result.stderr)
             self.assertNotIn(b"CAUGHT", result.stdout)
+            # Without, libcob adds COB_D2I digits ("XX" is 88): no SIZE ERROR.
+            if find_tool("cobc"):
+                report = verify(source)
+                self.assertTrue(report["match"], report)
+                self.assertNotIn("CAUGHT", report["rust_stdout"])
 
     def test_bad_reference_modification_is_a_named_abort(self):
         with tempfile.TemporaryDirectory() as temp:

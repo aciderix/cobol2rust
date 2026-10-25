@@ -23,6 +23,11 @@ class ControlGraph:
         self.blocks = blocks
         self.nodes: list[Node] = []
         self.times_slots = 0
+        # Inline PERFORMs being lowered: (exit_label, cycle_label) targets of
+        # EXIT PERFORM and EXIT PERFORM CYCLE (codegen.c output_perform).
+        self.performs: list[tuple[int, int]] = []
+        # ENTRY name: its position (an entry of the program's function).
+        self.entry_points: dict[str, int] = {}
         self._end = self._add("end")
         # cobc's static label_N of each paragraph modified by ALTER.
         self.alter_slots = {name: slot for slot, name in enumerate(program.alters)}
@@ -305,6 +310,11 @@ class ControlGraph:
         if op == "sentence_end":
             self._sentence = after
             return after
+        if op == "entry":
+            # emit_entry: a label; with DEBUGGING MODE its "START PROGRAM".
+            position = self._add("debug_contents", ("START PROGRAM", after)) if self.debug else after
+            self.entry_points[args[0]] = position
+            return position
         if op == "next_sentence":
             return self._add("jump", (self._sentence,), stmt)
         if op == "if":
@@ -434,6 +444,11 @@ class ControlGraph:
                 after = self._add("debug_contents", (self._label_text(target), after))
                 after = self._add("debug_name", (self._label_text(source), after))
             return self._add("alter", (self.alter_slots[source], self._target(target)[0], after), stmt)
+        if op == "exit_perform":
+            if not self.performs:
+                self._error(stmt, "EXIT PERFORM is only valid with inline PERFORM")
+            exit_label, cycle_label = self.performs[-1]
+            return self._add("jump", (cycle_label if args[0] else exit_label,), stmt)
         if op == "exit_paragraph":
             return self._add("jump", (self.paragraph_checkpoints[block],), stmt)
         if op == "exit_section":
@@ -479,8 +494,26 @@ class ControlGraph:
 
     def _loop(self, stmt: Stmt, after: int, block: int) -> int:
         mode, control, body = stmt.args
+        return self._loop_nodes(stmt, mode, control, body, after, block)
+
+    def _loop_body(self, body, continuation: int, after: int, block: int) -> int:
+        """The loop body: its end is the cycle label (output_perform_once),
+        the statement after the loop the exit label."""
+        self.performs.append((after, continuation))
+        try:
+            return self._body(body, continuation, block)
+        finally:
+            self.performs.pop()
+
+    def _loop_nodes(self, stmt, mode, control, body, after, block):
         if mode == "once":
-            return self._body(body, after, block)
+            return self._loop_body(body, after, after, block)
+        if mode == "forever":
+            # CB_PERFORM_FOREVER (UNTIL EXIT, FOREVER): for (;;) over the body.
+            head = self._add("jump", (), stmt)
+            entry = self._loop_body(body, head, after, block)
+            self.nodes[head] = Node("jump", (entry,), stmt)
+            return entry
         if mode == "times":
             count = control[0]
             if self._kind(count) != "number":
@@ -489,14 +522,14 @@ class ControlGraph:
             self.times_slots += 1
             test = self._add("times_test", (), stmt)
             step = self._add("times_step", (slot, test), stmt)
-            entry = self._body(body, step, block)
+            entry = self._loop_body(body, step, after, block)
             self.nodes[test] = Node("times_test", (slot, entry, after), stmt)
             return self._add("times_init", (slot, count, test), stmt)
         if mode == "until":
             condition, test_after = control
             test = self._add("branch", (), stmt)
             check = self._condition_debug(condition, test, block)
-            entry = self._body(body, check, block)
+            entry = self._loop_body(body, check, after, block)
             self.nodes[test] = Node("branch", (condition, after, entry), stmt)
             return entry if test_after else check
         if mode == "varying":
@@ -526,7 +559,7 @@ class ControlGraph:
                 if level + 1 < len(levels):
                     inner = level_loop(level + 1, inner_exit)
                 else:
-                    inner = self._body(body, inner_exit, block)
+                    inner = self._loop_body(body, inner_exit, after, block)
                 first = check if not test_after else inner
                 self.nodes[head] = Node("jump", (initialize(level + 1, first) if level + 1 < len(levels) else first,), stmt)
                 self.nodes[test] = Node("branch", (condition, exit_node, increment if test_after else inner), stmt)

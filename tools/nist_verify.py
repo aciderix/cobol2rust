@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,8 +30,24 @@ RUNNER_FLAGS = ["-std=cobol85", "--debug"]
 # report.pl compiles these programs with -fdebugging-line ($cobc_flags).
 DEBUGGING_LINES = {"SM206A"}
 # Programs that print the clock: both runs use the moment of the reference
-# run, read from its log (NC214M: DATE 261023, DAY 26296, TIME 15092270).
+# run, read from its log (reference_clock); this value is the fallback, from
+# the run of 23 October 2026 (DATE 261023, DAY 26296, TIME 15092270).
 RUNNER_CLOCK = {"NC214M": "2026/10/23 15:09:22.700000000"}
+NATIVE_LOGS = Path(".tools/nist-native-gnucobol-3.2")
+
+
+def reference_clock(name: str) -> str:
+    """COB_CURRENT_DATE of the native reference run, from the DATE YYMMDD and
+    HHMMSSFF lines of the program's REPORT log."""
+    log = NATIVE_LOGS / name[:2] / f"{name}.log"
+    if log.exists():
+        text = log.read_text(encoding="ascii", errors="replace")
+        date = re.search(r"0*(\d{6})\.0+\s+DATE YYMMDD", text)
+        time = re.search(r"0*(\d{1,8})\.0+\s+HHMMSSFF", text)
+        if date and time:
+            d, t = date.group(1), time.group(1).zfill(8)
+            return f"20{d[:2]}/{d[2:4]}/{d[4:]} {t[:2]}:{t[2:4]}:{t[4:6]}.{t[6:]}0000000"
+    return RUNNER_CLOCK[name]
 # report.pl $cobc_flags{DB201A} = "-fno-ec=data-incompatible".
 NO_EC_DATA_INCOMPATIBLE = {"DB201A"}
 # report.pl $raw_input, written with `echo "..." > $exe.inp` (so plus "\n").
@@ -43,7 +60,7 @@ def runner_env(name: str) -> dict:
     """report.pl: the runtime DEBUG switch is on for the DB module, except DB102A."""
     environment = {**RUNNER_ENV, "COB_SET_DEBUG": "Y" if name[:2] == "DB" and name != "DB102A" else "N"}
     if name in RUNNER_CLOCK:
-        environment["COB_CURRENT_DATE"] = RUNNER_CLOCK[name]
+        environment["COB_CURRENT_DATE"] = reference_clock(name)
     return environment
 # report.pl executes DB103M a second time with the runtime DEBUG switch off;
 # its REPORT log is the first run's, report.txt has a line for each run.
@@ -101,7 +118,7 @@ def rust_seed(corpus: Path, chain: list[Path], copybooks: list[Path], call_paths
     seed.mkdir()
     for program in chain:
         project = work / f"rust_{program.stem}"
-        convert(program, project, fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
+        convert(program, project, fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85", runtime_checks=True)
         binary = build_rust(project)
         stdin = program.with_suffix(".DAT")
         with (stdin.open("rb") if stdin.exists() else open(os.devnull, "rb")) as stream:
@@ -139,7 +156,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     call_paths = [path for path in [corpus / name[:2] / "lib"] if path.is_dir()]
     work.mkdir(parents=True)
     if name in COMPILE_ONLY or name[:2] in UNTESTED_MODULES:
-        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
+        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85",
+                runtime_checks=True)
         build_rust(work / "rust")
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
                 "runner_counts": runner_counts(native_logs, name)}
@@ -150,7 +168,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
                     stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
                     data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
                     runtime_env=runner_env(name), debugging_lines=name in DEBUGGING_LINES,
-                    cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE)
+                    cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE,
+                    runtime_checks=True)
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}
@@ -166,7 +185,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
                        stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
                        data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
                        runtime_env={**runner_env(name), **RERUN_ENV[name]}, debugging_lines=name in DEBUGGING_LINES,
-                       cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE)
+                       cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE,
+                    runtime_checks=True)
         entry["rerun_match"] = rerun["match"]
         entry["passed"] = entry["passed"] and rerun["match"]
     return entry
@@ -182,6 +202,8 @@ def main(argv=None) -> int:
     parser.add_argument("--work", type=Path, required=True, help="dossier de travail inexistant")
     parser.add_argument("-o", "--output", type=Path, required=True, help="nouveau rapport JSON")
     args = parser.parse_args(argv)
+    global NATIVE_LOGS
+    NATIVE_LOGS = args.native_logs
     names = list(args.programs)
     if args.accepted_from:
         results = json.loads(args.accepted_from.read_text(encoding="utf-8"))["results"]

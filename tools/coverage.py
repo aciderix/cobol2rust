@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cobol2rust import __version__
 from cobol2rust.audit import SKIP
 from cobol2rust.cli import emit_unit
-from cobol2rust.frontend import CobolError, Parser, load_source, source_format
+from cobol2rust.frontend import CobolError, Parser, decode_source, load_source, source_format
 from cobol2rust.toolchain import ROOT
 
 
@@ -65,9 +65,9 @@ def inspect_source(path, fmt, includes, call_paths=()):
             raise CobolError("symbolic-link source is not read")
         original = path.read_bytes()
         result["source_sha256"] = hashlib.sha256(original).hexdigest()
-        result["initial_source_format"] = source_format(original.decode("utf-8-sig"), fmt)
+        result["initial_source_format"] = source_format(decode_source(original), fmt)
         expanded, copies = load_source(path, list(includes), fmt)
-        result["expanded_sha256"] = hashlib.sha256(expanded.encode("utf-8")).hexdigest()
+        result["expanded_sha256"] = hashlib.sha256(expanded.encode("latin-1")).hexdigest()
         # On failure load_source does not return the COPY files it already read.
         # An incomplete list is deliberately not presented as an empty known list.
         result["copybooks"] = [{"path": name, "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest()}
@@ -115,10 +115,10 @@ def implementation_hashes():
 
 
 def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, include_subprograms=False,
-            call_paths=()):
+            call_paths=(), extensions=None):
     root = Path(root).absolute()
     includes = [Path(path).absolute() for path in includes]
-    extensions = EXTENSIONS | ({".sub"} if include_subprograms else set())
+    extensions = set(extensions or EXTENSIONS) | ({".sub"} if include_subprograms else set())
     try:
         paths, errors, excluded = discover(root, extensions)
     except OSError as error:

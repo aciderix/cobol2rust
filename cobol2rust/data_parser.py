@@ -4,7 +4,10 @@ import re
 from .frontend import Condition, Field, Token, VERBS
 
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
-          "INDEX"}
+          "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE"}
+# field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
+# digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
+FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18}
 
 
 def literal(p):
@@ -224,7 +227,20 @@ def declaration(p, file_record=False):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
-            if group_condition and not p.t.string:
+            if group_condition and not p.t.string and (p.at("ALL") or p.t.key in {
+                    "QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES", "ZERO", "ZEROS", "ZEROES"}
+                    or p.t.key in getattr(p, "symbolic", {})):
+                # cob_cmp of the group with a figurative constant or ALL literal
+                # repeats it over the group's size, known once it is laid out.
+                p.accept("ALL")
+                token = literal(p)
+                if p.at("THRU") or p.at("THROUGH"):
+                    p.error("plage THRU de figuratives au niveau 88 de groupe non prise en charge")
+                p.group_fills.append((key, len(values), token.text))
+                values.append((None, None))
+                p.accept(",")
+                continue
+            if group_condition and not p.t.string and p.t.key not in {"SPACE", "SPACES"}:
                 p.error("niveau 88 de groupe limité aux littéraux alphanumériques")
             if p.accept("ALL") or figurative:
                 # ALL literal and figurative constants: repeated over the item.
@@ -310,6 +326,7 @@ def declaration(p, file_record=False):
     if key in p.fields or label in VERBS or label in {"ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES"}:
         p.error(f"nom de donnée réservé ou dupliqué: {label}")
     picture, usage, initial = "", "DISPLAY", None
+    fixed_binary = None
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
     figurative = None
@@ -354,6 +371,8 @@ def declaration(p, file_record=False):
             if variable:
                 p.expect("DEPENDING"); p.accept("ON")
                 depending = p.name()
+                while p.accept("OF") or p.accept("IN"):
+                    depending += "\0" + p.name()
         elif p.at("ASCENDING") or p.at("DESCENDING"):
             # ASCENDING/DESCENDING KEY: the keys of SEARCH ALL, in order.
             if not table:
@@ -448,7 +467,19 @@ def declaration(p, file_record=False):
             if p.t.string or p.t.key not in USAGES:
                 p.error("USAGE/clause non pris en charge")
             usage = p.take().key
+            if usage in FIXED_BINARY_DIGITS:
+                signed_binary = not p.accept("UNSIGNED")
+                if signed_binary:
+                    p.accept("SIGNED")
+                fixed_binary = ("S" if signed_binary else "") + f"9({FIXED_BINARY_DIGITS[usage]})"
+                usage = "COMP-5"
+            elif usage == "COMPUTATIONAL-5":
+                usage = "COMP-5"
     p.expect(".")
+    if fixed_binary:
+        if picture:
+            p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE")
+        picture = fixed_binary
     # USAGE INDEX without PICTURE is an elementary index data item, unless
     # subordinate entries follow (a group whose USAGE they inherit).
     has_children = (not p.t.string and p.t.key.isdigit() and level not in {66, 77}

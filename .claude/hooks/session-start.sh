@@ -29,8 +29,13 @@ fi
 if [ ! -f .tools/corpora/manifest.json ]; then
     step "corpus publics et testsuite GnuCOBOL"
     rm -rf .tools/corpora
-    python3 tools/fetch_corpora.py --output .tools/corpora >> "$LOG" 2>&1 \
-        || echo "[session-start] AVERTISSEMENT : récupération des corpus échouée, voir $LOG"
+    # Les corpus réels sont la boussole du projet (CAP.md) : sans l'archive
+    # GnuCOBOL (ftp.gnu.org coupe parfois), récupérer au moins les dépôts.
+    python3 tools/fetch_corpora.py --output .tools/corpora >> "$LOG" 2>&1 || {
+        rm -rf .tools/corpora
+        python3 tools/fetch_corpora.py --output .tools/corpora --without-gnucobol >> "$LOG" 2>&1 \
+            || echo "[session-start] AVERTISSEMENT : récupération des corpus réels échouée, voir $LOG"
+    }
 fi
 
 # Référence du runner NIST natif (~15 min) : en arrière-plan, sans bloquer la session.

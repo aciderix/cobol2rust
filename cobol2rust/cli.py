@@ -77,8 +77,6 @@ def run_unit(source: Path, fmt, includes, call_paths):
     """
     expanded, copies = load_source(source, list(includes), fmt)
     main = Parser(expanded).parse()
-    if main.using:
-        raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
     directories = [Path(path) for path in call_paths]
     units = {}
     # Programs after the main one in its source are in the executable itself:
@@ -151,24 +149,28 @@ def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
     called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
     present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
                for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
-    emitters = [Emitter(main, called=called, present=present)]
+    entries = [name for program in (main, *(sub for _, sub, _, _ in subprograms))
+               for name, _ in getattr(program, "entries", [])]
+    emitters = [Emitter(main, called=called, present=present, entries=entries)]
     for index, (_, sub, _, _) in enumerate(subprograms, 1):
-        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present))
+        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present,
+                                entries=entries))
     rust, mapping = generate_unit(emitters)
     return main, expanded, copies, subprograms, rust, mapping
 
 
 def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), debugging_lines=False,
-            std="default", no_ec_data_incompatible=False):
+            std="default", no_ec_data_incompatible=False, runtime_checks=False):
     from . import frontend
     if std not in frontend.STANDARDS:
         raise CobolError(f"dialecte non modélisé: {std}; choisir parmi {', '.join(frontend.STANDARDS)}")
-    previous = frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE
-    frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = debugging_lines, std, no_ec_data_incompatible
+    previous = frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS
+    frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS = \
+        debugging_lines, std, no_ec_data_incompatible, runtime_checks
     try:
         program, expanded, copies, subprograms, rust, mapping = emit_unit(source, fmt, includes, call_paths)
     finally:
-        frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = previous
+        frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS = previous
     output = output.resolve()
     # Never replace an existing project or an unrelated directory implicitly.
     if output.exists() and any(output.iterdir()):
@@ -180,7 +182,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     organizations = sorted({f.organization for f in program.files.values()})
     report = {"schema_version": 1, "tool_version": __version__, "program": program.name,
               "source": str(source.resolve()), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-              "expanded_sha256": hashlib.sha256(expanded.encode("utf-8")).hexdigest(),
+              "expanded_sha256": hashlib.sha256(expanded.encode("latin-1")).hexdigest(),
               "copybook_sha256": {path: hashlib.sha256(Path(path).read_bytes()).hexdigest() for path in copies},
               "copybooks": copies, "fields": [asdict(f) for f in program.fields.values()],
               "paragraphs": list(program.paragraphs), "source_map": mapping,
@@ -194,6 +196,8 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
               "files": [asdict(f) for f in program.files.values()],
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
+              # PROCEDURE DIVISION USING: a module, run as cobcrun runs it.
+              "module": program.entry_name if program.using else None,
               "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
                                "in_main_source": Path(path).resolve() == Path(source).resolve(),
                                "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -218,7 +222,8 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     if program.files or any(sub.files for _, sub, _, _ in subprograms):
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    (output / "expanded.cob").write_text(expanded + "\n", encoding="utf-8")
+    # One character per source byte: expanded.cob keeps the original bytes.
+    (output / "expanded.cob").write_text(expanded + "\n", encoding="latin-1")
     (output / "conversion.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return report
 
@@ -236,6 +241,7 @@ def main(argv=None):
     source.add_argument("--debugging-lines", action="store_true", help="compiler les lignes D comme cobc -fdebugging-line")
     source.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc modélisé (-std)")
     source.add_argument("--fno-ec-data-incompatible", action="store_true", help="comme cobc -fno-ec=data-incompatible (MOVE sans cob_check_numeric)")
+    source.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution de cobc -debug (arrêt sur donnée invalide)")
     source.add_argument("--build", action="store_true", help="compiler le Rust généré")
     source.add_argument("--run", action="store_true", help="compiler et exécuter le Rust généré")
     binary = subs.add_parser("inspect", help="inspecter un exécutable COBOL potentiel (sans le lancer)")
@@ -250,9 +256,12 @@ def main(argv=None):
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
     verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE ou COB_SWITCH_n identique pour les deux programmes")
+    verification.add_argument("--file-env", action="append", default=[], metavar="NAME=CHEMIN",
+                              help="nom de fichier externe (DD_nom, dd_nom, nom ou COB_FILE_PATH), chemin relatif, pour les deux programmes")
     verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
+    verification.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution (cobc -debug) des deux côtés")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -279,15 +288,18 @@ def main(argv=None):
             from .verification import verify
             if args.output and args.output.exists():
                 raise CobolError(f"rapport existant: {args.output}")
-            environment = {}
-            for item in args.runtime_env:
-                if "=" not in item:
-                    raise CobolError("--runtime-env requiert NAME=VALUE")
-                key, value = item.split("=", 1)
-                environment[key] = value
+            environment, file_env = {}, {}
+            for option, items, target in (("--runtime-env", args.runtime_env, environment),
+                                          ("--file-env", args.file_env, file_env)):
+                for item in items:
+                    if "=" not in item:
+                        raise CobolError(f"{option} requiert NAME=VALUE")
+                    key, value = item.split("=", 1)
+                    target[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
                             args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
-                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible)
+                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env,
+                            runtime_checks=args.runtime_checks)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():
@@ -311,7 +323,7 @@ def main(argv=None):
             if (args.build or args.run) and not cargo:
                 raise CobolError("Cargo introuvable; installer Rust ou omettre --build/--run")
             report = convert(args.source, args.output, args.format, args.copybook_path, args.call_path,
-                             args.debugging_lines, args.std, args.fno_ec_data_incompatible)
+                             args.debugging_lines, args.std, args.fno_ec_data_incompatible, args.runtime_checks)
             print(f"{report['program']} -> {args.output.resolve()}", flush=True)
             if cargo:
                 command = [cargo, "run" if args.run else "build", "--quiet"]

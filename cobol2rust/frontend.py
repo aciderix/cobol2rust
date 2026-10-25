@@ -59,6 +59,9 @@ DEBUGGING_LINES = False
 STD = "default"
 # cobc -fno-ec=data-incompatible: MOVE from DISPLAY data without cob_check_numeric.
 NO_EC_DATA_INCOMPATIBLE = False
+# cobc -debug: runtime checks (EC-ALL); without them, libcob computes with
+# invalid numeric data (COB_D2I) instead of stopping.
+RUNTIME_CHECKS = False
 STANDARDS = ("default", "cobol85")
 
 
@@ -228,8 +231,21 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 i += 1
             else:
                 raise CobolError(f"ligne {start}: littéral non terminé")
-            if not value.isascii():
-                raise CobolError(f"ligne {start}: seuls les littéraux ASCII sont pris en charge")
+            # One character per source byte (decode_source): a non-ASCII
+            # literal holds the bytes of its source text, as for cobc.
+            tokens.append(Token(value, start, True, token_start, i))
+        elif c in "xX" and i + 1 < len(source) and source[i + 1] in "\"'":
+            # X"hex": two hexadecimal digits per byte (scanner.l).
+            quote, start = source[i + 1], line
+            end = source.find(quote, i + 2)
+            newline = source.find("\n", i + 2)
+            if end < 0 or (0 <= newline < end):
+                raise CobolError(f"ligne {start}: littéral hexadécimal non terminé")
+            digits = source[i + 2:end]
+            if not digits or len(digits) % 2 or not all(d in "0123456789abcdefABCDEF" for d in digits):
+                raise CobolError(f"ligne {start}: littéral hexadécimal invalide: {digits!r}")
+            value = bytes.fromhex(digits).decode("latin-1")
+            i = end + 1
             tokens.append(Token(value, start, True, token_start, i))
         else:
             # A COBOL word may start with digits when it holds a letter (3-DIMENSION-TBL);
@@ -247,6 +263,10 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
+            if not match and c == "&":
+                tokens.append(Token("&", line, False, i, i + 1))
+                i += 1
+                continue
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
             text = match[0]
@@ -261,7 +281,16 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             elif match[0] == ")" and parentheses:
                 parentheses -= 1
     tokens.append(Token("<EOF>", line, False, len(source), len(source)))
-    return tokens
+    # literal: literal TOK_AMPER basic_literal, concatenated by cobc.
+    merged = []
+    for token in tokens:
+        if (token.string and len(merged) > 1 and merged[-1].text == "&" and not merged[-1].string
+                and merged[-2].string):
+            merged.pop()
+            first = merged.pop()
+            token = Token(first.text + token.text, first.line, True, first.start, token.end)
+        merged.append(token)
+    return merged
 
 
 def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> tuple[str, list[str]]:
@@ -269,7 +298,10 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     path = path.resolve()
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
-    text = normalize(path.read_text(encoding="utf-8-sig"), fmt)
+    source = decode_source(path.read_bytes())
+    # The format detected on the main source also applies to its copybooks.
+    fmt = source_format(source, fmt)
+    text = normalize(source, fmt)
     # COPY is expanded at token boundaries; strings and comments cannot become directives.
     toks = lex(text)
     copies = []
@@ -410,6 +442,9 @@ class Expr:
     figurative_zero: bool = False
     figurative_space: bool = False
     literal_all: bool = False
+    # HIGH-VALUE / LOW-VALUE of the native collating sequence (cb_norm_high,
+    # cb_norm_low): a MOVE to any numeric item is a memset.
+    memset: bool = False
 
 
 @dataclass
@@ -445,6 +480,11 @@ class FileSpec:
     external: bool = False
     is_global: bool = False
     global_owner: str | None = None
+    # ASSIGN data-name: (label, qualifiers) until validate_files, then the
+    # field key read at each OPEN; `path` is then None.
+    assign_field: object = None
+    # The SELECT name as written: libcob's select_name in its messages.
+    select_text: str = ""
 
 
 @dataclass
@@ -496,15 +536,48 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENABLE DISABLE RECEIVE SEND PURGE".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
+def decode_source(data: bytes) -> str:
+    """cobc reads sources as bytes (columns are byte columns) and skips a
+    UTF-8 BOM (ppopen_get_file): one latin-1 character per byte."""
+    return data[3:].decode("latin-1") if data.startswith(b"\xef\xbb\xbf") else data.decode("latin-1")
+
+
 def source_format(source: str, fmt="auto"):
-    return ("fixed" if any(re.match(r"^\d{6}[ */-]", x) for x in source.splitlines()) else "free") if fmt == "auto" else fmt
+    """ppopen_get_file: in reference-format auto, the character in column 7 of
+    the first source line within the first 20 bytes decides; a non-indicator
+    switches to free format. -std=cobol85 has the cobol85 (fixed) format."""
+    if fmt != "auto":
+        return fmt
+    if STD == "cobol85":
+        return "fixed"
+    try:
+        data = source.encode("latin-1")
+    except UnicodeEncodeError:
+        data = source.lstrip("\ufeff").encode("utf-8")
+    buffer = bytearray(data[:20])
+    last, line_pos, pos = " ", 0, 0
+    while len(buffer) - pos > 7:
+        if buffer[pos] == 10:
+            line_pos = 0
+        elif buffer[pos] == 9:
+            buffer[pos] = 32
+            line_pos += 1
+            while line_pos % 8:
+                line_pos += 1
+        elif buffer[pos] != 13:
+            line_pos += 1
+        if line_pos >= 7:
+            last = chr(buffer[pos])
+            break
+        pos += 1
+    return "fixed" if last in " -dD*/\\$" else "free"
 
 
 class Parser:
@@ -534,6 +607,9 @@ class Parser:
         self.symbolic = {}
         self.same_records = []
         self.renames = []
+        # Level 88 of a group with a figurative or ALL value: (condition,
+        # value index, text) filled to the group's size after layout.
+        self.group_fills = []
         # SOURCE-COMPUTER ... WITH DEBUGGING MODE (current_program->flag_debugging).
         self.debugging_mode = False
         # PROGRAM COLLATING SEQUENCE with a literal alphabet: its weights, and
@@ -695,6 +771,28 @@ class Parser:
         registry = self.conditions if conditions else self.fields
         return [key for key, value in registry.items() if value.label == label and not getattr(value, "filler", False)]
 
+    def validate_assign_name(self, spec):
+        """validate_assign_name of typeck.c, on ASSIGN [TO] data-name."""
+        label, qualifiers, required, word = spec.assign_field
+        if label in self.files:
+            self.error(f"ASSIGN {label} : redéfinition d'un nom de fichier")
+        if self.candidates(label, True):
+            self.error(f"ASSIGN data item '{label}' is invalid")
+        if label in self.indexes:
+            self.error(f"ASSIGN vers un index non pris en charge: {label}")
+        if not self.candidates(label):
+            if required:
+                self.error(f"ASSIGN DYNAMIC/USING : donnée non déclarée {label}")
+            # implicit-assign-dynamic-var: a PIC X(4096) item holding the word
+            # as written; nothing else can name it, so it is that literal.
+            spec.path, spec.assign_field = Token(word.text, word.line, True), None
+            return
+        key = self.resolve(label, qualifiers)
+        field = self.fields[key]
+        if field.dimensions:
+            self.error(f"ASSIGN vers une donnée de table non pris en charge: {label}")
+        spec.assign_field = key
+
     def resolve(self, label, qualifiers=(), conditions=False):
         registry = self.conditions if conditions else self.fields
         candidates = self.candidates(label, conditions)
@@ -768,14 +866,20 @@ class Parser:
             self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
         return ref
 
+    def program_end(self):
+        """_procedure_division may be empty: the program ends here."""
+        return self.at("<EOF>") or (self.at("END") and self.tokens[self.i + 1].key == "PROGRAM")
+
     def parse(self):
-        if not (self.accept("IDENTIFICATION") or self.accept("ID")):
+        # _identification_header: the header itself is optional.
+        if self.accept("IDENTIFICATION") or self.accept("ID"):
+            self.expect("DIVISION")
+            self.expect(".")
+        elif not self.at("PROGRAM-ID"):
             self.error("IDENTIFICATION DIVISION attendue")
-        self.expect("DIVISION")
-        self.expect(".")
         self.expect("PROGRAM-ID")
         self.expect(".")
-        entry_name = self.t.text
+        entry_name = self.program_name = self.t.text
         name = self.name()
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
@@ -787,6 +891,8 @@ class Parser:
                 else:
                     common = True
             self.accept("PROGRAM")
+        if common and not self.level:
+            self.error("COMMON may only be used in a contained program")
         self.expect(".")
         if self.accept("ENVIRONMENT"):
             self.environment_division()
@@ -842,14 +948,15 @@ class Parser:
                 self.expect(".")
                 self.data_stack = []
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
-                        and not self.at("COMMUNICATION"):
+                        and not self.at("COMMUNICATION") and not self.program_end():
                     self.declaration()
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
                 self.data_stack = []
                 self.in_linkage = True
-                while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION"):
+                while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION") \
+                        and not self.program_end():
                     self.declaration()
                 self.in_linkage = False
             if self.accept("COMMUNICATION"):
@@ -867,7 +974,8 @@ class Parser:
 
         for descriptor in self.fields.values():
             if descriptor.depending:
-                descriptor.depending = self.resolve(descriptor.depending)
+                label, *qualifiers = descriptor.depending.split("\0")
+                descriptor.depending = self.resolve(label, tuple(qualifiers))
         # SAME RECORD AREA (finalize_file): the records of the later FDs
         # redefine the record area of the first FD of the group.
         order = list(self.fields)
@@ -878,9 +986,15 @@ class Parser:
                 self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        for key, index, text in self.group_fills:
+            condition = self.conditions[key]
+            size = self.fields[condition.parent].size
+            token = Token((text * size)[:size], self.t.line, True)
+            condition.values[index] = (token, token)
         self.apply_renames()
         self.validate_files()
         memory_size = self.debug_item(memory_size)
+        self.return_code_register()
         # GLOBAL items of the containing programs (copies of their
         # descriptions, storage owned by the declaring program).
         for key, item in getattr(self, "inherited", {}).items():
@@ -889,24 +1003,16 @@ class Parser:
             if file_name in self.files:
                 self.error(f"fichier homonyme d'un fichier GLOBAL non pris en charge: {file_name}")
             self.files[file_name] = spec
-        self.expect("PROCEDURE")
-        self.expect("DIVISION")
         using = []
-        if self.accept("USING"):
-            while not self.at("."):
-                if self.accept("BY"):
-                    if not self.accept("REFERENCE"):
-                        self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
-                if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
-                    self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
-                key = self.resolve(self.name())
-                field = self.fields[key]
-                if not field.linkage or field.parent is not None or field.redefines or key in using:
-                    self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
-                using.append(key)
-            if not using:
-                self.error("USING requiert au moins un paramètre")
-        self.expect(".")
+        procedure = not self.program_end()
+        if procedure:
+            self.expect("PROCEDURE")
+            self.expect("DIVISION")
+        if procedure and self.accept("USING"):
+            using = self.using_list(lambda: self.at("."))
+        if procedure:
+            self.expect(".")
+        self.entries = []
         entry, paragraphs = [], {}
         blocks = [ProcedureBlock(None, None, entry)]
         sections, segments = {}, {}
@@ -949,7 +1055,8 @@ class Parser:
                 break
             if self.accept("END"):
                 self.expect("PROGRAM")
-                if self.name() != name:
+                # cobc compares the names as written, case included.
+                if self.t.text != entry_name or self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
                 ended = True
@@ -1008,10 +1115,6 @@ class Parser:
             self.error("END DECLARATIVES attendu")
         if current_section is not None:
             sections[current_section] = (sections[current_section][0], len(blocks))
-        unbound = [f.label for f in self.fields.values()
-                   if f.linkage and f.parent is None and not f.redefines and f.name not in using]
-        if unbound:
-            self.error(f"article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: {unbound[0]}")
         if not self.debugging_mode:
             # Without DEBUGGING MODE the USE FOR DEBUGGING sections are not
             # compiled (skip_statements).
@@ -1024,12 +1127,14 @@ class Parser:
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
+        program.entries = self.entries
         program.segments = segments
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
         program.reports = self.reports
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
+        program.runtime_checks = RUNTIME_CHECKS
         program.debug_fields = self.debug_fields if self.debugging_mode else {}
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
@@ -1063,7 +1168,7 @@ class Parser:
                 child.siblings = []
             self.expect("END")
             self.expect("PROGRAM")
-            if self.name() != name:
+            if self.t.text != entry_name or self.name() != name:
                 self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
             self.expect(".")
             if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
@@ -1303,6 +1408,25 @@ class Parser:
             clone.global_owner, clone.global_root = owner, root.label
             inherited[clone.name] = clone
         return inherited
+
+    def return_code_register(self):
+        """cb_build_register_return_code: RETURN-CODE, "GLOBAL USAGE
+        BINARY-LONG VALUE ZERO", in each outermost program; contained programs
+        share it as a GLOBAL item. It is held apart from the program's storage
+        (Field.register), so the other offsets do not move."""
+        if self.level or self.candidates("RETURN-CODE"):
+            return
+        saved = self.tokens, self.i, self.data_stack, self.last_data
+        self.tokens, self.i, self.data_stack = lex("01 RETURN-CODE GLOBAL USAGE BINARY-LONG VALUE ZERO."), 0, []
+        self.building_register = True
+        try:
+            key = self.declaration()
+        finally:
+            self.building_register = False
+            self.tokens, self.i, self.data_stack, self.last_data = saved
+        from .layout import layout_fields
+        layout_fields({key: self.fields[key]})
+        self.fields[key].register = True
 
     def debug_item(self, memory_size):
         """cb_build_debug_item, at the first USE FOR DEBUGGING: DEBUG-ITEM in
@@ -1641,19 +1765,22 @@ class Parser:
                         self.high_value = chr(high)
                 else:
                     self.check_identity_alphabet(token, alphabet, "PROGRAM COLLATING SEQUENCE")
-            if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")):
+            if not any(self.at(word) for word in ("INPUT-OUTPUT", "DATA", "PROCEDURE")) and not self.program_end():
                 self.error("paragraphe CONFIGURATION non pris en charge")
         if self.accept("INPUT-OUTPUT"):
             self.expect("SECTION")
             self.expect(".")
-            self.expect("FILE-CONTROL")
-            self.expect(".")
+            # _file_control_header: optional when no SELECT follows (a SELECT
+            # without it is "FILE-CONTROL header missing", an error).
+            if self.at("FILE-CONTROL") or self.at("SELECT"):
+                self.expect("FILE-CONTROL")
+                self.expect(".")
             while self.at("SELECT"):
                 self.file_control()
             if self.accept("I-O-CONTROL"):
                 self.expect(".")
                 self.io_control()
-        if not (self.at("DATA") or self.at("PROCEDURE")):
+        if not (self.at("DATA") or self.at("PROCEDURE") or self.program_end()):
             self.error("clause ENVIRONMENT DIVISION non prise en charge")
 
     DEVICES = {"SYSIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout", "SYSLIST": "stdout", "SYSLST": "stdout",
@@ -1938,9 +2065,10 @@ class Parser:
         self.expect("SELECT")
         optional = self.accept("OPTIONAL")
         name = self.user_word(self.name())
+        select_text = self.tokens[self.i - 1].text
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
-        path = None
+        path, assign_field = None, None
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
         relative_key, record_key, alternate_keys = None, None, []
 
@@ -1968,14 +2096,12 @@ class Parser:
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
         while not self.at("."):
-            if self.accept("ASSIGN") and path is None:
+            if self.at("ASSIGN") and path is None and assign_field is None:
                 # SELECT clauses come in any order (file_control_entry).
-                self.accept("TO")
-                path = self.take()
-                if not path.string:
-                    self.error("ASSIGN requiert un chemin littéral entre guillemets")
-                if not path.text or any(ord(c) < 32 for c in path.text):
-                    self.error("chemin ASSIGN vide ou invalide")
+                self.take()
+                path, assign_field, assign_organization = self.assign_clause(name, select_text)
+                if assign_organization and not organization_seen:
+                    organization = assign_organization
             elif self.accept("PADDING"):
                 # Obsolete in default.conf: cobc warns and ignores it.
                 self.accept("CHARACTER")
@@ -2054,7 +2180,7 @@ class Parser:
                 self.accept("AREA") or self.accept("AREAS")
             else:
                 self.error("clause SELECT non prise en charge")
-        if path is None:
+        if path is None and assign_field is None:
             self.error("ASSIGN attendu")
         self.expect(".")
         if organization != "RELATIVE" and relative_key:
@@ -2067,12 +2193,77 @@ class Parser:
             self.error("ACCESS RANDOM/DYNAMIC requiert RELATIVE KEY")
         self.files[name] = FileSpec(name, path, optional, status, organization=organization,
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
-                                    record_key=record_key, alternate_keys=alternate_keys)
+                                    record_key=record_key, alternate_keys=alternate_keys,
+                                    assign_field=assign_field, select_text=select_text)
+
+    # assign_device of parser.y: general devices keep the SELECT name as file
+    # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.
+    GENERAL_DEVICES = {"DISC", "DISK", "TAPE", "RANDOM"}
+    LINE_DEVICES = {"CARD-PUNCH", "CARD-READER", "CASSETTE", "INPUT", "INPUT-OUTPUT", "MAGNETIC-TAPE", "OUTPUT"}
+
+    def assign_clause(self, file_name, select_text):
+        """assign_clause of parser.y, after ASSIGN: returns (literal token or
+        None, (label, qualifiers, required) of a data item or None, organization
+        forced by the device or None)."""
+        from .reserved import RESERVED
+        self.accept("TO")
+        # _ext_clause: EXTERNAL makes the word a file name, DYNAMIC a variable;
+        # without it, assign-clause (dynamic, external with -std=cobol85).
+        kind = "external" if self.accept("EXTERNAL") else "dynamic" if self.accept("DYNAMIC") else None
+        explicit = kind is not None
+        kind = kind or ("external" if STD == "cobol85" else "default")
+        if explicit and STD == "cobol85":
+            self.error("ASSIGN EXTERNAL/DYNAMIC non conforme à -std=cobol85")
+        if self.at("LINE") and self.tokens[self.i + 1].key == "ADVANCING":
+            self.error("ASSIGN LINE ADVANCING FILE non pris en charge")
+        organization, device = None, None
+        if not self.t.string and self.t.key in {"DISPLAY", "KEYBOARD", "PRINTER", "PRINTER-1", "PRINT"}:
+            self.error(f"ASSIGN TO {self.t.key} (périphérique spécial) non pris en charge")
+        if not self.t.string and self.t.key in self.GENERAL_DEVICES | self.LINE_DEVICES:
+            device = self.take().key
+            if device in self.LINE_DEVICES:
+                organization = "LINE SEQUENTIAL"
+            if device == "DISK" and self.at("FROM"):
+                self.error("ASSIGN DISK FROM non pris en charge")
+        if self.at("USING") or self.at("VARYING"):
+            if explicit:
+                self.error("EXTERNAL/DYNAMIC cannot be used with USING/VARYING")
+            self.take()
+            if STD == "cobol85":
+                self.error("ASSIGN USING/VARYING non conforme à -std=cobol85")
+            kind = "required"
+        if self.t.string:
+            if explicit:
+                self.error("EXTERNAL/DYNAMIC cannot be used with literals")
+            path = self.take()
+            if not path.text or any(ord(c) < 32 for c in path.text):
+                self.error("chemin ASSIGN vide ou invalide")
+            return path, None, organization
+        if self.t.key in RESERVED or self.t.key in {".", "SELECT"}:
+            if kind == "required" or device is None:
+                self.error("nom ASSIGN attendu")
+            # flag_fileid: the file name is the SELECT name (cb_validate_one).
+            return Token(select_text, self.t.line, True), None, organization
+        word = self.t
+        label, qualifiers = self.name(), []
+        while self.accept("OF") or self.accept("IN"):
+            qualifiers.append(self.name())
+        if kind == "external":
+            if qualifiers:
+                self.error("ASSIGN EXTERNAL qualifié non pris en charge")
+            # build_external_assignment_name: labels before the last '-' are dropped.
+            return Token(word.text.rsplit("-", 1)[-1], word.line, True), None, organization
+        if label == file_name and not qualifiers:
+            # cb_build_assignment_name: the file's own name is a literal.
+            return Token(word.text, word.line, True), None, organization
+        return None, (label, tuple(qualifiers), kind == "required" or kind == "dynamic", word), organization
 
     def validate_files(self):
         for spec in self.files.values():
             if not spec.record:
                 self.error(f"FD manquant pour {spec.name}")
+            if spec.assign_field:
+                self.validate_assign_name(spec)
             if spec.name in self.fields:
                 self.error(f"nom ambigu entre fichier et donnée: {spec.name}")
             if spec.status:
@@ -2178,9 +2369,9 @@ class Parser:
             # Like ALL '"': a figurative constant fills its receiver.
             left = Expr("all", ('"',))
         elif t.key in {"HIGH-VALUE", "HIGH-VALUES"}:
-            left = Expr("all", (self.high_value,))
+            left = Expr("all", (self.high_value,), memset=self.high_value == "\xff")
         elif t.key in {"LOW-VALUE", "LOW-VALUES"}:
-            left = Expr("all", (self.low_value,))
+            left = Expr("all", (self.low_value,), memset=self.low_value == "\x00")
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,), literal_all=True)
@@ -2209,6 +2400,8 @@ class Parser:
             left = Expr("linage", (self.linage_file(),))
         elif not t.string and t.key in {"LINE-COUNTER", "PAGE-COUNTER"}:
             left = Expr("report_counter", (self.counter_report(t.key), t.key))
+        elif not t.string and t.key == "LENGTH" and not self.candidates(t.key):
+            left = self.length_of()
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -2392,6 +2585,78 @@ class Parser:
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         return Expr("function", (name.key, tuple(args)))
 
+    def using_list(self, ended):
+        """PROCEDURE DIVISION / ENTRY USING: distinct 01/77 LINKAGE items."""
+        using = []
+        while not ended():
+            if self.accept("BY"):
+                if not self.accept("REFERENCE"):
+                    self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
+            if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
+                self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
+            key = self.resolve(self.name())
+            field = self.fields[key]
+            if not field.linkage or field.parent is not None or field.redefines or key in using:
+                self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
+            using.append(key)
+        if not using:
+            self.error("USING requiert au moins un paramètre")
+        return using
+
+    def entry_statement(self, line):
+        """ENTRY literal [USING ...] (entry_body, emit_entry): another entry
+        point of the program, a label where the program runs through it."""
+        if self.level:
+            self.error("ENTRY is invalid in nested program")
+        if STD == "cobol85":
+            self.error("ENTRY statement does not conform to COBOL 85")
+        if not self.t.string:
+            self.error("ENTRY limité à un littéral sans convention d'appel ni FOR GO TO")
+        name = self.take().text
+        if not name or name in {self.program_name, *(entry for entry, _ in self.entries)}:
+            self.error(f"ENTRY '{name}' duplicated")
+        using = []
+        if self.accept("USING"):
+            using = self.using_list(lambda: self.t.string or self.t.key in BOUNDARIES
+                                    or not (self.at("BY") or self.candidates(self.t.key)))
+        self.entries.append((name, using))
+        return Stmt("entry", (name,), line)
+
+    def length_of(self):
+        """LENGTH [OF] (length_of_register): cb_build_length, a literal for a
+        fixed item or literal, FUNCTION LENGTH for a reference modification
+        or a function, otherwise the cb_build_length_1 sum over the ODO."""
+        self.accept("OF")
+        if self.t.string:
+            return Expr("number", (str(len(self.take().text.encode("latin-1"))),))
+        if not self.t.string and self.t.key == "FUNCTION":
+            self.take()
+            return Expr("function", ("LENGTH", (self.function_call(),)))
+        ref = self.variable()
+        if ref.start is not None:
+            return Expr("function", ("LENGTH", (Expr("var", (ref,)),)))
+        return self.field_length(ref.name)
+
+    def field_length(self, name):
+        """cb_build_length_1: the size of a fixed item; the sizes of the
+        children of a variable one, an ODO table counted by its object."""
+        f = self.fields[name]
+
+        def variable(item):  # cb_field_variable_size
+            return any(self.fields[c].depending or variable(self.fields[c]) for c in item.children)
+        if not variable(f):
+            return Expr("number", (str(getattr(f, "parse_size", f.size)),))
+        total = None
+        for child in f.children:
+            c = self.fields[child]
+            size = self.field_length(child)
+            if c.depending:
+                size = Expr("*", (size, Expr("var", (DataRef(c.depending),))))
+            elif c.occurs > 1:
+                size = Expr("*", (size, Expr("number", (str(c.occurs),))))
+            total = size if total is None else Expr("+", (total, size))
+        return total
+
     def operand_start(self):
         """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
         t = self.t
@@ -2399,6 +2664,8 @@ class Parser:
             return not (t.text[:1] in "+-" and not t.string and len(t.text) == 1)
         k = t.key
         if k in {"FUNCTION", "LINAGE-COUNTER", "LINE-COUNTER", "PAGE-COUNTER"}:
+            return True
+        if k == "LENGTH" and not self.candidates(k):
             return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
@@ -3046,8 +3313,15 @@ class Parser:
             cond = self.condition()
             self.accept("THEN")
             yes = self.block({"ELSE", "END-IF"})
+            # if_else_statements: each branch needs a statement; an empty true
+            # branch before ELSE is a missing-statement (an error with -std=cobol85).
+            otherwise = self.accept("ELSE")
+            if not yes and (not otherwise or STD == "cobol85"):
+                self.error("IF without imperative statement")
             # Without END-IF, a further ELSE belongs to an enclosing IF.
-            no = self.block({"END-IF", "ELSE"}) if self.accept("ELSE") else []
+            no = self.block({"END-IF", "ELSE"}) if otherwise else []
+            if otherwise and not no:
+                self.error("ELSE without imperative statement")
             if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
@@ -3093,7 +3367,7 @@ class Parser:
             # An all-digit word is a procedure name unless TIMES follows it.
             numeric_name = (not self.t.string and re.fullmatch(r"\d+", self.t.key)
                             and self.tokens[self.i + 1].key != "TIMES")
-            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH", "TEST"} | VERBS and not self.t.string
+            if numeric_name or (self.t.key not in {"UNTIL", "VARYING", "WITH", "TEST", "FOREVER"} | VERBS and not self.t.string
                                 and not self.candidates(self.t.key)
                                 and re.fullmatch(r"[A-Z_][A-Z_0-9-]*|\d[A-Z0-9-]*[A-Z][A-Z_0-9-]*", self.t.key)):
                 target = [self.procedure_reference()]
@@ -3108,7 +3382,15 @@ class Parser:
                 else:
                     self.expect("BEFORE")
             mode, control = "once", ()
-            if self.accept("UNTIL"):
+            if self.at("UNTIL") and self.tokens[self.i + 1].key == "EXIT" and not self.tokens[self.i + 1].string:
+                # cond_or_exit: UNTIL EXIT is cb_build_perform_forever.
+                self.take(); self.take()
+                mode = "forever"
+            elif self.at("FOREVER") and self.tokens[self.i + 1].key != "TIMES" and self.accept("FOREVER"):
+                if test_after:
+                    self.error("WITH TEST requiert UNTIL ou VARYING")
+                mode = "forever"
+            elif self.accept("UNTIL"):
                 mode, control = "until", (self.condition(), test_after)
             elif self.accept("VARYING"):
                 # VARYING ... [AFTER ...]: one level per identifier, BY 1 by default.
@@ -3138,7 +3420,12 @@ class Parser:
                                               Stmt("loop", (mode, control, body), line)],), line)
             else:
                 # An inline PERFORM without TIMES/UNTIL/VARYING runs once.
-                body = self.block({"END-PERFORM"})
+                # perform_stack: EXIT PERFORM is only valid inside one.
+                self.inline_performs = getattr(self, "inline_performs", 0) + 1
+                try:
+                    body = self.block({"END-PERFORM"})
+                finally:
+                    self.inline_performs -= 1
                 self.expect("END-PERFORM")
             return Stmt("loop", (mode, control, body), line)
         if verb == "EVALUATE":
@@ -3302,6 +3589,8 @@ class Parser:
             return self.unstring_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
+        if verb == "ENTRY":
+            return self.entry_statement(line)
         if verb in {"ENABLE", "DISABLE", "PURGE", "RECEIVE", "SEND"}:
             return self.communication_statement(verb, line)
         if verb == "NEXT":
@@ -3314,8 +3603,13 @@ class Parser:
                 return Stmt("exit_section", (), line)
             if self.accept("PROGRAM"):
                 return Stmt("exit_program", (), line)
-            if self.at("PERFORM") or self.at("CYCLE"):
-                self.error(f"EXIT {self.t.key} non pris en charge")
+            if self.accept("PERFORM"):
+                cycle = self.accept("CYCLE")
+                if not getattr(self, "inline_performs", 0):
+                    self.error("EXIT PERFORM is only valid with inline PERFORM")
+                if self.debugging_mode:
+                    self.error("EXIT PERFORM sous DEBUGGING MODE non modélisé")
+                return Stmt("exit_perform", (bool(cycle),), line)
             if not self.t.string and self.t.key in BOUNDARIES:
                 return Stmt("continue", (), line)
             self.error("EXIT nu, EXIT PARAGRAPH ou EXIT SECTION attendu")
@@ -3558,7 +3852,9 @@ class Parser:
             return Expr("all", operand.args, literal_all=True) if operand.op == "text" else operand
         if t.key in INSPECT_FIGURATIVES:
             self.take()
-            return Expr("all", (self.figurative_value(t.key),))
+            value = self.figurative_value(t.key)
+            native = {"HIGH": "\xff", "LOW-": "\x00"}.get(t.key[:4])
+            return Expr("all", (value,), memset=value == native)
         if t.key in self.symbolic and not self.candidates(t.key):
             self.take()
             return Expr("all", (chr(self.symbolic[t.key]),))

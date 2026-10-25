@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .cli import convert
-from .frontend import CobolError, source_format
+from .frontend import CobolError, decode_source, source_format
 from .toolchain import CACHE_ROOT, build_rust, compiler_env, find_tool
 
 INDEXED_MAGIC = b"cobol2rust-btree-1\n"
@@ -60,33 +60,49 @@ def manifest(files):
     return {name: {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} for name, data in files.items()}
 
 
-def validate_file_paths(conversion):
+def validate_file_env(file_env):
+    """File names given to both runs through cob_chk_file_mapping (DD_name,
+    dd_name, name, COB_FILE_PATH): relative, so each run stays in its folder."""
+    for key, value in file_env.items():
+        portable = PurePosixPath(value.replace("\\", "/"))
+        if (not key or "=" in key or (key.startswith("COB_") and key != "COB_FILE_PATH") or not value
+                or PureWindowsPath(value).drive or portable.is_absolute() or ".." in portable.parts or "$" in value):
+            raise CobolError(f"variable de fichier refusée par le vérificateur: {key}={value}")
+
+
+def validate_file_paths(conversion, file_env=()):
     files = conversion.get("files", [])
     if files:
-        for key in ("COB_RUNTIME_CONFIG", "COB_FILE_PATH", "COB_UNIX_LF", "COB_LS_NULLS", "COB_LS_USES_CR",
+        for key in ("COB_RUNTIME_CONFIG", *(() if "COB_FILE_PATH" in file_env else ("COB_FILE_PATH",)), "COB_UNIX_LF", "COB_LS_NULLS", "COB_LS_USES_CR",
                     "COB_SEQ_CONCAT_NAME", "COB_SEQ_CONCAT_SEP"):
             if key in os.environ:
                 raise CobolError(f"configuration de fichiers non prise en charge: {key}")
     for spec in files:
+        if spec["path"] is None:
+            # ASSIGN data-name: the name is only known at run time; both runs
+            # share the same inputs and the directory snapshots are compared.
+            continue
         path = spec["path"]["text"]
         windows = PureWindowsPath(path)
         portable = PurePosixPath(path.replace("\\", "/"))
         if windows.drive or windows.root or portable.is_absolute() or ".." in portable.parts:
             raise CobolError("verify requiert des chemins ASSIGN relatifs sans '..' pour comparer les fichiers dans deux dossiers distincts")
         for key in (path, f"DD_{path}", f"dd_{path}"):
-            if key in os.environ:
+            if key in os.environ and key not in file_env:
                 raise CobolError(f"redirection de fichier par environnement non prise en charge: {key}")
 
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
            call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
-           no_ec_data_incompatible=False):
+           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False, runtime_checks=False):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
     files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
     runtime_env = dict(runtime_env or {})
+    file_env = dict(file_env or {})
+    validate_file_env(file_env)
     if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT", "COB_SET_DEBUG", "COB_CURRENT_DATE"} and not re.fullmatch(r"COB_SWITCH_\d+", key)
            for key in runtime_env):
         raise CobolError("seuls COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE et COB_SWITCH_n peuvent être définis par le vérificateur")
@@ -105,11 +121,15 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible)
-        validate_file_paths(conversion)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible,
+                             runtime_checks)
+        # The runtime checks of the conversion are cobc's -debug.
+        if runtime_checks and not any(flag in {"-debug", "--debug"} for flag in cobc_flags):
+            cobc_flags = [*cobc_flags, "-debug"]
+        validate_file_paths(conversion, file_env)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
-        fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
+        fmt = source_format(decode_source(source.read_bytes()), fmt)
         if any(flag.startswith("-std") and flag != f"-std={std}" for flag in cobc_flags):
             raise CobolError(f"options cobc incohérentes avec le dialecte converti: {std}")
         if std != "default" and not any(flag.startswith("-std") for flag in cobc_flags):
@@ -119,21 +139,31 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                    "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
             options.extend(["-I", str(Path(include).resolve())])
-        commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
         # Called programs become modules loaded by name, as GnuCOBOL's
         # default dynamic CALL does; only the converted ones are provided.
         modules = work / "modules"
         modules.mkdir()
+        module = conversion.get("module")
+        library = ".dll" if os.name == "nt" else ".so"
+        if module:
+            # PROCEDURE DIVISION USING: cobc -x refuses it; cobcrun runs the
+            # module without arguments.
+            cobcrun = find_tool("cobcrun")
+            if not cobcrun:
+                raise CobolError("cobcrun requis pour vérifier un module (PROCEDURE DIVISION USING)")
+            commands = [([cobc, "-m", *options, str(source.resolve()), "-o", str(modules / (module + library))], cobc)]
+        else:
+            commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
         for sub in conversion["subprograms"]:
             if sub["in_main_source"]:
                 continue
-            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + (".dll" if os.name == "nt" else ".so")))], cobc))
+            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + library))], cobc))
         for command, compiler in commands:
             result = subprocess.run(command, cwd=work, env=compiler_env(compiler), capture_output=True, timeout=60)
             if result.returncode:
                 raise CobolError(f"échec de compilation {Path(compiler).name}:\n{result.stderr.decode(errors='replace')}")
         try:
-            translated = build_rust(output)
+            translated = build_rust(output, release=True) if release else build_rust(output)
         except RuntimeError as exc:
             raise CobolError(str(exc)) from exc
         results, artifacts = [], []
@@ -148,10 +178,12 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 target.write_bytes(contents)
             environment = compiler_env(compiler)
             environment.update(runtime_env)
+            environment.update(file_env)
             if name == "cobol":
                 environment["COB_LIBRARY_PATH"] = str(modules)
-            result = subprocess.run([str(binary)], cwd=directory, env=environment,
-                                    input=stdin, capture_output=True, timeout=15)
+            command = [cobcrun, module] if name == "cobol" and module else [str(binary)]
+            result = subprocess.run(command, cwd=directory, env=environment,
+                                    input=stdin, capture_output=True, timeout=timeout)
             results.append(result)
             artifacts.append(snapshot(directory))
         a, b = results
@@ -164,13 +196,18 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "stdin_sha256": hashlib.sha256(stdin).hexdigest(),
                 "std": std, "cobc_flags": list(cobc_flags),
                 "scope": "original COBOL vs generated Rust: stdout bytes, zero exit codes and final file bytes for these inputs",
-                "runtime_env": runtime_env, "input_files": manifest(seed), "rust_input_files": manifest(rust_seed), "input_directories": seed_directories,
+                "runtime_env": runtime_env, "file_env": file_env, "input_files": manifest(seed), "rust_input_files": manifest(rust_seed), "input_directories": seed_directories,
                 "files_match": not differences, "file_differences": differences,
                 "indexed_files_compared_logically": indexed,
                 "cobol_files": manifest(left), "rust_files": manifest(right),
                 # Both runs end normally, or both die of SIGINT (cob_raise on
                 # character 03 read by ACCEPT); other signals are never modelled.
-                "match": a.stdout == b.stdout and a.returncode == b.returncode in {0, -2} and not differences,
+                # Another exit status (RETURN-CODE, cob_fatal_error) matches
+                # only with the same stderr bytes (libcob's messages).
+                "match": a.stdout == b.stdout and a.returncode == b.returncode
+                         and (a.returncode in {0, -2} or (a.returncode > 0 and a.stderr == b.stderr))
+                         and not differences,
+                "stderr_match": a.stderr == b.stderr,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),
                 "rust_stdout": b.stdout.decode("ascii", errors="backslashreplace"),
                 "cobol_exit": a.returncode, "rust_exit": b.returncode,
