@@ -1371,8 +1371,9 @@ class Emitter:
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1
             if into:
-                if spec.organization in {"SEQUENTIAL", "RELATIVE", "INDEXED"}:
-                    # READ INTO moves the record as read: its size is the size read.
+                if spec.organization in {"SEQUENTIAL", "RELATIVE", "INDEXED"} or spec.record_min != spec.record_max:
+                    # READ INTO moves the record as read: its size is the size
+                    # read (lineseq_read sets it to the bytes stored).
                     self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..{self.handle(name, True)}.last_read_size()].to_vec());")
                 else:
                     self.write(f"let record = self.{record}.snapshot();")
@@ -1506,6 +1507,9 @@ class Emitter:
                 created = f"file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}])"
             else:
                 linage = ".with_linage()" if spec.linage else ""
+                if spec.organization == "LINE SEQUENTIAL":
+                    # finalize_file: a LINE SEQUENTIAL record_min is 0.
+                    limits = f"0, {spec.record_max}"
                 created = f"file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}"
             registry = self.file_registry(name)
             if spec.external:

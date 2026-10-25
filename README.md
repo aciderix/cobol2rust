@@ -371,7 +371,9 @@ Les clauses SELECT s'écrivent dans n'importe quel ordre ; PADDING CHARACTER
 du FD aussi. `SAME RECORD AREA` partage la zone d'enregistrement du premier FD
 du groupe (`finalize_file`). Le niveau 66 `RENAMES … [THRU …]` est un alias de
 la zone (alphanumérique pour une plage ou un groupe), un REDEFINES de niveau 01
-plus grand agrandit la zone (octets supplémentaires nuls). `**` suit
+plus grand agrandit la zone (octets supplémentaires nuls). Un 66 peut reprendre le
+nom d'un article de son enregistrement : seule une référence non qualifiée est
+ambiguë, comme dans `cb_ref`. `**` suit
 `cob_decimal_pow` pour les exposants entiers (associatif à droite dans
 COMPUTE, à gauche dans les conditions) ; un exposant littéral négatif est
 refusé car cob_decimal_pow modifie la constante décimale partagée par cobc.
@@ -684,6 +686,11 @@ physiques sont égales. Elles partagent la même mémoire et `WRITE` utilise la
 description nommée. Des tailles différentes sélectionneraient un format variable
 à en-têtes, qui reste refusé.
 
+En LINE SEQUENTIAL, des 01 de tailles différentes sont acceptés : WRITE écrit
+la taille de l'enregistrement nommé, le minimum vaut 0 (`finalize_file`, même
+avec RECORD VARYING FROM), READ complète la zone par des espaces et READ INTO
+déplace les octets lus (`lineseq_read` fixe la taille de l'enregistrement).
+
 Une lecture finale partielle conserve la queue précédente du buffer FD et
 retourne `00` dans le profil GnuCOBOL vérifié, puis `10` et `46` aux lectures
 suivantes. `READ INTO` copie uniquement les octets effectivement lus, puis
@@ -717,7 +724,10 @@ Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
 fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
 ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
 (entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
-`finalize_report` et `cob_report_initiate`), puis des groupes 01 `TYPE` REPORT
+`finalize_report` et `cob_report_initiate` ; sans clause PAGE les limites
+valent 0 avec FIRST DETAIL 1, comme dans le `cob_report` émis par cobc, si bien
+que chaque ligne dépasse LAST DETAIL 0 et change de page, et un LINE de champ est
+refusé car `cob_report_initiate` le rejette), puis des groupes 01 `TYPE` REPORT
 HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
 `LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
 élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,

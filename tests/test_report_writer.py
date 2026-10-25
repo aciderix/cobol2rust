@@ -65,7 +65,9 @@ class ReportParseTests(unittest.TestCase):
             program("page 20", DETAIL_GROUP.replace("line plus 1", "line 21")),
             program("page 20 heading 5 first detail 3", DETAIL_GROUP),
             program("page 20 last detail 10 footing 8", DETAIL_GROUP),
-            program("", DETAIL_GROUP.replace("01 d", "01 d", 1)).replace("rd r .", "rd r."),
+            # Without PAGE, a field's LINE exceeds the limit 0 at INITIATE
+            # (cob_report_initiate does not guard rf->line with def_lines > 0).
+            program("", "01 d type detail.\n    03 line 1 column 3 pic x(4) source w.").replace("rd r .", "rd r."),
             program("page 20", DETAIL_GROUP, "write out-file."),
             program("page 20", DETAIL_GROUP, "read out-file."),
             program("page 20", DETAIL_GROUP, fd="report is r q"),
@@ -85,6 +87,14 @@ class ReportNativeTests(unittest.TestCase):
         self.assertTrue(report["files_match"], report)
         self.assertIn("03 line 10 page 0000000001\n", report["cobol_stdout"])
         self.assertEqual(report["cobol_files"]["SUMMARY.TXT"]["bytes"], 77)
+
+    def test_report_without_page_clause(self):
+        # Limits 0 with FIRST DETAIL 1: every line passes LAST DETAIL 0, so
+        # reportio.c changes page before each one.
+        report = verify(ROOT / "tests" / "fixtures" / "report_no_page.cob", fmt="free")
+        self.assertTrue(report["match"], report)
+        self.assertTrue(report["files_match"], report)
+        self.assertEqual(report["cobol_stdout"], "line 0000000000 page 0000000007\n")
 
 
 if __name__ == "__main__":

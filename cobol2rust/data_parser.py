@@ -271,8 +271,14 @@ def declaration(p, file_record=False):
         thru = target() if p.accept("THRU") or p.accept("THROUGH") else None
         p.expect(".")
         key = founder + "." + label
-        if key in p.fields or any(r[0] == key for r in p.renames):
-            p.error(f"nom de donnée dupliqué: {label}")
+        taken = lambda name: name in p.fields or any(r[0] == name for r in p.renames)
+        if taken(key):
+            # A homonym of an item of the record: references are ambiguous
+            # (cb_ref), keys stay distinct like homonymous siblings.
+            duplicate = 2
+            while taken(f"{key}${duplicate}"):
+                duplicate += 1
+            key = f"{key}${duplicate}"
         p.renames.append((key, label, first, thru, founder, line))
         return key
     if level not in {1, 77} and not 2 <= level <= 49:

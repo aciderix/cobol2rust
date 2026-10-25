@@ -283,8 +283,8 @@ def report_description(p, report):
         else:
             p.error("clause RD non prise en charge")
     p.expect(".")
-    if "PAGE" not in seen:
-        p.error("RD sans PAGE LIMIT non pris en charge")
+    # Without PAGE the limits stay 0 (first detail 1, see check_limits), as
+    # in the cob_report that cobc emits.
     stack = []
     while not p.t.string and p.t.key.isdigit():
         entry = group_entry(p, report)

@@ -2013,8 +2013,6 @@ class Parser:
                             spec.variable_sort = True
                         low = min(low, item.offset - self.fields[key].offset + item.size * item.occurs_min)
             spec.record_min, spec.record_max = min([low, *sizes]), max([high, *sizes])
-            if spec.record_min != spec.record_max and spec.organization == "LINE SEQUENTIAL":
-                self.error("enregistrements LINE SEQUENTIAL de tailles différentes non pris en charge")
             if varying and varying["depending"]:
                 spec.depending = self.resolve(varying["depending"])
                 dep = self.fields[spec.depending]

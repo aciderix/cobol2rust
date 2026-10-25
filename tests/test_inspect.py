@@ -24,6 +24,14 @@ class InspectSyntaxTests(unittest.TestCase):
             with self.subTest(body=body):
                 Emitter(Parser(program(DATA, body)).parse()).generate()
 
+    def test_renames_homonym_of_a_record_item(self):
+        # NC401M: a 66 may reuse a name of its record; only a reference to it
+        # is ambiguous, as cb_ref reports.
+        data = "01 rec. 03 vara pic x(4). 03 varb pic x(4). 03 varc pic x(4). 66 vara renames varb thru varc."
+        Emitter(Parser(program(data, "display varb.")).parse()).generate()
+        with self.assertRaises(CobolError):
+            Parser(program(data, "display vara.")).parse()
+
     def test_cobc_errors_are_refused(self):
         for body in ('inspect x tallying n for first "A".',
                      'inspect x tallying for all "A".',
