@@ -3,7 +3,8 @@
 of a function result, an IF ended by an enclosing scope terminator, comment
 entries without IDENTIFICATION DIVISION, CLASS with figurative constants, an
 FD with a numeric record, CBL/PROCESS lines, EXIT SECTION of the implicit
-MAIN SECTION, LOCAL-STORAGE."""
+MAIN SECTION, LOCAL-STORAGE, READ KEY of an item no key starts at, STOP RUN
+RETURNING and Z literals, configuration paragraphs in any order."""
 from __future__ import annotations
 
 import unittest
@@ -32,6 +33,17 @@ class RealFormsFrontendTests(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(CobolError):
                 Parser(source).parse()
 
+    def test_parser_forms_cobc_accepts(self):
+        # Configuration paragraphs in any order or empty, a missing period
+        # before the next SELECT, two 01 items of one name (a warning).
+        Parser("identification division. program-id. cfg.\nenvironment division. configuration section.\n"
+               "special-names. decimal-point is comma. object-computer. x. source-computer.\n"
+               "input-output section. file-control. select a assign to 'a' select b assign to 'b'.\n"
+               "data division. file section. fd a. 01 r pic x. fd b. 01 r2 pic x.\n"
+               "working-storage section. 01 d pic x. 01 d pic x.\nprocedure division. stop run.").parse()
+        with self.assertRaises(CobolError):
+            Parser(program("01 d pic x. 01 d pic x.", "display d. stop run.")).parse()
+
     def test_table_sort_keys_use_the_offset_in_their_parent(self):
         source = program("01 t. 02 e occurs 3. 03 m pic x. 03 g. 04 l pic x. 04 d pic 9.",
                          "sort e on ascending key d. stop run.")
@@ -44,7 +56,7 @@ class RealFormsFrontendTests(unittest.TestCase):
 class RealFormsNativeTests(unittest.TestCase):
     def test_fixtures_match_cobc(self):
         for name in ("table_sort", "scope_and_function_forms", "numeric_record", "compiler_options",
-                     "exit_implicit_section"):
+                     "exit_implicit_section", "indexed_missing_key", "stop_run_status"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

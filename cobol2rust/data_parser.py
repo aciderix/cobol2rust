@@ -316,9 +316,10 @@ def declaration(p, file_record=False):
     else:
         component = label
     key = (parent + "." if parent else "") + component
-    if parent and key in p.fields and label not in VERBS:
-        # Homonymous siblings are valid; a reference to them is ambiguous
-        # (cb_ref), which resolve() reports. Keep their keys distinct.
+    if key in p.fields and label not in VERBS and not getattr(p, "building_register", False):
+        # Homonymous siblings, and 01/77 items (only a redefinition warning
+        # for cobc), are valid; a reference to them is ambiguous (cb_ref),
+        # which resolve() reports. Keep their keys distinct.
         duplicate = 2
         while f"{key}${duplicate}" in p.fields:
             duplicate += 1

@@ -85,7 +85,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T18:46:36+00:00 (commit `59ea98600c`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T19:30:07+00:00 (commit `16497e1f09`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -93,11 +93,11 @@ Dernière mesure : 2026-10-25T18:46:36+00:00 (commit `59ea98600c`, cobc (GnuCOBO
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 300 | 311 | 11 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 320 | 331 | 11 | 0 |
-| **Total** | | **2458** | **715** | **738** | **23** | **0** |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
+| **Total** | | **2458** | **724** | **738** | **14** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T18:46:36+00:00, commit `59ea98600c`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T19:30:07+00:00, commit `16497e1f09`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,13 +111,12 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 4 × instruction non prise en charge: XML
 2. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
 3. 2 × PROCEDURE attendu
-4. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
-5. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
-6. 1 × clause SELECT non prise en charge
-7. 1 × paragraphe CONFIGURATION non pris en charge
-8. 1 × entrée SPECIAL-NAMES non prise en charge: <EOF>
-9. 1 × instruction non prise en charge: GIVING
-10. 1 × expression non prise en charge: Z
+4. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
+5. 1 × indicateur fixe '$' non pris en charge
+6. 1 × instruction non prise en charge: OF
+7. 1 × CALL identifiant requiert un champ alphanumérique
+8. 1 × USAGE/clause non pris en charge
+9. 1 × expression non prise en charge: xml
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -208,3 +207,11 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   18-2 sont identiques sur plus de 1200 lignes puis s'arrêtent, comme 13-6,
   sur un indice hors bornes que GnuCOBOL lit sans contrôle (la dernière ligne
   sans fin de ligne est relue par libcob, d'où StateName(70)).
+- 2026-10-25 — READ KEY d'un article où ne commence aucune clé (statut 23 de
+  `cob_findkey_attr`, la variante CardDemo CBTRN01C de che4z), 01 homonymes
+  (simple avertissement de cobc), paragraphes de CONFIGURATION dans tout
+  ordre ou vides, point facultatif avant le SELECT suivant (`missing-period`),
+  `STOP RUN RETURNING/GIVING/WITH STATUS`, littéraux `Z"…"` : **715 → 724**
+  acceptées, écart 23 → 14 (restent : XML, SCREEN, COMMUNICATION hors
+  cobol85, `$SET`, CALL d'un nom en casse mixte ou d'un numérique). Exécution
+  inchangée. Émission NIST 451/458.

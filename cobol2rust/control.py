@@ -461,7 +461,7 @@ class ControlGraph:
                 return self._add("jump", (self._following(following),), stmt)
             return self._add("jump", (self.section_checkpoints[section],), stmt)
         if op == "stop":
-            return self._add("stop_run", (), stmt)
+            return self._add("stop_run", (args[0] if args else None,), stmt)
         if op in {"goback", "exit_program"}:
             # A main program ignores EXIT PROGRAM; GOBACK there is STOP RUN.
             return self._add(op, (after,), stmt)

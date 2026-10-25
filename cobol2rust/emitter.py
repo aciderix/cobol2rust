@@ -897,7 +897,8 @@ class Emitter:
         elif op == "start":
             name, index, condition, _, _ = a
             if index is not None:
-                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {index[0]}, {index[1]}, &self.{self.files[name]}_area);")
+                key = "file_runtime::NO_KEY" if index[0] < 0 else index[0]
+                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {key}, {index[1]}, &self.{self.files[name]}_area);")
             else:
                 key = self.names[self.program.files[name].relative_key]
                 self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, &self.{key});")
@@ -1250,7 +1251,13 @@ class Emitter:
                 self.exit_code()
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "stop_run":
-            self.exit_code()
+            if a and a[0] is not None:
+                # cob_stop_run (cob_get_int (x)).
+                if self.kind(a[0]) != "number":
+                    raise CobolError("STOP RUN RETURNING alphanumérique non pris en charge")
+                self.write(f"unit.exit_code = runtime::stop_status(&({self.expression(a[0])}));")
+            else:
+                self.exit_code()
             self.write("return runtime::Outcome::Stop;")
         elif op == "use_return":
             self.write("return runtime::Outcome::Return;")
@@ -1559,7 +1566,8 @@ class Emitter:
             area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
             if spec.organization == "INDEXED":
                 if random:
-                    self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {random[0]}, {random[1]}, {depending});")
+                    key = "file_runtime::NO_KEY" if random[0] < 0 else random[0]
+                    self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {key}, {random[1]}, {depending});")
                 else:
                     self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {depending});")
             elif spec.organization != "RELATIVE":

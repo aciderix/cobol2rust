@@ -1486,6 +1486,9 @@ pub struct IndexedFile {
     last_key: Option<Vec<u8>>,
 }
 
+/// The key index of a KEY item that no key of the file starts at.
+pub const NO_KEY: usize = usize::MAX;
+
 impl IndexedFile {
     pub fn new(path: &str, optional: bool, access: &str, record_min: usize, record_max: usize, keys: Vec<IndexKey>) -> Self {
         for key in ["COB_RUNTIME_CONFIG", "DB_HOME", "COB_BDB_HOME"] {
@@ -1627,6 +1630,8 @@ impl IndexedFile {
     }
 
     fn start_internal(&mut self, condition: StartCondition, idx: usize, partlen: usize, record: &[u8]) -> u8 {
+        // cob_findkey_attr found no key at the KEY item's address.
+        if idx == NO_KEY { return 23; }
         self.key_index = idx;
         let primekeylen = self.primekeylen();
         let mut key = self.savekey(record, idx);

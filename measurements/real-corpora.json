@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T18:46:36+00:00",
- "git_head": "59ea98600c5e47efeb189b4bbc7b67ec8fc227f4",
- "implementation_sha256": "8b854938fcc5ca03f78eb12a368a01b797a9a8dbe0460555cdd00db0edea43a7",
+ "measured_at": "2026-10-25T19:30:07+00:00",
+ "git_head": "16497e1f09311a7e8bbcb6a6cfed75d3b468086e",
+ "implementation_sha256": "9e6e399bb9896617b6e5122532f83cf3da8828ebd5983c8d31c207f571ed3d7d",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
-  "accepted": 715,
+  "accepted": 724,
   "cobc_accepted": 738,
-  "gap": 23,
+  "gap": 14,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -211,7 +211,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 300,
+   "accepted": 306,
    "internal_errors": 0,
    "blockers": [
     [
@@ -266,7 +266,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 11,
+   "gap": 5,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -277,36 +277,12 @@
      "COMMUNICATION SECTION non conforme hors -std=cobol85"
     ],
     [
-     "src/test/resources/gov/nist/EXEC85.CBL",
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
-     "clause SELECT non prise en charge"
-    ],
-    [
      "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
      "PROCEDURE attendu"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/ScreenFiller.cbl",
      "PROCEDURE attendu"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/environment/configuration/ConfigurationSectionWrongOrder.cbl",
-     "paragraphe CONFIGURATION non pris en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/environment/configuration/EmptyConfigurationSectionParagraphs.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: <EOF>"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/procedure/stop/StopStatementGiving.cbl",
-     "instruction non prise en charge: GIVING"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/Literal.cbl",
-     "expression non prise en charge: Z"
     ],
     [
      "src/test/resources/io/proleap/cobol/preprocessor/fixed/CompilerDirective.cbl",
@@ -323,30 +299,6 @@
      2
     ],
     [
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
-     1
-    ],
-    [
-     "clause SELECT non prise en charge",
-     1
-    ],
-    [
-     "paragraphe CONFIGURATION non pris en charge",
-     1
-    ],
-    [
-     "entrée SPECIAL-NAMES non prise en charge: <EOF>",
-     1
-    ],
-    [
-     "instruction non prise en charge: GIVING",
-     1
-    ],
-    [
-     "expression non prise en charge: Z",
-     1
-    ],
-    [
      "indicateur fixe '$' non pris en charge",
      1
     ]
@@ -361,7 +313,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 320,
+   "accepted": 323,
    "internal_errors": 0,
    "blockers": [
     [
@@ -416,27 +368,15 @@
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 11,
+   "gap": 8,
    "gap_sources": [
     [
      "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
      "instruction non prise en charge: OF"
     ],
     [
-     "tests/test_files/Cobol85PositiveTestsSuite/positive/EXEC84.2.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
-    ],
-    [
-     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN01C.cbl",
-     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE"
-    ],
-    [
      "tests/test_files/project/HELLO-WORLD.cbl",
      "CALL identifiant requiert un champ alphanumérique"
-    ],
-    [
-     "tests/test_files/project/HOVER.CBL",
-     "nom de donnée réservé ou dupliqué: TERMS-RECORD"
     ],
     [
      "tests/test_files/project/TEST10.CBL",
@@ -473,19 +413,7 @@
      1
     ],
     [
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
-     1
-    ],
-    [
-     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE",
-     1
-    ],
-    [
      "CALL identifiant requiert un champ alphanumérique",
-     1
-    ],
-    [
-     "nom de donnée réservé ou dupliqué: TERMS-RECORD",
      1
     ],
     [
@@ -500,9 +428,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T18:46:36+00:00",
-  "git_head": "59ea98600c5e47efeb189b4bbc7b67ec8fc227f4",
-  "implementation_sha256": "8b854938fcc5ca03f78eb12a368a01b797a9a8dbe0460555cdd00db0edea43a7",
+  "measured_at": "2026-10-25T19:30:07+00:00",
+  "git_head": "16497e1f09311a7e8bbcb6a6cfed75d3b468086e",
+  "implementation_sha256": "9e6e399bb9896617b6e5122532f83cf3da8828ebd5983c8d31c207f571ed3d7d",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

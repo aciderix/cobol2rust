@@ -97,8 +97,9 @@ select records-file assign to "records.txt" organization line sequential.
                 Parser(program(FILES + "i-o-control. " + control + "\n", FILE_DATA)).parse()
 
     def test_incomplete_and_misplaced_paragraphs_fail(self):
+        # An empty paragraph is valid (configuration_paragraphs).
+        Parser(program("configuration section. source-computer.")).parse()
         for configuration in [
-            "configuration section. source-computer.",
             "configuration section. source-computer. GNU-Linux",
             "source-computer. GNU-Linux.",
             "configuration section. object-computer. GNU-Linux. unknown-paragraph.",

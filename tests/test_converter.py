@@ -41,7 +41,7 @@ class FrontendTests(unittest.TestCase):
             program("stop run.", "01 n usage comp-1."),
             program("stop run.", "01 n pic 9(19)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
-            program("stop run.", "01 n pic 9. 01 n pic 9."),
+            program("display n.", "01 n pic 9. 01 n pic 9."),   # ambiguous reference
             program("stop run.", "01 x pic x(0)."),
             program("accept n from microsecond-time.", "01 n pic 9(8)."),
         ]
@@ -102,9 +102,10 @@ class FrontendTests(unittest.TestCase):
                     f"    {select}.\ndata division.\nfile section.\nfd f.\n01 r.\n 02 k pic x(3).\n 02 a pic x(2).\n"
                     "working-storage section.\n01 w pic x(3).\nprocedure division.\n" + procedure)
         Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
+        # READ KEY of an item no key starts at: status 23 (cob_findkey_attr).
+        Emitter(Parser(source("record key is k", "read f key is a. stop run.")).parse()).generate()
         for case in (source("record key is w"), source("alternate record key is a"),
                      source("record key is k alternate record key is a suppress when space"),
-                     source("record key is k", "read f key is a. stop run."),
                      source("record key is k", "start f key is = w. stop run.")):
             with self.subTest(case=case), self.assertRaises(CobolError):
                 Emitter(Parser(case).parse()).generate()

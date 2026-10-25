@@ -100,6 +100,12 @@ pub fn refmod(value: &Value, start: &Value, length: Option<&Value>) -> Value {
     Value::Bytes(bytes[(start - 1) as usize..(start - 1 + length) as usize].to_vec())
 }
 
+/// STOP RUN RETURNING x: cob_get_int of x, the integer part.
+pub fn stop_status(value: &Value) -> i32 {
+    let units = value.num().units(0, false);
+    units.to_string().parse::<i32>().unwrap_or_else(|_| fail("STOP RUN status outside the C int range not modelled"))
+}
+
 pub fn fail(message: &str) -> ! {
     eprintln!("cobol2rust: COBOL line {}: {}", COBOL_LINE.load(Ordering::Relaxed), message);
     std::process::exit(70)

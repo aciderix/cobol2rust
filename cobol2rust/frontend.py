@@ -237,6 +237,17 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             # One character per source byte (decode_source): a non-ASCII
             # literal holds the bytes of its source text, as for cobc.
             tokens.append(Token(value, start, True, token_start, i))
+        elif c in "zZ" and i + 1 < len(source) and source[i + 1] in "\"'":
+            # Z"text": the text and a terminating NUL (scan_z).
+            quote, start = source[i + 1], line
+            end = source.find(quote, i + 2)
+            newline = source.find("\n", i + 2)
+            if end < 0 or (0 <= newline < end):
+                raise CobolError(f"ligne {start}: littéral Z non terminé")
+            if end == i + 2:
+                raise CobolError(f"ligne {start}: Z literals must contain at least one character")
+            i = end + 1
+            tokens.append(Token(source[token_start + 2:end] + "\x00", start, True, token_start, i))
         elif c in "xX" and i + 1 < len(source) and source[i + 1] in "\"'":
             # X"hex": two hexadecimal digits per byte (scanner.l).
             quote, start = source[i + 1], line
@@ -1747,12 +1758,21 @@ class Parser:
             self.expect(".")
             computers = set()
             collating = None
-            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER"):
+            # configuration_paragraphs: in any order, each once; an empty
+            # paragraph keeps only its header.
+            ends = {"SOURCE-COMPUTER", "OBJECT-COMPUTER", "SPECIAL-NAMES", "INPUT-OUTPUT", "DATA", "PROCEDURE"}
+            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES"):
                 paragraph = self.take().key
                 if paragraph in computers:
                     self.error(f"paragraphe {paragraph} dupliqué")
                 computers.add(paragraph)
                 self.expect(".")
+                if paragraph == "SPECIAL-NAMES":
+                    if not (self.t.key in ends and not self.t.string) and not self.program_end():
+                        self.special_names()
+                    continue
+                if not self.t.string and self.t.key in ends or self.program_end():
+                    continue
                 if not (paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING"))):
                     self.name()
                 if paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING")):
@@ -1781,9 +1801,6 @@ class Parser:
                         break
                 if not self.accept("."):
                     self.error(f"clause {paragraph} non prise en charge; seul le nom de machine est accepté")
-            if self.accept("SPECIAL-NAMES"):
-                self.expect(".")
-                self.special_names()
             if collating:
                 token, alphabet = collating
                 if isinstance(self.alphabets.get(alphabet), tuple):
@@ -2127,7 +2144,8 @@ class Parser:
 
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
-        while not self.at("."):
+        ends = ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE") if STD != "cobol85" else ()
+        while not self.at(".") and not any(self.at(word) for word in ends):
             if self.at("ASSIGN") and path is None and assign_field is None:
                 # SELECT clauses come in any order (file_control_entry).
                 self.take()
@@ -2214,7 +2232,10 @@ class Parser:
                 self.error("clause SELECT non prise en charge")
         if path is None and assign_field is None:
             self.error("ASSIGN attendu")
-        self.expect(".")
+        # dot_or_else_end_of_file_control: missing-period is a warning in
+        # the default dialect, an error in cobol85.
+        if STD == "cobol85" or not any(self.at(word) for word in ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE")):
+            self.expect(".")
         if organization != "RELATIVE" and relative_key:
             self.error("RELATIVE KEY requiert ORGANIZATION RELATIVE")
         if organization not in {"RELATIVE", "INDEXED"} and access not in {None, "SEQUENTIAL"}:
@@ -3158,6 +3179,9 @@ class Parser:
                 key = self.variable()
                 if spec.organization == "INDEXED":
                     index = self.index_key(spec, key)
+                    if index[0] < 0:
+                        # check_valid_key: a record item at a key's offset.
+                        self.error("invalid key item")
                 elif key.name != spec.relative_key or key.indices or key.start is not None:
                     self.error("START KEY doit désigner la RELATIVE KEY du fichier")
             elif spec.organization == "INDEXED":
@@ -3557,7 +3581,21 @@ class Parser:
                 return Stmt("sequence", ([Stmt("display", ([value], True, "stdout"), line),
                                           Stmt("accept_omitted", (), line)],), line)
             self.expect("RUN")
-            return Stmt("stop", (), line)
+            # stop_returning: cob_stop_run of RETURNING/GIVING x, x, WITH
+            # ERROR/NORMAL STATUS [x] (1 and 0), else RETURN-CODE.
+            status = None
+            if self.accept("RETURNING") or self.accept("GIVING"):
+                status = self.expr()
+            elif self.at("WITH") or self.at("ERROR") or self.at("NORMAL"):
+                self.accept("WITH")
+                error = self.take().key == "ERROR"
+                if not error and self.tokens[self.i - 1].key != "NORMAL":
+                    self.error("ERROR ou NORMAL attendu")
+                self.accept("STATUS")
+                status = self.expr() if self.operand_start() else Expr("number", ("1" if error else "0",))
+            elif self.t.string or (not self.at(".") and self.operand_start()):
+                status = self.expr()
+            return Stmt("stop", (status,), line)
         if verb == "GOBACK":
             return Stmt("goback", (), line)
         if verb == "CALL":
@@ -3715,18 +3753,22 @@ class Parser:
 
     def index_key(self, spec, ref):
         """cob_findkey_attr: the key whose field starts where the KEY item
-        starts; the item's size is the compared (partial) length."""
+        starts; the item's size is the compared (partial) length. Without
+        such a key the READ or START gives status 23 (index -1)."""
         f = self.fields[ref.name]
         root = ref.name.split(".")[0]
-        if ref.indices or ref.start is not None or f.dimensions or root not in spec.records:
-            self.error(f"KEY {f.label} doit être un champ de l'enregistrement de {spec.name}")
+        if ref.indices or ref.start is not None or f.dimensions:
+            self.error(f"KEY {f.label} indicé ou modifié non pris en charge")
+        if root not in spec.records:
+            # Not in the record area: no key starts there, status 23.
+            return -1, f.size
         offset = f.offset - self.fields[root].offset
         for index, (_, key_offset, size, _) in enumerate([spec.record_key, *spec.alternate_keys]):
             if key_offset == offset:
                 if f.size > size:
                     self.error(f"KEY {f.label} plus longue que la clé du fichier")
                 return index, f.size
-        self.error(f"KEY {f.label} ne désigne pas une clé de {spec.name}")
+        return -1, f.size
 
     def key_handlers(self, file_name, ending):
         """[INVALID KEY ...] [NOT INVALID KEY ...] [END-x], RELATIVE files only."""
