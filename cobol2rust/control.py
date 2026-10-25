@@ -67,6 +67,12 @@ class ControlGraph:
         self.entry = self._following(program.main_block, fall=False)
         if self.debug:
             self.entry = self._add("debug_contents", ("START PROGRAM", self.entry))
+        # Entry 2 of a program with USE GLOBAL: a contained program runs the
+        # section, which returns at its end ("Implicit GLOBAL DECLARATIVE return").
+        self.global_entries = {}
+        for section in sorted(set(getattr(program, "global_uses", {}).values())):
+            entry, checkpoint = self._target(section)
+            self.global_entries[section] = self._add("call", (entry, checkpoint, self._add("use_return")))
 
     def _add(self, op: str, args: tuple = (), stmt: Stmt | None = None) -> int:
         position = len(self.nodes)
@@ -456,10 +462,19 @@ class ControlGraph:
                 # output_file_error: DEBUG-CONTENTS "USE PROCEDURE".
                 position = self._add("debug_contents", ("USE PROCEDURE", position))
             return position
+        def global_call(owner, section):
+            # output_ferror_stmt: <owner>_ (<section label>), then resume.
+            position = self._add("global_use", (owner, section, after))
+            if self.debug:
+                position = self._add("debug_contents", ("USE PROCEDURE", position))
+            return position
         if file_name in self.program.file_declaratives:
             return ("file", call(self.program.file_declaratives[file_name]))
-        if self.program.mode_declaratives:
-            return ("modes", {mode: call(section) for mode, section in self.program.mode_declaratives.items()})
+        inherited = getattr(self.program, "inherited_uses", {})
+        if self.program.mode_declaratives or inherited:
+            modes = {mode: call(section) for mode, section in self.program.mode_declaratives.items()}
+            modes.update({mode: global_call(*target) for mode, target in inherited.items()})
+            return ("modes", modes)
         return None
 
     def _loop(self, stmt: Stmt, after: int, block: int) -> int:

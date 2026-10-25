@@ -180,6 +180,16 @@ def parse_fd_clauses(parser, spec):
                 linage[part] = linage_value(parser)
             put("linage", linage)
             spec.organization = "LINE SEQUENTIAL"
+        elif parser.at("EXTERNAL") or parser.at("GLOBAL") or (
+                parser.at("IS") and parser.tokens[parser.i + 1].key in {"EXTERNAL", "GLOBAL"}):
+            # file_description_clause: [IS] EXTERNAL shares the file and its
+            # record area by name in the run unit (cob_file_external_addr);
+            # [IS] GLOBAL makes them visible to the contained programs.
+            parser.accept("IS")
+            clause = parser.take().key
+            put(clause.lower(), True)
+            if getattr(spec, "sort", False):
+                parser.error(f"SD {clause} non pris en charge")
         elif parser.at("REPORT") or parser.at("REPORTS"):
             # report_clause: the file becomes LINE SEQUENTIAL with
             # flag_line_adv; one report per file is modelled.
@@ -200,5 +210,11 @@ def parse_fd_clauses(parser, spec):
             parser.error("clause FD non prise en charge")
     if "reports" in clauses and ("linage" in clauses or "code_set" in clauses or "record_varying" in clauses):
         parser.error("REPORT avec LINAGE, CODE-SET ou RECORD VARYING non pris en charge")
+    if "external" in clauses or "global" in clauses:
+        if "external" in clauses and "global" in clauses:
+            parser.error("FD EXTERNAL et GLOBAL non pris en charge")
+        if "reports" in clauses or "linage" in clauses:
+            parser.error("FD EXTERNAL ou GLOBAL avec REPORT ou LINAGE non pris en charge")
+    spec.external, spec.is_global = "external" in clauses, "global" in clauses
     parser.expect(".")
     spec.fd_clauses = clauses

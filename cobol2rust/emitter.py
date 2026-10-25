@@ -47,6 +47,12 @@ class Emitter:
         self.blocks = program.blocks or [ProcedureBlock(None, None, program.entry),
                                         *(ProcedureBlock(name, None, body) for name, body in program.paragraphs.items())]
         self.files = {name: f"file{i}" for i, name in enumerate(program.files)}
+        # Files whose handle is an Rc<RefCell<..>>: EXTERNAL, GLOBAL with
+        # contained programs, inherited GLOBAL, and every file of a program
+        # with USE GLOBAL (its alias runs the procedure with the same files).
+        self.shared_files = {name for name, spec in program.files.items()
+                             if spec.external or spec.global_owner or getattr(program, "global_uses", None)
+                             or (spec.is_global and getattr(program, "nested", None))}
         self.reports = {name: f"report{i}" for i, name in enumerate(getattr(program, "reports", {}))}
         # The report whose ReportEvent is being answered: its counters are
         # the event's arguments while the report is out of the program.
@@ -167,6 +173,13 @@ class Emitter:
         field = self.program.fields[name]
         while field.parent:
             field = self.program.fields[field.parent]
+        if getattr(field, "fd_file", None):
+            # The records of a FD share its record area, held by the first.
+            while field.redefines:
+                field = self.program.fields[field.redefines]
+            if field.fd_external:
+                # cob_external_addr ("<file>_Record", record_max).
+                return field.name, f"{field.fd_file.replace('-', '_')}_Record", False
         if field.external:
             return field.name, field.label, False
         owner = getattr(field, "global_owner", None)
@@ -199,7 +212,7 @@ class Emitter:
         if op == "shared":
             return f"{self.shared}.clone()"
         if op == "linage":
-            return f"self.{self.files[args[0]]}.linage_counter()"
+            return f"{self.handle(args[0], True)}.linage_counter()"
         if op == "clock":
             return f"runtime::clock_value({quoted(args[0])})"
         if op == "report_counter":
@@ -626,6 +639,28 @@ class Emitter:
             return value if op == "unary+" else f"Ok::<Value, runtime::SizeError>(({value}?).neg())"
         return f"Ok::<Value, runtime::SizeError>({self.expression(expr)})"
 
+    def file_kind(self, file_name):
+        organization = self.program.files[file_name].organization
+        return {"RELATIVE": "RelativeFile", "INDEXED": "IndexedFile", "SORT": "SortFile"}.get(organization, "CobolFile")
+
+    def file_registry(self, file_name):
+        """The run unit's name of a file shared with other programs."""
+        spec = self.program.files[file_name]
+        if spec.external:
+            return f"EXTERNAL {file_name}"
+        if spec.global_owner:
+            return f"GLOBAL {spec.global_owner} {file_name}"
+        if spec.is_global and getattr(self.program, "nested", None):
+            return f"GLOBAL {self.program.entry_name} {file_name}"
+        return None
+
+    def handle(self, file_name, read=False):
+        """The file's runtime object, borrowed when it is shared."""
+        rust = f"self.{self.files[file_name]}"
+        if file_name not in self.shared_files:
+            return rust
+        return f"{rust}.{'borrow' if read else 'borrow_mut'}()"
+
     def depending(self, file_name, mutable):
         name = self.program.files[file_name].depending
         return f"Some(&{'mut ' if mutable else ''}self.{self.names[name]})" if name else "None"
@@ -648,7 +683,7 @@ class Emitter:
         else:
             cases = " ".join(f"{quoted(mode)} => Some({target}),"
                              for mode, target in sorted(handlers[1].items()))
-            handler = f"match self.{self.files[file_name]}.last_open_mode() {{ {cases} _ => None }}"
+            handler = f"match {self.handle(file_name, True)}.last_open_mode() {{ {cases} _ => None }}"
         self.write(f"let handler: Option<usize> = {handler};")
         invalid = str(getattr(self, "io_invalid", False)).lower()
         result = "let eop = " if getattr(self, "io_eop", None) else ""
@@ -668,7 +703,7 @@ class Emitter:
                 values.append(f"Some({value[1]})")
             else:
                 values.append(f"Some(self.{self.names[value[1]]}.snapshot().count())")
-        self.write(f"self.{self.files[file_name]}.linage_values([{', '.join(values)}]);")
+        self.write(f"{self.handle(file_name)}.linage_values([{', '.join(values)}]);")
 
     def statement(self, stmt):
         op, a = stmt.op, stmt.args
@@ -695,14 +730,14 @@ class Emitter:
         elif op == "open":
             for mode, name in a[0]:
                 self.linage_values(name)
-                self.write(f"let status = self.{self.files[name]}.open({quoted(mode)});")
+                self.write(f"let status = {self.handle(name)}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
             for name, mode in a[0]:
                 if mode in {"reel", "no_rewind"}:
-                    self.write(f"let status = self.{self.files[name]}.close_unit({str(mode == 'no_rewind').lower()});")
+                    self.write(f"let status = {self.handle(name)}.close_unit({str(mode == 'no_rewind').lower()});")
                 else:
-                    self.write(f"let status = self.{self.files[name]}.close({str(mode == 'lock').lower()});")
+                    self.write(f"let status = {self.handle(name)}.close({str(mode == 'lock').lower()});")
                 self.file_status(name, "status")
         elif op == "rewrite":
             name, record, value, _, _ = a
@@ -711,22 +746,22 @@ class Emitter:
             organization = self.program.files[name].organization
             key = f"{self.relative_key(name, False)}, " if organization == "RELATIVE" else ""
             size = self.record_size(record)
-            self.write(f"let status = self.{self.files[name]}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
+            self.write(f"let status = {self.handle(name)}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "delete":
             name = a[0]
             if self.program.files[name].organization == "INDEXED":
-                self.write(f"let status = self.{self.files[name]}.delete(&self.{self.files[name]}_area);")
+                self.write(f"let status = {self.handle(name)}.delete(&self.{self.files[name]}_area);")
             else:
-                self.write(f"let status = self.{self.files[name]}.delete({self.relative_key(name, False)});")
+                self.write(f"let status = {self.handle(name)}.delete({self.relative_key(name, False)});")
             self.file_status(name, "status")
         elif op == "start":
             name, index, condition, _, _ = a
             if index is not None:
-                self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, {index[0]}, {index[1]}, &self.{self.files[name]}_area);")
+                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {index[0]}, {index[1]}, &self.{self.files[name]}_area);")
             else:
                 key = self.names[self.program.files[name].relative_key]
-                self.write(f"let status = self.{self.files[name]}.start(file_runtime::StartCondition::{condition}, &self.{key});")
+                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, &self.{key});")
             self.file_status(name, "status")
         elif op == "write":
             name, record, value, advancing, _, _ = a
@@ -749,13 +784,13 @@ class Emitter:
             if self.program.files[name].organization == "INDEXED":
                 if advancing is not None:
                     raise CobolError("WRITE ADVANCING sur un fichier INDEXED")
-                self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {self.depending(name, False)});")
+                self.write(f"let status = {self.handle(name)}.write(&self.{self.files[name]}_area, {size}, {self.depending(name, False)});")
             elif self.program.files[name].organization in {"SEQUENTIAL", "LINE SEQUENTIAL"} and getattr(self, "io_eop", None):
                 # cb_emit_write: check_eop only with an AT END-OF-PAGE phrase.
                 check = str(self.io_eop[0]).lower()
-                self.write(f"let status = self.{self.files[name]}.write_checked(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)}, {check});")
+                self.write(f"let status = {self.handle(name)}.write_checked(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)}, {check});")
             else:
-                self.write(f"let status = self.{self.files[name]}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
+                self.write(f"let status = {self.handle(name)}.write(&self.{self.files[name]}_area, {size}, {control}, {self.depending(name, False)});")
             self.file_status(name, "status")
         elif op == "display":
             values = []
@@ -765,7 +800,7 @@ class Emitter:
                     values.append("Value::Bytes(vec![" + ", ".join(str(ord(c)) for c in e.args[0]) + "])")
                     continue
                 if e.op == "linage":
-                    values.append(f"self.{self.files[e.args[0]]}.linage_display()")
+                    values.append(f"{self.handle(e.args[0], True)}.linage_display()")
                     continue
                 if e.op == "report_counter":
                     values.append(f"self.{self.reports[e.args[0]]}.counter_display({quoted(e.args[1])})")
@@ -835,7 +870,7 @@ class Emitter:
             name, record, value = a
             if value is not None:
                 self.assignment(value, [record], False, move=True)
-            self.write(f"self.{self.files[name]}.release(&self.{self.files[name]}_area);")
+            self.write(f"{self.handle(name)}.release(&self.{self.files[name]}_area);")
         elif op == "set_switch":
             for number in a[0]:
                 self.write(f"runtime::set_switch({number}, {str(a[1]).lower()});")
@@ -1030,6 +1065,12 @@ class Emitter:
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "stop_run":
             self.write("return runtime::Outcome::Stop;")
+        elif op == "use_return":
+            self.write("return runtime::Outcome::Return;")
+        elif op == "global_use":
+            owner, section, continuation = a
+            self.write(f"if let runtime::Outcome::Stop = unit.global_use({quoted(owner)}, {quoted(section)}) {{ return runtime::Outcome::Stop; }}")
+            self.write(f"pc = {continuation};")
         elif op == "goback":
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "exit_program":
@@ -1108,27 +1149,27 @@ class Emitter:
                 field = self.program.fields[ref.name]
                 specs.append(f"file_runtime::SortKey {{ offset: {field.offset - base}, size: {field.size}, "
                              f"kind: {self.storage_kind(field)}, descending: {str(descending).lower()} }}")
-            self.write(f"self.{self.files[name]}.init(vec![{', '.join(specs)}]);")
+            self.write(f"{self.handle(name)}.init(vec![{', '.join(specs)}]);")
             self.write(f"pc = {following};")
         elif op == "sort_using":
             # cob_file_sort_using: OPEN INPUT, READ each record into the SD
             # area (cob_copy_check) and release it, CLOSE. The user's FILE
             # STATUS is not updated; a file that fails to open is skipped.
             name, files, following = a
-            sort = self.files[name]
+            sort, sorter = self.files[name], self.handle(name)
             for using in files:
-                rust = self.files[using]
-                self.write(f"if self.{rust}.open(\"INPUT\") < 10 {{")
+                rust, handle = self.files[using], self.handle(using)
+                self.write(f"if {handle}.open(\"INPUT\") < 10 {{")
                 self.indent += 1
-                self.write(f"while self.{rust}.read(&mut self.{rust}_area, None) < 10 {{")
+                self.write(f"while {handle}.read(&mut self.{rust}_area, None) < 10 {{")
                 if self.program.files[using].record_min != self.program.files[using].record_max:
                     # The record's size is the size read (sequential_read).
-                    self.write(f"    let record = Value::Bytes(self.{rust}_area.bytes()[..self.{rust}.last_read_size()].to_vec());")
-                    self.write(f"    self.{sort}.release_from(&record, &mut self.{sort}_area);")
+                    self.write(f"    let record = Value::Bytes(self.{rust}_area.bytes()[..{self.handle(using, True)}.last_read_size()].to_vec());")
+                    self.write(f"    {sorter}.release_from(&record, &mut self.{sort}_area);")
                 else:
-                    self.write(f"    self.{sort}.release_from(&self.{rust}_area, &mut self.{sort}_area);")
+                    self.write(f"    {sorter}.release_from(&self.{rust}_area, &mut self.{sort}_area);")
                 self.write("}")
-                self.write(f"self.{rust}.close(false);")
+                self.write(f"{handle}.close(false);")
                 self.indent -= 1
                 self.write("}")
             self.write(f"pc = {following};")
@@ -1136,33 +1177,33 @@ class Emitter:
             # cob_file_sort_giving: OPEN OUTPUT each file, WRITE every record to
             # each one opened (record area at its maximum size), CLOSE them.
             name, files, following = a
-            sort = self.files[name]
+            sort, sorter = self.files[name], self.handle(name)
             opened = self.unique()
             self.write(f"let mut {opened} = vec![false; {len(files)}];")
             for index, giving in enumerate(files):
-                self.write(f"{opened}[{index}] = self.{self.files[giving]}.open(\"OUTPUT\") < 10;")
+                self.write(f"{opened}[{index}] = {self.handle(giving)}.open(\"OUTPUT\") < 10;")
             initially = self.unique()
             self.write(f"let {initially} = {opened}.clone();")
-            self.write(f"while self.{sort}.retrieve(&mut self.{sort}_area) == 0 {{")
+            self.write(f"while {sorter}.retrieve(&mut self.{sort}_area) == 0 {{")
             self.indent += 1
             for index, giving in enumerate(files):
-                rust, spec = self.files[giving], self.program.files[giving]
+                rust, spec, handle = self.files[giving], self.program.files[giving], self.handle(giving)
                 self.write(f"if {opened}[{index}] {{")
                 self.write(f"    self.{rust}_area.assign(&Value::Bytes(self.{sort}_area.bytes()), false);")
-                self.write(f"    if self.{rust}.write(&self.{rust}_area, {spec.record_max}, None, None) >= 30 {{ {opened}[{index}] = false; }}")
+                self.write(f"    if {handle}.write(&self.{rust}_area, {spec.record_max}, None, None) >= 30 {{ {opened}[{index}] = false; }}")
                 self.write("}")
             self.indent -= 1
             self.write("}")
             for index, giving in enumerate(files):
-                self.write(f"if {initially}[{index}] {{ self.{self.files[giving]}.close(false); }}")
+                self.write(f"if {initially}[{index}] {{ {self.handle(giving)}.close(false); }}")
             self.write(f"pc = {following};")
         elif op == "sort_close":
-            self.write(f"self.{self.files[a[0]]}.close();")
+            self.write(f"{self.handle(a[0])}.close();")
             self.write(f"pc = {a[1]};")
         elif op == "return_sort":
             name, into, at_end, not_at_end, = a
-            sort = self.files[name]
-            self.write(f"if self.{sort}.retrieve(&mut self.{sort}_area) == 0 {{")
+            sort, sorter = self.files[name], self.handle(name)
+            self.write(f"if {sorter}.retrieve(&mut self.{sort}_area) == 0 {{")
             self.indent += 1
             if into:
                 record = self.names[self.program.files[name].record]
@@ -1315,15 +1356,15 @@ class Emitter:
             area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
             if spec.organization == "INDEXED":
                 if random:
-                    self.write(f"let {status} = self.{self.files[name]}.read_key(&mut {area}, {random[0]}, {random[1]}, {depending});")
+                    self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {random[0]}, {random[1]}, {depending});")
                 else:
-                    self.write(f"let {status} = self.{self.files[name]}.read_next(&mut {area}, {depending});")
+                    self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {depending});")
             elif spec.organization != "RELATIVE":
-                self.write(f"let {status} = self.{self.files[name]}.read(&mut {area}, {depending});")
+                self.write(f"let {status} = {self.handle(name)}.read(&mut {area}, {depending});")
             elif random:
-                self.write(f"let {status} = self.{self.files[name]}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
+                self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
             else:
-                self.write(f"let {status} = self.{self.files[name]}.read_next(&mut {area}, {self.relative_key(name, True)}, {depending});")
+                self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {self.relative_key(name, True)}, {depending});")
             self.io_invalid = handled and keyed
             self.file_status(name, status, handled and not keyed)
             self.io_handlers, self.io_invalid = None, False
@@ -1332,7 +1373,7 @@ class Emitter:
             if into:
                 if spec.organization in {"SEQUENTIAL", "RELATIVE", "INDEXED"}:
                     # READ INTO moves the record as read: its size is the size read.
-                    self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..self.{self.files[name]}.last_read_size()].to_vec());")
+                    self.write(f"let record = Value::Bytes(self.{self.files[name]}_area.bytes()[..{self.handle(name, True)}.last_read_size()].to_vec());")
                 else:
                     self.write(f"let record = self.{record}.snapshot();")
                 self.write(f"{self.receiver(into)}.assign(&record, false);")
@@ -1416,9 +1457,10 @@ class Emitter:
         for name in self.names:
             self.write(f"{self.names[name]}: Value, // {name} PIC {self.program.fields[name].picture}")
         for name, rust_name in self.files.items():
-            organization = self.program.files[name].organization
-            kind = {"RELATIVE": "RelativeFile", "INDEXED": "IndexedFile", "SORT": "SortFile"}.get(organization, "CobolFile")
-            self.write(f"{rust_name}: file_runtime::{kind}, // {name}")
+            kind = f"file_runtime::{self.file_kind(name)}"
+            if name in self.shared_files:
+                kind = f"file_runtime::Shared<{kind}>"
+            self.write(f"{rust_name}: {kind}, // {name}")
             self.write(f"{rust_name}_area: Value, // FD area of {name}, largest record")
         for name, rust_name in self.reports.items():
             self.write(f"{rust_name}: file_runtime::Report, // RD {name}")
@@ -1441,7 +1483,8 @@ class Emitter:
                 externals[name] = f"external{len(externals)}"
                 # The declaring program's instance starts from fresh storage.
                 function = "owned_block" if block[2] else "external"
-                self.write(f"let {externals[name]} = storage_runtime::{function}({quoted(block[1])}, {field.size});")
+                size = self.program.files[field.fd_file].record_max if getattr(field, "fd_file", None) else field.size
+                self.write(f"let {externals[name]} = storage_runtime::{function}({quoted(block[1])}, {size});")
         self.write("let mut result = Self {")
         self.indent += 1
         for name, field in self.program.fields.items():
@@ -1454,18 +1497,31 @@ class Emitter:
             spec = self.program.files[name]
             limits = f"{spec.record_min}, {spec.record_max}"
             if spec.sort:
-                self.write(f"{rust_name}: file_runtime::SortFile::new({spec.record_max}),")
+                created = f"file_runtime::SortFile::new({spec.record_max})"
             elif spec.organization == "RELATIVE":
-                self.write(f"{rust_name}: file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}),")
+                created = f"file_runtime::RelativeFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits})"
             elif spec.organization == "INDEXED":
                 keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()} }}"
                                  for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
-                self.write(f"{rust_name}: file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]),")
+                created = f"file_runtime::IndexedFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}])"
             else:
                 linage = ".with_linage()" if spec.linage else ""
-                self.write(f"{rust_name}: file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage},")
-            offset = self.program.fields[spec.record].offset
-            self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: memory.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
+                created = f"file_runtime::CobolFile::new({quoted(spec.path.text)}, {str(spec.optional).lower()}, {quoted(spec.organization)}, {limits}){linage}"
+            registry = self.file_registry(name)
+            if spec.external:
+                # cob_file_external_addr: the first program creates the file.
+                created = f"file_runtime::external_file({quoted(registry)}, || {created})"
+            elif spec.global_owner:
+                created = f"file_runtime::global_file::<file_runtime::{self.file_kind(name)}>({quoted(registry)})"
+            elif registry:
+                # A new instance of the declaring program has a new file.
+                created = f"file_runtime::owned_file({quoted(registry)}, {created})"
+            elif name in self.shared_files:
+                created = f"std::rc::Rc::new(std::cell::RefCell::new({created}))"
+            self.write(f"{rust_name}: {created},")
+            block = self.shared_block(spec.record)
+            memory, offset = (externals[block[0]], 0) if block else ("memory", self.program.fields[spec.record].offset)
+            self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
         for name, rust_name in self.reports.items():
             self.write(f"{rust_name}: {self.report_definition(self.program.reports[name])},")
         alters = len(self.program.alters)
@@ -1518,7 +1574,19 @@ class Emitter:
             self.call_method()
         for name in self.reports:
             self.report_events(self.program.reports[name])
-        self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
+        uses = getattr(self.program, "global_uses", None)
+        if uses:
+            # While the program runs, its contained programs reach its GLOBAL
+            # USE procedures through an alias sharing its storage and files.
+            self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
+            self.write(f"    unit.uses.push(({quoted(self.program.entry_name)}, Some(Box::new(self.alias()))));")
+            self.write(f"    let outcome = self.run_from(unit, {graph.entry});")
+            self.write("    unit.uses.pop();")
+            self.write("    outcome")
+            self.write("}")
+            self.write("fn run_from(&mut self, unit: &mut RunUnit, start: usize) -> runtime::Outcome {")
+        else:
+            self.write("fn run(&mut self, unit: &mut RunUnit) -> runtime::Outcome {")
         self.indent += 1
         collating = getattr(self.program, "collating", None)
         if collating:
@@ -1530,7 +1598,7 @@ class Emitter:
             # COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol.
             separators = "b',', b'.'" if decimal_comma else "b'.', b','"
             self.write(f"let _symbols = runtime::SymbolGuard::new({separators}, {ord(currency)});")
-        self.write(f"let mut pc: usize = {graph.entry};")
+        self.write(f"let mut pc: usize = {'start' if uses else graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source
         # site, including when PERFORM re-enters that site recursively.
@@ -1565,8 +1633,29 @@ class Emitter:
         self.write("}")
         self.indent -= 1
         self.write("}")
+        if uses:
+            fields = [*self.names.values(), *self.files.values(), *(f"{rust}_area" for rust in self.files.values()),
+                      "alter", "alter_saved"]
+            self.write("fn alias(&self) -> Self {")
+            self.write("    Self { " + " ".join(f"{name}: self.{name}.clone()," for name in fields) + " }")
+            self.write("}")
+        cancelled = [name for name in self.files if self.file_registry(name) and not self.program.files[name].global_owner]
+        if cancelled:
+            # The cancel entry closes the EXTERNAL and GLOBAL files left open.
+            self.write("fn cancel_files(&self) {")
+            for name in cancelled:
+                self.write(f"    {self.handle(name)}.cancel_close();")
+            self.write("}")
         self.indent -= 1
         self.write("}")
+        if uses:
+            self.write(f"impl GlobalUse for {self.struct} {{")
+            self.write("    fn global_use(&mut self, unit: &mut RunUnit, section: &str) -> runtime::Outcome {")
+            cases = " ".join(f"{quoted(section)} => {position}," for section, position in graph.global_entries.items())
+            self.write(f'        let start = match section {{ {cases} _ => unreachable!("USE GLOBAL section") }};')
+            self.write("        self.run_from(unit, start)")
+            self.write("    }")
+            self.write("}")
         return self.lines, self.mapping
 
     def report_definition(self, report):
@@ -1679,24 +1768,38 @@ def generate_unit(emitters):
         head.append("mod file_runtime;")
     head += ["use runtime::{Value, display};", "struct PerformFrame { through: usize, return_pc: usize }"]
     subprograms = emitters[1:]
+    global_uses = any(getattr(emitter.program, "global_uses", None) for emitter in emitters)
+    shared = any(emitter.file_registry(name) for emitter in emitters for name in emitter.files)
     unit = ["struct RunUnit {"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
+    if global_uses:
+        # The active programs with USE GLOBAL, innermost last.
+        unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
     unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {"]
     for index, _ in enumerate(subprograms, 1):
         unit.append(f"            p{index}: None, p{index}_active: false,")
+    if global_uses:
+        unit.append("            uses: Vec::new(),")
     unit += ["        }", "    }",
              "    /// None: no such program was converted with this run unit.",
              "    fn call(&mut self, name: &str, arguments: Vec<Value>) -> Option<runtime::Outcome> {",
              "        match name {"]
+    def cancels_files(emitter):
+        return any(emitter.file_registry(name) and not emitter.program.files[name].global_owner for name in emitter.files)
     for index, emitter in enumerate(subprograms, 1):
+        if getattr(emitter.program, "initial", False):
+            # INITIAL: the program is cancelled when it returns.
+            kept = "program.cancel_files();" if cancels_files(emitter) else "drop(program);"
+        else:
+            kept = f"self.p{index} = Some(program);"
         unit += [f"            {quoted(emitter.program.entry_name)} => {{",
                  f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
                  f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
                  f"                self.p{index}_active = true;",
                  "                let outcome = program.call(self, arguments);",
                  f"                self.p{index}_active = false;",
-                 f"                self.p{index} = Some(program);",
+                 f"                {kept}",
                  "                Some(outcome)",
                  "            }"]
     unit += ["            _ => None,", "        }", "    }",
@@ -1704,8 +1807,22 @@ def generate_unit(emitters):
              "    fn cancel(&mut self, name: &str) {",
              "        match name {"]
     for index, emitter in enumerate(subprograms, 1):
-        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ runtime::fail(\"CANCEL of an active program\"); }} self.p{index} = None; }},")
-    unit += ["            _ => {}", "        }", "    }", "}"]
+        cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_files(); }}" \
+            if cancels_files(emitter) else f"self.p{index} = None;"
+        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ runtime::fail(\"CANCEL of an active program\"); }} {cancel} }},")
+    unit += ["            _ => {}", "        }", "    }"]
+    if global_uses:
+        unit += ["    /// <owner>_ (section label): a GLOBAL USE procedure of an active program.",
+                 "    fn global_use(&mut self, owner: &str, section: &str) -> runtime::Outcome {",
+                 "        let index = self.uses.iter().rposition(|(name, _)| *name == owner).unwrap_or_else(|| runtime::fail(\"USE GLOBAL of an inactive program\"));",
+                 "        let mut program = self.uses[index].1.take().unwrap_or_else(|| runtime::fail(\"USE GLOBAL procedure re-entered not modelled\"));",
+                 "        let outcome = program.global_use(self, section);",
+                 "        self.uses[index].1 = Some(program);",
+                 "        outcome",
+                 "    }"]
+    unit.append("}")
+    if global_uses:
+        unit += ["trait GlobalUse { fn global_use(&mut self, unit: &mut RunUnit, section: &str) -> runtime::Outcome; }"]
     lines = head + unit
     main_mapping = []
     for position, (emitter, body, mapping) in enumerate(bodies):
@@ -1714,5 +1831,9 @@ def generate_unit(emitters):
             main_mapping = [{**item, "rust_line": item["rust_line"] + offset} for item in mapping]
         lines += body
     unchecked = "storage_runtime::set_unchecked_data(); " if getattr(emitters[0].program, "unchecked_data", False) else ""
-    lines.append(f"fn main() {{ {unchecked}let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }}")
+    if shared:
+        # The run unit's EXTERNAL and GLOBAL files are closed at its end.
+        lines.append(f"fn main() {{ {unchecked}{{ let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }} file_runtime::release_shared(); }}")
+    else:
+        lines.append(f"fn main() {{ {unchecked}let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit); }}")
     return "\n".join(lines) + "\n", main_mapping

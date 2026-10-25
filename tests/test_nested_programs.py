@@ -69,7 +69,6 @@ class NestedProgramTests(unittest.TestCase):
 
     def test_unmodelled_forms_are_refused(self):
         sources = [
-            fill(first="first-in", common=" is initial", second="second-in", body="continue."),
             fill(first="first-in", common="", second="X", body="continue.").replace(
                 "01 g global pic 9 value 1.", "01 g external pic 9 value 1."),
         ]

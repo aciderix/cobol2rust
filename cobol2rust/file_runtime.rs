@@ -559,11 +559,71 @@ impl CobolFile {
     }
 }
 
+impl CobolFile {
+    /// The cancel entry and STOP RUN: cob_close of a file left open.
+    pub fn cancel_close(&mut self) {
+        if !matches!(self.state, State::Closed | State::Locked) { self.close(false); }
+    }
+}
+
 impl Drop for CobolFile {
     fn drop(&mut self) {
         // STOP RUN closes open files too, including a pending AFTER newline.
-        if !matches!(self.state, State::Closed | State::Locked) { self.close(false); }
+        self.cancel_close();
     }
+}
+
+/// A file handle seen by several programs: EXTERNAL, GLOBAL, or the files
+/// of a program whose USE GLOBAL procedures run from contained programs.
+pub type Shared<T> = std::rc::Rc<std::cell::RefCell<T>>;
+
+thread_local! {
+    static SHARED_FILES: std::cell::RefCell<std::collections::HashMap<String, std::rc::Rc<dyn std::any::Any>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn shared_entry<T: 'static>(name: &str, entry: std::rc::Rc<dyn std::any::Any>) -> Shared<T> {
+    entry.downcast::<std::cell::RefCell<T>>()
+        .unwrap_or_else(|_| fail(&format!("{name} declared with another organization not modelled")))
+}
+
+/// cob_file_external_addr: the run unit's file of that name, created by the
+/// first program that declares it; the others use it as it is.
+pub fn external_file<T: 'static>(name: &str, create: impl FnOnce() -> T) -> Shared<T> {
+    let entry = SHARED_FILES.with(|files| files.borrow_mut().entry(name.to_string())
+        .or_insert_with(|| std::rc::Rc::new(std::cell::RefCell::new(create()))).clone());
+    shared_entry(name, entry)
+}
+
+/// A GLOBAL file of a program with contained programs: each new instance
+/// of that program (after CANCEL) has a new file, which they then see.
+pub fn owned_file<T: 'static>(name: &str, file: T) -> Shared<T> {
+    let existing = SHARED_FILES.with(|files| files.borrow().get(name).cloned());
+    match existing {
+        Some(entry) => {
+            let shared = shared_entry::<T>(name, entry);
+            *shared.borrow_mut() = file;
+            shared
+        }
+        None => {
+            let shared = std::rc::Rc::new(std::cell::RefCell::new(file));
+            SHARED_FILES.with(|files| files.borrow_mut().insert(name.to_string(), shared.clone() as std::rc::Rc<dyn std::any::Any>));
+            shared
+        }
+    }
+}
+
+/// A GLOBAL file of a containing program, which always runs first.
+pub fn global_file<T: 'static>(name: &str) -> Shared<T> {
+    let entry = SHARED_FILES.with(|files| files.borrow().get(name).cloned())
+        .unwrap_or_else(|| fail(&format!("{name} used before its program")));
+    shared_entry(name, entry)
+}
+
+/// The end of the run unit: the shared files left open are closed.
+pub fn release_shared() {
+    let files = SHARED_FILES.with(|files| std::mem::take(&mut *files.borrow_mut()));
+    drop(files);
 }
 
 /// Store FILE STATUS. Without it, an exception (status 1x..9x) that no AT END
@@ -948,10 +1008,14 @@ impl RelativeFile {
     }
 }
 
-impl Drop for RelativeFile {
-    fn drop(&mut self) {
+impl RelativeFile {
+    pub fn cancel_close(&mut self) {
         if !self.open_mode.is_empty() { self.close(false); }
     }
+}
+
+impl Drop for RelativeFile {
+    fn drop(&mut self) { self.cancel_close(); }
 }
 
 /// One SORT/MERGE key: its place in the SD record and its description.
@@ -1581,10 +1645,14 @@ impl IndexedFile {
     }
 }
 
-impl Drop for IndexedFile {
-    fn drop(&mut self) {
+impl IndexedFile {
+    pub fn cancel_close(&mut self) {
         if !self.open_mode.is_empty() { self.close(false); }
     }
+}
+
+impl Drop for IndexedFile {
+    fn drop(&mut self) { self.cancel_close(); }
 }
 
 // libcob common.h COB_REPORT_* flags of a report line.

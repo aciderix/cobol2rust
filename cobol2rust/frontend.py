@@ -441,6 +441,10 @@ class FileSpec:
     alternate_keys: list = field(default_factory=list)
     # FD LINAGE: part (lines, footing, top, bottom) -> ("literal", n) or ("field", name).
     linage: dict | None = None
+    # FD EXTERNAL / GLOBAL; global_owner: the containing program that declared it.
+    external: bool = False
+    is_global: bool = False
+    global_owner: str | None = None
 
 
 @dataclass
@@ -545,6 +549,13 @@ class Parser:
         self.debug_fields = {}
         self.start_debug = False
         self.debug_frames = []
+        # USE GLOBAL AFTER ERROR on an OPEN mode: mode -> section.
+        self.global_uses = {}
+        # cb_build_program: nest_level, and the programs of the source in
+        # PROGRAM-ID order (cobc's next_program chain, reversed).
+        self.level = 0
+        self.chain = []
+        self.containers = []
 
     @property
     def t(self):
@@ -756,13 +767,15 @@ class Parser:
         self.expect(".")
         entry_name = self.t.text
         name = self.name()
+        self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
-        common = False
+        common = initial = False
         if self.accept("IS") or self.at("COMMON") or self.at("INITIAL"):
             while self.at("COMMON") or self.at("INITIAL"):
                 if self.take().key == "INITIAL":
-                    self.error("programme INITIAL non pris en charge")
-                common = True
+                    initial = True
+                else:
+                    common = True
             self.accept("PROGRAM")
         self.expect(".")
         if self.accept("ENVIRONMENT"):
@@ -813,6 +826,7 @@ class Parser:
                         else:
                             spec.record = key
                         spec.records.append(key)
+                    self.fd_records(spec)
             if self.accept("WORKING-STORAGE"):
                 self.expect("SECTION")
                 self.expect(".")
@@ -858,6 +872,10 @@ class Parser:
         # descriptions, storage owned by the declaring program).
         for key, item in getattr(self, "inherited", {}).items():
             self.fields[key] = item
+        for file_name, spec in getattr(self, "inherited_files", {}).items():
+            if file_name in self.files:
+                self.error(f"fichier homonyme d'un fichier GLOBAL non pris en charge: {file_name}")
+            self.files[file_name] = spec
         self.expect("PROCEDURE")
         self.expect("DIVISION")
         using = []
@@ -997,6 +1015,7 @@ class Parser:
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
         program.reports = self.reports
+        program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
         program.debug_fields = self.debug_fields if self.debugging_mode else {}
         self.debugging_program(program, debug_sections, fall_through)
@@ -1005,20 +1024,24 @@ class Parser:
         program.default_byte_init = STD != "cobol85"
         self.validate_calls(program)
         self.validate_alters(program)
+        self.validate_global_uses(program, blocks, sections)
         program.common, program.parent, program.nested = common, None, []
+        # INITIAL: an implicit CANCEL when the program returns (codegen.c).
+        program.initial = initial
         if nested_start:
             # Nested programs, then END PROGRAM of this one (parser.y nested_list).
-            if any(getattr(f, "is_global", False) for f in self.files.values()):
-                self.error("FD GLOBAL avec programmes contenus non pris en charge")
             if self.reports:
                 self.error("REPORT SECTION avec programmes contenus non pris en charge")
             inherited = self.global_items(entry_name)
+            inherited_files = self.global_files(entry_name)
             while self.at("IDENTIFICATION") or self.at("ID"):
                 child_parser = Parser.__new__(Parser)
                 child_parser.__init__("")
                 child_parser.tokens, child_parser.i = self.tokens, self.i
                 child_parser.decimal_comma = self.decimal_comma
-                child_parser.inherited = inherited
+                child_parser.inherited, child_parser.inherited_files = inherited, inherited_files
+                child_parser.level, child_parser.chain = self.level + 1, self.chain
+                child_parser.containers = [*self.containers, entry_name]
                 child = child_parser.parse()
                 self.i = child_parser.i
                 for item in [child, *child.siblings]:
@@ -1039,6 +1062,8 @@ class Parser:
             sibling.tokens, sibling.i = self.tokens, self.i
             # Programs contained in the same program see the same GLOBAL items.
             sibling.inherited = getattr(self, "inherited", {})
+            sibling.inherited_files = getattr(self, "inherited_files", {})
+            sibling.level, sibling.chain, sibling.containers = self.level, self.chain, self.containers
             sibling.decimal_comma = self.decimal_comma
             following = sibling.parse()
             self.i = sibling.i
@@ -1047,6 +1072,91 @@ class Parser:
             if any(other.entry_name == entry_name for other in program.siblings):
                 raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
         return program
+
+    def inherited_uses(self, own_modes):
+        """cobc.c "Set up USE GLOBAL handlers": for each OPEN mode without a
+        USE of its own, a contained program takes the GLOBAL USE of the first
+        program defined before it at a lower nesting level, up to level 0."""
+        inherited = {}
+        if not self.level:
+            return inherited
+        index = next(i for i, entry in enumerate(self.chain) if entry["uses"] is self.global_uses)
+        for entry in reversed(self.chain[:index]):
+            if entry["level"] >= self.level:
+                continue
+            for mode, section in entry["uses"].items():
+                if mode not in own_modes and mode not in inherited:
+                    if entry["name"] not in self.containers:
+                        # The walk also finds programs that do not contain this one.
+                        self.error(f"USE GLOBAL de {entry['name']}, qui ne contient pas ce programme, non pris en charge")
+                    inherited[mode] = (entry["name"], section)
+            if not entry["level"]:
+                break
+        return inherited
+
+    def validate_global_uses(self, program, blocks, sections):
+        """A GLOBAL USE procedure runs with the declaring program's data from
+        a contained program (entry 2 of the program's function)."""
+        if not program.global_uses:
+            return
+        if program.alters:
+            self.error("ALTER dans un programme avec USE GLOBAL non pris en charge")
+
+        def walk(item):
+            if isinstance(item, Stmt):
+                if item.op in {"goback", "exit_program"}:
+                    raise CobolError(f"ligne {item.line}: GOBACK ou EXIT PROGRAM dans une procédure USE GLOBAL non pris en charge")
+                walk(item.args)
+            elif isinstance(item, (list, tuple)):
+                for element in item:
+                    walk(element)
+        for section in set(program.global_uses.values()):
+            start, end = sections[section]
+            for block in blocks[start:end]:
+                walk(block.body)
+
+    def fd_records(self, spec):
+        """cb_build_field and finalize_file: the 01 records of an EXTERNAL
+        FD are external, those of a GLOBAL FD global; all of them redefine
+        the file's record area (fd_file)."""
+        records = [self.fields[key] for key in spec.records]
+        for record in records:
+            record.fd_file, record.fd_external = spec.name, spec.external
+            if spec.is_global:
+                record.is_global = True
+        if not spec.is_global and len({record.is_global for record in records}) > 1:
+            self.error("GLOBAL sur une partie des enregistrements d'un FD non pris en charge")
+
+    def global_files(self, owner):
+        """The GLOBAL files of this program and those it inherits, as its
+        contained programs see them: records and keys named like the copies
+        made by global_items."""
+        import copy
+        inherited = dict(getattr(self, "inherited_files", {}))
+        prefix = f"^{owner}^"
+        for name, spec in self.files.items():
+            if not spec.is_global or spec.global_owner:
+                continue
+            if any(name in group for group in self.same_records):
+                self.error("SAME RECORD AREA avec un FD GLOBAL non pris en charge")
+            clone = copy.copy(spec)
+            clone.global_owner = owner
+            clone.record, clone.records = prefix + spec.record, [prefix + key for key in spec.records]
+            for attribute in ("status", "relative_key", "depending"):
+                key = getattr(spec, attribute)
+                if key is None:
+                    continue
+                root = self.fields[key]
+                while root.parent:
+                    root = self.fields[root.parent]
+                if not root.is_global:
+                    self.error(f"FD GLOBAL dont la clause {attribute} désigne une donnée non GLOBAL non pris en charge")
+                setattr(clone, attribute, prefix + key)
+            if spec.record_key:
+                clone.record_key = (prefix + spec.record_key[0], *spec.record_key[1:])
+                clone.alternate_keys = [(prefix + key[0], *key[1:]) for key in spec.alternate_keys]
+            inherited[name] = clone
+        return inherited
 
     def global_items(self, owner):
         """Descriptions of this program's GLOBAL items and of those it
@@ -1061,7 +1171,9 @@ class Parser:
                 root = self.fields[root.parent]
             if not root.is_global or getattr(item, "global_owner", None):
                 continue
-            if root.redefines or any(f.redefines == root.name for f in self.fields.values()):
+            # The records of a FD redefine its first one (the record area).
+            if not getattr(root, "fd_file", None) and (
+                    root.redefines or any(f.redefines == root.name for f in self.fields.values())):
                 self.error("REDEFINES d'un article GLOBAL non pris en charge")
             clone = copy.copy(item)
             clone.name, clone.parent, clone.redefines = rename(item.name), rename(item.parent), rename(item.redefines)
@@ -1122,8 +1234,11 @@ class Parser:
         """USE AFTER STANDARD ERROR/EXCEPTION PROCEDURE ON files or an OPEN
         mode, or USE FOR DEBUGGING ON targets (returned as a list)."""
         self.expect("USE")
-        if self.at("GLOBAL"):
-            self.error("USE GLOBAL non pris en charge")
+        # _use_global: the section's flag_global; contained programs take it
+        # for the OPEN modes they have no USE of their own for.
+        use_global = self.accept("GLOBAL")
+        if use_global and (self.at("FOR") or self.at("DEBUGGING")):
+            self.error("USE GLOBAL FOR DEBUGGING non pris en charge")
         if self.at("FOR") or self.at("DEBUGGING"):
             self.accept("FOR")
             self.expect("DEBUGGING")
@@ -1161,7 +1276,13 @@ class Parser:
             if mode in by_mode:
                 self.error(f"USE dupliqué pour {mode}")
             by_mode[mode] = section
+            if use_global:
+                self.global_uses[mode] = section
         else:
+            if use_global:
+                # setup_use_file: a GLOBAL file's handler goes through the
+                # programs' global_file_list, inherited by its contained programs.
+                self.error("USE GLOBAL sur un fichier non pris en charge")
             names = [self.file_name()]
             while not self.t.string and self.t.key in self.files:
                 names.append(self.file_name())

@@ -228,8 +228,27 @@ descendants (un nom local le masque) et partage leur stockage ; un article
 `EXTERNAL` est un bloc de l'unité d'exécution désigné par son nom, comme
 `cob_external_addr` (alloué à zéro, sans VALUE, même taille exigée).
 
-Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, programmes INITIAL, FD
-EXTERNAL/GLOBAL et USE GLOBAL, plusieurs programmes dans un source appelé,
+Un FD `EXTERNAL` partage le fichier et sa zone d'enregistrement
+(`<fichier>_Record`) dans l'unité d'exécution, comme `cob_file_external_addr` :
+le premier programme qui le déclare le crée (son ASSIGN et son OPTIONAL
+comptent), chaque programme garde son propre FILE STATUS, et le CANCEL d'un
+programme ferme le fichier qu'il a laissé ouvert. Un FD `GLOBAL` d'un programme
+contenant est vu par ses descendants avec ses enregistrements ; une nouvelle
+instance du programme (après CANCEL) a un nouveau fichier. `USE GLOBAL AFTER
+ERROR` sur un mode d'ouverture sert aux programmes contenus qui n'ont pas de
+USE pour ce mode, selon le parcours de cobc.c (premier programme défini avant,
+de niveau inférieur, jusqu'au niveau 0) ; la procédure s'exécute avec les
+données et les fichiers du programme qui la déclare (entrée 2 de sa fonction
+C : un alias qui partage son stockage), puis rend la main au programme
+appelant. Un programme `INITIAL` est annulé (CANCEL implicite) à chaque retour.
+
+Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, USE GLOBAL sur un nom de
+fichier, un USE GLOBAL que le parcours de cobc.c prendrait à un programme non
+contenant, ALTER dans un programme à USE GLOBAL et GOBACK ou EXIT PROGRAM dans
+sa procédure, FD
+EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
+GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
+GLOBAL, plusieurs programmes dans un source appelé,
 EXTERNAL AS et VALUE d'un article EXTERNAL, LINKAGE hors de USING, VALUE en
 LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).

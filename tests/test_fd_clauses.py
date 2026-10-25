@@ -65,7 +65,7 @@ class FdClauseTests(unittest.TestCase):
             "recording mode s.", "recording mode u.", "linage 66 lines footing 2 footing 3.",
             "linage.", "linage 'A'.", "linage 6 top.",
             "code-set is custom-alphabet.",
-            "external.", "global.", "data rec.", "data record.", "data records are.",
+            "external is external.", "global global.", "external global.", "data rec.", "data record.", "data records are.",
             "data record is rec data record is rec.", "data record label records standard.",
             "data record is 'rec'.", "data record is rec of f.",
         ]
