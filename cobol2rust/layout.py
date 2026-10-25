@@ -7,13 +7,13 @@ def layout_fields(fields):
         f = fields[key]
         if f.picture:
             if f.kind == "edited":
-                f.size = len(f.editing)
+                f.size = f.edit_size
             elif f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
                 f.size = (f.digits + 2) // 2
             elif f.usage != "DISPLAY":
                 f.size = 1 if f.digits <= 2 else 2 if f.digits <= 4 else 4 if f.digits <= 9 else 8
             else:
-                f.size = f.digits
+                f.size = f.digits + (1 if f.sign_separate else 0)
         else:
             if not f.children:
                 raise CobolError(f"groupe vide: {f.name}")
@@ -22,6 +22,8 @@ def layout_fields(fields):
             raise CobolError(f"zone de données trop grande: {f.name}")
         return f.size * f.occurs
 
+    extents = {}
+
     def siblings(keys, start):
         cursor = start
         for key in keys:
@@ -29,8 +31,15 @@ def layout_fields(fields):
             total = size(key)
             if f.redefines:
                 target = fields[f.redefines]
-                if total > target.size * target.occurs:
-                    raise CobolError(f"REDEFINES plus grand que sa zone non pris en charge: {key}")
+                extent = extents.get(target.name, target.size * target.occurs)
+                if total > extent:
+                    # Alternate FD records follow their first record and may be
+                    # larger: the record area grows to the largest one.
+                    # A larger 01 REDEFINES grows the area (memory_size, field.c).
+                    if not (f.parent is None and target.parent is None and f.file_record == target.file_record):
+                        raise CobolError(f"REDEFINES plus grand que sa zone non pris en charge: {key}")
+                    cursor += total - extent
+                    extents[target.name] = total
                 f.offset = target.offset
             else:
                 f.offset = cursor
@@ -52,6 +61,30 @@ def layout_fields(fields):
             locate(child, f.offset, f.dimensions)
     for key in roots:
         locate(key, 0, [])
+    # SYNCHRONIZED aligns binary items of 2, 4 or 8 bytes inside their record
+    # (cobc compute_size), padding before them and after table entries; it
+    # has no effect on other items. Only layouts needing no padding are kept.
+    for f in fields.values():
+        cursor, synced = f, f.synchronized
+        while cursor.parent:
+            cursor = fields[cursor.parent]
+            synced = synced or (cursor.synchronized and f.usage != "DISPLAY")
+        if not synced or not f.picture or f.usage in {"DISPLAY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+            continue
+        align = f.size if f.size in {2, 4, 8} else 1
+        if f.index_for or f.usage == "INDEX":
+            align = 4
+        if align == 1:
+            continue
+        aligned = (f.offset - cursor.offset) % align == 0
+        tables = []
+        parent = f.parent
+        while parent:
+            if fields[parent].table:
+                tables.append(fields[parent])
+            parent = fields[parent].parent
+        if not aligned or any(table.size % align for table in tables) or (f.table and f.size % align):
+            raise CobolError(f"SYNCHRONIZED avec remplissage d'alignement non pris en charge: {f.label}")
     # A terminal ODO has a fixed address and a variable enclosing group length.
     # Sliding fields, variable strides and record I/O need a separate layout model.
     for f in fields.values():
@@ -60,8 +93,8 @@ def layout_fields(fields):
         controller = fields[f.depending]
         if controller.kind != "number" or controller.scale or controller.dimensions or controller.index_for:
             raise CobolError("DEPENDING ON requiert un entier scalaire avec PICTURE")
-        if f.file_record or f.parent is None:
-            raise CobolError("OCCURS DEPENDING ON limité à une table subordonnée WORKING-STORAGE")
+        if f.parent is None:
+            raise CobolError("OCCURS DEPENDING ON limité à une table subordonnée")
         cursor = f
         while cursor.parent:
             parent = fields[cursor.parent]
@@ -69,10 +102,12 @@ def layout_fields(fields):
                 raise CobolError("OCCURS DEPENDING ON doit terminer chaque groupe parent, sans OCCURS englobant")
             cursor = parent
         root = cursor
-        if controller.name == root.name or controller.name.startswith(root.name + "."):
-            raise CobolError("contrôleur DEPENDING ON requis hors du groupe variable")
+        if controller.name.startswith(f.name + "."):
+            raise CobolError("contrôleur DEPENDING ON dans sa propre table non pris en charge")
         subtree = [item for item in fields.values() if item.name == root.name or item.name.startswith(root.name + ".")]
-        if any(item.redefines for item in subtree) or any(item.redefines == root.name for item in fields.values()):
+        # The other 01 records of an FD share its area (an implicit REDEFINES).
+        if any(item.redefines for item in subtree if not (item is root and root.file_record)) or any(
+                item.redefines == root.name and not (item.file_record and item.parent is None) for item in fields.values()):
             raise CobolError("REDEFINES d'un groupe variable non pris en charge")
     return total
 

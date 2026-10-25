@@ -154,8 +154,8 @@ nombre de programmes entièrement acceptés.
 | Clause FD BLOCK | 16 |
 | I-O-CONTROL | 13 |
 
-Les formats variables, les autres clauses FD et les compteurs ADVANCING
-variables restent explicitement refusés. Aucun résultat de cette étape ne
+Les formats variables et les autres clauses FD restent explicitement refusés
+(les compteurs ADVANCING variables et LINAGE sont pris en charge depuis). Aucun résultat de cette étape ne
 constitue une réussite des assertions de conformité NIST.
 
 ## Progression : PICTURE éditées et clauses FD
@@ -386,6 +386,240 @@ indépendantes et **50 PASS** (49/1), sans FAIL/DELETED/INSPECT
 création/relecture de 750 records de 120 octets. Ces essais ciblés ne sont pas
 le runner NIST complet et ne démontrent pas la garantie universelle recherchée.
 
+## Progression : DATA RECORDS et MOVE numérique tronquant
+
+La clause FD `DATA RECORD(S) [IS|ARE] nom...` est acceptée comme métadonnée.
+GnuCOBOL 3.2 l'analyse sans résoudre ses noms et ne lui donne aucun effet ;
+ses doublons et sa forme sans nom restent refusés comme en natif.
+Un MOVE numérique vers numérique tronque désormais les chiffres de tête sans
+SIZE ERROR, comme la norme et GnuCOBOL ; les calculs sans gestionnaire gardent
+l'arrêt conservateur. Le seul cas natif non modélisé (chiffre déposé dans le
+quartet de tête d'un COMP-3 pair par une source binaire ou un littéral entier)
+est refusé ou arrêté avec un diagnostic nommé.
+
+| Mesure sur les mêmes 458 sources | Avant | Après |
+| --- | ---: | ---: |
+| Blocage au prétraitement | 16 | 16 |
+| Blocage à l'analyse/disposition | 430 | 422 |
+| Émission Rust acceptée | 12 | 20 |
+| Erreur interne | 0 | 0 |
+
+Les 36 sources dont DATA RECORD était le premier diagnostic changent de statut
+ou de diagnostic. Les 8 nouvelles sources acceptées SM102A, SM104A, SM204A,
+SQ128A, ST103A, ST104A, ST115A et ST121A ont **8/8 comparaisons natives
+conformes** ; leur REPORT est identique octet pour octet au journal du runner
+NIST officiel exécuté sous GnuCOBOL 3.2 : **44 PASS, 0 FAIL/DELETED/INSPECT**.
+Les cinq `.SUB` lisent les fichiers de leurs producteurs officiels (SM101A,
+SM103A, SM203A, ST101A/ST102A, ST119A/ST120A) exécutés en GnuCOBOL. ST115A
+dépendait du MOVE tronquant. Les 12 sources acceptées auparavant restent
+conformes. Premiers diagnostics désormais : RELATIVE (32), INDEXED (26),
+FILE STATUS de groupe (25), VALUE/USAGE de groupe (24), OBJECT-COMPUTER (19).
+Rapport : `build/coverage-nist-data-records.json`.
+
+## Progression : groupes, configuration et receveurs multiples
+
+| Mesure sur les mêmes 458 sources | Avant | Après |
+| --- | ---: | ---: |
+| Blocage au prétraitement | 16 | 15 |
+| Blocage à l'analyse/disposition | 422 | 413 |
+| Émission Rust acceptée | 20 | 30 |
+| Erreur interne | 0 | 0 |
+
+FILE STATUS de groupe débloque 7 sources SQ, VALUE/USAGE de groupe NC245A, les
+clauses de configuration sans effet OBSQ4A et SQ303M. `tools/nist_verify.py`
+compare les **30** sources acceptées avec les entrées du runner officiel :
+**30/30 conformes**, REPORT identiques aux journaux natifs, 401 PASS et 1
+INSPECT. Cette vérification a révélé une perte silencieuse de receveur dans
+`ADD ... TO A, B.`, corrigée avant mesure. Rapports :
+`build/coverage-nist-multi.json` et `build/nist-verify-30.json`.
+
+## Progression : DECLARATIVES et instructions de fichier
+
+DECLARATIVES `USE AFTER ERROR`, les mots facultatifs de READ et CLOSE WITH
+LOCK portent l'émission acceptée de **30 à 59/458**. Les 29 nouvelles sources
+sont conformes avec `tools/nist_verify.py`, REPORT identiques au runner natif,
+117 PASS sans FAIL (`build/nist-verify-decl.json`, `build/nist-verify-rc.json`).
+Rapport statique : `build/coverage-nist-read-close.json`.
+
+## Progression : OPEN I-O et REWRITE séquentiels
+
+OPEN I-O et REWRITE SEQUENTIAL portent l'émission acceptée à **66/458**. Toutes
+les sources acceptées sont reverifiées avec les entrées du runner : **66/66
+conformes**, 539 PASS, 1 INSPECT (SM106A), aucun FAIL
+(`build/nist-verify-66.json`). Prochains obstacles : RELATIVE (32), INDEXED (26),
+fonctions intrinsèques, WITH DEBUGGING MODE et PROGRAM COLLATING SEQUENCE.
+
+## Progression : RELATIVE et clauses SELECT
+
+Les fichiers RELATIVE, au format disque exact de GnuCOBOL, et la grammaire
+SELECT complète portent l'émission acceptée à **95/458**. Les 29 nouvelles
+sources sont conformes au runner natif (762 PASS, 4 DELETED également natifs ;
+`build/nist-verify-rel.json`, `build/nist-verify-rel2.json`). Les `.SUB` lisent
+des fichiers RELATIVE écrits par les producteurs GnuCOBOL.
+
+## Progression : enregistrements variables et formes de langage
+
+Enregistrements variables SEQUENTIAL/RELATIVE au format exact de GnuCOBOL,
+PERFORM VARYING ... AFTER, mots commençant par un chiffre, littéraux à point
+initial, PIC A/V, MOVE ALL et SET depuis un index portent l'émission acceptée à
+**115/458**. Toutes les nouvelles sources sont conformes au runner natif
+(`build/nist-verify-var.json` : 12/12, 643 PASS).
+
+## Progression : CALL et programmes liés
+
+CALL/CANCEL/LINKAGE (unité d'exécution multi-programmes, `--call-path lib` pour
+le module IC) portent l'émission acceptée à **126/458** (dont 2 modules de
+`IC/lib` vérifiés par leur appelant IC116M). Les 9 nouveaux programmes IC sont
+conformes au runner natif (51 PASS ; `build/nist-verify-ic.json`) et la
+revérification complète donne **124/124 programmes conformes**, 2077 PASS,
+4 DELETED et 1 INSPECT natifs, aucun FAIL (`build/nist-verify-call.json`).
+Obstacles IC restants : programmes imbriqués ou multiples par source, USAGE
+INDEX, NEXT SENTENCE, EXTERNAL/GLOBAL, PICTURE avec B/0.
+
+## Progression : NEXT SENTENCE, programmes frères et PICTURE P
+
+NEXT SENTENCE (saut après le prochain point séparateur, y compris hors d'une
+boucle inline), programmes frères dans un même source (résolus avant le chemin
+d'appel, comme le résolveur de libcob) et PICTURE P portent l'émission acceptée
+à **131/458**. Revérification complète : **129/129 programmes conformes**,
+2180 PASS, 0 FAIL (`build/nist-verify-p.json`). Les sources NC à P bloquent
+maintenant sur l'édition numérique générale (`/ , B 0 $ CR DB *`, P édité),
+QUOTE, SYNCHRONIZED, CORRESPONDING, BLANK WHEN ZERO et RENAMES.
+
+## Progression : édition numérique et alphanumérique, pliage des comparaisons
+
+`cob_move_display_to_edited` et `cob_move_alphanum_to_edited` sont portés
+symbole par symbole ; les images suivent `cb_build_picture` et la table de
+précédence de cobc (63 images, aucun écart d'acceptation). Les comparaisons de
+champs édités sont alphanumériques ; les comparaisons champ DISPLAY/littéral
+suivent le pliage `compare_field_literal` de cobc (par exemple `S99 > -100`
+vaut FAUX natif). S'y ajoutent BLANK WHEN ZERO, JUSTIFIED, QUOTE, VALUE ALL,
+SIZE ERROR sur receveur édité, MOVE de champs P vers X et la valeur absolue dans
+un receveur non signé. Émission acceptée : **141/458** ; revérification :
+**139/139 programmes conformes**, 3072 PASS, 0 FAIL (`build/nist-verify-editing.json`).
+
+## Progression : SIGN, SYNCHRONIZED et clauses de données
+
+Clause SIGN (LEADING/TRAILING, SEPARATE, héritée du groupe) comme
+`cob_real_get_sign`/`cob_real_put_sign`, affichage du signe séparé final comme
+`pretty_display_numeric`, SYNCHRONIZED sans remplissage (DISPLAY ou binaire déjà
+aligné ; le remplissage de `compute_size` reste refusé), FILLER implicite,
+`88 … VALUE ALL` et constantes figuratives de niveau 88, VALUE ZERO sur PIC X.
+Émission acceptée : **153/458** ; revérification : **151/151 programmes
+conformes**, 3656 PASS, 0 FAIL (`build/nist-verify-sign.json`).
+
+## Progression : formes arithmétiques, HIGH/LOW-VALUE, START >=
+
+`ADD a b GIVING c` sans TO, `DIVIDE … BY … GIVING`, REMAINDER (reste calculé
+sur le quotient complet tronqué à l'échelle du quotient, comme
+`cob_div_quotient`), HIGH-VALUE/LOW-VALUE (octets 0xFF/0x00 en VALUE, MOVE,
+comparaisons ALL et niveaux 88) et `START … >=`/`GREATER OR EQUAL` (COB_GE).
+Émission acceptée : **166/458** ; revérification : **164/164 programmes
+conformes**, 4296 PASS, 0 FAIL (`build/nist-verify-arith.json`).
+
+## Progression : SORT et MERGE
+
+SD, SORT/MERGE (clés ASCENDING/DESCENDING, WITH DUPLICATES), USING/GIVING
+SEQUENTIAL et LINE SEQUENTIAL à enregistrements fixes, INPUT/OUTPUT PROCEDURE,
+RELEASE [FROM] et RETURN [INTO] AT END, abaissés comme le C de cobc
+(`cob_file_sort_init`, PERFORM des procédures, `cob_file_sort_close`). Le tri
+est celui de libcob : stable, clés numériques par valeur, les autres octet par
+octet ; MERGE est un tri stable des fichiers USING dans l'ordre. Les FILE
+STATUS des fichiers USING/GIVING ne sont pas mis à jour, comme en natif.
+Émission acceptée : **182/458** ; revérification : **180/180 programmes
+conformes**, 4474 PASS, 0 FAIL (`build/nist-verify-sort.json`).
+
+## Progression : segments, CLOSE REEL/UNIT/NO REWIND
+
+Numéros de segment de SECTION acceptés (sans effet hors ALTER, toujours
+refusé, comme dans codegen.c), `CLOSE REEL/UNIT [FOR REMOVAL]` (le fichier reste
+ouvert, 07) et `CLOSE WITH NO REWIND` (fermé, 07) comme `cob_file_close`,
+`OPEN … WITH NO REWIND/REVERSED` ignorés comme par cobc, et `file_runtime.rs`
+fourni quand seul un sous-programme a des fichiers. Émission acceptée :
+**198/458** ; revérification : **196/196 programmes conformes**, 4566 PASS,
+0 FAIL (`build/nist-verify-close.json`).
+
+## Progression : SPECIAL-NAMES et ACCEPT
+
+SPECIAL-NAMES : noms mnémoniques (DISPLAY UPON SYSOUT/CONSOLE/SYSERR, ACCEPT
+FROM SYSIN/CONSOLE, comme `cb_build_display_mnemonic`), SWITCH-n et leurs
+conditions ON/OFF (`COB_SWITCH_n` lu comme `cob_init`, SET … TO ON/OFF),
+ALPHABET NATIVE/STANDARD-1/STANDARD-2/ASCII (table identité `cob_native`, d'où
+PROGRAM COLLATING SEQUENCE et SORT COLLATING acceptés pour ces alphabets),
+CLASS utilisateur et SYMBOLIC CHARACTERS. ACCEPT suit `cob_accept` (ligne
+jusqu'au LF, CR conservé, troncature des DISPLAY numériques, MOVE
+alphanumérique). `nist_verify` reproduit `COB_SWITCH_1=ON`/`COB_SWITCH_2=OFF`
+de report.pl. Émission acceptée : **205/458** ; revérification : **203/203
+programmes conformes**, 4650 PASS, 0 FAIL (`build/nist-verify-special.json`).
+
+## Progression : SEARCH, USAGE INDEX, INSPECT, EVALUATE
+
+SEARCH et SEARCH ALL (code généré par cobc, y compris une condition 88 de clé
+comme `build_cond_88`), USAGE INDEX explicite (entier natif petit-boutiste),
+INSPECT TALLYING/REPLACING/CONVERTING porté de `strings.c` (tampons statiques,
+marquage LEADING incomplet, signe incrusté, `cob_add_int` tronquant), EVALUATE
+réécrit d'après `cb_emit_evaluate` (ALSO, ANY, THRU, NOT, TRUE/FALSE, WHEN
+consécutifs), ELSE imbriqués sans END-IF, 88 de groupe, SET mixte index/entier,
+BY et ON facultatifs dans INDEXED BY / DEPENDING ON, KEY après INDEXED,
+littéraux signés du scanner de cobc dans les sous-scripts, et passage BY
+REFERENCE de l'allocation entière d'un groupe ODO (IC207A). Émission acceptée :
+**229/458** ; revérification : **227/227 programmes conformes**, 5269 PASS,
+0 FAIL (`build/nist-verify-inspect.json`, `build/nist-verify-subscripts.json`).
+
+## Progression : conditions cobc, STRING/UNSTRING
+
+`conditions.py` porte `cb_build_expr` (conditions abrégées, NOT, signe,
+classes) ; STRING et UNSTRING suivent `strings.c` ; les mots réservés de cobc
+sont refusés comme noms (NC211A, que cobc rejette, n'est plus accepté).
+Émission acceptée : **233/458** ; revérification : **231/231 programmes
+conformes**, 5497 PASS, 0 FAIL (`build/nist-verify-conditions.json`,
+`build/nist-verify-string.json`).
+
+## Progression : fichiers, RENAMES, exponentiation
+
+Ordre libre des clauses SELECT, PADDING, RECORD DELIMITER, VALUE OF, SAME
+RECORD AREA, RENAMES, REDEFINES 01 plus grand, `**`, ALL figuratif, MOVE -0,
+comparaisons numériques/figuratives. Émission acceptée : **251/458** ;
+revérification : **249/249 programmes conformes**, 5841 PASS, 0 FAIL
+(`build/nist-verify-files-renames.json`).
+
+## Progression : CORRESPONDING, troncature DISPLAY, dé-édition
+
+Émission acceptée : **256/458** ; revérification : **254/254 programmes
+conformes**, 6104 PASS, 0 FAIL (`build/nist-verify-corresponding.json`).
+
+## Progression : COPY REPLACING
+
+Émission acceptée : **262/458** ; revérification : **260/260 programmes
+conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
+
+## Progression : fonctions intrinsèques
+
+Port de libcob/intrinsic.c pour INTEGER, INTEGER-PART, MOD, REM, FACTORIAL,
+SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
+ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
+INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
+LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
+Restent refusées : RANDOM et la modification de référence d'un résultat
+(CURRENT-DATE et WHEN-COMPILED sont portés depuis, voir plus bas) (SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS,
+ATAN, STANDARD-DEVIATION, PI et E sont portés depuis : voir plus bas).
+`tools/coverage.py` émet les sources à PROCEDURE DIVISION USING comme
+sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
+revérification : **289/289 programmes principaux conformes**, 6608 PASS,
+0 FAIL (`build/nist-verify-intrinsics.json`).
+
+## Progression : ALTER, noms de procédure, dialecte cobol85
+
+ALTER (label_N de cobc, remise à zéro des paragraphes de segments
+indépendants à la chute dans la SECTION, au PERFORM et au GO TO d'un autre
+segment), GO TO sans cible, noms de procédure homonymes qualifiés IN/OF et
+entièrement numériques (`cb_ref`), PERFORM a THRU b inversé, PERFORM en ligne
+sans option, compteur TIMES selon `cob_get_llint` et `cb_check_integer_value`,
+STOP littéral. Option `--std cobol85` : `section-segments` et `defaultbyte:
+none`. Émission acceptée : **327/458** ; revérification : **302/303
+programmes principaux conformes**, 6980 PASS, 0 FAIL
+(`build/nist-verify-alter.json`) ; OBNC1M diverge sur SIGINT (non modélisé).
+
 ## Ordre de travail
 
 1. Conserver une mesure reproductible de l'ensemble des sources NIST, en
@@ -405,3 +639,125 @@ le runner NIST complet et ne démontrent pas la garantie universelle recherchée
 Les refus explicites restent en place jusqu'à validation de leur remplacement.
 Le nombre de programmes acceptés ne doit pas augmenter au prix d'une perte de
 fidélité sémantique.
+
+## Progression : DEBUGGING MODE
+
+`SOURCE-COMPUTER ... WITH DEBUGGING MODE` active les lignes D qui suivent
+(pplex.l) ; `USE FOR DEBUGGING` sur procédures, `ALL PROCEDURES` et fichiers
+(OPEN, CLOSE, READ, DELETE, START) ; DEBUG-ITEM construit comme
+`cb_build_debug_item` ; DEBUG-LINE de la dernière instruction commencée,
+DEBUG-NAME dans l'orthographe de la première occurrence du mot,
+DEBUG-CONTENTS (START PROGRAM, PERFORM LOOP, FALL THROUGH, USE PROCEDURE,
+SORT INPUT/OUTPUT, MERGE OUTPUT, cible d'ALTER, enregistrement lu) ;
+sections de débogage actives selon `COB_SET_DEBUG`. Les identifiants surveillés
+(`ON identifiant`, `ALL REFERENCES OF`) restent refusés. Émission acceptée :
+**336/458** ; revérification : **311/312 programmes principaux conformes**,
+7275 PASS, 0 FAIL (`build/nist-verify-debugging.json`).
+
+## Progression : INDEXED
+
+Port des fonctions Berkeley DB de fileio.c (`indexed_open`, `start_internal`,
+`read_next`, `write_internal`, `delete_internal`, `rewrite`, `check_alt_keys`,
+`get_dupno`) sur des btrees ordonnés comme BDB (memcmp, doublons dans l'ordre
+d'insertion, numéro de doublon natif). Comportements de libcob conservés : pas
+de statut 02 (écrasé par DB_PUT), REWRITE séquentiel à clé changée accepté,
+21 au lieu de 22 en écriture séquentielle OUTPUT. Format disque propre à
+cobol2rust (fichiers `nom`, `nom.1`, ...), non interchangeable avec les
+fichiers BDB de GnuCOBOL. Refusés : clés composées (SOURCE IS), SUPPRESS,
+READ PREVIOUS, LOCK. Émission acceptée : **375/458** ; revérification :
+**350/351 programmes principaux conformes** (`build/nist-verify-indexed.json`).
+
+## Progression : PROGRAM COLLATING SEQUENCE et fonctions mathématiques
+
+Alphabets littéraux (`validate_alphabet` : littéraux, `THRU`, `ALSO`, doublons
+refusés comme cobc) utilisés comme PROGRAM COLLATING SEQUENCE : la table de
+pondération remplace l'ordre natif dans `cob_cmp_alnum`/`cob_cmp_all` et dans
+le SORT du module ; LOW-VALUE est le premier caractère de l'alphabet et
+HIGH-VALUE suit `cb_validate_collating`. Deux littéraux comparés par `=` ou
+`<>` restent pliés sur leurs octets bruts (tree.c). Fonctions SQRT, LOG,
+LOG10, EXP, SIN, COS, TAN, ASIN, ACOS, ATAN, STANDARD-DEVIATION, PI et E :
+calcul en virgule flottante décimale à 150 chiffres, ramené à 96 chiffres
+significatifs arrondis au plus proche comme `cob_decimal_set_mpf`
+(COB_MAX_INTERMEDIATE_FLOATING_SIZE). Émission acceptée : **390/458** ;
+revérification : **365/366 programmes principaux conformes**, 8066 PASS,
+0 FAIL (`build/nist-verify-math.json`, `build/coverage-nist-math.json`).
+
+## Progression : LINAGE, ADVANCING et formes de préprocesseur
+
+Port de `cob_linage_write_opt`, `file_linage_check` et `lineseq_write` (marge
+haute au premier WRITE, saut de page, statut 57, END-OF-PAGE via `check_eop`),
+ADVANCING sur LINE SEQUENTIAL, par identifiant, ZERO et mnémonique
+FORMFEED/Cnn, qualification d'un enregistrement par son FD (`PRINT-REC IN
+PRINT-FILE`). Formes levées au passage : `TEST BEFORE/AFTER` sans WITH, liste de
+mots réservés `cobol85.words` en `--std cobol85`, `[NOT] [ON] SIZE ERROR` qui ne
+capture plus le NOT ON EXCEPTION d'un CALL englobant, articles frères
+homonymes, I-O-CONTROL vide, instruction REPLACE, `COPY … OF|IN`, zone de
+séquence quelconque, `SET` à plusieurs groupes de commutateurs, terminateur de
+portée qui ferme les instructions conditionnelles englobées. Émission
+acceptée : **407/458** ; revérification : **382/383 programmes principaux conformes**, 8325 PASS, 0 FAIL
+(`build/nist-verify-linage.json`, `build/coverage-nist-linage.json`).
+
+## Progression : OCCURS DEPENDING, symboles du module, INITIALIZE REPLACING
+
+Contrôleur OCCURS DEPENDING interne au groupe (longueur maximale pour le
+récepteur d'un MOVE, `flag_receiving`), tables variables dans les
+enregistrements FD (taille courante à WRITE/REWRITE, `record_min` selon
+`occurs_min`), ELSE et WHEN qui ferment les instructions conditionnelles
+englobées ; CURRENCY SIGN et DECIMAL-POINT IS COMMA (scanner, PICTURE, édition,
+NUMVAL, affichage) ; MOVE de littéral alphanumérique vers numérique DISPLAY
+(`cb_build_move_literal`) et MOVE ALL vers alphanumérique édité ; INITIALIZE
+REPLACING (`output_initialize_one`) ; SORT USING/GIVING de fichiers SEQUENTIAL
+variables ; CODE-SET d'alphabet natif ignoré ; programmes contenus (visibilité
+directe ou COMMON), articles GLOBAL partagés avec les descendants, articles
+EXTERNAL par nom (`cob_external_addr`) ; FUNCTION CURRENT-DATE (horloge
+système, fuseau UTC seul modélisé) et WHEN-COMPILED (littéral de l'heure de
+conversion, comme `cb_set_intr_when_compiled`). Émission acceptée :
+**426/458** ; revérification : **401/402 programmes principaux conformes**, 9303 PASS, 0 FAIL
+(`build/nist-verify-odo.json`, `build/coverage-nist-odo.json`).
+
+## Progression : Report Writer
+
+Port de `reportio.c` sans ruptures de contrôle (`do_page_heading`,
+`do_page_footing`, `report_line`, `report_line_type`, `cob_report_generate`,
+`cob_report_terminate`) et des règles de cobc pour la REPORT SECTION
+(`page_limit_clause`, `finalize_report`, `output_report_define_lines`) : FD
+REPORT, RD avec limites de page littérales, groupes RH/PH/DE/PF/RF, LINE [PLUS],
+COLUMN, SOURCE, VALUE, LINE-COUNTER et PAGE-COUNTER. Émission acceptée :
+**430/458** ; revérification : **405/406 programmes principaux conformes**,
+9343 PASS, 0 FAIL (`build/nist-verify-report.json`,
+`build/coverage-nist-report.json`).
+
+## Progression : USE FOR DEBUGGING sur articles
+
+Port de `cb_check_field_debug` (liste `debug_check` de chaque instruction,
+émise après son corps sous `cob_debugging_mode`), des cas inline de codegen.c
+(`output_goto`, `output_perform`, `output_perform_until`, `output_cond_debug`)
+et de typeck.c (pas de PERFORM VARYING, enregistrement de WRITE/REWRITE) ;
+option `--fno-ec-data-incompatible` pour DB201A. Émission acceptée :
+**434/458** ; revérification : **409/410 programmes principaux conformes**,
+9438 PASS, 0 FAIL (`build/nist-verify-debug-items.json`,
+`build/coverage-nist-debug-items.json`).
+
+## Progression : horloge, RANDOM, comparaisons littérales, SD à ODO
+
+Port de `cob_get_current_datetime` et `check_current_date` (ACCEPT FROM
+DATE/DAY/DAY-OF-WEEK/TIME, COB_CURRENT_DATE), de FUNCTION RANDOM (Mersenne
+Twister de GMP 6.3.0, `mpf_urandomb` puis `mpf_get_d`), de
+`compare_field_literal` pour les comparaisons d'un numérique à un littéral
+alphanumérique, et de `cob_file_sort_using/giving` pour un SD à OCCURS
+DEPENDING. Émission acceptée : **439/458** ; revérification : **414/415
+programmes principaux conformes**, 9555 PASS, 0 FAIL
+(`build/nist-verify-isolated.json`, `build/coverage-nist-isolated.json`).
+
+## Progression : fin de la première partie
+
+FD EXTERNAL/GLOBAL et USE GLOBAL (registre de fichiers partagés, alias du
+programme déclarant exécutant sa section comme l'entrée 2 de cobc), programmes
+INITIAL, 66 homonyme, LINE SEQUENTIAL à tailles multiples, RD sans PAGE et
+contrôle des LINE à l'INITIATE, COMMUNICATION SECTION telle que cobc 3.2
+l'analyse sans l'implémenter, SIGINT sur le caractère 03 lu par ACCEPT.
+Émission acceptée : **451/458** (les 7 refus sont des programmes CM que cobc
+ne compile pas) ; revérification : **427/427 programmes principaux
+conformes**, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT, le bilan exact du
+runner natif (`build/nist-verify-final.json`, `build/coverage-nist-final.json`).
+

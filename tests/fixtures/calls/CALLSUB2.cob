@@ -1,0 +1,5 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CALLSUB2.
+       PROCEDURE DIVISION.
+           DISPLAY "IN SUB2".
+           GOBACK.

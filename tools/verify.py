@@ -13,12 +13,17 @@ from cobol2rust.toolchain import ROOT, find_tool
 
 
 def verify_fixture(source, fmt, stdin):
+    """One comparison per dialect listed in the fixture's `standards` option."""
     options = source.with_suffix(".json")
     config = json.loads(options.read_text(encoding="utf-8")) if options.is_file() else {}
     data = source.with_suffix(".data")
-    result = compare(source, fmt, stdin, data_dir=data if data.is_dir() else None, runtime_env=config.get("runtime_env"))
-    result["fixture"] = source.name
-    return result
+    results = []
+    for std in config.get("standards", ["default"]):
+        result = compare(source, fmt, stdin, data_dir=data if data.is_dir() else None, runtime_env=config.get("runtime_env"),
+                         call_paths=[source.parent / path for path in config.get("call_paths", [])], std=std)
+        result["fixture"] = source.name if std == "default" else f"{source.name} -std={std}"
+        results.append(result)
+    return results
 
 
 def main():
@@ -34,13 +39,14 @@ def main():
     cases.extend((p, "free", b"") for p in sorted((ROOT / "tests" / "fixtures").glob("*.cob")))
     for source, fmt, stdin in cases:
         try:
-            result = verify_fixture(source, fmt, stdin)
+            outcomes = verify_fixture(source, fmt, stdin)
         except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
-            result = {"fixture": source.name, "match": False, "error": str(exc)}
-        results.append(result)
-        print(f"{'PASS' if result['match'] else 'FAIL'} {source.name}", flush=True)
-        if not result["match"]:
-            print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
+            outcomes = [{"fixture": source.name, "match": False, "error": str(exc)}]
+        for result in outcomes:
+            results.append(result)
+            print(f"{'PASS' if result['match'] else 'FAIL'} {result['fixture']}", flush=True)
+            if not result["match"]:
+                print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     passed = sum(r["match"] for r in results)
     report = {"fixtures": len(results), "passed": passed, "failed": len(results) - passed, "results": results}

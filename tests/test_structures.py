@@ -50,7 +50,6 @@ class LayoutTests(unittest.TestCase):
             program('display n("X").', "01 a. 05 n occurs 3 times pic 9."),
             program("stop run.", "05 orphan pic 9."),
             program("stop run.", "01 a pic 9. 05 n pic 9."),
-            program("stop run.", "01 a pic x(2). 01 b redefines a pic x(3)."),
             program("stop run.", "01 a pic x(2). 01 c pic x. 01 b redefines a pic x(2)."),
             program("stop run.", "01 a. 05 n occurs 2 to 3 depending on other pic 9."),
             program("stop run.", "01 a. 05 n occurs 3 indexed by index-a index-a pic 9."),
@@ -58,7 +57,6 @@ class LayoutTests(unittest.TestCase):
             program("set active-a to false.", '01 n pic x. 88 active-a value "Y".'),
             program("set active-a to true.", '01 n pic 9. 88 active-a value "Y".'),
             program("stop run.", "01 a. 88 active-a value 1."),
-            program("stop run.", "01 a pic 9. 66 names-a renames a."),
             program('move "x" to n(1:1).', "01 n pic 99 comp-3."),
             program('move "x" to n(1)(1:1).', "01 n pic xx."),
             program('move "x" to n(1:"A").', "01 n pic xx."),
@@ -71,7 +69,7 @@ class LayoutTests(unittest.TestCase):
         cases = [
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 05 tail-a pic x.",
             "01 n pic 9. 01 a. 05 row-a occurs 2. 10 cell-a occurs 0 to 3 depending on n pic x.",
-            "01 a. 05 n pic 9. 05 cell-a occurs 0 to 3 depending on n pic x.",
+            "01 a. 05 cell-a occurs 0 to 3 depending on n. 10 n pic 9.",
             "01 n pic 9v9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x.",
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 01 alias-a redefines a pic x.",
             "01 n pic 9. 01 a. 05 alias-a redefines n pic x.",
@@ -81,6 +79,12 @@ class LayoutTests(unittest.TestCase):
         for data in cases:
             with self.subTest(data=data), self.assertRaises(CobolError):
                 Emitter(Parser(program("stop run.", data)).parse()).generate()
+
+    def test_controller_inside_the_group_gives_move_receivers_their_maximum(self):
+        data = "01 a. 05 n pic 9. 05 cell-a occurs 0 to 3 depending on n pic x. 01 b pic x(4)."
+        rust = Emitter(Parser(program("move b to a. move a to b. stop run.", data)).parse()).generate()[0]
+        # cb_build_move: the receiver containing its controller is not shortened.
+        self.assertEqual(rust.count(".active_size("), 1)
 
     def test_error_handlers_validate_calls_and_types(self):
         for body in [
@@ -113,7 +117,8 @@ class StructureRuntimeTests(unittest.TestCase):
                 with self.subTest(stdin=stdin):
                     result = subprocess.run([str(binary)], input=stdin, capture_output=True, timeout=10)
                     self.assertEqual(result.returncode, 70)
-                    self.assertIn(b"native index capacity exceeded", result.stderr)
+                    # cob_accept moves the line as text: refused for an index.
+                    self.assertIn(b"index", result.stderr)
 
     def test_variable_count_and_active_subscripts_are_checked(self):
         with tempfile.TemporaryDirectory() as temp:

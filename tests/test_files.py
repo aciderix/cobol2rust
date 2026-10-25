@@ -35,17 +35,24 @@ class FileFrontendTests(unittest.TestCase):
             file_program(storage="01 fs pic xxx."),
             file_program(storage="01 fs pic s99."),
             file_program(storage="01 fs pic 99 comp."),
-            file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(8)."),
-            file_program(select=select + 'select other-file assign to "data.txt" organization line sequential.',
-                         fd="fd f. 01 rec pic x(8). fd other-file. 01 other-rec pic x(8)."),
+            file_program(storage="01 fs. 02 a pic x."),
+            file_program(storage="01 fs. 02 a pic x(3)."),
+            file_program(storage="01 g. 02 fs occurs 2. 03 a pic xx."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
                 Emitter(Parser(source).parse()).generate()
 
+    def test_two_byte_group_file_status_is_accepted(self):
+        for storage in ("01 fs. 02 a pic x. 02 b pic x.", "01 fs. 02 a pic 9. 02 b pic 9.",
+                        "01 fs. 02 a pic x occurs 2.", "01 fs. 02 a pic s9(4) comp.",
+                        "01 g. 02 fs. 03 a pic x. 03 b pic x."):
+            with self.subTest(storage=storage):
+                Parser(file_program(storage=storage)).parse()
+
     def test_reject_unsupported_operations_and_incomplete_input(self):
         cases = ["open f.", "open i-o f.", "open input.", "read.", "write fs.", "close.",
-                 "read f into fs.", "read f with lock.", "rewrite rec.", "write rec after advancing 2 lines.",
+                 "read f into fs.", "read f with lock.", "rewrite rec.",
                  "read f at end perform missing end-read."]
         for body in cases:
             with self.subTest(body=body), self.assertRaises(CobolError):
@@ -85,6 +92,53 @@ class FileRuntimeTests(unittest.TestCase):
 
 @unittest.skipUnless(find_tool("cargo") and find_tool("cobc"), "Cargo and GnuCOBOL required")
 class FileVerificationTests(unittest.TestCase):
+    def test_one_path_shared_by_two_selects_in_turn(self):
+        select = ('select f assign to "data.txt" organization line sequential file status fs. '
+                  'select other-file assign to "data.txt" organization line sequential.')
+        fd = "fd f. 01 rec pic x(8). fd other-file. 01 other-rec pic x(8)."
+        body = ('open output f write rec from "ONE" close f open input other-file read other-file '
+                'display "[" other-rec "]" close other-file stop run.')
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "shared-path.cob"
+            source.write_text(file_program(body, select=select, fd=fd), encoding="utf-8")
+            report = verify(source)
+            self.assertTrue(report["match"], report)
+            self.assertEqual(report["cobol_stdout"], "[ONE     ]\n")
+            # Both open at once depends on native locking: the Rust runtime stops.
+            source.write_text(file_program('open output f open input other-file stop run.',
+                                           select=select, fd=fd), encoding="utf-8")
+            convert(source, Path(directory) / "rust")
+            binary = build_rust(Path(directory) / "rust")
+            result = subprocess.run([str(binary)], cwd=directory, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 70)
+        self.assertIn(b"simultaneous OPEN", result.stderr)
+
+    def test_close_with_lock_forbids_reopening(self):
+        # A second CLOSE of a locked file takes an abnormal libcob path (it
+        # warns and returns 00): the Rust runtime stops there instead.
+        body = ('open output f display "[" fs "]" close f with lock display "[" fs "]" '
+                'open input f display "[" fs "]" read f display "[" fs "]" stop run.')
+        for organization in ("line sequential", "sequential"):
+            with self.subTest(organization=organization), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "close-lock.cob"
+                select = f'select f assign to "data.txt" organization {organization} file status fs.'
+                source.write_text(file_program(body, select=select), encoding="utf-8")
+                report = verify(source)
+                self.assertTrue(report["match"], report)
+                self.assertEqual(report["cobol_stdout"], "[00]\n[00]\n[38]\n[47]\n")
+
+    def test_group_file_status_receives_raw_status_bytes(self):
+        body = ('open input f display "[" fs "]" open output f display "[" fs "]" '
+                'write rec from "AB" display "[" fs "]" close f display "[" fs "]" stop run.')
+        for storage in ("01 fs. 02 a pic x. 02 b pic x.", "01 fs. 02 a pic 9. 02 b pic 9.",
+                        "01 fs. 02 a pic s9(4) comp."):
+            with self.subTest(storage=storage), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "group-status.cob"
+                source.write_text(file_program(body, storage=storage), encoding="utf-8")
+                report = verify(source)
+                self.assertTrue(report["match"], report)
+                self.assertEqual(report["cobol_stdout"], "[35]\n[00]\n[00]\n[00]\n")
+
     def test_empty_input_directories_are_available_to_both_programs(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

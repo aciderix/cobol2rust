@@ -108,6 +108,30 @@ conversions GnuCOBOL dépendent du stockage et peuvent réduire à 32 bits.
 EXIT SECTION hors section explicite, EXIT PERFORM, ALTER, noms de procédure
 qualifiés ou homonymes et segments numérotés ne sont pas encore modélisés.
 
+## Unité d'exécution et CALL
+
+`cli.run_unit` analyse le programme principal puis, transitivement, chaque cible
+CALL littérale trouvée dans `--call-path` (tous les programmes du chemin en cas
+de CALL dynamique). `emitter.generate_unit` écrit une structure Rust par
+programme (`Program`, `Program1`…) et un `RunUnit` qui garde une instance par
+appelé (`Option<Box<…>>` et un indicateur actif). `run` rend
+`runtime::Outcome::{Return, Stop}` ; un appelé lie ses articles LINKAGE aux
+arguments par `storage_runtime::rebind` dans sa méthode `call`.
+
+Un fichier vu par plusieurs programmes (FD EXTERNAL, FD GLOBAL d'un programme
+contenant, fichiers d'un programme à USE GLOBAL) est un
+`file_runtime::Shared<…>` (`Rc<RefCell<…>>`) ; `Emitter.handle` emprunte la
+poignée à chaque accès. Les fichiers EXTERNAL et GLOBAL sont nommés dans un
+registre du runtime (`external_file`, `owned_file`, `global_file`), vidé en fin
+d'unité (`release_shared`) ; `cancel_files` ferme ceux qu'un CANCEL laisse
+ouverts. Un programme à USE GLOBAL s'inscrit pendant son exécution dans
+`RunUnit.uses` sous la forme d'un alias (`alias`, mêmes vues et poignées) ;
+le programme contenu appelle `unit.global_use(propriétaire, section)`, qui
+exécute la section par `run_from` depuis l'entrée préparée par
+`ControlGraph.global_entries` (nœud `use_return` en fin de section, comme
+l'entrée 2 de la fonction C de cobc). Un programme INITIAL est abandonné
+(avec `cancel_files`) à chaque retour.
+
 ## Runtime Rust
 
 Chaque programme possède un espace mémoire `Rc<RefCell<Vec<u8>>>` partagé par
@@ -176,9 +200,10 @@ avec une restriction aux colonnes DISPLAY et aux octets ASCII imprimables.
 
 `CobolFile` distingue cette organisation du SEQUENTIAL fixe, explicite ou
 implicite. Ce dernier lit et écrit les octets bruts sans délimiteur. Les
-descriptions 01 FD alternatives deviennent des vues de même taille sur la
-zone du premier record ; les tailles différentes sont refusées pour éviter
-de produire un format fixe à la place du format variable natif.
+descriptions 01 FD alternatives deviennent des vues sur la zone du premier
+record ; en SEQUENTIAL, des tailles différentes donnent le format variable à
+en-têtes de libcob, en LINE SEQUENTIAL chaque WRITE écrit la taille de son
+record (minimum 0, comme `finalize_file`).
 
 Le runtime conserve le nombre d'octets réellement lus : une lecture partielle
 préserve la queue du record, tandis que READ INTO ne copie que le préfixe lu.
@@ -201,6 +226,13 @@ pour les divisions et une affectation numérique contrôlée. Le contrôle de
 PICTURE intervient avant l'écriture et après l'arrondi. Seuls le dépassement
 de destination et la division par zéro sont récupérables. Les erreurs de données
 restent des diagnostics nommés, sans interception de panique ou d'arrêt processus.
+Un MOVE numérique vers numérique utilise `View.move_number` : décimales
+tronquées, magnitude modulo 10^chiffres, signe perdu vers un non signé et zéro
+négatif conservé en DISPLAY/COMP-3. Il ne lève jamais SIZE ERROR, contrairement
+aux calculs sans gestionnaire, qui gardent l'arrêt conservateur. Vers COMP-3,
+cobc emploie `cob_set_packed_int` pour les sources binaires et petits littéraux
+entiers ; ce chemin remplit le quartet de tête d'une PICTURE paire. Ce cas est
+refusé à l'émission (littéral) ou arrêté à l'exécution (`move_binary_to_packed`).
 INITIALIZE de groupe ODO composé est refusé ; l'initialisation d'une occurrence
 résolue et le cas uniforme texte vérifié restent disponibles.
 

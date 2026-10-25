@@ -1,8 +1,370 @@
 # Handoff — COBOL vers Rust
 
-État au 22 octobre 2026, après livraison de la version **0.4.0**.
+État au 25 octobre 2026 : version **0.4.0** livrée, branche
+`claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
+
+**Bilan de la première partie.** Tous les programmes que le runner natif
+GnuCOBOL 3.2 (`tests/cobol85/report.pl`) exécute sont convertis et
+conformes : 427/427 programmes principaux, **9610 PASS, 0 FAIL, 20 DELETED,
+118 INSPECT**, le bilan exact de `summary.txt` (REPORT identiques octet pour
+octet, fichiers comparés). 451/458 sources acceptées ; les 7 refus sont des
+programmes CM que cobc 3.2 ne compile pas lui-même. Rapports :
+`build/nist-verify-final.json`, `build/coverage-nist-final.json`. Pipeline de
+validation complet (environ 1 h 15) : voir la dernière section de VALIDATION.md ;
+lancer les builds avec `CARGO_INCREMENTAL=0`, sinon le cache incrémental de
+`build/rust-target` dépasse 20 Go.
+
+Suite possible : corpus métier et autres dialectes (IBM, Micro Focus), formes
+encore refusées listées dans le README (niveau 78, COMP-5, EXIT PERFORM, STOP
+identifiant, SCREEN SECTION, clauses CD), puis le parcours sans sources.
 
 ## Reprise cloud et objectif élargi
+
+Dernière étape : `Parser.search_statement` (nœuds `search_test`/`search_step`/
+`search_all`), USAGE INDEX (`Usage::Index` petit-boutiste), INSPECT
+(`Parser.inspect_statement`, `storage_runtime::Inspect` = portage de
+`strings.c` avec tampons `thread_local` persistants comme les statiques de
+libcob ; accès hors tampon = arrêt nommé), `View::store_truncated`
+(`cob_decimal_get_display` opt 0), EVALUATE désucré en conditions
+(`Parser.evaluate_subject`/`evaluate_object` = `evaluate_test`), ELSE
+imbriqués, 88 de groupe, SET mixte, littéraux signés dans `lex` (seulement
+après un opérande entre parenthèses). NIST **229/458**, 227/227 conformes.
+
+Dernière étape : `conditions.py` = `build_expr_shift/reduce/finish` de
+typeck.c ; `Parser.expression_tokens` produit la liste `expr_tokens` de
+parser.y (un signe collé à des chiffres est un littéral signé). STRING/UNSTRING
+(`storage_runtime::StringInto`/`Unstring`, nœuds `string`/`unstring`) ; une
+comparaison de délimiteur multiple qui lirait l'octet après la source (bogue
+libcob) est un arrêt nommé. `reserved.py` = mots réservés de cobc.
+NIST **233/458**, 231/231 conformes.
+
+Dernière étape : `Parser.same_records` (SAME RECORD AREA via `redefines` du
+premier enregistrement), `Parser.renames` + `apply_renames` (champ 66 ajouté
+après `layout_fields`, `redefines` pour ne pas l'initialiser), REDEFINES 01
+plus grand dans `layout.py`, `Number::power` (= cob_decimal_pow entier),
+`Value::negative_zero`. NIST **251/458**, 249/249 conformes. Prochains :
+CORRESPONDING, COPY REPLACING, DEBUGGING MODE, INDEXED, LINAGE.
+
+Dernière étape : `Parser.corresponding_pairs` (Stmt `sequence` pour MOVE
+CORR), troncature DISPLAY dans `View::assign`, `View::move_deedited`.
+NIST **256/458**, 254/254 conformes.
+
+Dernière étape : `load_source` repère COPY par `lex`, la fin par
+`copy_replace.statement_end` (textes pplex, hors pseudo-texte) et applique
+`copy_replace.apply`. `frontend.DEBUGGING_LINES` (= -fdebugging-line, option
+`--debugging-lines`, `nist_verify.DEBUGGING_LINES`). NIST **262/458**,
+260/260 conformes. Prochain : fonctions intrinsèques (module IF).
+
+Dernière étape : `Parser.FUNCTIONS` / `function_call` (arité, LENGTH
+littéral), `Emitter.function` → `runtime::intrinsic::*` (port d'intrinsic.c ;
+les fonctions texte reçoivent les octets bruts de `Operand::of`). `coverage.py`
+émet les sources USING comme sous-programmes. NIST **313/458**, 289/289
+conformes. Prochains : ALTER, DEBUGGING MODE, INDEXED, LINAGE.
+
+Dernière étape : ALTER (`Program.alters`, nœuds `alter_check`/`alter`/
+`alter_zap`/`alter_save`/`alter_restore` dans `control.py`, état `alter` du
+struct), `Parser.resolve_procedures` (règles `cb_ref`, noms internes uniques
+des homonymes), `frontend.STD` / `--std cobol85` (`Program.segments`,
+`Program.default_byte_init`), `tools/verify.py` lit `standards`,
+`nist_verify` compile avec `RUNNER_FLAGS` et `RAW_INPUT`. NIST **327/458**,
+302/303 conformes (OBNC1M : SIGINT). Prochain : DEBUGGING MODE (en cours).
+
+Dernière étape : DEBUGGING MODE. `normalize` active les lignes D après le
+motif pplex ; `Parser.debug_item` (DEBUG-ITEM ajouté après la mise en page),
+`use_statement` rend les cibles, `debugging_program` (cb_validate_labels) ;
+dans `control.py`, nœuds `debug_gate`, `debug_name`, `debug_contents`,
+`debug_line`, `debug_resume` (fichiers : section avant le traitement du
+statut), marques `fall_through` du frontend ; `runtime::debugging_mode`
+(COB_SET_DEBUG). NIST **336/458**, 311/312. Prochain : INDEXED (en cours :
+`tools/bdb_dump.c` pour comparer logiquement les fichiers BDB de cobc).
+
+Dernière étape : INDEXED. `file_runtime::IndexedFile` (état `key`/`data`/
+`last_readkey`/`last_dupno` de `struct indexed_file`), `Btree` (format
+`cobol2rust-btree-1`), `FileSpec.record_key`/`alternate_keys` résolues en
+(nom, décalage, taille, doublons), `Parser.index_key` (cob_findkey_attr),
+`verification.indexed_contents` + `cobol2rust/bdb_dump.c`,
+`nist_verify.rust_seed`. NIST **375/458**, 350/351. Prochain : PROGRAM
+COLLATING SEQUENCE (en cours), LINAGE, fonctions trigonométriques.
+
+Dernière étape : collation et mathématiques. `Parser.alphabet_table`
+(validate_alphabet), `Program.collating` + `high_value`/`low_value`,
+`runtime::CollatingGuard`/`collated_cmp` (comparaisons et SORT),
+`Emitter.folded_comparison` (= et <> entre deux littéraux) ; module
+`runtime::intrinsic` (`Float` décimal à 150 chiffres, `number()` arrondi à 96
+chiffres significatifs). NIST **390/458**, 365/366. Prochain : LINAGE (en
+cours), ADVANCING identifiant/mnémonique.
+
+Dernière étape : LINAGE. `file_runtime::Linage` dans `CobolFile`
+(`with_linage`, `linage_values` appelé avant OPEN et WRITE, `linage_check`,
+`linage_advance`, état `HalfOpen` après un OPEN en 57), EOP global (`EOP`,
+rendu par `file_status`), `write_checked` ; `FileSpec.linage`,
+`Expr("linage", fichier)` pour LINAGE-COUNTER, `Parser.eop_handlers` (les
+corps END-OF-PAGE occupent les places INVALID KEY du nœud io). Aussi :
+`copy_replace.replace_statements` (REPLACE), `RESERVED_COBOL85`, `COPY OF`.
+NIST **407/458**, 382/383.
+
+Dernière étape : `Emitter.receiver` (MOVE et INTO vers un groupe qui contient
+son contrôleur ODO : longueur maximale), `Emitter.record_size` (WRITE/REWRITE
+d'un enregistrement FD variable), `runtime::SymbolGuard`/`module_symbols`/
+`internal_symbols`/`module_text` (point décimal, séparateur, symbole monétaire
+du module), `lex(…, decimal_comma)` et `Parser.picture_symbols`,
+`Emitter.initialize_replacing` (occurrences déroulées, 4096 au plus) ;
+`Program.nested`/`parent`/`common`, `cli.check_nested_calls`,
+`Parser.global_items` (copies `^propriétaire^clé` marquées `global_owner`),
+`Emitter.shared_block`, `storage_runtime::external`/`owned_block`.
+NIST **426/458**, 401/402. Prochains blocages : programmes imbriqués,
+GLOBAL/EXTERNAL (IC226A-IC235A), INITIALIZE REPLACING, ODO hors WORKING-STORAGE,
+CURRENCY/DECIMAL-POINT, RANDOM, CODE-SET.
+
+Dernière étape : Report Writer. `report_parser.py` (RD, groupes, lignes et
+champs comme `output_report_define_lines`, `rcsz`, contrôles de
+`finalize_report`/`cob_report_initiate`), `Parser.report_section`,
+`Parser.hidden_item` (articles de rapport et enregistrement du fichier de
+rapport, renommés `^report^…`/`^record^…`), `Expr("report_counter")`,
+instructions `initiate`/`generate`/`terminate` ; `file_runtime::Report` (port de
+`reportio.c` sans contrôles) appelle le programme par `ReportEvent` : la méthode
+`reportN_event` fait le MOVE des SOURCE et le `write_report` du fichier pendant
+que le rapport est sorti du programme (`std::mem::take`). RW101A-RW104A
+conformes (REPORT et fichier de rapport identiques à cobc). NIST **430/458**,
+405/406. Prochains blocages : USE FOR DEBUGGING sur identifiants (DB201A-203A,
+listes `debug_check` de cobc), FD GLOBAL/EXTERNAL et USE GLOBAL
+(IC227A/233A/234A).
+
+Dernière étape : USE FOR DEBUGGING sur articles. `Parser.debug_fields`
+(clé -> section, ALL REFERENCES), `start_debug` après END DECLARATIVES,
+`Parser.statement` empile un cadre par instruction (`debug_frames`, suspendu
+pour GO/PERFORM/WRITE/REWRITE comme parser.y), `reference` y inscrit chaque
+identifiant, `target_variable` marque les receveurs ; `Stmt.debug_checks`
+(nom, référence, section). `ControlGraph._debug_checks` (sous `debug_gate`),
+`_field_debug` et `_condition_debug` pour les cas inline ; nœud
+`debug_blank` (`storage_runtime::fill_spaces`). `NO_EC_DATA_INCOMPATIBLE` /
+`storage_runtime::set_unchecked_data`. NIST **434/458**, 409/410. Prochains
+blocages : FD GLOBAL/EXTERNAL et USE GLOBAL (IC227A/233A/234A), RANDOM,
+NC103A, NC214M, ST137A, SQ401M.
+
+Dernière étape : horloge et cas isolés. `runtime::current_datetime` (port de
+`cob_get_current_datetime`, UTC, nanosecondes toujours lues sous Linux) et
+`check_current_date` ; Stmt `accept_clock`, Expr `clock`. `intrinsic::random`
+= `MersenneTwister` de GMP (`mangle_seed`, 2000 tirages de chauffe, 63 bits).
+`Emitter.folded_comparison` (= `compare_field_literal`), `spec.variable_sort`
+(RELEASE/RETURN refusés). `nist_verify.RUNNER_CLOCK` fige NC214M. NIST
+**439/458**, 414/415. Prochains blocages : FD GLOBAL/EXTERNAL et USE GLOBAL
+(IC227A/233A/234A), programmes INITIAL (IC401M).
+
+Dernière étape : fin de la première partie. `file_parser` (FD [IS]
+EXTERNAL/GLOBAL), `Parser.fd_records` (`fd_file`/`fd_external`),
+`Parser.global_files` (copies `^propriétaire^`), `Parser.inherited_uses` (=
+boucle « Set up USE GLOBAL handlers » de cobc.c, refus d'un programme non
+contenant), `ControlGraph.global_entries` + nœuds `global_use`/`use_return`,
+`Emitter.handle`/`file_registry`/`shared_files`, `alias`/`run_from`/
+`GlobalUse`/`RunUnit.uses`, `file_runtime::Shared`/`external_file`/
+`owned_file`/`global_file`/`release_shared`/`cancel_close` ; INITIAL =
+abandon de l'instance au retour. `Parser.communication_section`/
+`communication_statement` (no-op comme CB_PENDING, `in_communication`),
+`parse_size` de DEBUG-CONTENTS ; `Report.with_initiate_error`
+(limitCheckOneLine) ; `runtime::interrupt` (SIGINT, `OPEN_FILES`) ;
+`nist_verify.UNTESTED_MODULES`/`RERUN_ENV`. NIST **451/458**, 427/427,
+9610 PASS (bilan natif exact).
+
+Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
+`alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
+`display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte
+`COB_SWITCH_n` ; `nist_verify.RUNNER_ENV` = commutateurs de report.pl.
+NIST **205/458**, 203/203 conformes.
+
+Dernière étape : segments de SECTION acceptés (ALTER refusé, donc sans effet),
+`CobolFile::close_unit` pour CLOSE REEL/UNIT/NO REWIND, OPEN NO REWIND/REVERSED
+ignorés. NIST **198/458**, 196/196 conformes. Prochains blocages : INDEXED (34,
+format BDB), SPECIAL-NAMES (11) et PROGRAM COLLATING (12), DEBUGGING MODE (12),
+USAGE INDEX (7), COPY REPLACING (10), SAME RECORD AREA (6), FUNCTION (IF).
+
+Dernière étape : SORT/MERGE. `FileSpec.sort` (SD), `Parser.sort_statement`,
+nœuds `sort_init`/`sort_using`/`sort_giving`/`sort_close` et `return_sort` dans
+`control.py` (procédures = nœuds `call` comme PERFORM), `file_runtime::SortFile`
+(tri stable au premier RETURN comme `cob_file_sort_compare`). Restent refusés :
+COLLATING SEQUENCE, fichiers USING/GIVING variables ou RELATIVE/INDEXED.
+
+Dernière étape : clauses de données. SIGN = variantes `Usage::SignLeading`,
+`SignLeadingSeparate`, `SignTrailingSeparate` et helpers `display_digits`/
+`display_bytes` (seul '-' séparé est négatif ; un octet séparé autre que +/-
+arrête). Le 4e élément de la méta `Value::Num` dit d'afficher le signe en fin.
+SYNCHRONIZED : `layout.py` refuse tout cas où cobc insérerait du remplissage.
+MOVE -0 vers un nombre signé refusé (cobc garde un zéro négatif).
+
+Dernière étape : édition et comparaisons. `data_parser.edited_picture` refait
+`cb_build_picture` (groupes de symboles identiques, CR/DB = C/D, chiffres et
+échelle, taille) et `valid_char_order` la table de précédence de tree.c.
+`storage_runtime::edit` est `cob_move_display_to_edited` ligne à ligne ; MOVE
+édite les chiffres propres de l'émetteur (`move_edited`), un calcul passe par
+les chiffres de l'image (modulo). `Kind::AlnumEdited` (valeur initiale éditée
+sans VALUE, groupe émetteur brut, MOVE ALL refusé) et `Kind::Justified`.
+`Emitter.folded_comparison` = `compare_field_literal` (tree.c), appliqué aux
+conditions et aux WHEN d'EVALUATE. Un numérique édité se compare comme texte.
+
+Dernière étape : NEXT SENTENCE, programmes frères, PICTURE P. Le parseur ajoute
+un marqueur `sentence_end` à chaque point séparateur du niveau paragraphe ; le
+graphe (construit à rebours) fait de NEXT SENTENCE un saut vers la suite du
+prochain marqueur. `Program.siblings` : programmes après `END PROGRAM` dans le
+même source, prioritaires sur le chemin d'appel (dlsym de l'exécutable par
+libcob), non compilés en modules par `verify`. PICTURE P comme `cb_build_picture`
+de tree.c : P final → échelle négative, P initial → V implicite, seuls les 9
+stockés ; `Kind::Numeric.scale` et `Number::units` sont signés (`i32`). DISPLAY
+suit `pretty_display_numeric`. Quirk reproduit : ADD/SUBTRACT d'un opérande
+`cb_fits_int` sans ROUNDED ni SIZE ERROR passe par `cob_add_int`, qui tronque
+l'opérande aux positions P du receveur (`ADD 15 TO S99P` ajoute 10, et rien si
+le quotient est nul). P limité à DISPLAY ; MOVE texte↔P et comparaisons mixtes
+refusés ou arrêtés.
+
+Dernière étape : CALL/CANCEL/LINKAGE. `cli.run_unit` découvre les appelés
+(`<nom>.CBL/.cob` du `--call-path`, PROGRAM-ID identique), `generate_unit` émet
+une structure par programme et un `RunUnit` (instance persistante par appelé,
+CANCEL = abandon de l'instance, donc fermeture des fichiers comme le
+`P_cancel` de codegen.c). LINKAGE : `storage_runtime::rebind` sur la mémoire de
+l'argument, `content_copy` pour BY CONTENT. Nom introuvable : ON EXCEPTION
+seulement si `surely_absent` (majuscules, pas `SYSTEM`/`EXTFH`, pas de source
+non convertie du chemin). Piège natif sondé : dans `ON EXCEPTION DISPLAY ..
+NOT ON EXCEPTION ..`, GnuCOBOL donne NOT ON EXCEPTION au DISPLAY — refusé.
+`verify` compile les appelés en `cobc -m` dans `modules/` (COB_LIBRARY_PATH) ;
+`nist_verify` utilise `<module>/lib`, `coverage.py --call-path lib`.
+NIST **126/458**, 124/124 programmes acceptés conformes.
+
+Dernière étape : enregistrements variables, PERFORM VARYING AFTER, formes
+lexicales et MOVE ALL. Limites comme `finalize_file` de cobc (clause élargie par
+les 01, minimum par défaut au premier puis au plus petit) dans `FileSpec.record_min/
+record_max/depending`. La zone FD (`fileN_area`, vue de `record_max` octets) sert
+aux lectures ; les 01 alternatifs peuvent être plus grands (layout étend la zone).
+Écriture : taille = DEPENDING ON plafonné à la taille de l'enregistrement nommé,
+44 hors limites. SEQUENTIAL variable : en-tête 4 octets (u16 big endian + 0 0,
+COB_VARSEQ_FORMAT 0). RELATIVE : `size_t` = taille, données `record_max`.
+Lecture : DEPENDING ON = taille lue ; READ INTO déplace la taille lue (préfixe).
+REWRITE SEQUENTIAL : 44 si la taille lue diffère (remplace l'ancien arrêt).
+LINE SEQUENTIAL variable reste refusé. PERFORM VARYING ... AFTER suit
+`output_perform_until` (réinitialisation du niveau suivant en tête de boucle).
+Mots commençant par un chiffre, littéraux `.5` (normalisés à l'émission par
+`numeric_text`), PIC `V9(n)`, PIC A, ASCENDING KEY, MOVE ALL et SET entier TO
+index ajoutés. NIST **115/458** ; nouvelles sources toutes conformes.
+
+Dernière étape : fichiers RELATIVE (`file_runtime::RelativeFile`). Format
+GnuCOBOL 3.2 Linux x86-64 : emplacement = `size_t` little endian (8 octets,
+taille d'enregistrement, 0 = vide, trou lu comme vide) puis `record_max`
+octets. Chaque méthode suit `cob_open`/`cob_read`/`cob_read_next`/`cob_write`/
+`cob_rewrite`/`cob_delete`/`cob_start` puis `relative_*` de `fileio.c`, y compris
+leurs écarts : REWRITE direct d'un emplacement vide écrit les données, garde
+la taille 0 et rend 00 ; DELETE d'un emplacement déjà vide rend 00 ; START en
+échec arme la fin de fichier (READ NEXT suivant 46) ; READ NEXT met la clé à
+0 puis rend 14 si le numéro dépasse sa PICTURE ; OPTIONAL absent : READ NEXT
+10 puis 46, READ direct 10 puis 23 (`flag_first_read` = 2 à l'OPEN).
+Choix de lecture comme `cb_emit_read` : NEXT, accès SEQUENTIAL ou DYNAMIC avec
+AT END lisent séquentiellement, sinon par RELATIVE KEY. AT END couvre toute la
+classe 1x, INVALID KEY la 2x (`file_status` reçoit les deux indicateurs).
+RELATIVE KEY : entier non signé de 9 chiffres au plus hors de l'enregistrement.
+START : =, >, NOT < (>= et LT/LE refusés). SELECT suit `parser.y` : `RELATIVE
+[KEY]`, `[FILE] STATUS` qualifié, organisation sans ORGANIZATION, RESERVE ignoré,
+statut VSAM refusé. Deux SELECT d'un même chemin sont permis ; leur ouverture
+simultanée s'arrête (`claim_path`). NIST **95/458** ; les 29 nouvelles sources
+RELATIVE/SELECT sont conformes (762 PASS, 4 DELETED natifs). Prochains :
+RECORD VARYING, NEXT SENTENCE, noms commençant par un chiffre, INDEXED.
+
+Dernière étape : OPEN I-O et REWRITE SEQUENTIAL. `State::InputOutput(File)`
+lit sans tampon pour que REWRITE recule exactement d'un enregistrement
+(`sequential_rewrite`). Mesures natives : I-O absent 35 ; OPTIONAL absent 05 et
+fichier créé vide ; REWRITE sans READ réussi 43 (aussi après un REWRITE, un
+WRITE ou une fin de fichier) ; WRITE en I-O 48 ; REWRITE hors I-O 49. Un READ 0x
+arme REWRITE (`read_done`). LINE SEQUENTIAL en I-O/REWRITE est refusé : la
+réécriture native écrase des lignes de longueur différente. REWRITE après un
+enregistrement partiel s'arrête. NIST **66/458**, **66/66 conformes**
+(539 PASS, 1 INSPECT) : `build/nist-verify-66.json`.
+
+Dernière étape : DECLARATIVES, READ souple et CLOSE WITH LOCK.
+`USE AFTER [STANDARD] {ERROR|EXCEPTION} PROCEDURE [ON] {fichiers|INPUT|OUTPUT|
+I-O|EXTEND}` est analysé dans `use_statement` ; `Program.file_declaratives`,
+`mode_declaratives` et `main_block` (exécution après END DECLARATIVES).
+`control.py` transforme OPEN/CLOSE/WRITE en nœuds `io` et ajoute aux READ la
+cible déclarative : comme `output_ferror_stmt`/`output_file_error` de cobc,
+tout statut 1x..9x non pris par AT END appelle la section USE du fichier, sinon
+celle du dernier mode d'OPEN (`last_open_mode`, conservé par un 41, pris sur
+toute autre tentative), comme un PERFORM, puis reprend après l'instruction.
+Un 46 après fin de fichier n'est pas AT END. Sans FILE STATUS, une exception
+sans gestionnaire reste fatale. OPEN/CLOSE à plusieurs fichiers sont découpés,
+chaque fichier ayant son contrôle (instructions implicites de cobc).
+USE GLOBAL et USE FOR DEBUGGING restent refusés.
+
+READ accepte `[NEXT] [RECORD]`, `[AT] END` et `NOT [AT] END` (scanner cobc).
+CLOSE WITH LOCK : OPEN suivant 38, READ 47 ; un second CLOSE d'un fichier
+verrouillé suit un chemin anormal de libcob (avertissement, 00) et s'arrête
+en Rust. NO REWIND, REEL et UNIT restent refusés.
+NIST : **59/458**, les 29 nouvelles sources conformes (117 PASS natifs). Prochain :
+OPEN I-O + REWRITE séquentiel (8), puis RELATIVE (32) et INDEXED (26).
+
+Dernière étape : receveurs multiples, groupes et configuration documentaire.
+**Bug silencieux corrigé** : `ADD 1 TO A, B.` ne gardait que A et faisait de
+`B.` un en-tête de paragraphe (NC245A). Les verbes arithmétiques lisent
+désormais tous leurs receveurs avec ROUNDED propre (`Stmt("compute")` et
+`Stmt("arithmetic")` portent `(partagé, [(réf, expr, rounded)])`). Mesures
+natives : un opérande unique est relu après chaque stockage (`ADD X TO X Y`
+donne Y=12), plusieurs opérandes sont sommés une fois, COMPUTE/GIVING évaluent
+une fois, les indices du receveur sont évalués à son stockage, SIZE ERROR garde
+seulement le receveur fautif. Un nom de paragraphe/section homonyme d'une donnée,
+condition, fichier ou index est refusé (`procedure_name_check`).
+
+FILE STATUS accepte un groupe de 2 octets (octets bruts, comme GnuCOBOL ; autres
+tailles refusées nativement). VALUE de groupe : littéral alphanumérique, ZERO ou
+SPACE, appliqué après les feuilles sur toutes les occurrences ; VALUE subordonné,
+numérique, ALL, HIGH-VALUES, REDEFINES/FD et ODO refusés. USAGE de groupe hérité
+par les feuilles sans USAGE ; un USAGE explicite subordonné l'emporte (natif).
+MEMORY SIZE, SEGMENT-LIMIT 1..49, MULTIPLE FILE [TAPE], SAME [SORT|SORT-MERGE]
+AREA sont ignorés comme dans `parser.y` ; SAME RECORD AREA, RERUN, PROGRAM
+COLLATING SEQUENCE et WITH DEBUGGING MODE restent refusés. Lignes `D`/`d` :
+commentaires, sauf si le texte contient DEBUGGING MODE (refus explicite).
+
+`tools/nist_verify.py` rejoue les prédécesseurs natifs du runner (tout depuis le
+dernier `.CBL`, `XXXXX*` effacés avant chaque `.CBL`), compare GnuCOBOL/Rust et
+exige un REPORT identique au journal natif ; les `comp_only` de `report.pl`
+sont seulement compilés. `tools/nist_native_reference.sh` régénère la référence
+(lancée en arrière-plan par le hook). NIST : **30/458**, et **30/30** conformes
+(401 PASS, 1 INSPECT SM106A) : `build/nist-verify-30.json`. Prochain blocage :
+DECLARATIVES `USE AFTER ERROR` (23), puis RELATIVE (32), INDEXED (26) et les
+fonctions intrinsèques du module IF.
+
+Dernière étape : FD DATA RECORDS et MOVE numérique tronquant. `file_parser.py`
+garde `DATA RECORD(S) [IS|ARE] nom...` en métadonnée `data_records` : GnuCOBOL
+n'en résout pas les noms (même inconnus) et la clause est sans effet. La liste
+s'arrête aux mots réservés FD (`FD_WORDS`) ; doublon et liste vide sont refusés.
+
+Le MOVE numérique vers numérique passe par `View.move_number` : troncature des
+décimales, magnitude modulo 10^chiffres (binaire compris), valeur absolue vers
+non signé, zéro négatif conservé en DISPLAY (`00p`) et COMP-3 (`D`), pas en
+binaire. COMPUTE/ADD sans SIZE ERROR gardent l'arrêt 70 ; ne pas les faire
+passer par ce chemin sans essai natif. Une source index reste stricte.
+
+Piège natif : vers COMP-3, cobc utilise `cob_set_packed_int` pour une source
+binaire dont la valeur mise à l'échelle tient sur 32 bits, et pour un littéral
+entier tenant dans un int avec chiffres + échelle ≤ 9. Ce chemin remplit tous
+les quartets physiques : `1234 → PIC 99 COMP-3` donne `234F`. Les relectures
+natives sont ensuite incohérentes (DISPLAY/comparaison voient 34, MOVE COMP-3
+vers COMP-3 voit 234). Le littéral est donc refusé à l'émission
+(`check_packed_literal_move`) et la source binaire arrêtée à l'exécution
+(`move_binary_to_packed`) lorsque le quartet de tête recevrait un chiffre non nul.
+
+NIST : **20/458** (`build/coverage-nist-data-records.json`). SM102A, SM104A,
+SM204A, SQ128A, ST103A, ST104A, ST115A et ST121A ont des REPORT identiques au
+runner natif officiel (44 PASS). Les `.SUB` lisent les fichiers de leurs
+producteurs (`*HEADER,COBOL,<producteur>,SUBPRG,<sub>` dans newcob.val),
+exécutés en GnuCOBOL dans l'ordre du runner. Priorités suivantes : RELATIVE
+(32), INDEXED (26), FILE STATUS de groupe (25), VALUE/USAGE de groupe (24).
+
+Environnement Linux du 23 octobre 2026 (Ubuntu 24.04) : GnuCOBOL 3.2.0
+compilé depuis les sources GNU signées avec BDB (`tools/install_gnucobol.sh`).
+La suite découvre **201 tests : 200 réussis, un PE Windows ignoré** ; les
+comparaisons COBOL/Rust ne sont plus ignorées. NIST est reproduit à **12/458**
+(`build/coverage-nist-baseline.json`). Le site web GnuCOBOL renvoyant 403,
+`prepare_nist.py` bascule sur le miroir SourceForge, SHA256 inchangé.
+Le runner NIST natif donne 9610 PASS et 0 FAIL sur 9748 tests
+(`.tools/nist-native-gnucobol-3.2`). `tools/fetch_corpora.py` ajoute six dépôts
+publics épinglés et la testsuite GnuCOBOL 3.2. Acceptation statique initiale :
+beg-cobol 16/113, proleap 43/759, che4z 55/1504, carddemo 0/44,
+cobol-programming-course 0/7, zopeneditor 0/5 (`build/coverage-<corpus>.json`).
+Les 1346 cas `.at` GnuCOBOL ne sont pas encore extraits en programmes autonomes.
 
 Dernière étape : séparateurs virgule/point-virgule et entrées documentaires
 d'Identification. Le lexer conserve une PICTURE comme un mot contigu, avec ses

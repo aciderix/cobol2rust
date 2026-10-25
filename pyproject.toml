@@ -17,4 +17,4 @@ cobol2rust = "cobol2rust.cli:main"
 packages = ["cobol2rust"]
 
 [tool.setuptools.package-data]
-cobol2rust = ["*.rs"]
+cobol2rust = ["*.rs", "*.c"]

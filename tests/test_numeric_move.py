@@ -24,13 +24,13 @@ class NumericMoveTests(unittest.TestCase):
         parsed = Parser(program("01 n pic 999. 01 output-a pic xxx.",
                                 "move n to output-a compute n = 1 stop run.")).parse()
         self.assertEqual(parsed.entry[0].op, "move")
-        self.assertEqual(parsed.entry[1].op, "assign")
+        self.assertEqual(parsed.entry[1].op, "compute")
 
     def test_figurative_zero_is_distinct_from_numeric_literal_zero(self):
         parsed = Parser(program("01 output-a pic xxx.",
                                 "move zero to output-a move 0 to output-a "
                                 "move zeros to output-a move zeroes to output-a stop run.")).parse()
-        sources = [stmt.args[0] for stmt in parsed.entry[:-1]]
+        sources = [stmt.args[0] for stmt in parsed.entry if stmt.op == "move"]
         self.assertEqual([source.figurative_zero for source in sources], [True, False, True, True])
         self.assertEqual([source.args[0] for source in sources], ["0"] * 4)
 
@@ -57,17 +57,16 @@ class NumericMoveTests(unittest.TestCase):
                                        "move n to group-a.")).parse()).generate()
 
     def test_unmodelled_sources_remain_rejected(self):
-        for body in ("move edited-a to n.",
-                     "move edited-a to edited-b.", "move n + 1 to output-a."):
+        for body in (
+                     "move n + 1 to output-a.",):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic 999. 01 output-a pic xxx. "
                                        "01 edited-a pic +999. 01 edited-b pic +999.", body)).parse()).generate()
 
-    def test_implicit_index_cannot_be_copied_to_raw_group(self):
-        with self.assertRaises(CobolError):
-            Emitter(Parser(program("01 table-a. 02 item-a pic x occurs 2 indexed by idx. "
-                                   "01 group-a. 02 cell-a pic x(8).",
-                                   "move idx to group-a.")).parse()).generate()
+    def test_implicit_index_copies_native_bytes_to_raw_group(self):
+        Emitter(Parser(program("01 table-a. 02 item-a pic x occurs 2 indexed by idx. "
+                               "01 group-a. 02 cell-a pic x(8).",
+                               "move idx to group-a.")).parse()).generate()
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

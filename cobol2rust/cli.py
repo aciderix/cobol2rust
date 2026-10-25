@@ -11,15 +11,164 @@ from pathlib import Path
 
 from . import __version__
 from .binary import inspect_binary
-from .emitter import Emitter
-from .frontend import CobolError, Parser, load_source
+from .emitter import Emitter, generate_unit
+from .frontend import CobolError, Parser, Stmt, load_source
 from .toolchain import compiler_env, find_tool
 
 
-def convert(source: Path, output: Path, fmt="auto", includes=()):
+SOURCE_SUFFIXES = (".CBL", ".cbl", ".COB", ".cob")
+
+
+def statements(program):
+    """Every statement of a program, nested bodies included."""
+    def walk(item):
+        if isinstance(item, Stmt):
+            yield item
+            yield from walk(item.args)
+        elif isinstance(item, (list, tuple)):
+            for element in item:
+                yield from walk(element)
+    for block in program.blocks:
+        yield from walk(block.body)
+
+
+def call_targets(program):
+    literals, dynamic = set(), False
+    for stmt in statements(program):
+        if stmt.op == "call_program":
+            if stmt.args[0][0] == "literal":
+                literals.add(stmt.args[0][1])
+            else:
+                dynamic = True
+    return literals, dynamic
+
+
+def check_nested_calls(main, local):
+    """A contained program is called by the program that directly contains
+    it or, when COMMON, by the other programs that this one contains; cobc
+    resolves other calls of its name dynamically, which cannot find it."""
+    programs = {main.entry_name: main, **local}
+
+    def ancestors(name):
+        chain, parent = [], programs[name].parent
+        while parent is not None:
+            chain.append(parent)
+            parent = programs[parent].parent
+        return chain
+
+    for caller, program in programs.items():
+        for target in call_targets(program)[0]:
+            callee = programs.get(target)
+            if callee is None or callee.parent is None:
+                continue
+            visible = callee.parent == caller or (
+                callee.common and callee.parent in ancestors(caller)
+                and target not in [caller, *ancestors(caller)])
+            if not visible:
+                raise CobolError(f"CALL {target} depuis {caller}: programme contenu non visible (non modélisé)")
+
+
+def run_unit(source: Path, fmt, includes, call_paths):
+    """Main program and every program it may CALL, found as <name>.CBL/.cob.
+
+    Like GnuCOBOL's dynamic CALL, a literal name resolves to a module of that
+    name in the call path. A name found nowhere raises EXCEPTION at run time.
+    A dynamic CALL brings in every program of the call path that converts.
+    """
     expanded, copies = load_source(source, list(includes), fmt)
-    program = Parser(expanded).parse()
-    rust, mapping = Emitter(program).generate()
+    main = Parser(expanded).parse()
+    if main.using:
+        raise CobolError("programme principal avec PROCEDURE DIVISION USING non pris en charge")
+    directories = [Path(path) for path in call_paths]
+    units = {}
+    # Programs after the main one in its source are in the executable itself:
+    # GnuCOBOL's resolver finds them before searching the call path.
+    local = {}
+
+    def gather(program):
+        for child in [*program.nested]:
+            local[child.entry_name] = child
+            gather(child)
+    gather(main)
+    for program in main.siblings:
+        local[program.entry_name] = program
+        gather(program)
+    check_nested_calls(main, local)
+    pending, dynamic = call_targets(main)
+    if dynamic:
+        pending |= set(local)
+    if dynamic:
+        for directory in directories:
+            for path in sorted(directory.iterdir()) if directory.is_dir() else []:
+                if path.suffix in SOURCE_SUFFIXES:
+                    try:
+                        load_source(path, list(includes), fmt)
+                        pending.add(path.stem)
+                    except (CobolError, OSError):
+                        continue
+    seen = set()
+    while pending:
+        name = pending.pop()
+        if name in seen or name == main.entry_name:
+            continue
+        seen.add(name)
+        if name in local:
+            program = local[name]
+            literals, more = call_targets(program)
+            if more:
+                raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
+            units[name] = (source, program, expanded, copies)
+            pending |= literals
+            continue
+        path = next((directory / (name + suffix) for directory in directories for suffix in SOURCE_SUFFIXES
+                     if (directory / (name + suffix)).is_file()), None)
+        if path is None:
+            continue
+        sub_expanded, sub_copies = load_source(path, list(includes), fmt)
+        try:
+            program = Parser(sub_expanded).parse()
+        except CobolError as exc:
+            if dynamic and name not in call_targets(main)[0]:
+                continue
+            raise CobolError(f"programme appelé {path.name}: {exc}") from exc
+        if program.siblings or program.nested:
+            raise CobolError(f"plusieurs programmes dans le source appelé non pris en charge: {path.name}")
+        if program.entry_name != name:
+            if program.entry_name.upper() == name.upper() or dynamic is False:
+                raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
+            continue
+        units[name] = (path, program, sub_expanded, sub_copies)
+        literals, more = call_targets(program)
+        if more:
+            raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
+        pending |= literals
+    return main, expanded, copies, [units[name] for name in sorted(units)]
+
+
+def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
+    """Rust source of the run unit of `source`, with its parsed programs."""
+    main, expanded, copies, subprograms = run_unit(source, fmt, includes, call_paths)
+    called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
+    present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
+               for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
+    emitters = [Emitter(main, called=called, present=present)]
+    for index, (_, sub, _, _) in enumerate(subprograms, 1):
+        emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present))
+    rust, mapping = generate_unit(emitters)
+    return main, expanded, copies, subprograms, rust, mapping
+
+
+def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), debugging_lines=False,
+            std="default", no_ec_data_incompatible=False):
+    from . import frontend
+    if std not in frontend.STANDARDS:
+        raise CobolError(f"dialecte non modélisé: {std}; choisir parmi {', '.join(frontend.STANDARDS)}")
+    previous = frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE
+    frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = debugging_lines, std, no_ec_data_incompatible
+    try:
+        program, expanded, copies, subprograms, rust, mapping = emit_unit(source, fmt, includes, call_paths)
+    finally:
+        frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = previous
     output = output.resolve()
     # Never replace an existing project or an unrelated directory implicitly.
     if output.exists() and any(output.iterdir()):
@@ -45,6 +194,12 @@ def convert(source: Path, output: Path, fmt="auto", includes=()):
               "files": [asdict(f) for f in program.files.values()],
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
+              "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
+                               "in_main_source": Path(path).resolve() == Path(source).resolve(),
+                               "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                               "using": sub.using, "memory_size": sub.memory_size}
+                              for path, sub, _, _ in subprograms],
+              "call_paths": [str(Path(path).resolve()) for path in call_paths],
               "storage_profile": {"binary_size": "1-2-4-8", "binary_byteorder": "big-endian", "display_sign": "ASCII trailing overpunch"},
               "file_runtime": {"organization": organizations[0] if len(organizations) == 1 else "MIXED",
                                "organizations": organizations,
@@ -61,7 +216,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=()):
     (output / "src" / "main.rs").write_text(rust, encoding="utf-8")
     (output / "src" / "runtime.rs").write_text(Path(__file__).with_name("runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    if program.files:
+    if program.files or any(sub.files for _, sub, _, _ in subprograms):
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "expanded.cob").write_text(expanded + "\n", encoding="utf-8")
     (output / "conversion.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -77,6 +232,10 @@ def main(argv=None):
     source.add_argument("-o", "--output", type=Path, required=True)
     source.add_argument("--format", choices=["auto", "free", "fixed"], default="auto")
     source.add_argument("-I", "--copybook-path", type=Path, action="append", default=[])
+    source.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
+    source.add_argument("--debugging-lines", action="store_true", help="compiler les lignes D comme cobc -fdebugging-line")
+    source.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc modélisé (-std)")
+    source.add_argument("--fno-ec-data-incompatible", action="store_true", help="comme cobc -fno-ec=data-incompatible (MOVE sans cob_check_numeric)")
     source.add_argument("--build", action="store_true", help="compiler le Rust généré")
     source.add_argument("--run", action="store_true", help="compiler et exécuter le Rust généré")
     binary = subs.add_parser("inspect", help="inspecter un exécutable COBOL potentiel (sans le lancer)")
@@ -87,9 +246,13 @@ def main(argv=None):
     verification.add_argument("source", type=Path)
     verification.add_argument("--format", choices=["auto", "free", "fixed"], default="auto")
     verification.add_argument("-I", "--copybook-path", type=Path, action="append", default=[])
+    verification.add_argument("--call-path", type=Path, action="append", default=[], help="dossier des programmes appelés par CALL")
     verification.add_argument("--stdin-file", type=Path, help="entrées identiques fournies aux deux programmes")
     verification.add_argument("--data-dir", type=Path, help="fichiers d'entrée copiés dans deux dossiers d'exécution distincts")
-    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED ou COB_LS_SPLIT identique pour les deux programmes")
+    verification.add_argument("--runtime-env", action="append", default=[], metavar="NAME=VALUE", help="COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE ou COB_SWITCH_n identique pour les deux programmes")
+    verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
+    verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
+    verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -123,7 +286,8 @@ def main(argv=None):
                 key, value = item.split("=", 1)
                 environment[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
-                            args.data_dir, environment)
+                            args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
+                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():
@@ -146,7 +310,8 @@ def main(argv=None):
             cargo = find_tool("cargo") if args.build or args.run else None
             if (args.build or args.run) and not cargo:
                 raise CobolError("Cargo introuvable; installer Rust ou omettre --build/--run")
-            report = convert(args.source, args.output, args.format, args.copybook_path)
+            report = convert(args.source, args.output, args.format, args.copybook_path, args.call_path,
+                             args.debugging_lines, args.std, args.fno_ec_data_incompatible)
             print(f"{report['program']} -> {args.output.resolve()}", flush=True)
             if cargo:
                 command = [cargo, "run" if args.run else "build", "--quiet"]

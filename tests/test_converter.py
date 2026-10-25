@@ -34,8 +34,8 @@ class FrontendTests(unittest.TestCase):
         cases = [
             program("call 'external'."), program("alter finish to proceed to other."),
             program("open input file-a."), program("display function current-date."),
-            program("exec sql select 1 end-exec."), program("next sentence."),
-            program("perform missing stop run."), program("if n = 1 or 2 display 'bad' end-if.", "01 n pic 9."),
+            program("exec sql select 1 end-exec."), program("alter p to proceed to q."),
+            program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
             program("stop run.", "01 n pic 9(2) comp-5."),
@@ -43,7 +43,7 @@ class FrontendTests(unittest.TestCase):
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("stop run.", "01 n pic 9. 01 n pic 9."),
             program("stop run.", "01 x pic x(0)."),
-            program("accept n from date.", "01 n pic 9(8)."),
+            program("accept n from microsecond-time.", "01 n pic 9(8)."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
@@ -54,6 +54,14 @@ class FrontendTests(unittest.TestCase):
         for body in ['compute n = t + 1.', 'perform t times continue end-perform.']:
             with self.subTest(body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(body, declarations)).parse()).generate()
+
+    def test_times_requires_an_integer_like_cobc(self):
+        # cb_check_integer_value, checked against cobc 3.2.
+        for body in ("perform f times display 1 end-perform.", "perform 2.5 times display 1 end-perform.",
+                     "perform -1 times display 1 end-perform.", "perform n(1:1) times display 1 end-perform."):
+            with self.subTest(body=body), self.assertRaises(CobolError):
+                Parser(program(body, "01 f pic 9v9. 01 n pic 9.")).parse()
+        Parser(program("perform s times display 1 end-perform.", "01 s pic s9p.")).parse()
 
     def test_incomplete_input_has_diagnostic_not_traceback(self):
         for body in ["display", "compute", "if", "perform", "move", "compute n ="]:
@@ -66,6 +74,40 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(normalize("000100 >>source format free\ndisplay 'A'.", "fixed").splitlines()[1], "display 'A'.")
         with self.assertRaises(CobolError):
             normalize("000100- continuation", "fixed")
+
+    def test_debugging_lines_follow_debugging_mode(self):
+        # pplex.l: D lines are source once "WITH DEBUGGING MODE" has been read.
+        source = ("000100 IDENTIFICATION DIVISION.\n000200D    DISPLAY 'BEFORE'.\n"
+                  "000300 SOURCE-COMPUTER. X WITH DEBUGGING MODE.\n000400D    DISPLAY 'AFTER'.\n")
+        text = normalize(source, "fixed")
+        self.assertNotIn("BEFORE", text)
+        self.assertIn("AFTER", text)
+        self.assertNotIn("AFTER", normalize(source.replace("WITH DEBUGGING MODE", ""), "fixed"))
+
+    def test_debugging_targets_outside_the_model_are_rejected(self):
+        declaratives = ("declaratives. d section. use for debugging on {}. p. display debug-name. "
+                        "end declaratives. m section. a. stop run.")
+        data = "01 x pic x. 01 t. 02 e pic x occurs 2."
+        for target in ("e (1)", "x x", "p", "d", "missing", "all procedures a"):
+            source = ("identification division.\nprogram-id. t.\nenvironment division.\nconfiguration section.\n"
+                      "source-computer. c with debugging mode.\ndata division. working-storage section.\n"
+                      + data + "\nprocedure division.\n" + declaratives.format(target))
+            with self.subTest(target=target), self.assertRaises(CobolError):
+                Emitter(Parser(source).parse()).generate()
+
+    def test_indexed_limits_are_refused(self):
+        def source(select, procedure="stop run."):
+            return ("identification division.\nprogram-id. t.\nenvironment division.\ninput-output section.\n"
+                    "file-control.\n    select f assign to \"IXF\" organization indexed access dynamic\n"
+                    f"    {select}.\ndata division.\nfile section.\nfd f.\n01 r.\n 02 k pic x(3).\n 02 a pic x(2).\n"
+                    "working-storage section.\n01 w pic x(3).\nprocedure division.\n" + procedure)
+        Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
+        for case in (source("record key is w"), source("alternate record key is a"),
+                     source("record key is k alternate record key is a suppress when space"),
+                     source("record key is k", "read f key is a. stop run."),
+                     source("record key is k", "start f key is = w. stop run.")):
+            with self.subTest(case=case), self.assertRaises(CobolError):
+                Emitter(Parser(case).parse()).generate()
 
     def test_copy_expansion_cycle_and_missing(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -156,14 +198,15 @@ class RuntimeTests(unittest.TestCase):
 
     def test_divide_zero_overflow_and_invalid_input_abort(self):
         rustc = find_tool("rustc")
-        cases = [("compute n = 1 / 0 stop run.", b"", "division by zero"),
-                 ("compute n = 100 stop run.", b"", "overflow"),
-                 ("accept n stop run.", b"bad\n", "invalid numeric input")]
-        for body, stdin, diagnostic in cases:
+        # A DISPLAY receiver truncates like cob_decimal_get_display; binary
+        # overflow depends on cobc's native add routines and stops.
+        cases = [("compute n = 1 / 0 stop run.", b"", "division by zero", "01 n pic 99."),
+                 ("compute n = 100 stop run.", b"", "overflow", "01 n pic 99 comp.")]
+        for body, stdin, diagnostic, data in cases:
             with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 source = root / "main.cob"
-                source.write_text(program(body, "01 n pic 99."), encoding="utf-8")
+                source.write_text(program(body, data), encoding="utf-8")
                 convert(source, root / "rust")
                 binary = build_rust(root / "rust")
                 p = subprocess.run([str(binary)], capture_output=True, input=stdin, timeout=10)

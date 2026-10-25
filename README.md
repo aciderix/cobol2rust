@@ -15,12 +15,19 @@ La couverture universelle est désormais l'objectif de développement. La
 [feuille de route et les mesures de couverture](COVERAGE.md) distinguent ce
 cap de ce qui est effectivement accepté, compilé et vérifié.
 
+Sur la branche de développement, la suite NIST CCVS85 est couverte telle que
+GnuCOBOL 3.2 l'exécute : les 427 programmes principaux que son runner traite
+donnent en Rust des REPORT identiques octet pour octet (9610 PASS, 0 FAIL, le
+bilan natif exact) ; seuls 7 programmes du module CM, que cobc ne compile pas,
+restent refusés ([VALIDATION.md](VALIDATION.md)).
+
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur
 mémoire et contrôles d'impression `WRITE ... ADVANCING`.
 Elle prend aussi en charge un premier sous-ensemble de PICTURE numériques
-éditées et les clauses FD LABEL/BLOCK, RECORD de taille exacte et RECORDING F
-du profil disque GnuCOBOL vérifié.
+éditées et les clauses FD LABEL/BLOCK, RECORD de taille exacte, RECORDING F et
+DATA RECORDS du profil disque GnuCOBOL vérifié. Un MOVE numérique tronque les
+chiffres de tête sans SIZE ERROR, comme en natif.
 Les séparateurs virgule/point-virgule et les paragraphes documentaires
 d'IDENTIFICATION sont également pris en charge dans le profil décrit ci-dessous.
 
@@ -55,7 +62,13 @@ des sources Rust fonctionne sans accès réseau et sans compilateur installé.
 python -m cobol2rust convert chemin/programme.cob -o build/programme-rust
 python -m cobol2rust convert examples/fixed.cob --format fixed -o build/fixe --build
 python -m cobol2rust convert examples/copybook.cob -I examples -o build/copies --run
+python -m cobol2rust convert principal.cob --call-path sousprogrammes -o build/unite
 ```
+
+`--call-path` désigne les dossiers des programmes appelés par CALL : comme le
+CALL dynamique de GnuCOBOL, un nom littéral `X` se résout en `X.cbl`/`X.cob`
+dont le PROGRAM-ID est `X`. Le programme principal et tous ses appelés
+(transitivement) forment une seule unité d'exécution Rust.
 
 Le projet produit contient :
 
@@ -71,8 +84,8 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 199 tests Python, avec un test d'inspection du PE
-Windows ignoré (200 découverts), et les 51 comparaisons COBOL/Rust du corpus actuel.
+également validé sous Linux 304 tests Python, avec un test d'inspection du PE
+Windows ignoré (305 découverts), et les 96 comparaisons COBOL/Rust du corpus actuel.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -89,16 +102,16 @@ Ces résultats portent sur les entrées testées.
 | Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON`, `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
 | Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` |
-| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, une destination `GIVING`, `ROUNDED`, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
+| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
-| MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ; groupe source copié brut vers numérique/édité |
-| Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un entier uniquement avec chiffres de même largeur |
-| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus |
+| MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ou numérique DISPLAY ; groupe source copié brut vers numérique/édité |
+| Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un champ numérique (`cob_cmp_alnum` des chiffres stockés, sauf repli de `compare_field_literal`) |
+| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03 lu par un ACCEPT tue le programme par SIGINT comme `cob_raise`, arrêt nommé si un fichier est encore ouvert, libcob perdant alors ses tampons) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER` |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
-| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple |
-| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` en SEQUENTIAL, `CLOSE`, `FILE STATUS`, `SELECT OPTIONAL` |
-| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `CONTINUE`, `STOP RUN`, `GOBACK` |
+| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
+| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
 
 Les champs numériques sont limités à **18 chiffres**, les champs texte à
 **256 caractères ASCII par champ élémentaire**. Un groupe peut être plus grand.
@@ -108,18 +121,21 @@ Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-`SEARCH`, `USAGE INDEX` explicite, niveaux 66/78,
-REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
-images éditées hors du sous-ensemble décrit ci-dessous, `COPY REPLACING`, conditions abrégées,
-fonctions intrinsèques, appels externes, `ALTER`, `GO TO` sans cible,
-`EXIT SECTION` hors section explicite, `EXIT PERFORM`, noms de procédure qualifiés ou homonymes et
-segments SECTION numérotés,
-fichiers à enregistrements variables, relatifs/indexés, SQL embarqué, CICS et
-plusieurs programmes liés. Les formats binaires autres que les enregistrements
-SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
+niveau 78, REDEFINES indirects, `COMP-5` et autres USAGE hors liste, images
+éditées hors du sous-ensemble décrit ci-dessous, fonctions intrinsèques hors
+liste ci-dessous, CALL d'un programme ni converti ni sûrement absent,
+`EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
+SCREEN SECTION, SQL embarqué et CICS. Les formats de fichier autres que ceux
+décrits plus bas (LINE SEQUENTIAL, SEQUENTIAL fixe ou variable, RELATIVE,
+INDEXED au format propre de cobol2rust) ne sont pas modélisés.
 La déédition, les calculs sur texte et les calculs vers PIC X restent refusés.
-Le MOVE d'un littéral texte vers un champ numérique ordinaire reste refusé :
-les optimisations natives diffèrent du transfert depuis un champ PIC X.
+Le MOVE d'un littéral texte vers un champ numérique DISPLAY suit
+`cb_build_move_literal` : à échelle égale et sans signe séparé, ses octets sont
+copiés à la compilation (cadrés à droite, complétés de zéros, BLANK WHEN ZERO
+appliqué) ; sinon `cob_move` le traite comme un champ PIC X. Vers un champ
+binaire ou packé il reste refusé (optimisations natives de cobc). `MOVE ALL
+"littéral"` vers un alphanumérique édité remplit sans édition, comme le
+`memset`/`memcpy` de cobc ; une constante figurative y est éditée.
 
 Pour `MOVE`, un entier numérique vers PIC X ou sous-chaîne fournit les chiffres
 de sa magnitude sur la largeur PICTURE, sans signe, puis tronque à droite ou
@@ -189,6 +205,239 @@ Les erreurs de syntaxe non prise en charge donnent une position et empêchent
 la création du projet. Les lignes des diagnostics et de la correspondance
 Rust désignent le source **normalisé et développé** (`expanded.cob`), pas
 nécessairement la ligne d'origine avant expansion des copybooks.
+
+## Programmes appelés (CALL)
+
+CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT, ON EXCEPTION/
+OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
+(`output_call` de codegen.c, `cob_call_field`/`cob_cancel` de call.c) :
+
+- un appelé conserve sa WORKING-STORAGE entre deux CALL ; CANCEL la réinitialise
+  et ferme ses fichiers ouverts ; CALL ou CANCEL d'un programme actif s'arrête ;
+- les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
+  de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
+  son argument s'arrête au lieu de lire la mémoire voisine ;
+- EXIT PROGRAM est sans effet dans le programme principal, GOBACK y vaut STOP RUN ;
+  STOP RUN dans un appelé termine toute l'unité ;
+- un nom introuvable prend ON EXCEPTION seulement s'il est sûrement absent : mot
+  majuscule, ni routine système libcob (`SYSTEM`, `CBL_…`, `C$…`), ni source du
+  chemin d'appel non convertie. Sinon la conversion ou l'exécution s'arrête.
+
+Les programmes qui suivent `END PROGRAM` dans le même source sont des frères :
+ils sont dans l'exécutable et GnuCOBOL les trouve avant le chemin d'appel.
+Les programmes contenus (IDENTIFICATION DIVISION à la fin de la PROCEDURE
+DIVISION, puis `END PROGRAM`) sont appelables par le programme qui les contient
+directement et, s'ils sont `COMMON`, par les autres programmes qu'il contient ;
+tout autre CALL de leur nom est refusé (cobc le résoudrait dynamiquement sans
+les trouver). Un article 01/77 `GLOBAL` d'un programme contenant est vu par ses
+descendants (un nom local le masque) et partage leur stockage ; un article
+`EXTERNAL` est un bloc de l'unité d'exécution désigné par son nom, comme
+`cob_external_addr` (alloué à zéro, sans VALUE, même taille exigée).
+
+Un FD `EXTERNAL` partage le fichier et sa zone d'enregistrement
+(`<fichier>_Record`) dans l'unité d'exécution, comme `cob_file_external_addr` :
+le premier programme qui le déclare le crée (son ASSIGN et son OPTIONAL
+comptent), chaque programme garde son propre FILE STATUS, et le CANCEL d'un
+programme ferme le fichier qu'il a laissé ouvert. Un FD `GLOBAL` d'un programme
+contenant est vu par ses descendants avec ses enregistrements ; une nouvelle
+instance du programme (après CANCEL) a un nouveau fichier. `USE GLOBAL AFTER
+ERROR` sur un mode d'ouverture sert aux programmes contenus qui n'ont pas de
+USE pour ce mode, selon le parcours de cobc.c (premier programme défini avant,
+de niveau inférieur, jusqu'au niveau 0) ; la procédure s'exécute avec les
+données et les fichiers du programme qui la déclare (entrée 2 de sa fonction
+C : un alias qui partage son stockage), puis rend la main au programme
+appelant. Un programme `INITIAL` est annulé (CANCEL implicite) à chaque retour.
+
+Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, USE GLOBAL sur un nom de
+fichier, un USE GLOBAL que le parcours de cobc.c prendrait à un programme non
+contenant, ALTER dans un programme à USE GLOBAL et GOBACK ou EXIT PROGRAM dans
+sa procédure, FD
+EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
+GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
+GLOBAL, plusieurs programmes dans un source appelé,
+EXTERNAL AS et VALUE d'un article EXTERNAL, LINKAGE hors de USING, VALUE en
+LINKAGE, USING dans le programme principal, et `NOT ON EXCEPTION` suivant un
+DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
+
+## NEXT SENTENCE et PICTURE P
+
+NEXT SENTENCE poursuit après le prochain point séparateur, y compris depuis un
+IF imbriqué, un EVALUATE ou une boucle PERFORM inline qu'il quitte.
+
+PICTURE P (`S99P`, `9(3)P(4)`, `PP99`, `SVP9`) suit l'analyse de cobc : seuls
+les 9 sont stockés ; un P final multiplie par 10, un P initial ajoute une
+position décimale implicite. MOVE, calcul, comparaison numérique et DISPLAY
+(`+990`, `.0012`) sont identiques au natif, y compris la troncature de
+l'opérande par `cob_add_int` (`ADD 15 TO S99P` ajoute 10). P est limité à USAGE
+DISPLAY ; les MOVE entre texte et champ P sont refusés.
+
+## Édition et comparaisons
+
+Les images éditées numériques (`Z`, `*`, `9`, `+`, `-`, `$` fixes ou flottants,
+`,`, `.`, `B`, `0`, `/`, `CR`, `DB`, `P`, BLANK WHEN ZERO) et alphanumériques
+(`X`, `A`, `9` avec `B`, `0`, `/`) sont éditées comme libcob, et acceptées ou
+refusées comme cobc. Un champ édité se compare comme texte. Comme cobc, une
+comparaison d'un champ DISPLAY avec un littéral trop long est résolue à la
+compilation (`S99 > -100` est FAUX, comme en natif). JUSTIFIED RIGHT, VALUE ALL
+et QUOTE sont pris en charge, ainsi que SIGN LEADING/TRAILING [SEPARATE] et
+SYNCHRONIZED lorsqu'il n'impose aucun octet de remplissage.
+
+## SORT et MERGE
+
+SORT et MERGE (SD, clés ASCENDING/DESCENDING, USING/GIVING de fichiers
+séquentiels fixes ou SEQUENTIAL variables sans DEPENDING, INPUT/OUTPUT
+PROCEDURE, RELEASE, RETURN) reproduisent le tri stable de libcob ; un USING
+variable copie la taille lue et un GIVING écrit `record_max`, comme
+`cob_copy_check`. Un SD à OCCURS DEPENDING est accepté pour USING/GIVING, où
+libcob déplace chaque enregistrement à la taille maximale du SD ; RELEASE et
+RETURN d'un tel SD, et SORT … COLLATING SEQUENCE littérale, restent refusés.
+
+## Horloge, ACCEPT FROM DATE et FUNCTION RANDOM
+
+`ACCEPT x FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK` et `TIME`
+reprennent `cob_accept_date`… (valeur déplacée comme un champ binaire de 6, 8,
+5, 7 ou 8 chiffres, DAY-OF-WEEK comme un caractère alphanumérique) et
+FUNCTION CURRENT-DATE ; l'heure vient de `cob_get_current_datetime` : heure
+locale (fuseau UTC seul modélisé), nanosecondes toujours lues comme
+`clock_gettime` sous Linux, et `COB_CURRENT_DATE` porté de
+`check_current_date` (date, heure, nanosecondes, décalage `Z`/`±hh[:]mm`,
+gabarits `YYYY`/`MM`/…, normalisation `mktime`). Une valeur invalide de
+`COB_CURRENT_DATE` (libcob l'ignore avec un avertissement) et la forme
+`@secondes` sont des arrêts nommés. `verify --runtime-env COB_CURRENT_DATE=…`
+fixe l'horloge des deux programmes. `FUNCTION RANDOM [(graine)]` reproduit le
+Mersenne Twister de GMP 6.3 utilisé par libcob (`gmp_randseed_ui`,
+`mpf_urandomb` de 63 bits, `mpf_get_d` tronqué, conversion exacte du double) ;
+sans graine au premier appel, libcob tire la graine de l'heure et de l'adresse
+du module, valeur non reproductible : le port prend l'heure et une adresse du
+programme Rust, ce qui donne une suite native possible.
+
+## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
+
+SPECIAL-NAMES accepte les noms mnémoniques de périphériques (DISPLAY UPON
+SYSOUT/CONSOLE/SYSERR, ACCEPT FROM SYSIN/CONSOLE), SWITCH-n avec conditions
+ON/OFF et SET … TO ON/OFF (état initial lu dans `COB_SWITCH_n`, comme libcob),
+les alphabets NATIVE, STANDARD-1, STANDARD-2 et ASCII (sans effet sur une
+machine ASCII), les alphabets littéraux (`THRU`, `ALSO`) comme PROGRAM
+COLLATING SEQUENCE, les classes utilisateur et SYMBOLIC CHARACTERS. Une
+séquence de collation littérale suit `validate_alphabet` et
+`cb_validate_collating` de cobc : pondération de chaque octet, LOW-VALUE et
+HIGH-VALUE déduits de l'alphabet, comparaisons alphanumériques et SORT du
+module selon cette table ; deux littéraux comparés par `=` ou `<>` sont pliés
+sur leurs octets bruts, comme dans tree.c. `CURRENCY SIGN IS "c"` (un
+caractère, contrôles de `set_currency_picture_symbol`) et `DECIMAL-POINT IS
+COMMA` sont des réglages du module (`COB_MODULE_PTR`) : le scanner lit alors
+1,5 comme un littéral, les PICTURE échangent `.` et `,`, et l'édition, le MOVE
+alphanumérique vers numérique, la dé-édition, NUMVAL/NUMVAL-C et l'affichage
+d'un nombre à décimales utilisent ces symboles. `CURRENCY … PICTURE SYMBOL` et
+SORT … COLLATING SEQUENCE avec un alphabet littéral restent refusés. Une
+clause FD `CODE-SET` avec un alphabet natif est ignorée, comme cobc sur une
+machine ASCII ; les autres alphabets sont refusés.
+ACCEPT reproduit `cob_accept`.
+
+## SEARCH, USAGE INDEX et INSPECT
+
+`SEARCH` (index VARYING ou premier index de la table, AT END, WHEN multiples)
+et `SEARCH ALL` (recherche dichotomique de cobc sur les clés ASCENDING/
+DESCENDING) suivent le code généré par cobc. `USAGE INDEX` explicite est un
+entier natif de 4 octets petit-boutiste, copié brut vers un groupe.
+`INSPECT` TALLYING, REPLACING et CONVERTING, avec BEFORE/AFTER INITIAL, est un
+portage de `strings.c` : marqueurs et tampon de remplacement statiques partagés
+entre instructions (y compris le marquage incomplet de LEADING en TALLYING),
+signe incrusté retiré puis remis, compteurs mis à jour par `cob_add_int`
+(troncature des chiffres de poids fort). Un accès hors des tampons de libcob,
+qui ferait planter le programme natif, est un arrêt nommé. Les cibles binaires
+ou packées et INSPECT BACKWARD restent refusés.
+
+`EVALUATE` suit `cb_emit_evaluate` : sujets multiples `ALSO`, `TRUE`/`FALSE`,
+objets `ANY`, `NOT`, `THRU`, conditions, lignes `WHEN` consécutives partageant
+les mêmes instructions, et mêmes comparaisons qu'un `IF`. Sans `END-IF`, un
+`ELSE` se rattache au `IF` ouvert le plus proche. Un niveau 88 de groupe
+compare la zone en alphanumérique. Comme le scanner de cobc, un signe collé à
+des chiffres après un opérande est un littéral signé : `T(I +1)` a deux
+sous-scripts.
+
+## Conditions, STRING et UNSTRING
+
+Les conditions sont construites par un portage de `cb_build_expr` (pile de
+priorités de typeck.c) : conditions abrégées (`A = 1 OR 2`,
+`A NOT = B AND > C`), place du NOT, conditions de signe POSITIVE/NEGATIVE/ZERO
+et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
+`STRING` (DELIMITED BY, POINTER, ON OVERFLOW) et `UNSTRING` (DELIMITED BY
+[ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
+reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune
+exception levée). Les mots réservés de cobc sont refusés comme noms : la
+liste par défaut, ou celle de `config/cobol85.words` avec `--std cobol85`
+(NOTHING y redevient un nom, AUTHOR y est réservé). Deux articles frères de même
+nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée.
+
+## Fichiers, RENAMES, exponentiation
+
+Les clauses SELECT s'écrivent dans n'importe quel ordre ; PADDING CHARACTER
+(obsolète) et RECORD DELIMITER STANDARD-1 sont ignorés comme par cobc, VALUE OF
+du FD aussi. `SAME RECORD AREA` partage la zone d'enregistrement du premier FD
+du groupe (`finalize_file`). Le niveau 66 `RENAMES … [THRU …]` est un alias de
+la zone (alphanumérique pour une plage ou un groupe), un REDEFINES de niveau 01
+plus grand agrandit la zone (octets supplémentaires nuls). Un 66 peut reprendre le
+nom d'un article de son enregistrement : seule une référence non qualifiée est
+ambiguë, comme dans `cb_ref`. `**` suit
+`cob_decimal_pow` pour les exposants entiers (associatif à droite dans
+COMPUTE, à gauche dans les conditions) ; un exposant littéral négatif est
+refusé car cob_decimal_pow modifie la constante décimale partagée par cobc.
+`MOVE -0` laisse un zéro négatif dans un DISPLAY signé. Un champ DISPLAY non
+signé se compare octet par octet à QUOTE, HIGH/LOW-VALUE ou ALL littéral.
+
+## CORRESPONDING, troncature et dé-édition
+
+`MOVE`, `ADD` et `SUBTRACT CORRESPONDING` appariement par nom comme
+`emit_corresponding` (sans REDEFINES, OCCURS ni FILLER ; numériques
+élémentaires seulement pour le calcul). Sans SIZE ERROR, un receveur DISPLAY
+garde les chiffres de poids faible (`cob_decimal_get_display`) ; les receveurs
+binaires ou packés, qui passent par d'autres routines de cobc, restent un arrêt
+nommé en cas de dépassement. Un MOVE d'un champ édité vers un numérique suit
+`cob_move_edited_to_display`.
+
+## COPY REPLACING
+
+`COPY` est développé où qu'il se trouve sur la ligne, et `REPLACING` suit le
+portage de `replace.c` (`cobol2rust/copy_replace.py`) : textes de pplex
+(mots, littéraux numériques et alphanumériques, autres caractères, espaces),
+pseudo-texte `==…==` comparé sans tenir compte de la casse ni des espaces,
+identifiants qualifiés ou indicés, littéraux. `COPY nom OF|IN bibliothèque`
+cherche `bibliothèque/nom` comme `ppcopy` (tel quel puis dans chaque dossier
+`-I`), puis le nom seul. L'instruction `REPLACE ==…== BY ==…== .` et
+`REPLACE OFF` s'appliquent au texte qui suit, COPY développés compris (deux
+filtres de `replace.c`) ; l'instruction est effacée et les numéros de ligne
+conservés. LEADING/TRAILING, REPLACE ALSO/LAST, `COB_COPY_LIB_*` et REPLACING
+d'un copybook qui contient lui-même un COPY restent refusés. En format fixe, la
+zone de séquence (colonnes 1-6) est ignorée quel que soit son contenu.
+`--debugging-lines` reproduit `cobc -fdebugging-line`.
+`SOURCE-COMPUTER ... WITH DEBUGGING MODE` et `USE FOR DEBUGGING` (procédures,
+ALL PROCEDURES, fichiers) suivent cobc 3.2 ; les sections de débogage ne
+s'exécutent qu'avec `COB_SET_DEBUG` vrai à l'exécution, comme libcob. La
+surveillance d'articles (`USE FOR DEBUGGING ON [ALL REFERENCES OF] article`)
+suit `cb_check_field_debug` : après MOVE, COMPUTE, ADD/SUBTRACT/MULTIPLY/DIVIDE
+sans SIZE ERROR, IF et DISPLAY, sous le commutateur, DEBUG-NAME (nom et
+qualificatifs écrits), DEBUG-CONTENTS, DEBUG-SUB-1..3 (sous-scripts ou espaces)
+puis la section, une fois par article et par instruction, pour un receveur ou
+pour toute référence avec ALL ; l'IF est débogué après ses branches comme dans
+le C de cobc. GO TO DEPENDING (ALL), PERFORM VARYING/AFTER (valeur initiale,
+pas, comparaisons de l'UNTIL en `cob_cmp`) et l'enregistrement d'un WRITE ou
+REWRITE suivent le code inline de codegen.c/typeck.c. Un article surveillé dans
+une autre instruction, un article indicé ou une référence modifiée sont
+refusés. `--fno-ec-data-incompatible` (convert, verify) reproduit
+`cobc -fno-ec=data-incompatible` : sans `cob_check_numeric`, le MOVE vers
+alphanumérique d'un article à signe séparé invalide copie ses chiffres tels
+quels et réécrit l'octet de signe (`COB_PUT_SIGN`) ; sans l'option ce cas reste
+un arrêt nommé, comme `--debug` arrête cobc.
+`--std {default,cobol85}` (convert, verify) choisit le dialecte cobc modélisé ;
+`verify --std cobol85` compile aussi l'original avec `-std=cobol85`. Seule
+différences modélisées à ce jour : `section-segments` (numéros de segment
+ignorés par défaut, actifs en cobol85) et `defaultbyte` (`init` par défaut :
+données sans VALUE initialisées selon leur PICTURE, index INDEXED BY à 1 ;
+`none` en cobol85 : mémoire laissée à zéro binaire, index à 0). `tools/nist_verify.py` convertit en
+cobol85 et compile l'original avec les options de report.pl
+(`-std=cobol85 --debug`) ; `tools/verify.py` lit `standards` dans le JSON
+d'une fixture pour la vérifier sous plusieurs dialectes.
 
 ## Calcul décimal et limites explicites
 
@@ -291,7 +540,17 @@ Les niveaux 88 testent leur donnée parente ; ils n'ajoutent pas de mémoire.
 `SET condition TO TRUE` choisit la première valeur déclarée. `SET ... TO FALSE`
 requiert une clause `WHEN SET TO FALSE` explicite. `INITIALIZE` ignore les FILLER
 et les vues REDEFINES subordonnées ; `WITH FILLER` inclut les FILLER. Une vue
-REDEFINES nommée directement peut être initialisée.
+REDEFINES nommée directement peut être initialisée. `INITIALIZE … REPLACING
+{ALPHABETIC|ALPHANUMERIC|NUMERIC|ALPHANUMERIC-EDITED|NUMERIC-EDITED} [DATA] BY
+valeur` suit `output_initialize_one` : un MOVE vers chaque article élémentaire
+de la catégorie, occurrence par occurrence, les autres articles restant
+inchangés ; VALUE et DEFAULT (COBOL 2002) restent refusés.
+
+Un groupe OCCURS DEPENDING peut contenir son propre contrôleur, être un
+enregistrement FD ou le partager avec les autres 01 du FD. Comme le
+`flag_receiving` de `cb_build_move`, un récepteur de MOVE (READ/RETURN INTO
+compris) qui contient son contrôleur prend sa longueur maximale ; les autres
+usages, et WRITE/REWRITE de l'enregistrement, prennent la longueur courante.
 
 L'initialisation d'une occurrence variable précise, par exemple
 `INITIALIZE ligne(index)`, est prise en charge. L'initialisation du groupe
@@ -428,22 +687,80 @@ fixes octet pour octet et les concatène sans séparateur. Les groupes peuvent
 contenir COMP/BINARY et COMP-3 ; un octet nul ou LF reste une donnée. Il ne faut
 pas assimiler ce format au texte LINE SEQUENTIAL décrit plus haut.
 
-Plusieurs descriptions `01` d'un même FD sont acceptées si leurs tailles
-physiques sont égales. Elles partagent la même mémoire et `WRITE` utilise la
-description nommée. Des tailles différentes sélectionneraient un format variable
-à en-têtes, qui reste refusé.
+Plusieurs descriptions `01` d'un même FD partagent la même mémoire et `WRITE`
+utilise la description nommée. Des tailles différentes sélectionnent le format
+variable à en-têtes de libcob (voir RECORD VARYING plus haut).
+
+En LINE SEQUENTIAL, des 01 de tailles différentes sont acceptés : WRITE écrit
+la taille de l'enregistrement nommé, le minimum vaut 0 (`finalize_file`, même
+avec RECORD VARYING FROM), READ complète la zone par des espaces et READ INTO
+déplace les octets lus (`lineseq_read` fixe la taille de l'enregistrement).
 
 Une lecture finale partielle conserve la queue précédente du buffer FD et
 retourne `00` dans le profil GnuCOBOL vérifié, puis `10` et `46` aux lectures
 suivantes. `READ INTO` copie uniquement les octets effectivement lus, puis
 complète sa destination, au lieu de recopier cette queue ancienne.
 
-`WRITE ... BEFORE/AFTER ADVANCING` est pris en charge pour ces fichiers avec
-PAGE ou un entier littéral de 0 à 65535 lignes. Les contrôles sont les octets
+`WRITE ... BEFORE/AFTER ADVANCING` est pris en charge pour ces fichiers et
+pour LINE SEQUENTIAL avec PAGE, un mnémonique FORMFEED (S01-S05, CSP, TOP) ou
+canal C01-C12 (une page, comme `cb_build_write_advancing_mnemonic`), un entier
+littéral, ZERO ou un identificateur numérique de 0 à 65535 lignes (hors de cette
+plage cobc corromprait l'option : arrêt nommé). Les contrôles sont les octets
 LF (lignes), CR (zéro ligne) et FF (PAGE). AFTER écrit le contrôle avant le
-record ; BEFORE l'écrit après. Les espaces des records sont conservés. Un LF
-final restant après AFTER est écrit à CLOSE ou à la fermeture implicite de
-STOP RUN. OPEN réinitialise cet état.
+record ; BEFORE l'écrit après ; un WRITE LINE SEQUENTIAL sans ADVANCING vaut
+BEFORE 1 LINE (`cb_emit_write`). Les espaces des records SEQUENTIAL sont
+conservés. Un LF final restant après AFTER est écrit à CLOSE ou à la fermeture
+implicite de STOP RUN. OPEN réinitialise cet état.
+
+La clause FD `LINAGE [IS] n [LINES] [WITH FOOTING [AT] f] [LINES AT TOP t]
+[LINES AT BOTTOM b]` (entiers ou noms de données) rend le fichier LINE
+SEQUENTIAL et suit `cob_linage_write_opt` : marge haute due au premier WRITE,
+page logique de n lignes, saut vers la page suivante (lignes restantes, marge
+basse, relecture des valeurs, marge haute), statut 57 si la géométrie lue est
+invalide. `LINAGE-COUNTER [IN|OF fichier]` est lisible (registre `unsigned int`
+affiché sur 10 chiffres) ; `AT END-OF-PAGE`/`NOT AT END-OF-PAGE` reproduisent
+`check_eop` et `output_ferror_stmt`. Après un OPEN en 57, libcob garde le mode
+ouvert sur un `FILE *` fermé : un nouvel OPEN rend 41, toute autre opération est
+un arrêt nommé. Une écriture dans LINAGE-COUNTER et l'OPEN INPUT d'un fichier
+LINAGE restent refusés.
+
+La COMMUNICATION SECTION suit cobc 3.2, qui l'analyse sans l'implémenter
+(`CB_PENDING`) : acceptée seulement avec `--std cobol85` (non conforme sinon),
+`CD nom FOR [INITIAL] INPUT | OUTPUT | [INITIAL] I-O` sans autre clause, puis ses
+enregistrements 01 (stockage statique jamais initialisé : VALUE ignoré, les
+suivants redéfinissent le premier). ENABLE, DISABLE, PURGE, RECEIVE (ses
+instructions NO DATA et WITH DATA sont analysées puis abandonnées), SEND et
+`ACCEPT cd MESSAGE COUNT` ne font que mettre à jour DEBUG-LINE ; un CD cible de
+USE FOR DEBUGGING ne déclenche donc rien mais agrandit DEBUG-CONTENTS. Comme la
+PROCEDURE DIVISION est analysée avec la taille par défaut de 30 octets, `FUNCTION
+LENGTH` de DEBUG-CONTENTS ou DEBUG-ITEM et les positions constantes d'une
+modification de référence utilisent cette taille, comme dans cobc.
+
+Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
+`REPORT [IS] r` (un seul rapport par fichier, sans enregistrement décrit) rend le
+fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
+ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
+(entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
+`finalize_report` et `cob_report_initiate` ; sans clause PAGE les limites
+valent 0 avec FIRST DETAIL 1, comme dans le `cob_report` émis par cobc, si bien
+que chaque ligne dépasse LAST DETAIL 0 et change de page ; un LINE au-delà de la
+limite fait échouer INITIATE comme `limitCheckOneLine`, le GENERATE suivant est un
+arrêt nommé), puis des groupes 01 `TYPE` REPORT
+HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
+`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
+élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,
+LINE-COUNTER ou PAGE-COUNTER), soit `VALUE` alphanumérique. Les lignes et champs
+reprennent `output_report_define_lines` ; la taille d'enregistrement est le
+`rcsz` de cobc. `INITIATE`, `GENERATE` groupe DETAIL ou nom de rapport et
+`TERMINATE` reproduisent `do_page_heading`, `do_page_footing`, `report_line` et
+`report_line_type` (écritures BEFORE n LINES, lignes vides, sauts de page).
+`LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
+affichés sur 10 chiffres. Restent refusés : CONTROL, SUM, NEXT GROUP, GROUP
+INDICATE, PRESENT/ABSENT WHEN, OCCURS, COLUMN PLUS/LEFT/RIGHT/CENTER, LINE NEXT
+PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
+BEFORE REPORTING, plusieurs rapports par FD, READ/WRITE d'un fichier de
+rapport ; un INITIATE d'un rapport actif ou un GENERATE/TERMINATE sans
+INITIATE est un arrêt nommé.
 
 Les clauses FD `LABEL RECORDS OMITTED/STANDARD`, `BLOCK CONTAINS` (en records
 ou caractères, éventuellement sous forme de plage) et `RECORDING MODE F` sont
@@ -451,11 +768,16 @@ acceptées dans le profil disque GnuCOBOL vérifié. LABEL/BLOCK sont conservée
 dans les métadonnées sans ajouter de labels ni de blocage physique. Une clause
 `RECORD CONTAINS n CHARACTERS` exige que n égale la taille physique de chaque
 description FD ; sinon le compilateur natif pourrait sélectionner un format
-variable et la conversion est refusée.
+variable et la conversion est refusée. `DATA RECORD(S) [IS|ARE] nom...` est
+conservée comme métadonnée : GnuCOBOL n'en résout pas les noms et ne lui donne
+aucun effet ; la clause en double ou sans nom reste refusée.
 
-Les compteurs ADVANCING variables, LINAGE, les autres clauses FD,
-les formats variables, I-O/REWRITE et les fichiers relatifs/indexés restent
-refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
+Les fichiers INDEXED suivent le gestionnaire Berkeley DB de libcob 3.2
+(clé principale, clés alternées avec ou sans doublons, START, READ KEY,
+DELETE, REWRITE), dans un format disque propre à cobol2rust (`nom`, `nom.1`,
+...) qui n'est pas interchangeable avec les fichiers BDB de GnuCOBOL ; le
+vérificateur compare leur contenu logique (`cobol2rust/bdb_dump.c`, libdb).
+Les autres clauses FD et les clés INDEXED composées (SOURCE IS), SUPPRESS ou READ PREVIOUS restent refusés. Le vérificateur refuse les réglages de concaténation de fichiers non
 modélisés (`COB_SEQ_CONCAT_NAME`, `COB_SEQ_CONCAT_SEP`). Les options `COB_LS_FIXED`
 et `COB_LS_SPLIT` s'appliquent seulement au runtime LINE SEQUENTIAL.
 

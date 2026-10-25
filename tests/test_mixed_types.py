@@ -44,21 +44,24 @@ class MixedTypeTests(unittest.TestCase):
             with self.subTest(condition=condition), self.assertRaises(CobolError):
                 self.emit(data, f"if {condition} continue end-if.")
 
-    def test_mixed_evaluate_remains_outside_the_comparison_profile(self):
-        data = "01 n pic 99. 01 t pic xx."
+    def test_evaluate_uses_the_comparison_profile(self):
+        # cb_emit_evaluate builds the same comparisons as IF.
+        data = "01 n pic 99. 01 t pic xx. 01 w pic 999."
         for body in ('evaluate n when "12" continue end-evaluate.',
                      "evaluate t when 12 continue end-evaluate.",
                      "evaluate t when zero continue end-evaluate."):
-            with self.subTest(body=body), self.assertRaises(CobolError):
+            with self.subTest(body=body):
                 self.emit(data, body)
+        # cob_cmp_alnum of the item's digits with the literal (mixed_literal_compare.cob).
+        self.emit(data, 'evaluate w when "12" continue end-evaluate.')
 
-    def test_direct_text_literals_with_unmodelled_native_optimizations_are_rejected(self):
-        for data, condition in (("01 n pic s99v99.", 'n = "1230"'),
-                                ("01 n pic s99v99.", '"1230" = n'),
-                                ("01 n pic 999.", 'n = "12"'),
+    def test_direct_text_literals_compare_by_digits_unless_folded(self):
+        # compare_field_literal folds n = "1230" with PIC S99V99; the others
+        # are cob_cmp_alnum of the stored digits (mixed_literal_compare.cob).
+        for data, condition in (("01 n pic 999.", 'n = "12"'),
                                 ("01 n pic 999.", '"0012" = n'),
                                 ("01 n pic 999.", 'n = "12A"')):
-            with self.subTest(data=data, condition=condition), self.assertRaises(CobolError):
+            with self.subTest(data=data, condition=condition):
                 self.emit(data, f"if {condition} continue end-if.")
 
     def test_mixed_condition_values_and_direct_edited_comparisons_are_rejected(self):
@@ -66,21 +69,29 @@ class MixedTypeTests(unittest.TestCase):
                      '01 t pic xx. 88 chosen value 12.'):
             with self.subTest(data=data), self.assertRaises(CobolError):
                 self.emit(data, "if chosen continue end-if.")
+        # Edited items compare as alphanumeric (comparison_folding.cob).
         for condition in ('edited-a = "12"', "edited-a = 12"):
-            with self.subTest(condition=condition), self.assertRaises(CobolError):
+            with self.subTest(condition=condition):
                 self.emit("01 edited-a pic +99.", f"if {condition} continue end-if.")
 
     def test_text_literals_to_numeric_and_index_receivers_remain_rejected(self):
         data = ("01 n pic s99v99. 01 t pic x(6). "
                 "01 table-a. 02 cell-a pic x occurs 2 indexed by idx.")
-        for body in ('move "123" to n.', 'move "12.30" to n.',
-                     "move spaces to n.", "move t to idx."):
+        for body in ("move spaces to n.", "move t to idx."):
             with self.subTest(body=body), self.assertRaises(CobolError):
                 self.emit(data, body)
 
+    def test_text_literal_to_display_number_follows_cb_build_move_literal(self):
+        # Same scale: bytes copied at compile time; else cob_move at run time.
+        rust = self.emit("01 n pic 9(4). 01 s pic s99v99. 01 b pic 99 comp.", 'move "12" to n. move "1.5" to s.')[0]
+        self.assertIn("vec![48, 48, 49, 50]), true)", rust)
+        self.assertIn("assign_text_move(", rust)
+        with self.assertRaises(CobolError):
+            self.emit("01 b pic 99 comp.", 'move "12" to b.')
+
     def test_deediting_and_arithmetic_are_not_promoted_by_text_move(self):
         data = "01 n pic 999. 01 t pic xxx. 01 edited-a pic +999."
-        for body in ("move edited-a to n.", "move edited-a to edited-a.",
+        for body in (
                      "compute n = t + 1.", "compute t = 1.",
                      "add t to n.", "move spaces to edited-a."):
             with self.subTest(body=body), self.assertRaises(CobolError):
@@ -257,8 +268,6 @@ if n = "1230" display "DIRECT:TRUE" else display "DIRECT:FALSE" end-if
 if n = t display "FIELD:TRUE" else display "FIELD:FALSE" end-if
 stop run.
 ''')
-        with self.assertRaises(CobolError):
-            Emitter(Parser(source_text).parse()).generate()
         cobc = find_tool("cobc")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -272,6 +281,13 @@ stop run.
                                     capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
         self.assertEqual(result.stdout, b"DIRECT:FALSE\nFIELD:TRUE\n")
+        # The direct comparison is folded like cobc's compare_field_literal.
+        if find_tool("cargo"):
+            with tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "literal-optimization.cob"
+                source.write_text(source_text, encoding="utf-8")
+                report = verify(source, fmt="free")
+            self.assertTrue(report["match"], report)
 
 
 if __name__ == "__main__":

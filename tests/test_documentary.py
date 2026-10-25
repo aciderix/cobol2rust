@@ -146,8 +146,8 @@ class DocumentaryTests(unittest.TestCase):
                       "    source-computer. GNU-Linux with debugging mode.")
         normalized = normalize(source, "free")
         self.assertIn("with debugging mode.", normalized)
-        with self.assertRaisesRegex(CobolError, "ligne 6:"):
-            Parser(normalized).parse()
+        # The clause is parsed: DEBUGGING MODE is modelled.
+        self.assertTrue(Parser(normalized).parse().debugging_mode)
 
     def test_area_a_copy_is_not_hidden_by_documentary_text(self):
         with tempfile.TemporaryDirectory() as directory:

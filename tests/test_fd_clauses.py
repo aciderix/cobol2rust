@@ -14,8 +14,8 @@ from tests.test_files import file_program
 
 
 class FdClauseTests(unittest.TestCase):
-    def clauses(self, source):
-        parser, spec = Parser(source), SimpleNamespace(fd_clauses={})
+    def clauses(self, source, organization="SEQUENTIAL"):
+        parser, spec = Parser(source), SimpleNamespace(fd_clauses={}, organization=organization)
         parse_fd_clauses(parser, spec)
         self.assertTrue(parser.at("<EOF>"))
         return spec.fd_clauses
@@ -41,9 +41,19 @@ class FdClauseTests(unittest.TestCase):
         self.assertEqual(self.clauses("block contains 0 records."),
                          {"block_contains": {"minimum": 0, "maximum": 0, "unit": "RECORDS"}})
 
+    def test_documentary_data_records_are_kept_as_metadata(self):
+        self.assertEqual(self.clauses("data record is rec."), {"data_records": ["REC"]})
+        self.assertEqual(self.clauses("data records are rec-a, rec-b."), {"data_records": ["REC-A", "REC-B"]})
+        self.assertEqual(self.clauses("label records standard data records rec-a rec-b block 2."),
+                         {"label_records": "STANDARD", "data_records": ["REC-A", "REC-B"],
+                          "block_contains": {"minimum": 2, "maximum": 2, "unit": "RECORDS"}})
+        # GnuCOBOL 3.2 ne résout pas ces noms : la clause n'a aucun effet.
+        parsed = Parser(file_program(fd="fd f data record is unknown-rec. 01 rec pic x(8).")).parse()
+        self.assertEqual(parsed.files["F"].fd_clauses["data_records"], ["UNKNOWN-REC"])
+
     def test_unsupported_and_ambiguous_fd_clauses_are_not_ignored(self):
         cases = [
-            "record contains 7 to 9 characters.", "record is varying from 1 to 9 characters.",
+            "record contains 9 to 7 characters.", "record is varying from 9 to 9 characters.",
             "record contains 0 characters.", "record contains -5 characters.",
             "record contains 5.5 characters.", "record contains 5 character.",
             "block contains 12 to 1 records.", "block contains -1 records.",
@@ -52,13 +62,24 @@ class FdClauseTests(unittest.TestCase):
             "block contains 1 records block contains 2 records.",
             "record contains 5 characters record contains 5 characters.",
             "recording mode f recording mode f.", "recording mode v.",
-            "recording mode s.", "recording mode u.", "linage 66 lines.",
-            "code-set is custom-alphabet.", "value of file-id is 'other.bin'.",
-            "data record is rec.", "external.", "global.",
+            "recording mode s.", "recording mode u.", "linage 66 lines footing 2 footing 3.",
+            "linage.", "linage 'A'.", "linage 6 top.",
+            "code-set is custom-alphabet.",
+            "external is external.", "global global.", "external global.", "data rec.", "data record.", "data records are.",
+            "data record is rec data record is rec.", "data record label records standard.",
+            "data record is 'rec'.", "data record is rec of f.",
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
                 self.clauses(source)
+
+    def test_linage_phrases_in_any_order(self):
+        clauses = self.clauses("data record rec linage is page-size lines lines at bottom 2 "
+                               "with footing at 50 at top 1.")
+        self.assertEqual(clauses["linage"], {"lines": ("name", "PAGE-SIZE", ()), "bottom": ("literal", 2),
+                                             "footing": ("literal", 50), "top": ("literal", 1)})
+        with self.assertRaises(CobolError):
+            self.clauses("linage 60.", organization="RELATIVE")
 
     def test_record_length_is_checked_after_physical_layout(self):
         select = 'select f assign to "data.bin" organization sequential file status fs.'
@@ -83,6 +104,8 @@ class FdClauseNativeTests(unittest.TestCase):
             ("organization sequential", "label records omitted block contains 0 records record contains 5 characters", b"AB   "),
             ("organization sequential", "recording mode is f label record is standard block contains 1 to 12 records record contains 5", b"AB   "),
             ("organization line sequential", "label records standard block contains 120 characters record contains 5 characters recording mode f", b"AB\n"),
+            ("organization sequential", "label records standard data records are rec, fs", b"AB   "),
+            ("organization line sequential", "data record is absent-name record contains 5", b"AB\n"),
         ]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

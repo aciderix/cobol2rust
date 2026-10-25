@@ -1,5 +1,357 @@
 # Validation — 22 octobre 2026
 
+## Fin de la première partie : couverture NIST du runner natif — 25 octobre 2026
+
+- **369 tests découverts : 368 réussis, un test PE Windows ignoré.**
+- **129/129 comparaisons locales conformes** ; nouvelles fixtures
+  `external_files.cob`, `global_files.cob`, `initial_program.cob`,
+  `line_sequential_variable.cob`, `report_no_page.cob`, `communication.cob`
+  (`-std=cobol85`) et `stop_literal.cob` (SIGINT sur le caractère 03, vérifié
+  par `test_runtime_registers`).
+- NIST : **451/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **427/427 programmes principaux conformes** (dont 14 que report.pl compile
+  seulement, et le module CM que la suite n'exécute pas) : **9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT, total 9748**, exactement le bilan natif de
+  `summary.txt`. Rapports : `build/nist-verify-final.json`,
+  `build/coverage-nist-final.json`. 13 programmes ajoutés : CM201M, CM303M,
+  DB205A, DB304M, IC227A, IC233A, IC234A, IC401M, NC401M, OBNC1M, RW301M,
+  RW302M, SQ401M ; DB103M est vérifié dans ses deux exécutions (COB_SET_DEBUG
+  Y puis N, 42/42).
+- Restent refusés : CM101M, CM102M, CM103M, CM104M, CM105M, CM202M, CM401M,
+  que cobc 3.2 ne compile pas lui-même (erreurs de syntaxe CD, CD sans
+  enregistrement).
+- L'écart OBNC1M est levé : les deux programmes meurent de SIGINT après le
+  STOP littéral et le REPORT est identique.
+
+## Horloge, RANDOM, comparaisons littérales, SD à ODO — 25 octobre 2026
+
+- **354 tests découverts : 352 réussis, un test PE Windows ignoré** ; l'échec
+  restant (`test_p_scaling`) encodait l'ancien refus d'un article P comparé à un
+  littéral alphanumérique, comparaison désormais émise et vérifiée en natif
+  (fixture `mixed_literal_compare.cob`, cas d1-d5).
+- **122/122 comparaisons locales conformes** ; nouvelles fixtures
+  `clock_accept.cob` (ACCEPT FROM DATE/DAY/DAY-OF-WEEK/TIME sous
+  COB_CURRENT_DATE, normalisation de mktime), `random_function.cob`
+  (Mersenne Twister de GMP) et `mixed_literal_compare.cob`
+  (`compare_field_literal` de cobc).
+- NIST : **439/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **414/415 programmes principaux conformes** (9555 PASS, 0 FAIL, 16 DELETED,
+  118 INSPECT) : `build/nist-verify-isolated.json`,
+  `build/coverage-nist-isolated.json`. 5 programmes ajoutés : IF131A, IF403M,
+  NC103A, NC214M (horloge figée au moment du log de référence), ST137A.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
+## USE FOR DEBUGGING sur articles — 25 octobre 2026
+
+- **347 tests découverts : 346 réussis, un test PE Windows ignoré.**
+- **119/119 comparaisons locales conformes** ; nouvelle fixture
+  `debugging_items.cob` (receveurs et ALL REFERENCES, IF débogué après ses
+  branches, PERFORM VARYING/AFTER/UNTIL, GO TO DEPENDING, sous-scripts et
+  qualificatifs, WRITE d'un enregistrement surveillé), en default et cobol85,
+  commutateur de débogage actif ; MOVE sans `cob_check_numeric` vérifié avec
+  `-fno-ec=data-incompatible`.
+- NIST : **434/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **409/410 programmes principaux conformes** (9438 PASS, 0 FAIL, 16 DELETED,
+  118 INSPECT) : `build/nist-verify-debug-items.json`,
+  `build/coverage-nist-debug-items.json`. 4 programmes ajoutés : DB201A
+  (avec `-fno-ec=data-incompatible` comme report.pl), DB202A, DB203A, DB303M.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
+## Report Writer — 24 octobre 2026
+
+- **341 tests découverts : 340 réussis, un test PE Windows ignoré.**
+- **117/117 comparaisons locales conformes** ; nouvelle fixture
+  `report_writer.cob` (REPORT/PAGE HEADING, DETAIL à plusieurs lignes,
+  LINE absolue, PAGE/REPORT FOOTING, GENERATE du rapport, deux rapports, OPEN
+  EXTEND) ; stdout et fichiers de rapport identiques à cobc.
+- NIST : **430/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **405/406 programmes principaux conformes** (9343 PASS, 0 FAIL, 12 DELETED,
+  104 INSPECT) : `build/nist-verify-report.json`,
+  `build/coverage-nist-report.json`. 4 programmes ajoutés : RW101A, RW102A,
+  RW103A, RW104A (fichiers de rapport XXXXX049 identiques à ceux de cobc).
+  Écart connu inchangé : OBNC1M (SIGINT).
+
+## OCCURS DEPENDING, symboles du module, programmes contenus — 24 octobre 2026
+
+- **336 tests découverts : 335 réussis, un test PE Windows ignoré.**
+- **116/116 comparaisons locales conformes** ; nouvelles fixtures
+  `odo_internal.cob` (contrôleur interne, READ INTO, enregistrements FD
+  variables), `decimal_comma.cob` (CURRENCY SIGN, DECIMAL-POINT IS COMMA),
+  `literal_numeric_move.cob`, `initialize_replacing.cob`,
+  `nested_programs.cob` (COMMON, GLOBAL, EXTERNAL, programme frère) et
+  `current_date.cob` (format de CURRENT-DATE et WHEN-COMPILED).
+- NIST : **426/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **401/402 programmes principaux conformes** (9303 PASS, 0 FAIL, 12 DELETED,
+  104 INSPECT) : `build/nist-verify-odo.json`, `build/coverage-nist-odo.json`.
+  19 programmes ajoutés : IC226A, IC228A, IC235A, IF107A, IF142A, IF401M,
+  NC105A, NC107A, NC108M, NC223A, NC247A, RL210A, RL211A, SM103A, SQ111A,
+  SQ214A, ST110A, ST123A, ST146A. Écart connu inchangé : OBNC1M (SIGINT ; libcob
+  perd alors les tampons stdio des fichiers ouverts).
+
+## LINAGE, ADVANCING et formes de préprocesseur — 24 octobre 2026
+
+- **327 tests découverts : 326 réussis, un test PE Windows ignoré.**
+- **110/110 comparaisons locales conformes** ; nouvelles fixtures
+  `linage.cob` (FOOTING/TOP/BOTTOM littéraux et noms de données, AT/NOT AT
+  END-OF-PAGE, ADVANCING identifiant, PAGE, FORMFEED, C01, 0 ligne, statut 57
+  au changement de page, LINE SEQUENTIAL avec AFTER/BEFORE) et
+  `preprocessing.cob` (REPLACE/REPLACE OFF, COPY OF bibliothèque, TEST BEFORE
+  sans WITH, homonymes, I-O-CONTROL vide, SET à plusieurs groupes, NOT ON
+  EXCEPTION après ADD) ; les trois fichiers LINAGE sont identiques à cobc.
+- NIST : **407/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **382/383 programmes principaux conformes** (8325 PASS, 0 FAIL, 8 DELETED,
+  104 INSPECT, ces derniers surtout dans les programmes d'impression LINAGE
+  dont le REPORT est comparé octet à octet) : `build/nist-verify-linage.json`,
+  `build/coverage-nist-linage.json`. 17 programmes ajoutés : IC222A, IF402M,
+  NC114M, NC174A, NC201A, NC211A, SM207A, SM208A, SM401M, SQ101M, SQ201M,
+  SQ207M, SQ208M, SQ209M, SQ210M, SQ212A, ST147A. Écart connu inchangé :
+  OBNC1M (SIGINT).
+
+## PROGRAM COLLATING SEQUENCE et fonctions mathématiques — 24 octobre 2026
+
+- **311 tests découverts : 310 réussis, un test PE Windows ignoré.**
+- **108/108 comparaisons locales conformes** ; nouvelles fixtures
+  `collating_sequence.cob` (alphabet littéral THRU/ALSO, HIGH/LOW-VALUE,
+  comparaisons et SORT selon la table) et `math_functions.cob` (SQRT, LOG,
+  LOG10, EXP, trigonométrie, STANDARD-DEVIATION, PI, E).
+- NIST : **390/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **365/366 programmes principaux conformes** (8066 PASS, 0 FAIL, 8 DELETED,
+  14 INSPECT) : `build/nist-verify-math.json`, `build/coverage-nist-math.json`.
+  15 programmes ajoutés : IF101A, IF103A, IF104A, IF106A, IF116A, IF117A,
+  IF135A, IF136A, IF137A, IF139A, IX210A, IX214A, IX215A, NC215A, NC219A.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
+## Organisation INDEXED — 24 octobre 2026
+
+- **310 tests découverts : 309 réussis, un test PE Windows ignoré.**
+- **106/106 comparaisons locales conformes** ; nouvelle fixture
+  `indexed_files.cob` (clés alternées avec et sans doublons, START partiel,
+  READ KEY, DELETE/REWRITE puis READ NEXT, statuts 21/22/23/43/46).
+- NIST : **375/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **350/351 programmes principaux conformes** (7671 PASS, 0 FAIL, 8 DELETED,
+  14 INSPECT) : `build/nist-verify-indexed.json`,
+  `build/coverage-nist-indexed.json`. 39 programmes IX ajoutés.
+- Les fichiers INDEXED sont comparés logiquement : `cobol2rust/bdb_dump.c`
+  (libdb 5.3) liste les paires clé/donnée des btrees Berkeley DB de cobc,
+  comparées à celles du format propre de cobol2rust. Les programmes chaînés
+  reçoivent côté Rust les fichiers écrits par leurs prédécesseurs convertis.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
+## DEBUGGING MODE et USE FOR DEBUGGING — 24 octobre 2026
+
+- **310 tests découverts : 309 réussis, un test PE Windows ignoré.**
+- **105/105 comparaisons locales conformes** ; nouvelle fixture
+  `debugging_procedures.cob` (dialectes `default` et `cobol85`,
+  `COB_SET_DEBUG=Y`, et sans le commutateur dans les tests).
+- NIST : **336/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **311/312 programmes principaux conformes** (7275 PASS, 0 FAIL, 7 DELETED,
+  14 INSPECT) : `build/nist-verify-debugging.json`,
+  `build/coverage-nist-debugging.json`. Neuf programmes DB ajoutés (DB101A,
+  DB102A, DB103M, DB104A, DB105A, DB204A, DB301M, DB302M, DB305M), avec
+  `COB_SET_DEBUG` réglé comme report.pl (Y pour DB sauf DB102A). Écart connu
+  inchangé : OBNC1M (SIGINT).
+
+## ALTER, noms de procédure, dialecte cobol85 — 24 octobre 2026
+
+- **307 tests découverts : 306 réussis, un test PE Windows ignoré.**
+- **103/103 comparaisons locales conformes** ; nouvelles fixtures
+  `alter_statement.cob` et `default_byte.cob` (vérifiées sous `default` et
+  `-std=cobol85`), `procedure_names.cob`, `perform_backward_thru.cob`,
+  `perform_times_count.cob`.
+- NIST : **327/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **302/303 programmes principaux conformes** (6980 PASS, 0 FAIL, 7 DELETED,
+  1 INSPECT) : `build/nist-verify-alter.json`, `build/coverage-nist-alter.json`.
+  L'original est désormais compilé avec les options de report.pl
+  (`-std=cobol85 --debug`) et le Rust converti en dialecte cobol85 ; les
+  entrées clavier `$raw_input` de report.pl sont fournies (NC302M, OBNC1M).
+- Écart connu : OBNC1M lit le caractère 03 au 9ᵉ `STOP littéral` ; libcob
+  lève SIGINT (processus tué), le Rust s'arrête par un arrêt nommé (code 70).
+  Le REPORT est identique au journal natif ; seul le mode de fin diffère.
+
+## Fonctions intrinsèques — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **96/96 comparaisons locales conformes** ; nouvelle fixture
+  `intrinsic_functions.cob`.
+- NIST : **313/458** émissions acceptées, dont 24 sous-programmes `lib`
+  désormais émis comme sous-programmes et vérifiés au travers de leurs
+  appelants ; **289/289 programmes principaux conformes** (6608 PASS, 0 FAIL,
+  7 DELETED, 1 INSPECT) : `build/nist-verify-intrinsics.json`,
+  `build/coverage-nist-intrinsics.json`.
+
+## COPY REPLACING — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **95/95 comparaisons locales conformes** ; nouvelle fixture
+  `copy_replacing.cob` (copybooks `replacing_items.cpy`, `replacing_code.cpy`).
+- Séparateurs de COPY vérifiés contre cobc (`, COPY`, `COPY ;` acceptés ;
+  `COPY "x";.` refusé).
+- NIST : **262/458** ; **260/260 programmes acceptés conformes** (6156 PASS,
+  0 FAIL) : `build/nist-verify-copy-replacing.json`. SM206A est vérifié avec
+  `-fdebugging-line`, comme le compile report.pl.
+
+## CORRESPONDING, troncature DISPLAY, dé-édition — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **94/94 comparaisons locales conformes** ; nouvelles fixtures
+  `corresponding.cob`, `display_truncation.cob`, `deediting.cob`.
+- NIST : **256/458** ; **254/254 programmes acceptés conformes** (6104 PASS,
+  0 FAIL) : `build/nist-verify-corresponding.json`.
+
+## Fichiers, RENAMES, exponentiation — 24 octobre 2026
+
+- **305 tests découverts : 304 réussis, un test PE Windows ignoré.**
+- **91/91 comparaisons locales conformes** ; nouvelles fixtures `renames.cob`,
+  `exponentiation.cob`, `figurative_numeric.cob`, `negative_zero.cob`.
+- NIST : **251/458** ; **249/249 programmes acceptés conformes** (5841 PASS,
+  0 FAIL) : `build/nist-verify-files-renames.json`.
+- Sonde native : avec un exposant littéral négatif, `cob_decimal_pow` écrase la
+  constante décimale partagée (`3 ** -1` puis `3 ** -1` donne 0,3333 puis 27) ;
+  ce cas est refusé.
+
+## Conditions cobc, STRING/UNSTRING — 24 octobre 2026
+
+- **304 tests découverts : 303 réussis, un test PE Windows ignoré.**
+- **87/87 comparaisons locales conformes** ; nouvelles fixtures
+  `abbreviated_conditions.cob` (23 formes de conditions), `string_unstring.cob`.
+- NIST : **233/458** ; **231/231 programmes acceptés conformes** (5497 PASS,
+  0 FAIL) : `build/nist-verify-conditions.json` (230, dont NC211A rejeté par
+  cobc car `NOTHING` est réservé, désormais refusé aussi) et
+  `build/nist-verify-string.json` (NC217A, NC218A).
+
+## SEARCH, USAGE INDEX, INSPECT, EVALUATE — 24 octobre 2026
+
+- **301 tests découverts : 300 réussis, un test PE Windows ignoré.**
+- **85/85 comparaisons locales conformes** ; nouvelles fixtures
+  `usage_index.cob`, `search_tables.cob`, `inspect_statement.cob`,
+  `inspect_markers.cob` (marqueurs statiques de libcob entre instructions),
+  `evaluate_forms.cob`, `nested_conditions.cob`.
+- NIST : **229/458** ; **227/227 programmes acceptés conformes** (5269 PASS,
+  0 FAIL) : `build/nist-verify-inspect.json` (224) et
+  `build/nist-verify-subscripts.json`.
+- Défaut corrigé : deux `WHEN` consécutifs ne partageaient pas les
+  instructions suivantes (le premier ne faisait rien), écart silencieux
+  détecté par une sonde native.
+
+## SPECIAL-NAMES et ACCEPT — 24 octobre 2026
+
+- **292 tests découverts : 291 réussis, un test PE Windows ignoré.**
+- **78/78 comparaisons locales conformes** ; nouvelles fixtures
+  `special_names.cob` (stdout et stderr identiques), `accept_input.cob`.
+- NIST : **205/458** ; **203/203 programmes acceptés conformes** (4650 PASS).
+
+## Segments, CLOSE REEL/NO REWIND — 24 octobre 2026
+
+- **290 tests découverts : 289 réussis, un test PE Windows ignoré.**
+- **77/77 comparaisons locales conformes** ; nouvelle fixture `close_reel.cob`.
+- NIST : **198/458** ; **196/196 programmes acceptés conformes** (4566 PASS).
+
+## SORT et MERGE — 24 octobre 2026
+
+- **289 tests découverts : 288 réussis, un test PE Windows ignoré.**
+- **76/76 comparaisons locales conformes** ; nouvelle fixture `sort_merge.cob`
+  (USING/GIVING, procédures, MERGE ; octets des fichiers GIVING identiques).
+- NIST : **182/458** ; **180/180 programmes acceptés conformes** (4474 PASS).
+
+## Formes arithmétiques, HIGH/LOW-VALUE — 23 octobre 2026
+
+- **286 tests découverts : 285 réussis, un test PE Windows ignoré.**
+- **75/75 comparaisons locales conformes** ; nouvelles fixtures
+  `divide_remainder.cob`, `high_low_values.cob`, `relative_start_ge.cob`.
+- NIST : **166/458** ; **164/164 programmes acceptés conformes** (4296 PASS).
+
+## SIGN, SYNCHRONIZED, clauses de données — 23 octobre 2026
+
+- **283 tests découverts : 282 réussis, un test PE Windows ignoré.**
+- **72/72 comparaisons locales conformes** ; nouvelles fixtures
+  `sign_clause.cob`, `condition_figuratives.cob`.
+- NIST : **153/458** ; **151/151 programmes acceptés conformes** (3656 PASS).
+
+## Édition, pliage des comparaisons, JUSTIFIED — 23 octobre 2026
+
+- **278 tests découverts : 277 réussis, un test PE Windows ignoré.**
+- **69/69 comparaisons locales conformes** ; nouvelles fixtures
+  `numeric_editing.cob` (23 images × 8 valeurs), `alnum_editing.cob`,
+  `comparison_folding.cob`, `edited_size_error.cob`, `value_all_justified.cob`.
+- NIST : **141/458** ; **139/139 programmes acceptés conformes** (3072 PASS).
+
+## NEXT SENTENCE, programmes frères, PICTURE P — 23 octobre 2026
+
+- **269 tests découverts : 268 réussis, un test PE Windows ignoré.**
+- **65/65 comparaisons locales conformes** ; nouvelles fixtures
+  `next_sentence.cob`, `sibling_programs.cob`, `p_scaling.cob`.
+- NIST : **131/458** ; **129/129 programmes acceptés conformes** (2180 PASS).
+
+## CALL et programmes liés — 23 octobre 2026
+
+- **261 tests découverts : 260 réussis, un test PE Windows ignoré.**
+- **62/62 comparaisons locales conformes** ; nouvelle fixture `call_main.cob`
+  (+ `calls/`), sous-programmes compilés en modules `cobc -m` côté natif.
+- NIST : **126/458** ; revérification de tous les programmes acceptés :
+  **124/124 conformes** (2077 PASS, 0 FAIL) ; 9 nouveaux programmes IC.
+
+## Enregistrements variables — 23 octobre 2026
+
+- **255 tests découverts : 254 réussis, un test PE Windows ignoré.**
+- **61/61 comparaisons locales conformes** (nouvelles fixtures
+  `variable_records`, `perform_after`, `lexical_forms`, `set_all`).
+- NIST : **115/458** ; 12 + 7 + 1 nouvelles sources conformes.
+
+## RELATIVE — 23 octobre 2026
+
+- **243 tests découverts : 242 réussis, un test PE Windows ignoré.**
+- **57/57 comparaisons locales conformes**, dont `relative.cob` : statuts,
+  clés, trous, START et octets d'emplacements identiques au natif.
+- NIST : **95/458** ; 29 nouvelles comparaisons conformes.
+
+## OPEN I-O et REWRITE — 23 octobre 2026
+
+- **239 tests découverts : 238 réussis, un test PE Windows ignoré.**
+- `sequential_io.cob` : statuts 35/05/43/48/49 et octets finaux identiques ;
+  le fichier OPTIONAL ouvert en I-O est créé vide comme en natif.
+- NIST : **66/458** ; vérification complète des acceptées **66/66** conformes.
+
+## DECLARATIVES et fichiers — 23 octobre 2026
+
+- **235 tests découverts : 234 réussis, un test PE Windows ignoré.**
+- **55/55 comparaisons locales conformes**, dont `declaratives.cob` : USE par
+  fichier et par mode, 10/46/41/42/35, OPEN multiple, mode conservé par 41.
+- NIST : **59/458 émissions acceptées** ; 29 nouvelles comparaisons conformes,
+  117 PASS natifs identiques.
+
+## Groupes, configuration et receveurs multiples — 23 octobre 2026
+
+- **231 tests découverts : 230 réussis, un test PE Windows ignoré.**
+- **54/54 comparaisons locales conformes**, dont `group_value.cob` et
+  `multi_receivers.cob` (22 lignes mesurées en natif avant implémentation).
+- NIST : **30/458 émissions acceptées** ; **30/30 comparaisons conformes** avec
+  les entrées reconstituées du runner, REPORT identiques aux journaux natifs :
+  401 PASS, 1 INSPECT, 0 FAIL (`build/nist-verify-30.json`).
+- La régénération de `.tools/nist-native-gnucobol-3.2` par
+  `tools/nist_native_reference.sh` reproduit le même résumé (9610 PASS) ; seul
+  NC214M diffère, par l'heure courante qu'il imprime.
+
+## DATA RECORDS et MOVE numérique tronquant — 23 octobre 2026
+
+Environnement : Ubuntu 24.04 x86-64, Python 3.13, Rust 1.97, GnuCOBOL 3.2.0
+compilé depuis les sources GNU signées avec BDB (`tools/install_gnucobol.sh`).
+
+- **212 tests découverts : 211 réussis, un test PE Windows ignoré.** Les ajouts
+  couvrent DATA RECORDS (métadonnée, refus natifs, deux comparaisons de
+  fichiers), le MOVE tronquant, l'index source strict, les deux chemins COMP-3
+  de cobc et l'arrêt nommé du quartet de tête.
+- **52/52 comparaisons locales conformes** (`build/verification.json`). La
+  fixture `numeric_truncation.cob` couvre DISPLAY/COMP/COMP-3, signes, V,
+  littéraux et zéros négatifs `00p`/`000D`, mesurés en natif avant implémentation.
+- NIST statique : **20/458 émissions acceptées**, 16 blocages au prétraitement,
+  422 à l'analyse, aucun à l'émission et zéro erreur interne
+  (`build/coverage-nist-data-records.json`).
+- **8/8 nouvelles comparaisons NIST conformes** et **12/12 anciennes** sans
+  régression. Les REPORT des 8 nouvelles sources sont identiques aux journaux
+  du runner NIST natif : 44 PASS, sans FAIL/DELETED/INSPECT.
+- Runner NIST natif complet de référence : 426 programmes, 9748 tests,
+  9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT (`.tools/nist-native-gnucobol-3.2`).
+
 ## Séparateurs et paragraphes documentaires
 
 - **200 tests découverts : 199 réussis, un test PE Windows ignoré.** Les 37

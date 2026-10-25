@@ -18,6 +18,14 @@ def fixed(body, data=()):
 
 
 class FixedContinuationTests(unittest.TestCase):
+    def test_debugging_lines_are_comments_without_debugging_mode(self):
+        text = normalize('000100D    display "debug".\n000200     display "kept".', "fixed")
+        self.assertEqual(text.splitlines(), ["", '    display "kept".'])
+        self.assertEqual(normalize('000100d    display "debug".', "fixed"), "")
+        # GnuCOBOL activates them on WITH DEBUGGING MODE (pplex.l).
+        active = normalize('       source-computer. x with debugging mode.\n000100D    display "x".', "fixed")
+        self.assertEqual(active.splitlines()[1], '    display "x".')
+
     def test_words_numbers_and_pictures_continue_without_spaces(self):
         text = normalize("       DISPL   \n      -    AY 12\n      -    34.", "fixed")
         self.assertEqual([token.text for token in lex(text)], ["DISPLAY", "1234", ".", "<EOF>"])
@@ -83,7 +91,6 @@ class FixedContinuationTests(unittest.TestCase):
             '           DISPL\n       >>source format fixed\n      -    AY "bad".',
             '           display "open\n       >>source format free\ndisplay "bad".',
             '           display "open\n      -    >>source format free',
-            '000100D    display "debug".',
         ]
         for text in cases:
             with self.subTest(text=text), self.assertRaises(CobolError):
@@ -111,6 +118,14 @@ class FixedContinuationTests(unittest.TestCase):
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")
 class FixedContinuationNativeTests(unittest.TestCase):
+    def test_debugging_line_is_dropped_like_gnucobol(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "debugging-line.cob"
+            source.write_text(fixed(['000100D    display "debug"', '           display "kept"']), encoding="utf-8")
+            report = verify(source, fmt="fixed")
+        self.assertTrue(report["match"], report)
+        self.assertEqual(report["cobol_stdout"], "kept\n")
+
     def test_continued_sources_match_gnucobol(self):
         prefix = '           display "'
         first = '           display "AB'

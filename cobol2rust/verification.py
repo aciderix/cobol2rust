@@ -3,13 +3,47 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from .cli import convert
 from .frontend import CobolError, source_format
-from .toolchain import build_rust, compiler_env, find_tool
+from .toolchain import CACHE_ROOT, build_rust, compiler_env, find_tool
+
+INDEXED_MAGIC = b"cobol2rust-btree-1\n"
+
+
+def bdb_dumper() -> Path:
+    """Compile bdb_dump.c (libdb) once: the logical content of cobc's files."""
+    target = CACHE_ROOT / "bdb_dump"
+    source = Path(__file__).with_name("bdb_dump.c")
+    if target.is_file() and target.stat().st_mtime >= source.stat().st_mtime:
+        return target
+    compiler = find_tool("gcc") or find_tool("cc")
+    if not compiler:
+        raise CobolError("compilateur C requis pour comparer les fichiers INDEXED (Berkeley DB)")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run([compiler, "-O1", "-o", str(target), str(source), "-ldb"], capture_output=True)
+    if result.returncode:
+        raise CobolError("bdb_dump: libdb introuvable pour comparer les fichiers INDEXED:\n"
+                         + result.stderr.decode(errors="replace"))
+    return target
+
+
+def indexed_contents(left, right, left_dir):
+    """Replace each INDEXED file pair (cobc: a Berkeley DB btree; Rust:
+    cobol2rust's own format) by its key/data pairs in btree order, as
+    bdb_dump writes them. Other files stay compared byte for byte."""
+    names = []
+    for name in sorted(left.keys() & right.keys()):
+        if left[name][12:16] == b"\x62\x31\x05\x00" and right[name].startswith(INDEXED_MAGIC):
+            dump = subprocess.run([str(bdb_dumper()), str(left_dir / name)], capture_output=True)
+            left[name] = dump.stdout if dump.returncode == 0 else b"<bdb_dump failed>" + dump.stderr
+            right[name] = right[name][len(INDEXED_MAGIC):]
+            names.append(name)
+    return names
 
 
 def snapshot(directory: Path):
@@ -44,13 +78,18 @@ def validate_file_paths(conversion):
                 raise CobolError(f"redirection de fichier par environnement non prise en charge: {key}")
 
 
-def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None):
+def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
+           call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
+           no_ec_data_incompatible=False):
+    """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
+    files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
     runtime_env = dict(runtime_env or {})
-    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT"} for key in runtime_env):
-        raise CobolError("seuls COB_LS_FIXED et COB_LS_SPLIT peuvent être définis par le vérificateur")
+    if any(key not in {"COB_LS_FIXED", "COB_LS_SPLIT", "COB_SET_DEBUG", "COB_CURRENT_DATE"} and not re.fullmatch(r"COB_SWITCH_\d+", key)
+           for key in runtime_env):
+        raise CobolError("seuls COB_LS_FIXED, COB_LS_SPLIT, COB_SET_DEBUG, COB_CURRENT_DATE et COB_SWITCH_n peuvent être définis par le vérificateur")
     seed = {}
     seed_directories = []
     if data_dir:
@@ -58,19 +97,37 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             raise CobolError(f"dossier de données introuvable: {data_dir}")
         seed = snapshot(data_dir)
         seed_directories = [p.relative_to(data_dir).as_posix() for p in sorted(data_dir.rglob("*")) if p.is_dir()]
+    rust_seed = seed
+    if rust_data_dir:
+        if not rust_data_dir.is_dir() or not data_dir:
+            raise CobolError(f"dossier de données Rust introuvable: {rust_data_dir}")
+        rust_seed = snapshot(rust_data_dir)
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible)
         validate_file_paths(conversion)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)
         fmt = source_format(source.read_text(encoding="utf-8-sig"), fmt)
-        command = [cobc, "-x", "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
+        if any(flag.startswith("-std") and flag != f"-std={std}" for flag in cobc_flags):
+            raise CobolError(f"options cobc incohérentes avec le dialecte converti: {std}")
+        if std != "default" and not any(flag.startswith("-std") for flag in cobc_flags):
+            cobc_flags = [f"-std={std}", *cobc_flags]
+        options = [*cobc_flags, *(["-fdebugging-line"] if debugging_lines else []),
+                   *(["-fno-ec=data-incompatible"] if no_ec_data_incompatible else []),
+                   "-free" if fmt == "free" else "-fixed", "-I", str(source.resolve().parent)]
         for include in includes:
-            command.extend(["-I", str(Path(include).resolve())])
-        command.extend([str(source.resolve()), "-o", str(native)])
-        commands = [(command, cobc)]
+            options.extend(["-I", str(Path(include).resolve())])
+        commands = [([cobc, "-x", *options, str(source.resolve()), "-o", str(native)], cobc)]
+        # Called programs become modules loaded by name, as GnuCOBOL's
+        # default dynamic CALL does; only the converted ones are provided.
+        modules = work / "modules"
+        modules.mkdir()
+        for sub in conversion["subprograms"]:
+            if sub["in_main_source"]:
+                continue
+            commands.append(([cobc, "-m", *options, sub["source"], "-o", str(modules / (sub["program"] + (".dll" if os.name == "nt" else ".so")))], cobc))
         for command, compiler in commands:
             result = subprocess.run(command, cwd=work, env=compiler_env(compiler), capture_output=True, timeout=60)
             if result.returncode:
@@ -85,28 +142,35 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             directory.mkdir()
             for relative in seed_directories:
                 (directory / relative).mkdir(parents=True, exist_ok=True)
-            for relative, contents in seed.items():
+            for relative, contents in (seed if name == "cobol" else rust_seed).items():
                 target = directory / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(contents)
             environment = compiler_env(compiler)
             environment.update(runtime_env)
+            if name == "cobol":
+                environment["COB_LIBRARY_PATH"] = str(modules)
             result = subprocess.run([str(binary)], cwd=directory, env=environment,
                                     input=stdin, capture_output=True, timeout=15)
             results.append(result)
             artifacts.append(snapshot(directory))
         a, b = results
         left, right = artifacts
+        indexed = indexed_contents(left, right, work / "run_cobol")
         differences = sorted(name for name in left.keys() | right.keys() if left.get(name) != right.get(name))
         return {"schema_version": 1, "source": conversion["source"], "source_sha256": conversion["source_sha256"],
                 "expanded_sha256": conversion["expanded_sha256"], "copybook_sha256": conversion["copybook_sha256"],
                 "storage_profile": conversion["storage_profile"],
                 "stdin_sha256": hashlib.sha256(stdin).hexdigest(),
+                "std": std, "cobc_flags": list(cobc_flags),
                 "scope": "original COBOL vs generated Rust: stdout bytes, zero exit codes and final file bytes for these inputs",
-                "runtime_env": runtime_env, "input_files": manifest(seed), "input_directories": seed_directories,
+                "runtime_env": runtime_env, "input_files": manifest(seed), "rust_input_files": manifest(rust_seed), "input_directories": seed_directories,
                 "files_match": not differences, "file_differences": differences,
+                "indexed_files_compared_logically": indexed,
                 "cobol_files": manifest(left), "rust_files": manifest(right),
-                "match": a.stdout == b.stdout and a.returncode == b.returncode == 0 and not differences,
+                # Both runs end normally, or both die of SIGINT (cob_raise on
+                # character 03 read by ACCEPT); other signals are never modelled.
+                "match": a.stdout == b.stdout and a.returncode == b.returncode in {0, -2} and not differences,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),
                 "rust_stdout": b.stdout.decode("ascii", errors="backslashreplace"),
                 "cobol_exit": a.returncode, "rust_exit": b.returncode,
