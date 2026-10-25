@@ -74,30 +74,30 @@ Les paramètres de chaque corpus sont figés dans l'outil ; niveau 2 de preuve
 seulement (émission acceptée).
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T12:09:52+00:00 (commit `e642f35190`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T12:32:35+00:00 (commit `7c4ab9bc65`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 8 | 14 | 6 | 0 |
-| zopeneditor-sample | application exemple IBM | 5 | 0 | 5 | 5 | 0 |
+| carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 10 | 14 | 4 | 0 |
+| zopeneditor-sample | application exemple IBM | 5 | 3 | 5 | 2 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 55 | 65 | 10 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 289 | 311 | 22 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 315 | 331 | 16 | 0 |
-| **Total** | | **2458** | **678** | **738** | **60** | **0** |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 290 | 311 | 21 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 316 | 331 | 15 | 0 |
+| **Total** | | **2458** | **685** | **738** | **53** | **0** |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 6 × USAGE/clause non pris en charge
-2. 6 × IDENTIFICATION DIVISION attendue
-3. 4 × RECORDING MODE limité à F pour des enregistrements fixes
-4. 4 × PROCEDURE attendu
-5. 4 × instruction non prise en charge: XML
-6. 3 × nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire
-7. 3 × EXIT SECTION requiert une section de procédure
-8. 2 × article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC
-9. 2 × fichier non déclaré: COUNTYDETAILS
-10. 2 × cible INSPECT littérale ou fonction non prise en charge
+1. 6 × IDENTIFICATION DIVISION attendue
+2. 4 × PROCEDURE attendu
+3. 4 × instruction non prise en charge: XML
+4. 3 × instruction non prise en charge: ENTRY
+5. 3 × USAGE/clause non pris en charge
+6. 3 × EXIT SECTION requiert une section de procédure
+7. 2 × article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC
+8. 2 × fichier non déclaré: COUNTYDETAILS
+9. 2 × cible INSPECT littérale ou fonction non prise en charge
+10. 2 × clause RD CONTROL non prise en charge
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -117,5 +117,13 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   cobc (lecture en octets, IF/ELSE sans instruction, COMMON hors programme
   contenu, END PROGRAM sensible à la casse) : **626 → 678** acceptées,
   écart 122 → 60, **à examiner 10 → 0** (plus aucune source acceptée que
-  cobc refuse). Prochains : COMP-5 et RETURN-CODE, RECORDING MODE V,
-  comparaisons à `ALL littéral`, Report Writer avec ruptures (CONTROLS).
+  cobc refuse).
+- 2026-10-25 — COMP-5 et BINARY-CHAR/SHORT/LONG/DOUBLE (binaire réel :
+  `cob_decimal_get_binary`, `cob_print_realbin`), registre RETURN-CODE
+  (CALL, CANCEL, programmes contenus, code de sortie), RECORDING MODE ignoré
+  comme par cobc : **678 → 685** acceptées, écart 60 → 53, CardDemo 8 → 10,
+  zopeneditor 0 → 3. Vérification NIST complète : 426/427 sur l'état
+  précédent, l'écart NC214M étant l'horloge figée en dur (lue désormais dans
+  le journal de référence). Prochains : ENTRY (CardDemo), comparaisons à
+  `ALL littéral`, Report Writer avec ruptures (CONTROLS), puis compilation et
+  exécution des programmes batch acceptés (niveaux 3-4 sur code réel).

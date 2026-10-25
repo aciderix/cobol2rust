@@ -38,7 +38,7 @@ class FrontendTests(unittest.TestCase):
             program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
-            program("stop run.", "01 n pic 9(2) comp-5."),
+            program("stop run.", "01 n usage comp-1."),
             program("stop run.", "01 n pic 9(19)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("stop run.", "01 n pic 9. 01 n pic 9."),

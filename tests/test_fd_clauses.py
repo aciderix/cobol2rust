@@ -20,6 +20,16 @@ class FdClauseTests(unittest.TestCase):
         self.assertTrue(parser.at("<EOF>"))
         return spec.fd_clauses
 
+    def test_recording_mode_is_ignored_like_cobc(self):
+        # recording_mode_clause: F, V, FIXED, VARIABLE everywhere; U and S only
+        # for (RECORD) SEQUENTIAL files.
+        for mode in ("f", "v", "fixed", "variable", "u", "s"):
+            self.assertEqual(self.clauses(f"recording mode is {mode}.")["recording_mode"], mode.upper())
+        self.assertEqual(self.clauses("recording v.", "LINE SEQUENTIAL")["recording_mode"], "V")
+        for mode in ("u", "s"):
+            with self.subTest(mode=mode), self.assertRaises(CobolError):
+                self.clauses(f"recording mode {mode}.", "LINE SEQUENTIAL")
+
     def test_label_block_and_fixed_record_metadata(self):
         clauses = self.clauses("label records are standard block contains 0 to 120 characters "
                                "record contains 5 characters recording mode is f.")
@@ -61,8 +71,7 @@ class FdClauseTests(unittest.TestCase):
             "label records custom-label.", "label records standard label records omitted.",
             "block contains 1 records block contains 2 records.",
             "record contains 5 characters record contains 5 characters.",
-            "recording mode f recording mode f.", "recording mode v.",
-            "recording mode s.", "recording mode u.", "linage 66 lines footing 2 footing 3.",
+            "recording mode f recording mode f.", "recording mode x.", "linage 66 lines footing 2 footing 3.",
             "linage.", "linage 'A'.", "linage 6 top.",
             "code-set is custom-alphabet.",
             "external is external.", "global global.", "external global.", "data rec.", "data record.", "data records are.",

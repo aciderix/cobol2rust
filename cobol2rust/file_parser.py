@@ -113,9 +113,15 @@ def parse_fd_clauses(parser, spec):
         elif parser.accept("RECORDING"):
             parser.accept("MODE")
             parser.accept("IS")
-            if not parser.accept("F"):
-                parser.error("RECORDING MODE limité à F pour des enregistrements fixes")
-            put("recording_mode", "F")
+            # recording_mode_clause: ignored by cobc; U or S only for
+            # (RECORD) SEQUENTIAL files.
+            mode = parser.t.key if not parser.t.string else None
+            if mode in {"U", "S"} and spec.organization != "SEQUENTIAL":
+                parser.error("RECORDING MODE U or S can only be used with RECORD SEQUENTIAL files")
+            if mode not in {"F", "V", "FIXED", "VARIABLE", "U", "S"}:
+                parser.error("RECORDING MODE F, V, FIXED, VARIABLE, U ou S attendu")
+            parser.take()
+            put("recording_mode", mode)
         elif parser.accept("DATA"):
             if not (parser.accept("RECORD") or parser.accept("RECORDS")):
                 parser.error("DATA requiert RECORD ou RECORDS")

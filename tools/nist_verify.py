@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -29,8 +30,24 @@ RUNNER_FLAGS = ["-std=cobol85", "--debug"]
 # report.pl compiles these programs with -fdebugging-line ($cobc_flags).
 DEBUGGING_LINES = {"SM206A"}
 # Programs that print the clock: both runs use the moment of the reference
-# run, read from its log (NC214M: DATE 261023, DAY 26296, TIME 15092270).
+# run, read from its log (reference_clock); this value is the fallback, from
+# the run of 23 October 2026 (DATE 261023, DAY 26296, TIME 15092270).
 RUNNER_CLOCK = {"NC214M": "2026/10/23 15:09:22.700000000"}
+NATIVE_LOGS = Path(".tools/nist-native-gnucobol-3.2")
+
+
+def reference_clock(name: str) -> str:
+    """COB_CURRENT_DATE of the native reference run, from the DATE YYMMDD and
+    HHMMSSFF lines of the program's REPORT log."""
+    log = NATIVE_LOGS / name[:2] / f"{name}.log"
+    if log.exists():
+        text = log.read_text(encoding="ascii", errors="replace")
+        date = re.search(r"0*(\d{6})\.0+\s+DATE YYMMDD", text)
+        time = re.search(r"0*(\d{1,8})\.0+\s+HHMMSSFF", text)
+        if date and time:
+            d, t = date.group(1), time.group(1).zfill(8)
+            return f"20{d[:2]}/{d[2:4]}/{d[4:]} {t[:2]}:{t[2:4]}:{t[4:6]}.{t[6:]}0000000"
+    return RUNNER_CLOCK[name]
 # report.pl $cobc_flags{DB201A} = "-fno-ec=data-incompatible".
 NO_EC_DATA_INCOMPATIBLE = {"DB201A"}
 # report.pl $raw_input, written with `echo "..." > $exe.inp` (so plus "\n").
@@ -43,7 +60,7 @@ def runner_env(name: str) -> dict:
     """report.pl: the runtime DEBUG switch is on for the DB module, except DB102A."""
     environment = {**RUNNER_ENV, "COB_SET_DEBUG": "Y" if name[:2] == "DB" and name != "DB102A" else "N"}
     if name in RUNNER_CLOCK:
-        environment["COB_CURRENT_DATE"] = RUNNER_CLOCK[name]
+        environment["COB_CURRENT_DATE"] = reference_clock(name)
     return environment
 # report.pl executes DB103M a second time with the runtime DEBUG switch off;
 # its REPORT log is the first run's, report.txt has a line for each run.
@@ -182,6 +199,8 @@ def main(argv=None) -> int:
     parser.add_argument("--work", type=Path, required=True, help="dossier de travail inexistant")
     parser.add_argument("-o", "--output", type=Path, required=True, help="nouveau rapport JSON")
     args = parser.parse_args(argv)
+    global NATIVE_LOGS
+    NATIVE_LOGS = args.native_logs
     names = list(args.programs)
     if args.accepted_from:
         results = json.loads(args.accepted_from.read_text(encoding="utf-8"))["results"]

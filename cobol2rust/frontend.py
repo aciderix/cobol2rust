@@ -959,6 +959,7 @@ class Parser:
         self.apply_renames()
         self.validate_files()
         memory_size = self.debug_item(memory_size)
+        self.return_code_register()
         # GLOBAL items of the containing programs (copies of their
         # descriptions, storage owned by the declaring program).
         for key, item in getattr(self, "inherited", {}).items():
@@ -1385,6 +1386,25 @@ class Parser:
             clone.global_owner, clone.global_root = owner, root.label
             inherited[clone.name] = clone
         return inherited
+
+    def return_code_register(self):
+        """cb_build_register_return_code: RETURN-CODE, "GLOBAL USAGE
+        BINARY-LONG VALUE ZERO", in each outermost program; contained programs
+        share it as a GLOBAL item. It is held apart from the program's storage
+        (Field.register), so the other offsets do not move."""
+        if self.level or self.candidates("RETURN-CODE"):
+            return
+        saved = self.tokens, self.i, self.data_stack, self.last_data
+        self.tokens, self.i, self.data_stack = lex("01 RETURN-CODE GLOBAL USAGE BINARY-LONG VALUE ZERO."), 0, []
+        self.building_register = True
+        try:
+            key = self.declaration()
+        finally:
+            self.building_register = False
+            self.tokens, self.i, self.data_stack, self.last_data = saved
+        from .layout import layout_fields
+        layout_fields({key: self.fields[key]})
+        self.fields[key].register = True
 
     def debug_item(self, memory_size):
         """cb_build_debug_item, at the first USE FOR DEBUGGING: DEBUG-ITEM in

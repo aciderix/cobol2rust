@@ -34,6 +34,11 @@ pub fn external(name: &str, size: usize) -> Memory {
 #[derive(Clone, Copy, Debug)]
 pub enum Usage {
     Display, Packed, Binary, Index,
+    /// COMP-5 (and BINARY-CHAR/SHORT/LONG/DOUBLE): COB_FLAG_REAL_BINARY,
+    /// native little-endian storage bounded by its size, not its PICTURE.
+    /// Register is an internal register (RETURN-CODE): same storage,
+    /// displayed with its PICTURE digits (COB_TYPE_NUMERIC_COMP5).
+    Native, Register,
     /// Signed DISPLAY with a SIGN clause: overpunched first digit, or a
     /// separate '+'/'-' byte before or after the digits.
     SignLeading, SignLeadingSeparate, SignTrailingSeparate,
@@ -42,6 +47,17 @@ impl Usage {
     pub fn is_display(self) -> bool {
         matches!(self, Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate)
     }
+}
+
+/// cob_decimal_get_binary without COB_STORE_KEEP_ON_OVERFLOW: the value,
+/// or on overflow its residue modulo 2^(8 * size), in little-endian bytes.
+fn native_bytes(units: &BigInt, size: usize) -> Vec<u8> {
+    let modulus = BigInt::from(1) << (8 * size);
+    let mut wrapped = units % &modulus;
+    if wrapped.sign() == Sign::Minus { wrapped += &modulus; }
+    let mut bytes = wrapped.to_bytes_le().1;
+    bytes.resize(size, 0);
+    bytes
 }
 
 /// The digits of DISPLAY storage and its sign, as cob_real_get_sign reads
@@ -382,12 +398,32 @@ impl View {
             },
             // An index is a native int: little endian on x86-64.
             Usage::Index => BigInt::from_signed_bytes_le(&bytes),
+            Usage::Native | Usage::Register => {
+                if signed { BigInt::from_signed_bytes_le(&bytes) }
+                else { BigInt::from_bytes_le(Sign::Plus, &bytes) }
+            },
             Usage::Binary => {
                 if signed { BigInt::from_signed_bytes_be(&bytes) }
                 else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             },
         };
         Ok(Value::Num(Number::scaled(coefficient, scale), Some((digits, scale, signed, matches!(usage, Usage::SignTrailingSeparate)))))
+    }
+    /// DISPLAY of a real binary item, cob_print_realbin: the stored integer
+    /// (no decimal point) on bin_digits[size] digits, or on the PICTURE
+    /// digits for an internal register; a sign only when the item has one.
+    pub fn native_display(&self) -> Option<String> {
+        let (digits, signed, usage) = match self.kind {
+            Kind::Numeric { digits, signed, usage: usage @ (Usage::Native | Usage::Register), .. } => (digits, signed, usage),
+            _ => return None,
+        };
+        self.resolved();
+        let bytes = self.raw();
+        let integer = if signed { BigInt::from_signed_bytes_le(&bytes) } else { BigInt::from_bytes_le(Sign::Plus, &bytes) };
+        const BIN_DIGITS: [usize; 9] = [1, 3, 5, 8, 10, 13, 15, 17, 20];
+        let width = if matches!(usage, Usage::Register) { digits as usize } else { BIN_DIGITS[self.size.min(8)] };
+        let text = format!("{:0>width$}", absolute(&integer).to_string(), width = width);
+        Some(if signed { format!("{}{text}", if integer.sign() == Sign::Minus { '-' } else { '+' }) } else { text })
     }
     pub fn value(&self) -> Value {
         match self.kind {
@@ -458,7 +494,7 @@ impl View {
                 if !comparison { bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize)); }
                 bytes
             },
-            Usage::Packed | Usage::Binary | Usage::Index => {
+            Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
                 let number = self.number().unwrap_or_else(|error| fail(error));
                 let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
                 format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
@@ -472,6 +508,9 @@ impl View {
         let bytes = source.bytes();
         if matches!(self.kind, Kind::Numeric { usage: Usage::Index, .. }) {
             fail("MOVE of text to an index requires native index semantics");
+        }
+        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register, .. }) {
+            fail("MOVE of text to a COMP-5 item not modelled");
         }
         if raw_group {
             // Group category wins over the receiver's elementary category.
@@ -535,6 +574,9 @@ impl View {
     pub fn move_number(&mut self, source: &Value) {
         self.resolved();
         let (digits, scale, signed, usage) = match self.kind {
+            // cob_move_display_to_binary on a real binary receiver keeps the
+            // low-order bytes of the value, not its PICTURE digits.
+            Kind::Numeric { usage: Usage::Native | Usage::Register, .. } => return self.assign(source, false),
             Kind::Numeric { digits, scale, signed, usage } if !matches!(usage, Usage::Index) => (digits, scale, signed, usage),
             _ => return self.assign(source, false),
         };
@@ -566,7 +608,7 @@ impl View {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
-            Usage::Binary | Usage::Index => return,
+            Usage::Binary | Usage::Index | Usage::Native | Usage::Register => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
         self.memory.borrow_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
@@ -606,6 +648,11 @@ impl View {
                 let negative = units.sign() == Sign::Minus;
                 let coefficient = absolute(&units) % power(digits);
                 edit(symbols, self.size, coefficient.to_string().as_bytes(), scale, negative, blank_zero)
+            },
+            Kind::Numeric { scale, signed, usage: Usage::Native | Usage::Register, .. } => {
+                let mut units = source.num().units(scale, rounded);
+                if !signed { units = absolute(&units); }
+                native_bytes(&units, self.size)
             },
             Kind::Numeric { digits, scale, signed, usage } => {
                 let mut units = source.num().units(scale, rounded);
@@ -647,6 +694,8 @@ impl View {
                         padded.append(&mut bytes);
                         padded
                     },
+                    // Stored by the real binary arm above.
+                    Usage::Native | Usage::Register => unreachable!(),
                 }
             },
         };
@@ -738,6 +787,13 @@ impl View {
             _ => fail("checked arithmetic destination requires numeric storage"),
         };
         let mut units = source.num().units(scale, rounded);
+        if matches!(usage, Usage::Native | Usage::Register) {
+            // cob_decimal_get_binary: SIZE ERROR beyond size * 8 - sign bits.
+            if !signed { units = absolute(&units); }
+            if absolute(&units).bits() > (self.size * 8 - signed as usize) as u64 { return Err(SizeError); }
+            self.assign(&Value::Num(Number::scaled(units, scale), None), false);
+            return Ok(());
+        }
         if !matches!(usage, Usage::Index) && absolute(&units) >= power(digits) { return Err(SizeError); }
         // COBOL discards the sign for an unsigned receiver. This is not SIZE ERROR.
         if !signed { units = absolute(&units); }
@@ -897,7 +953,7 @@ impl Inspect {
                 Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
                 _ => fail("INSPECT of a binary or packed item not modelled"),
             }
-        } else if let Kind::Numeric { usage: Usage::Packed | Usage::Binary | Usage::Index, .. } = view.kind {
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
             fail("INSPECT of a binary or packed item not modelled");
         }
         // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.

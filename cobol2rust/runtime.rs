@@ -170,7 +170,11 @@ impl Value {
         match self { Self::View(view) => Self::View(view.slice(start, length)), _ => fail("reference modification requires storage view") }
     }
     pub fn bytes(&self) -> Vec<u8> {
-        match self { Self::View(view) => view.value().bytes(), Self::Bytes(b) => b.clone(), _ => self.show().into_bytes() }
+        match self {
+            Self::View(view) => view.native_display().map(String::into_bytes).unwrap_or_else(|| view.value().bytes()),
+            Self::Bytes(b) => b.clone(),
+            _ => self.show().into_bytes(),
+        }
     }
     pub fn numeric_move_text(&self, group: bool) -> Self {
         match self {
@@ -348,7 +352,7 @@ impl Value {
     }
     pub fn show(&self) -> String {
         match self {
-            Self::View(view) => view.value().show(),
+            Self::View(view) => view.native_display().unwrap_or_else(|| view.value().show()),
             Self::Bytes(b) => String::from_utf8(b.clone()).unwrap_or_else(|_| fail("binary group requires raw byte output")),
             Self::Text(s) => s.clone(),
             Self::Num(n, Some((digits, scale, signed, trailing_sign))) => {

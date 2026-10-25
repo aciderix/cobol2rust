@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T12:09:52+00:00",
- "git_head": "e642f351907d7a763a037868436f14c98e4caa73",
- "implementation_sha256": "c6868534f324f79825a0bd5ffb3d3c10f3919d90c0166cbf5eb87938d6d0ae97",
+ "measured_at": "2026-10-25T12:32:35+00:00",
+ "git_head": "7c4ab9bc65d44da919e6aee0ca7e3cc3e2d84e6c",
+ "implementation_sha256": "62b01678e1a165e12b7421619fb8291d578a2e32aa350fa0d3f8b8be07ccf7e3",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
  "totals": {
   "sources": 2458,
-  "accepted": 678,
+  "accepted": 685,
   "cobc_accepted": 738,
-  "gap": 60,
+  "gap": 53,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -22,7 +22,7 @@
     "kind": "application réelle IBM (CICS/VSAM/DB2/IMS/MQ)"
    },
    "sources": 44,
-   "accepted": 8,
+   "accepted": 10,
    "internal_errors": 0,
    "blockers": [
     [
@@ -34,11 +34,15 @@
      7
     ],
     [
-     "USAGE/clause non pris en charge",
-     5
+     "instruction non prise en charge: ENTRY",
+     3
     ],
     [
      "copybook introuvable: CMQGMOV",
+     2
+    ],
+    [
+     "USAGE/clause non pris en charge",
      2
     ],
     [
@@ -58,46 +62,30 @@
      1
     ],
     [
-     "RECORDING MODE limité à F pour des enregistrements fixes",
-     1
-    ],
-    [
      "clé INDEXED EXPORT-SEQUENCE-NUM hors de l'enregistrement de EXPORT-OUTPUT ou dans une table",
      1
     ],
     [
      "clé INDEXED EXPORT-SEQUENCE-NUM hors de l'enregistrement de EXPORT-INPUT ou dans une table",
      1
-    ],
-    [
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
-     1
     ]
    ],
    "cobc_accepted": 14,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 6,
+   "gap": 4,
    "gap_sources": [
     [
      "app/app-authorization-ims-db2-mq/cbl/DBUNLDGS.CBL",
-     "USAGE/clause non pris en charge"
+     "instruction non prise en charge: ENTRY"
     ],
     [
      "app/app-authorization-ims-db2-mq/cbl/PAUDBLOD.CBL",
-     "USAGE/clause non pris en charge"
+     "instruction non prise en charge: ENTRY"
     ],
     [
      "app/app-authorization-ims-db2-mq/cbl/PAUDBUNL.CBL",
-     "USAGE/clause non pris en charge"
-    ],
-    [
-     "app/cbl/CBACT01C.cbl",
-     "RECORDING MODE limité à F pour des enregistrements fixes"
-    ],
-    [
-     "app/cbl/CBTRN02C.cbl",
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
+     "instruction non prise en charge: ENTRY"
     ],
     [
      "app/cbl/CSUTLDTC.cbl",
@@ -106,15 +94,11 @@
    ],
    "gap_blockers": [
     [
+     "instruction non prise en charge: ENTRY",
+     3
+    ],
+    [
      "USAGE/clause non pris en charge",
-     4
-    ],
-    [
-     "RECORDING MODE limité à F pour des enregistrements fixes",
-     1
-    ],
-    [
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
      1
     ]
    ]
@@ -128,13 +112,9 @@
     "kind": "application exemple IBM"
    },
    "sources": 5,
-   "accepted": 0,
+   "accepted": 3,
    "internal_errors": 0,
    "blockers": [
-    [
-     "RECORDING MODE limité à F pour des enregistrements fixes",
-     3
-    ],
     [
      "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
      2
@@ -143,23 +123,11 @@
    "cobc_accepted": 5,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 5,
+   "gap": 2,
    "gap_sources": [
-    [
-     "COBOL/SAM1.cbl",
-     "RECORDING MODE limité à F pour des enregistrements fixes"
-    ],
-    [
-     "COBOL/SAM1LIB.cbl",
-     "RECORDING MODE limité à F pour des enregistrements fixes"
-    ],
     [
      "COBOL/SAM2.cbl",
      "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC"
-    ],
-    [
-     "multiroot/sam/SAM1.cbl",
-     "RECORDING MODE limité à F pour des enregistrements fixes"
     ],
     [
      "multiroot/sam/SAM2.cbl",
@@ -167,10 +135,6 @@
     ]
    ],
    "gap_blockers": [
-    [
-     "RECORDING MODE limité à F pour des enregistrements fixes",
-     3
-    ],
     [
      "article LINKAGE absent de PROCEDURE DIVISION USING non pris en charge: CUST-CONTACT-REC",
      2
@@ -370,7 +334,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 289,
+   "accepted": 290,
    "internal_errors": 0,
    "blockers": [
     [
@@ -425,7 +389,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 22,
+   "gap": 21,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -474,10 +438,6 @@
     [
      "src/test/resources/io/proleap/cobol/asg/procedure/stop/StopStatementGiving.cbl",
      "instruction non prise en charge: GIVING"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/AddToStatement.cbl",
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
     ],
     [
      "src/test/resources/io/proleap/cobol/ast/variable/FunctionCall.cbl",
@@ -558,11 +518,11 @@
      1
     ],
     [
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: X",
      1
     ],
     [
-     "expression non prise en charge: X",
+     "indicateur fixe '$' non pris en charge",
      1
     ]
    ]
@@ -576,7 +536,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 315,
+   "accepted": 316,
    "internal_errors": 0,
    "blockers": [
     [
@@ -620,18 +580,18 @@
      11
     ],
     [
-     "USAGE/clause non pris en charge",
+     "instruction non prise en charge: FIND",
      10
     ],
     [
-     "instruction non prise en charge: FIND",
+     "copybook introuvable: LGCMAREA",
      10
     ]
    ],
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 16,
+   "gap": 15,
    "gap_sources": [
     [
      "clients/analysis/src/__tests__/__resources__/cfgraph/case43.cbl",
@@ -656,10 +616,6 @@
     [
      "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN01C.cbl",
      "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE"
-    ],
-    [
-     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN02C.cbl",
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire"
     ],
     [
      "tests/test_files/aws-mainframe-modernization-carddemo/positive/CSUTLDTC.cbl",
@@ -721,10 +677,6 @@
     ],
     [
      "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE",
-     1
-    ],
-    [
-     "nom inconnu: RETURN-CODE; qualifier avec OF/IN si nécessaire",
      1
     ],
     [

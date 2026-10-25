@@ -1,5 +1,17 @@
 # Validation — 22 octobre 2026
 
+## Corpus réels après les premières étapes du cap — 25 octobre 2026
+
+`tools/real_corpora.py --cobc --record` : **685/2458** acceptées (référence
+230), cobc 738, écart 53, aucune source acceptée que cobc refuse. Nouvelles
+preuves natives : `assign_names`, `assign_mapping` (variables DD_, $VAR,
+COB_FILE_PATH), `group_condition_figurative`, `exit_perform`, en-têtes
+facultatifs, `comp5`, `return_code` (CALL, CANCEL, code de sortie 44) et
+`return_code_nested` (code 23). Vérification NIST complète sur le commit
+7c4ab9b : 426/427, seul NC214M divergeait à cause de l'horloge figée du
+23 octobre alors que la référence native a été régénérée le 25 ; l'outil lit
+désormais l'horloge dans le journal de référence et NC214M passe.
+
 ## Mesure de référence des corpus réels — 25 octobre 2026
 
 Nouvelle boussole (CAP.md). `tools/real_corpora.py --cobc --record`, six corpus

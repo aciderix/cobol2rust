@@ -187,7 +187,11 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "cobol_files": manifest(left), "rust_files": manifest(right),
                 # Both runs end normally, or both die of SIGINT (cob_raise on
                 # character 03 read by ACCEPT); other signals are never modelled.
-                "match": a.stdout == b.stdout and a.returncode == b.returncode in {0, -2} and not differences,
+                # A RETURN-CODE exit status (cob_stop_run) also matches when
+                # neither run reported an error on stderr.
+                "match": a.stdout == b.stdout and a.returncode == b.returncode
+                         and (a.returncode in {0, -2} or (a.returncode > 0 and not a.stderr and not b.stderr))
+                         and not differences,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),
                 "rust_stdout": b.stdout.decode("ascii", errors="backslashreplace"),
                 "cobol_exit": a.returncode, "rust_exit": b.returncode,
