@@ -115,13 +115,13 @@ Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-niveaux 66/78,
-REDEFINES indirects ou plus grands que la zone d'origine, `COMP-5`,
-images éditées hors du sous-ensemble décrit ci-dessous, conditions abrégées,
-fonctions intrinsèques hors liste ci-dessous, appels externes,
+niveau 78, REDEFINES indirects, `COMP-5` et autres USAGE hors liste, images
+éditées hors du sous-ensemble décrit ci-dessous, fonctions intrinsèques hors
+liste ci-dessous, CALL d'un programme ni converti ni sûrement absent,
 `EXIT SECTION` hors section explicite, `EXIT PERFORM`, STOP identifiant,
-fichiers à enregistrements variables, SQL embarqué et CICS. Les formats binaires autres que les enregistrements
-SEQUENTIAL fixes du profil pris en charge ne sont pas modélisés.
+SCREEN SECTION, SQL embarqué et CICS. Les formats de fichier autres que ceux
+décrits plus bas (LINE SEQUENTIAL, SEQUENTIAL fixe ou variable, RELATIVE,
+INDEXED au format propre de cobol2rust) ne sont pas modélisés.
 La déédition, les calculs sur texte et les calculs vers PIC X restent refusés.
 Le MOVE d'un littéral texte vers un champ numérique DISPLAY suit
 `cb_build_move_literal` : à échelle égale et sans signe séparé, ses octets sont
@@ -681,10 +681,9 @@ fixes octet pour octet et les concatène sans séparateur. Les groupes peuvent
 contenir COMP/BINARY et COMP-3 ; un octet nul ou LF reste une donnée. Il ne faut
 pas assimiler ce format au texte LINE SEQUENTIAL décrit plus haut.
 
-Plusieurs descriptions `01` d'un même FD sont acceptées si leurs tailles
-physiques sont égales. Elles partagent la même mémoire et `WRITE` utilise la
-description nommée. Des tailles différentes sélectionneraient un format variable
-à en-têtes, qui reste refusé.
+Plusieurs descriptions `01` d'un même FD partagent la même mémoire et `WRITE`
+utilise la description nommée. Des tailles différentes sélectionnent le format
+variable à en-têtes de libcob (voir RECORD VARYING plus haut).
 
 En LINE SEQUENTIAL, des 01 de tailles différentes sont acceptés : WRITE écrit
 la taille de l'enregistrement nommé, le minimum vaut 0 (`finalize_file`, même

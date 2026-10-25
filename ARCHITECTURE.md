@@ -118,6 +118,20 @@ appelé (`Option<Box<…>>` et un indicateur actif). `run` rend
 `runtime::Outcome::{Return, Stop}` ; un appelé lie ses articles LINKAGE aux
 arguments par `storage_runtime::rebind` dans sa méthode `call`.
 
+Un fichier vu par plusieurs programmes (FD EXTERNAL, FD GLOBAL d'un programme
+contenant, fichiers d'un programme à USE GLOBAL) est un
+`file_runtime::Shared<…>` (`Rc<RefCell<…>>`) ; `Emitter.handle` emprunte la
+poignée à chaque accès. Les fichiers EXTERNAL et GLOBAL sont nommés dans un
+registre du runtime (`external_file`, `owned_file`, `global_file`), vidé en fin
+d'unité (`release_shared`) ; `cancel_files` ferme ceux qu'un CANCEL laisse
+ouverts. Un programme à USE GLOBAL s'inscrit pendant son exécution dans
+`RunUnit.uses` sous la forme d'un alias (`alias`, mêmes vues et poignées) ;
+le programme contenu appelle `unit.global_use(propriétaire, section)`, qui
+exécute la section par `run_from` depuis l'entrée préparée par
+`ControlGraph.global_entries` (nœud `use_return` en fin de section, comme
+l'entrée 2 de la fonction C de cobc). Un programme INITIAL est abandonné
+(avec `cancel_files`) à chaque retour.
+
 ## Runtime Rust
 
 Chaque programme possède un espace mémoire `Rc<RefCell<Vec<u8>>>` partagé par
@@ -186,9 +200,10 @@ avec une restriction aux colonnes DISPLAY et aux octets ASCII imprimables.
 
 `CobolFile` distingue cette organisation du SEQUENTIAL fixe, explicite ou
 implicite. Ce dernier lit et écrit les octets bruts sans délimiteur. Les
-descriptions 01 FD alternatives deviennent des vues de même taille sur la
-zone du premier record ; les tailles différentes sont refusées pour éviter
-de produire un format fixe à la place du format variable natif.
+descriptions 01 FD alternatives deviennent des vues sur la zone du premier
+record ; en SEQUENTIAL, des tailles différentes donnent le format variable à
+en-têtes de libcob, en LINE SEQUENTIAL chaque WRITE écrit la taille de son
+record (minimum 0, comme `finalize_file`).
 
 Le runtime conserve le nombre d'octets réellement lus : une lecture partielle
 préserve la queue du record, tandis que READ INTO ne copie que le préfixe lu.
