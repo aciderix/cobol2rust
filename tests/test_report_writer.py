@@ -45,6 +45,16 @@ class ReportParseTests(unittest.TestCase):
         spec = parsed.files["OUT-FILE"]
         self.assertEqual((spec.organization, spec.record_min, spec.record_max), ("LINE SEQUENTIAL", 70, 70))
 
+    def test_line_beyond_the_limit_fails_at_initiate(self):
+        # Without PAGE, a field's LINE exceeds the limit 0: limitCheckOneLine
+        # does not guard rf->line with def_lines > 0, so INITIATE reports it.
+        text = program("", "01 d type detail.\n    03 line 1 column 3 pic x(4) source w.").replace("rd r .", "rd r.")
+        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE R LINE 1 exceeds PAGE LIMIT")
+        self.assertIn('.with_initiate_error("INITIATE R LINE 1 exceeds PAGE LIMIT")', unit(text)[4])
+        # A group LINE beyond PAGE LIMIT: the message gives the limit.
+        text = program("page 20", DETAIL_GROUP.replace("line plus 1", "line 21"))
+        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE R LINE 21 exceeds PAGE LIMIT 20")
+
     def test_counters_and_statements(self):
         procedure = ("initiate r. generate d. generate r. move line-counter to n. "
                      "display page-counter of r. terminate r.")
@@ -62,12 +72,8 @@ class ReportParseTests(unittest.TestCase):
             program("page 20", DETAIL_GROUP.replace("type detail", "type control heading w")),
             program("page 20", DETAIL_GROUP.replace("line plus 1", "line next page")),
             program("page 20", DETAIL_GROUP.replace("source w", "source w group indicate")),
-            program("page 20", DETAIL_GROUP.replace("line plus 1", "line 21")),
             program("page 20 heading 5 first detail 3", DETAIL_GROUP),
             program("page 20 last detail 10 footing 8", DETAIL_GROUP),
-            # Without PAGE, a field's LINE exceeds the limit 0 at INITIATE
-            # (cob_report_initiate does not guard rf->line with def_lines > 0).
-            program("", "01 d type detail.\n    03 line 1 column 3 pic x(4) source w.").replace("rd r .", "rd r."),
             program("page 20", DETAIL_GROUP, "write out-file."),
             program("page 20", DETAIL_GROUP, "read out-file."),
             program("page 20", DETAIL_GROUP, fd="report is r q"),

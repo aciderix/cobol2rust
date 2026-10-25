@@ -1679,7 +1679,9 @@ class Emitter:
             lines.append(f"file_runtime::ReportLine {{ flags: {line.flags}, line: {line.line}, fields: vec![{', '.join(fields)}], "
                          f"child: {option(line.child)}, sister: {option(line.sister)} }}")
         limits = f"[{report.lines}, {report.heading}, {report.first_detail}, {report.last_detail}]"
-        return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}])"
+        error = getattr(report, "initiate_error", None)
+        checked = f".with_initiate_error({quoted(error)})" if error else ""
+        return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}]){checked}"
 
     def report_events(self, report):
         """The program's answer to the report routines: cob_move of each

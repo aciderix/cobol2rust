@@ -1702,6 +1702,8 @@ pub struct Report {
     in_page_footing: bool,
     in_report_footing: bool,
     initiate_done: bool,
+    /// limitCheck's error, found by the translator.
+    initiate_error: Option<&'static str>,
     line_counter: i64,
     page_counter: i64,
 }
@@ -1740,6 +1742,11 @@ impl Report {
         events(ReportEvent::Write(&self.record[..size], lines as u32));
     }
 
+    pub fn with_initiate_error(mut self, message: &'static str) -> Self {
+        self.initiate_error = Some(message);
+        self
+    }
+
     /// cob_report_initiate; the PAGE LIMIT and LINE checks were made by the translator.
     pub fn initiate(&mut self) {
         if self.initiate_done { fail(&format!("INITIATE {} was already done (COB_EC_REPORT_ACTIVE) not modelled", self.name)); }
@@ -1747,6 +1754,11 @@ impl Report {
         self.curr_line = 0;
         self.incr_line = true;
         self.save_line_counter();
+        if let Some(message) = self.initiate_error {
+            // cob_runtime_error, COB_EC_REPORT_PAGE_LIMIT: not initiated.
+            eprintln!("libcob: error: {message}");
+            return;
+        }
         self.initiate_done = true;
         self.first_detail = true;
         self.first_generate = true;

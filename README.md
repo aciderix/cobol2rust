@@ -726,8 +726,9 @@ ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
 (entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
 `finalize_report` et `cob_report_initiate` ; sans clause PAGE les limites
 valent 0 avec FIRST DETAIL 1, comme dans le `cob_report` émis par cobc, si bien
-que chaque ligne dépasse LAST DETAIL 0 et change de page, et un LINE de champ est
-refusé car `cob_report_initiate` le rejette), puis des groupes 01 `TYPE` REPORT
+que chaque ligne dépasse LAST DETAIL 0 et change de page ; un LINE au-delà de la
+limite fait échouer INITIATE comme `limitCheckOneLine`, le GENERATE suivant est un
+arrêt nommé), puis des groupes 01 `TYPE` REPORT
 HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
 `LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
 élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,

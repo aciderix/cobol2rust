@@ -165,10 +165,18 @@ def check_limits(p, report):
         p.error("PAGE LIMIT LINES should be >= FOOTING")
     if report.lines > 0 and not report.lines >= report.heading:
         p.error(f"INITIATE {report.name} PAGE LIMIT problem")
+    # limitCheckOneLine: at run time INITIATE reports the first LINE beyond
+    # the limit and leaves the report not initiated (GENERATE then fails).
+    report.initiate_error = None
     for line in report.report_lines:
-        if (line.line > 0 and report.lines > 0 and line.line > report.lines
-                or any(f.line and f.line > report.lines for f in line.fields)):
-            p.error(f"INITIATE {report.name} LINE exceeds PAGE LIMIT {report.lines}")
+        if line.line > 0 and report.lines > 0 and line.line > report.lines:
+            report.initiate_error = f"INITIATE {report.name} LINE {line.line} exceeds PAGE LIMIT {report.lines}"
+        else:
+            beyond = [f.line for f in line.fields if f.line and f.line > report.lines]
+            if beyond:
+                report.initiate_error = f"INITIATE {report.name} LINE {beyond[0]} exceeds PAGE LIMIT"
+        if report.initiate_error:
+            break
 
 
 def group_entry(p, report):
