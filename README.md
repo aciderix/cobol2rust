@@ -15,6 +15,12 @@ La couverture universelle est désormais l'objectif de développement. La
 [feuille de route et les mesures de couverture](COVERAGE.md) distinguent ce
 cap de ce qui est effectivement accepté, compilé et vérifié.
 
+Sur la branche de développement, la suite NIST CCVS85 est couverte telle que
+GnuCOBOL 3.2 l'exécute : les 427 programmes principaux que son runner traite
+donnent en Rust des REPORT identiques octet pour octet (9610 PASS, 0 FAIL, le
+bilan natif exact) ; seuls 7 programmes du module CM, que cobc ne compile pas,
+restent refusés ([VALIDATION.md](VALIDATION.md)).
+
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur
 mémoire et contrôles d'impression `WRITE ... ADVANCING`.

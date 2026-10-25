@@ -1,5 +1,28 @@
 # Validation — 22 octobre 2026
 
+## Fin de la première partie : couverture NIST du runner natif — 25 octobre 2026
+
+- **369 tests découverts : 368 réussis, un test PE Windows ignoré.**
+- **129/129 comparaisons locales conformes** ; nouvelles fixtures
+  `external_files.cob`, `global_files.cob`, `initial_program.cob`,
+  `line_sequential_variable.cob`, `report_no_page.cob`, `communication.cob`
+  (`-std=cobol85`) et `stop_literal.cob` (SIGINT sur le caractère 03, vérifié
+  par `test_runtime_registers`).
+- NIST : **451/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **427/427 programmes principaux conformes** (dont 14 que report.pl compile
+  seulement, et le module CM que la suite n'exécute pas) : **9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT, total 9748**, exactement le bilan natif de
+  `summary.txt`. Rapports : `build/nist-verify-final.json`,
+  `build/coverage-nist-final.json`. 13 programmes ajoutés : CM201M, CM303M,
+  DB205A, DB304M, IC227A, IC233A, IC234A, IC401M, NC401M, OBNC1M, RW301M,
+  RW302M, SQ401M ; DB103M est vérifié dans ses deux exécutions (COB_SET_DEBUG
+  Y puis N, 42/42).
+- Restent refusés : CM101M, CM102M, CM103M, CM104M, CM105M, CM202M, CM401M,
+  que cobc 3.2 ne compile pas lui-même (erreurs de syntaxe CD, CD sans
+  enregistrement).
+- L'écart OBNC1M est levé : les deux programmes meurent de SIGINT après le
+  STOP littéral et le REPORT est identique.
+
 ## Horloge, RANDOM, comparaisons littérales, SD à ODO — 25 octobre 2026
 
 - **354 tests découverts : 352 réussis, un test PE Windows ignoré** ; l'échec

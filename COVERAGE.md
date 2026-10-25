@@ -748,3 +748,16 @@ alphanumérique, et de `cob_file_sort_using/giving` pour un SD à OCCURS
 DEPENDING. Émission acceptée : **439/458** ; revérification : **414/415
 programmes principaux conformes**, 9555 PASS, 0 FAIL
 (`build/nist-verify-isolated.json`, `build/coverage-nist-isolated.json`).
+
+## Progression : fin de la première partie
+
+FD EXTERNAL/GLOBAL et USE GLOBAL (registre de fichiers partagés, alias du
+programme déclarant exécutant sa section comme l'entrée 2 de cobc), programmes
+INITIAL, 66 homonyme, LINE SEQUENTIAL à tailles multiples, RD sans PAGE et
+contrôle des LINE à l'INITIATE, COMMUNICATION SECTION telle que cobc 3.2
+l'analyse sans l'implémenter, SIGINT sur le caractère 03 lu par ACCEPT.
+Émission acceptée : **451/458** (les 7 refus sont des programmes CM que cobc
+ne compile pas) ; revérification : **427/427 programmes principaux
+conformes**, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT, le bilan exact du
+runner natif (`build/nist-verify-final.json`, `build/coverage-nist-final.json`).
+

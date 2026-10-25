@@ -1,6 +1,22 @@
 # Handoff — COBOL vers Rust
 
-État au 23 octobre 2026, après livraison de la version **0.4.0**.
+État au 25 octobre 2026 : version **0.4.0** livrée, branche
+`claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
+
+**Bilan de la première partie.** Tous les programmes que le runner natif
+GnuCOBOL 3.2 (`tests/cobol85/report.pl`) exécute sont convertis et
+conformes : 427/427 programmes principaux, **9610 PASS, 0 FAIL, 20 DELETED,
+118 INSPECT**, le bilan exact de `summary.txt` (REPORT identiques octet pour
+octet, fichiers comparés). 451/458 sources acceptées ; les 7 refus sont des
+programmes CM que cobc 3.2 ne compile pas lui-même. Rapports :
+`build/nist-verify-final.json`, `build/coverage-nist-final.json`. Pipeline de
+validation complet (environ 1 h 15) : voir la dernière section de VALIDATION.md ;
+lancer les builds avec `CARGO_INCREMENTAL=0`, sinon le cache incrémental de
+`build/rust-target` dépasse 20 Go.
+
+Suite possible : corpus métier et autres dialectes (IBM, Micro Focus), formes
+encore refusées listées dans le README (niveau 78, COMP-5, EXIT PERFORM, STOP
+identifiant, SCREEN SECTION, clauses CD), puis le parcours sans sources.
 
 ## Reprise cloud et objectif élargi
 
@@ -134,6 +150,21 @@ Dernière étape : horloge et cas isolés. `runtime::current_datetime` (port de
 (RELEASE/RETURN refusés). `nist_verify.RUNNER_CLOCK` fige NC214M. NIST
 **439/458**, 414/415. Prochains blocages : FD GLOBAL/EXTERNAL et USE GLOBAL
 (IC227A/233A/234A), programmes INITIAL (IC401M).
+
+Dernière étape : fin de la première partie. `file_parser` (FD [IS]
+EXTERNAL/GLOBAL), `Parser.fd_records` (`fd_file`/`fd_external`),
+`Parser.global_files` (copies `^propriétaire^`), `Parser.inherited_uses` (=
+boucle « Set up USE GLOBAL handlers » de cobc.c, refus d'un programme non
+contenant), `ControlGraph.global_entries` + nœuds `global_use`/`use_return`,
+`Emitter.handle`/`file_registry`/`shared_files`, `alias`/`run_from`/
+`GlobalUse`/`RunUnit.uses`, `file_runtime::Shared`/`external_file`/
+`owned_file`/`global_file`/`release_shared`/`cancel_close` ; INITIAL =
+abandon de l'instance au retour. `Parser.communication_section`/
+`communication_statement` (no-op comme CB_PENDING, `in_communication`),
+`parse_size` de DEBUG-CONTENTS ; `Report.with_initiate_error`
+(limitCheckOneLine) ; `runtime::interrupt` (SIGINT, `OPEN_FILES`) ;
+`nist_verify.UNTESTED_MODULES`/`RERUN_ENV`. NIST **451/458**, 427/427,
+9610 PASS (bilan natif exact).
 
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
