@@ -73,10 +73,13 @@ fn claim_path(path: &str) {
     if !OPEN_PATHS.with(|paths| paths.borrow_mut().insert(path.to_string())) {
         fail("simultaneous OPEN of one path by several files not modelled");
     }
+    crate::runtime::OPEN_FILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 fn release_path(path: &str) {
-    OPEN_PATHS.with(|paths| { paths.borrow_mut().remove(path); });
+    if OPEN_PATHS.with(|paths| paths.borrow_mut().remove(path)) {
+        crate::runtime::OPEN_FILES.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 fn setting(name: &str, default: bool) -> bool {

@@ -168,7 +168,9 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 "files_match": not differences, "file_differences": differences,
                 "indexed_files_compared_logically": indexed,
                 "cobol_files": manifest(left), "rust_files": manifest(right),
-                "match": a.stdout == b.stdout and a.returncode == b.returncode == 0 and not differences,
+                # Both runs end normally, or both die of SIGINT (cob_raise on
+                # character 03 read by ACCEPT); other signals are never modelled.
+                "match": a.stdout == b.stdout and a.returncode == b.returncode in {0, -2} and not differences,
                 "cobol_stdout": a.stdout.decode("ascii", errors="backslashreplace"),
                 "rust_stdout": b.stdout.decode("ascii", errors="backslashreplace"),
                 "cobol_exit": a.returncode, "rust_exit": b.returncode,

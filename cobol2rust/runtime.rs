@@ -388,6 +388,7 @@ impl Value {
             match io::Read::read(&mut input, &mut byte) {
                 Ok(0) => { end = true; break; },
                 Ok(_) if byte[0] == b'\n' => break,
+                Ok(_) if byte[0] == 3 => interrupt(),
                 Ok(_) => line.push(byte[0]),
                 Err(_) => fail("stdin read failed"),
             }
@@ -406,9 +407,28 @@ impl Value {
         }
     }
 }
-/// DISPLAY UPON SYSERR.
+/// Files open in the run unit (file_runtime's open paths).
+pub static OPEN_FILES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// cob_raise (SIGINT) from cob_accept on character 03: cob_sig_handler
+/// writes its message, cob_terminate_routines leaves the open files as they
+/// are (cob_exit_fileio_msg_only) and the signal is raised again with its
+/// default action. The stdio buffers of files still open would be lost
+/// there, which is not modelled.
+fn interrupt() -> ! {
+    if OPEN_FILES.load(std::sync::atomic::Ordering::Relaxed) > 0 {
+        fail("SIGINT (character 03 read by ACCEPT) with open files not modelled");
+    }
+    io::stdout().flush().unwrap_or_else(|_| fail("stdout flush failed"));
+    eprintln!("\nlibcob: interrupt from keyboard (signal SIGINT)\n");
+    extern "C" { fn raise(signal: i32) -> i32; }
+    // SAFETY: raise(3) of SIGINT, whose default action ends the process.
+    unsafe { raise(2); }
+    std::process::exit(130)
+}
+
 /// cob_accept (NULL), the ACCEPT of STOP literal: input up to '\n' or end
-/// of input is discarded; character 03 raises SIGINT, which is not modelled.
+/// of input is discarded; character 03 raises SIGINT.
 pub fn accept_omitted() {
     io::stdout().flush().unwrap_or_else(|_| fail("stdout flush failed"));
     let stdin = io::stdin();
@@ -418,13 +438,14 @@ pub fn accept_omitted() {
         match io::Read::read(&mut input, &mut byte) {
             Ok(0) => break,
             Ok(_) if byte[0] == b'\n' => break,
-            Ok(_) if byte[0] == 3 => fail("ACCEPT of STOP literal read character 03 (SIGINT) not modelled"),
+            Ok(_) if byte[0] == 3 => interrupt(),
             Ok(_) => {},
             Err(_) => fail("stdin read failed"),
         }
     }
 }
 
+/// DISPLAY UPON SYSERR.
 pub fn display_error(values: &[Value], newline: bool) {
     let mut out = io::stderr().lock();
     for v in values { out.write_all(&v.bytes()).unwrap_or_else(|_| fail("stderr write failed")); }

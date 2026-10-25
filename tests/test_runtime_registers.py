@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from cobol2rust.emitter import Emitter
@@ -66,6 +68,27 @@ class NativeTests(unittest.TestCase):
     def test_random_matches_gmp_mersenne_twister(self):
         report = self.fixture("random_function")
         self.assertTrue(report["cobol_stdout"].startswith("0.65712178890805361\n0.55413637240866164\n"))
+
+    def test_character_03_raises_sigint_like_cob_accept(self):
+        source = ROOT / "tests" / "fixtures" / "stop_literal.cob"
+        # STOP literal: the line is discarded; 03 kills both runs with SIGINT.
+        report = verify(source, fmt="free", stdin=b"YES\nok\x03\n")
+        self.assertTrue(report["match"], report)
+        self.assertEqual((report["cobol_exit"], report["rust_exit"]), (-2, -2))
+        self.assertEqual(report["cobol_stdout"], "first\nanswer [YES ]\nOPERATOR\n")
+        report = verify(source, fmt="free", stdin=b"YES\n\nab\x03cd\n")
+        self.assertTrue(report["match"], report)
+        self.assertTrue(report["cobol_stdout"].endswith("after stop\n"))
+        report = verify(source, fmt="free", stdin=b"Y\x03\n")
+        self.assertTrue(report["match"], report)
+        # libcob would lose the stdio buffers of a file still open: named stop.
+        with tempfile.TemporaryDirectory() as directory:
+            opened = Path(directory) / "stop_open.cob"
+            opened.write_text(source.read_text(encoding="utf-8").replace("    close out-file.\n", "")
+                              .replace("    stop run.", "    close out-file.\n    stop run."), encoding="utf-8")
+            report = verify(opened, fmt="free", stdin=b"YES\n\x03\n")
+            self.assertEqual((report["cobol_exit"], report["rust_exit"]), (-2, 70))
+            self.assertIn("SIGINT (character 03 read by ACCEPT) with open files not modelled", report["rust_stderr"])
 
     def test_mixed_literal_comparisons(self):
         report = self.fixture("mixed_literal_compare")
