@@ -1051,7 +1051,10 @@ class Emitter:
                 self.write(f"runtime::set_switch({number}, {str(a[1]).lower()});")
         elif op == "initiate":
             for name in a[0]:
-                self.write(f"self.{self.reports[name]}.initiate();")
+                rust = self.reports[name]
+                self.write(f"let mut report = std::mem::take(&mut self.{rust});")
+                self.write(f"report.initiate(&mut |event| self.{rust}_event(event));")
+                self.write(f"self.{rust} = report;")
         elif op in {"generate", "terminate"}:
             for name in ([a[0]] if op == "generate" else a[0]):
                 rust = self.reports[name]
@@ -1854,14 +1857,38 @@ class Emitter:
                 if f.source is not None:
                     source = f"Some({sources})"
                     sources += 1
-                fields.append(f"file_runtime::ReportField {{ column: {f.column}, literal: {literal}, source: {source} }}")
+                fields.append(f"file_runtime::ReportField {{ column: {f.column}, literal: {literal}, source: {source}, "
+                              f"indicate: {str(f.indicate).lower()}, indicated: false }}")
             option = lambda v: "None" if v is None else f"Some({v})"
             lines.append(f"file_runtime::ReportLine {{ flags: {line.flags}, line: {line.line}, fields: vec![{', '.join(fields)}], "
-                         f"child: {option(line.child)}, sister: {option(line.sister)} }}")
+                         f"child: {option(line.child)}, sister: {option(line.sister)}, next_group: {line.next_group} }}")
         limits = f"[{report.lines}, {report.heading}, {report.first_detail}, {report.last_detail}]"
         error = getattr(report, "initiate_error", None)
         checked = f".with_initiate_error({quoted(error)})" if error else ""
+        if report.controls or report.sums:
+            # output_report_control: each control's lines, last declared
+            # first, and its sequence in cobc's list.
+            ids = self.report_field_ids(report)
+            controls = []
+            for sequence, key in enumerate(report.controls, 1):
+                refs = [index for index, line in enumerate(report.report_lines) if line.control == key][::-1]
+                controls.append(f"file_runtime::ReportControl::new({ids.index(key)}, vec![{', '.join(map(str, refs))}], {sequence})")
+            sums = []
+            for counter, sources, control, final, subtotal in report.sums:
+                control_index = "None" if control is None or control not in report.controls else f"Some({report.controls.index(control)})"
+                sums.append(f"file_runtime::ReportSum {{ counter: {ids.index(counter)}, sources: vec![{', '.join(str(ids.index(k)) for k in sources)}], "
+                            f"control: {control_index}, control_final: {str(final).lower()}, subtotal: {str(subtotal).lower()} }}")
+            checked += f".with_controls(vec![{', '.join(controls)}], vec![{', '.join(sums)}])"
         return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}]){checked}"
+
+    @staticmethod
+    def report_field_ids(report):
+        """The numbered fields of ReportEvent Get/Put/Differs/Add/Zero."""
+        ids = []
+        for key in [*report.controls, *(k for counter, sources, *_ in report.sums for k in (counter, *sources))]:
+            if key not in ids:
+                ids.append(key)
+        return ids
 
     def report_events(self, report):
         """The program's answer to the report routines: cob_move of each
@@ -1890,6 +1917,54 @@ class Emitter:
         self.write('_ => unreachable!("report SOURCE"),')
         self.indent -= 1
         self.write("},")
+        if report.controls or report.sums:
+            ids = self.report_field_ids(report)
+            refs = [self.reference(DataRef(key)) for key in ids]
+            data = lambda r: f"storage_runtime::Operand::of(&{r}).data"
+            self.write("file_runtime::ReportEvent::Get(field) => match field {")
+            for number, r in enumerate(refs):
+                self.write(f"    {number} => {data(r)},")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("},")
+            # cob_move of a copy with the same attributes: its bytes.
+            self.write("file_runtime::ReportEvent::Put(field, bytes) => { match field {")
+            for number, r in enumerate(refs):
+                self.write(f"    {number} => {r}.assign_text_move(&Value::Bytes(bytes.to_vec()), true),")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("} Vec::new() }")
+            # cob_cmp of the control item and its saved copy (cob_field_dup).
+            self.write("file_runtime::ReportEvent::Differs(field, bytes) => { let differs = match field {")
+            for number, r in enumerate(refs):
+                f = self.program.fields[ids[number]]
+                # cob_numeric_cmp of two items of one description: as
+                # integers below 19 digits (invalid data read as libcob does).
+                read = (".operand_integer()" if f.digits < 19 else ".operand()") if f.kind == "number" else ""
+                self.write(f"    {number} => {r}{read}.compare(&storage_runtime::copy_of(&{r}, bytes){read}) != std::cmp::Ordering::Equal,")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("}; vec![differs as u8] }")
+            # cob_add_fields: counter = counter + operand, truncated (cob_add, opt 0).
+            self.write("file_runtime::ReportEvent::Add(counter, operand) => {")
+            self.write("    let value = match operand {")
+            for number, r in enumerate(refs):
+                self.write(f"        {number} => {r}.operand(),")
+            self.write('        _ => unreachable!("report field"),')
+            self.write("    };")
+            self.write("    match counter {")
+            for number, r in enumerate(refs):
+                if ids[number] in {c for c, *_ in report.sums}:
+                    self.write(f"        {number} => {{ let sum = {r}.operand().plus(&value); {r}.store_truncated(&sum); }}")
+            self.write('        _ => unreachable!("report counter"),')
+            self.write("    }")
+            self.write("    Vec::new()")
+            self.write("}")
+            # cob_field_init: MOVE ZERO to the counter.
+            self.write("file_runtime::ReportEvent::Zero(counter) => { match counter {")
+            for number, r in enumerate(refs):
+                if ids[number] in {c for c, *_ in report.sums}:
+                    self.write(f"    {number} => {r}.assign(&Value::number(\"0\"), false),")
+            self.write('    _ => unreachable!("report counter"),')
+            self.write("} Vec::new() }")
+
         self.write("file_runtime::ReportEvent::Write(bytes, lines) => {")
         self.indent += 1
         file = self.files[report.file]
@@ -1901,6 +1976,8 @@ class Emitter:
         self.write("Vec::new()")
         self.indent -= 1
         self.write("}")
+        if not (report.controls or report.sums):
+            self.write('_ => unreachable!("report event"),')
         self.indent -= 1
         self.write("}")
         self.indent -= 1

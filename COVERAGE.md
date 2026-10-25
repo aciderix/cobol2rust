@@ -806,3 +806,15 @@ instruction englobante, entrées documentaires sans IDENTIFICATION DIVISION,
 CLASS avec figuratives, FD à enregistrement numérique. Fixtures
 `table_sort`, `scope_and_function_forms`, `numeric_record` identiques à cobc.
 Corpus réels : 703/2458 acceptées (cobc 738) ; cours 12/12, livre 62/113.
+
+## Progression : Report Writer avec ruptures de contrôle
+
+Port de `cob_report_generate`, `cob_report_terminate`, `report_line_and`,
+`report_line_type` (arrêt des pieds de séquence supérieure),
+`zero_all_counters`, `sum_all_detail`, `sum_this_counter`, `set_next_info` et
+`clear_group_indicate` de reportio.c, de `build_sum_counter` (tree.c) et de
+l'ordre des listes de codegen.c (`output_report_control`,
+`output_report_sum_counters`). Fixture `report_controls` (deux contrôles et
+FINAL, cumuls de SUM, NEXT GROUP PLUS et NEXT PAGE, débordement de page,
+GROUP INDICATE) identique à cobc ; NIST RW101A-RW104A, RW301M, RW302M
+conformes. Corpus réels : 715/2458 acceptées (cobc 738), livre 64/65.

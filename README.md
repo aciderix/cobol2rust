@@ -794,28 +794,42 @@ PROCEDURE DIVISION est analysée avec la taille par défaut de 30 octets, `FUNCT
 LENGTH` de DEBUG-CONTENTS ou DEBUG-ITEM et les positions constantes d'une
 modification de référence utilisent cette taille, comme dans cobc.
 
-Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
+Le Report Writer suit `reportio.c` : un FD
 `REPORT [IS] r` (un seul rapport par fichier, sans enregistrement décrit) rend le
 fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
 ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
 (entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
+précédés de `CONTROL[S] [IS|ARE] [FINAL] identifiants`,
 `finalize_report` et `cob_report_initiate` ; sans clause PAGE les limites
 valent 0 avec FIRST DETAIL 1, comme dans le `cob_report` émis par cobc, si bien
 que chaque ligne dépasse LAST DETAIL 0 et change de page ; un LINE au-delà de la
 limite fait échouer INITIATE comme `limitCheckOneLine`, le GENERATE suivant est un
 arrêt nommé), puis des groupes 01 `TYPE` REPORT
-HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
-`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
-élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,
-LINE-COUNTER ou PAGE-COUNTER), soit `VALUE` alphanumérique. Les lignes et champs
+HEADING/RH, PAGE HEADING/PH, CONTROL HEADING/CH et CONTROL FOOTING/CF
+[identifiant | FINAL], DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
+`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles et `NEXT GROUP
+[IS] [PLUS] n | NEXT PAGE` au niveau 01, et des articles élémentaires
+`PICTURE`, `COLUMN [NUMBER] [IS] n`, `GROUP [INDICATE]` et soit `SOURCE`
+(identifiant, indicé compris, LINE-COUNTER ou PAGE-COUNTER), soit `SUM`
+d'identifiants numériques DISPLAY ou d'autres articles SUM (`RESET ON` analysé
+et sans effet, comme dans codegen.c), soit `VALUE [ALL]` alphanumérique. Les
+ruptures suivent `cob_report_generate` et `cob_report_terminate` : la liste
+CONTROLS de cobc va du contrôle le plus mineur au plus majeur (chaque
+identifiant est préfixé), un changement rompt aussi les contrôles de séquence
+inférieure, les pieds de contrôle s'impriment avec la valeur précédente du
+contrôle, les compteurs SUM (`build_sum_counter` : `S9(n+2)V9(s)` en
+WORKING-STORAGE) s'additionnent à chaque GENERATE, se reportent dans les
+compteurs qui les somment et se remettent à zéro au pied de leur groupe, dans
+l'ordre de la liste `sum_prv` de codegen.c ; CONTROL HEADING FINAL n'est jamais
+imprimé par libcob 3.2. Les lignes et champs
 reprennent `output_report_define_lines` ; la taille d'enregistrement est le
 `rcsz` de cobc. `INITIATE`, `GENERATE` groupe DETAIL ou nom de rapport et
 `TERMINATE` reproduisent `do_page_heading`, `do_page_footing`, `report_line` et
 `report_line_type` (écritures BEFORE n LINES, lignes vides, sauts de page).
 `LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
-affichés sur 10 chiffres. Restent refusés : CONTROL, SUM, NEXT GROUP, GROUP
-INDICATE, PRESENT/ABSENT WHEN, OCCURS, COLUMN PLUS/LEFT/RIGHT/CENTER, LINE NEXT
-PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
+affichés sur 10 chiffres. Restent refusés : PRESENT/ABSENT WHEN, SUPPRESS,
+SUM UPON, SUM d'opérandes non DISPLAY, CF ALL et OR PAGE, OCCURS, COLUMN
+PLUS/LEFT/RIGHT/CENTER, LINE NEXT PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
 BEFORE REPORTING, plusieurs rapports par FD, READ/WRITE d'un fichier de
 rapport ; un INITIATE d'un rapport actif ou un GENERATE/TERMINATE sans
 INITIATE est un arrêt nommé.

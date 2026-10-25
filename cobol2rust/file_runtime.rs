@@ -1953,31 +1953,76 @@ pub const REPORT_HEADING: u32 = 1 << 4;
 pub const REPORT_FOOTING: u32 = 1 << 5;
 pub const REPORT_PAGE_HEADING: u32 = 1 << 6;
 pub const REPORT_PAGE_FOOTING: u32 = 1 << 7;
+pub const REPORT_CONTROL_HEADING: u32 = 1 << 8;
+pub const REPORT_CONTROL_HEADING_FINAL: u32 = 1 << 9;
+pub const REPORT_CONTROL_FOOTING: u32 = 1 << 10;
+pub const REPORT_CONTROL_FOOTING_FINAL: u32 = 1 << 11;
 pub const REPORT_DETAIL: u32 = 1 << 12;
-const NOT_DETAIL: u32 = REPORT_HEADING | REPORT_FOOTING | REPORT_PAGE_HEADING | REPORT_PAGE_FOOTING;
+pub const REPORT_NEXT_GROUP_LINE: u32 = 1 << 13;
+pub const REPORT_NEXT_GROUP_PLUS: u32 = 1 << 14;
+pub const REPORT_NEXT_GROUP_PAGE: u32 = 1 << 15;
+/// reportio.c NOTDETAIL (ND1 | ND2 | ND3).
+const NOT_DETAIL: u32 = REPORT_HEADING | REPORT_FOOTING | REPORT_PAGE_HEADING | REPORT_PAGE_FOOTING
+    | REPORT_CONTROL_HEADING | REPORT_CONTROL_HEADING_FINAL | REPORT_CONTROL_FOOTING | REPORT_CONTROL_FOOTING_FINAL;
 /// reportio.c REPORT_MAX_COLS: def_cols when the RD gives no COLUMNS.
 const REPORT_MAX_COLS: usize = 999;
 
 /// cob_report_field: its COLUMN, then its alphanumeric VALUE or the number
-/// of its SOURCE, which the program moves into the item (ReportEvent::Source).
-pub struct ReportField { pub column: usize, pub literal: Option<&'static [u8]>, pub source: Option<usize> }
+/// of its SOURCE (a SUM counter for a SUM item), which the program moves
+/// into the item (ReportEvent::Source); GROUP INDICATE prints it once until
+/// clear_group_indicate (page heading, control footing).
+pub struct ReportField {
+    pub column: usize, pub literal: Option<&'static [u8]>, pub source: Option<usize>, pub indicate: bool, pub indicated: bool,
+}
 
 /// cob_report_line: flags, LINE value, fields, then child and sister lines
-/// as indexes into the report's line table (line 0 is first_line).
-pub struct ReportLine { pub flags: u32, pub line: i64, pub fields: Vec<ReportField>, pub child: Option<usize>, pub sister: Option<usize> }
+/// as indexes into the report's line table (line 0 is first_line), and the
+/// NEXT GROUP value.
+pub struct ReportLine {
+    pub flags: u32, pub line: i64, pub fields: Vec<ReportField>, pub child: Option<usize>, pub sister: Option<usize>,
+    pub next_group: i64,
+}
+
+/// cob_report_control: its data item (a field number of ReportEvent), the
+/// CONTROL HEADING/FOOTING lines that name it (last declared first) and its
+/// sequence (1 for the last item of CONTROLS: cobc prepends each one).
+pub struct ReportControl {
+    pub field: usize, pub refs: Vec<usize>, pub sequence: usize,
+    val: Vec<u8>, sf: Vec<u8>, data_change: bool, suppress: bool,
+}
+
+impl ReportControl {
+    pub fn new(field: usize, refs: Vec<usize>, sequence: usize) -> Self {
+        Self { field, refs, sequence, val: Vec::new(), sf: Vec::new(), data_change: false, suppress: false }
+    }
+}
+
+/// cob_report_sum_ctr: the counter, its SUM operands (cob_report_sum, last
+/// listed first), the control of its CONTROL HEADING/FOOTING group or the
+/// FINAL footing, and whether it sums other counters (subtotal).
+pub struct ReportSum {
+    pub counter: usize, pub sources: Vec<usize>, pub control: Option<usize>, pub control_final: bool, pub subtotal: bool,
+}
 
 /// What reportio.c asks of the program: the data of a SOURCE item after
-/// cob_move (with LINE-COUNTER and PAGE-COUNTER as they are then), or
-/// cob_write of the report record BEFORE ADVANCING n LINES.
-pub enum ReportEvent<'a> { Source(usize, i64, i64), Write(&'a [u8], u32) }
+/// cob_move (with LINE-COUNTER and PAGE-COUNTER as they are then), cob_write
+/// of the report record BEFORE ADVANCING n LINES, and for CONTROL and SUM the
+/// data of a numbered field (Get, Put), cob_cmp with a saved copy (Differs,
+/// answered 1 when unequal), cob_add_fields (Add counter, operand) and
+/// cob_field_init of a counter (Zero).
+pub enum ReportEvent<'a> {
+    Source(usize, i64, i64), Write(&'a [u8], u32),
+    Get(usize), Put(usize, &'a [u8]), Differs(usize, &'a [u8]), Add(usize, usize), Zero(usize),
+}
 
-/// cob_report of reportio.c without CONTROL, SUM, NEXT GROUP, GROUP
-/// INDICATE, PRESENT WHEN, declaratives and run-time PAGE LIMIT values,
-/// which the translator refuses.
+/// cob_report of reportio.c without GROUP INDICATE, PRESENT WHEN, SUPPRESS,
+/// declaratives and run-time PAGE LIMIT values, which the translator refuses.
 #[derive(Default)]
 pub struct Report {
     name: &'static str,
     lines: Vec<ReportLine>,
+    controls: Vec<ReportControl>,
+    sums: Vec<ReportSum>,
     def_lines: i64,
     def_cols: usize,
     def_heading: i64,
@@ -1993,6 +2038,12 @@ pub struct Report {
     in_page_footing: bool,
     in_report_footing: bool,
     initiate_done: bool,
+    next_value: i64,
+    next_line: bool,
+    next_line_plus: bool,
+    next_page: bool,
+    next_just_set: bool,
+    foot_next_page: bool,
     /// limitCheck's error, found by the translator.
     initiate_error: Option<&'static str>,
     line_counter: i64,
@@ -2008,6 +2059,13 @@ impl Report {
         let [def_lines, def_heading, def_first_detail, def_last_detail] = limits;
         Self { name, lines, def_lines, def_cols: REPORT_MAX_COLS, def_heading, def_first_detail, def_last_detail,
                record: vec![b' '; size], ..Default::default() }
+    }
+
+    /// The CONTROLS of the RD (cobc's list order) and the SUM counters.
+    pub fn with_controls(mut self, controls: Vec<ReportControl>, sums: Vec<ReportSum>) -> Self {
+        self.controls = controls;
+        self.sums = sums;
+        self
     }
 
     /// LINE-COUNTER and PAGE-COUNTER: unsigned int items set by saveLineCounter.
@@ -2039,7 +2097,7 @@ impl Report {
     }
 
     /// cob_report_initiate; the PAGE LIMIT and LINE checks were made by the translator.
-    pub fn initiate(&mut self) {
+    pub fn initiate(&mut self, events: &mut Events) {
         if self.initiate_done { fail(&format!("INITIATE {} was already done (COB_EC_REPORT_ACTIVE) not modelled", self.name)); }
         self.curr_page = 1;
         self.curr_line = 0;
@@ -2053,6 +2111,12 @@ impl Report {
         self.initiate_done = true;
         self.first_detail = true;
         self.first_generate = true;
+        self.next_value = 0;
+        self.next_line = false;
+        self.next_line_plus = false;
+        self.next_page = false;
+        for control in &mut self.controls { control.val.clear(); control.sf.clear(); }
+        for k in 0..self.sums.len() { events(ReportEvent::Zero(self.sums[k].counter)); }
     }
 
     /// do_page_footing.
@@ -2102,11 +2166,43 @@ impl Report {
             self.curr_line += 1;
             self.save_line_counter();
         }
+        self.clear_group_indicate();
         self.in_page_heading = false;
     }
 
-    /// report_line: position the line, then copy its fields (print_field:
-    /// the item's data without trailing spaces or NULs) and write it.
+    /// clear_group_indicate of every line reached from first_line.
+    fn clear_group_indicate(&mut self) {
+        for line in &mut self.lines {
+            for field in &mut line.fields { field.indicated = false; }
+        }
+    }
+
+    /// set_next_info: a line with NEXT GROUP sets the spacing of the next one.
+    fn set_next_info(&mut self, index: usize) {
+        let (flags, value) = (self.lines[index].flags, self.lines[index].next_group);
+        if flags & REPORT_NEXT_GROUP_LINE != 0 {
+            self.next_value = value;
+            self.next_line = true;
+            self.next_just_set = true;
+            self.next_line_plus = false;
+        }
+        if flags & REPORT_NEXT_GROUP_PLUS != 0 {
+            self.next_value = value;
+            self.next_line = false;
+            self.next_line_plus = true;
+            self.next_just_set = true;
+        }
+        if flags & REPORT_NEXT_GROUP_PAGE != 0 {
+            self.next_value = value;
+            self.next_line = false;
+            self.next_page = true;
+            self.next_just_set = true;
+        }
+    }
+
+    /// report_line: position the line (a pending NEXT GROUP first), then copy
+    /// its fields (print_field: the item's data without trailing spaces or
+    /// NULs) and write it.
     fn report_line(&mut self, index: usize, events: &mut Events) {
         let (flags, line) = (self.lines[index].flags, self.lines[index].line);
         self.blank();
@@ -2115,7 +2211,27 @@ impl Report {
             self.page_heading(events);
         }
         let mut check_line_plus = false;
-        if flags & REPORT_LINE_PLUS == 0 && flags & REPORT_LINE != 0 {
+        if !self.next_just_set && self.next_line_plus {
+            self.write_rec(self.next_value, events);
+            self.curr_line += self.next_value;
+            self.next_line_plus = false;
+            check_line_plus = true;
+        } else if !self.next_just_set && self.next_line {
+            self.next_line = false;
+            if self.curr_line > self.next_value {
+                self.page_footing(events);
+                self.page_heading(events);
+            }
+            while self.curr_line < self.next_value {
+                self.write_rec(1, events);
+                self.curr_line += 1;
+            }
+            check_line_plus = true;
+        } else if !self.next_just_set && self.next_page {
+            self.next_page = false;
+            self.page_footing(events);
+            self.page_heading(events);
+        } else if flags & REPORT_LINE_PLUS == 0 && flags & REPORT_LINE != 0 {
             if self.curr_line > line {
                 self.page_footing(events);
                 if self.in_report_footing {
@@ -2143,10 +2259,14 @@ impl Report {
             self.page_heading(events);
         }
         self.save_line_counter();
-        if self.lines[index].fields.is_empty() { return; }
+        if self.lines[index].fields.is_empty() {
+            self.set_next_info(index);
+            return;
+        }
         for k in 0..self.lines[index].fields.len() {
             let (column, literal, source) = {
                 let f = &self.lines[index].fields[k];
+                if f.indicated { continue; }
                 (f.column, f.literal, f.source)
             };
             let data = match (source, literal) {
@@ -2160,21 +2280,53 @@ impl Report {
                 (None, None) => unreachable!("report field without SOURCE or VALUE"),
             };
             self.record[column - 1..column - 1 + data.len()].copy_from_slice(&data);
+            let f = &mut self.lines[index].fields[k];
+            if f.indicate { f.indicated = true; }
         }
         self.write_rec(1, events);
         self.curr_line += 1;
         self.save_line_counter();
+        self.set_next_info(index);
+    }
+
+    /// report_line_and: a group without fields of `kind` prints its child
+    /// lines; otherwise the lines of `kind` from its first child.
+    fn report_line_and(&mut self, index: usize, kind: u32, events: &mut Events) {
+        let mut index = index;
+        if self.lines[index].fields.is_empty() {
+            if let Some(child) = self.lines[index].child {
+                if self.lines[index].flags & kind != 0 {
+                    self.report_line(index, events);
+                    self.report_line_type(Some(child), REPORT_LINE, events);
+                    return;
+                }
+                index = child;
+            }
+        }
+        self.report_line_type(Some(index), kind, events);
+    }
+
+    /// get_control_sequence: the sequence of the control naming the line.
+    fn control_sequence(&self, index: usize) -> i64 {
+        self.controls.iter().find(|c| c.refs.contains(&index)).map_or(-1, |c| c.sequence as i64)
     }
 
     /// report_line_type: the lines of `type` from `start` on, each with its
-    /// child lines, then its sisters of that type.
+    /// child lines, then its sisters of that type (a CONTROL FOOTING stops
+    /// before the footing of a later control sequence).
     fn report_line_type(&mut self, start: Option<usize>, kind: u32, events: &mut Events) -> bool {
         let Some(index) = start else { return false };
         let (flags, child, sister) = (self.lines[index].flags, self.lines[index].child, self.lines[index].sister);
         if flags & kind != 0 {
             self.report_line(index, events);
             if child.is_some() { self.report_line_type(child, REPORT_LINE, events); }
-            if sister.is_some() { self.report_line_type(sister, kind, events); }
+            if let Some(next) = sister {
+                if kind == REPORT_CONTROL_FOOTING && self.lines[next].flags & REPORT_CONTROL_FOOTING != 0 {
+                    let (current, following) = (self.control_sequence(index), self.control_sequence(next));
+                    if current > 0 && following > 0 && following > current { return true; }
+                }
+                self.report_line_type(Some(next), kind, events);
+            }
             return true;
         }
         if child.is_some() && self.report_line_type(child, kind, events) { return true; }
@@ -2190,9 +2342,74 @@ impl Report {
         index
     }
 
+    /// sum_all_detail: each counter but a subtotal adds its operands.
+    fn sum_all_detail(&mut self, events: &mut Events) {
+        for k in 0..self.sums.len() {
+            if self.sums[k].subtotal { continue; }
+            for &source in &self.sums[k].sources { events(ReportEvent::Add(self.sums[k].counter, source)); }
+        }
+    }
+
+    /// sum_this_counter: a counter summed by others rolls forward into them.
+    fn sum_this_counter(&mut self, counter: usize, events: &mut Events) {
+        for k in 0..self.sums.len() {
+            if self.sums[k].sources.contains(&counter) {
+                for &source in &self.sums[k].sources { events(ReportEvent::Add(self.sums[k].counter, source)); }
+            }
+        }
+    }
+
+    /// zero_all_counters, once per SUM operand of each counter as in reportio.c.
+    fn zero_all_counters(&mut self, flag: u32, line: Option<usize>, events: &mut Events) {
+        let line = line.map(|index| self.print_line(index));
+        for k in 0..self.sums.len() {
+            for _ in 0..self.sums[k].sources.len() {
+                let counter = self.sums[k].counter;
+                if flag & REPORT_CONTROL_FOOTING_FINAL != 0 {
+                    if self.sums[k].control_final { events(ReportEvent::Zero(counter)); }
+                } else if let Some(control) = self.sums[k].control {
+                    for r in self.controls[control].refs.clone() {
+                        let flags = self.lines[r].flags;
+                        if flags & (REPORT_CONTROL_HEADING | REPORT_CONTROL_HEADING_FINAL) != 0 { continue; }
+                        if line.is_some_and(|l| l != self.print_line(r)) { continue; }
+                        if flags & flag != 0 {
+                            self.sum_this_counter(counter, events);
+                            events(ReportEvent::Zero(counter));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The CONTROL FOOTING lines of one control, as cob_report_generate and
+    /// cob_report_terminate print them.
+    fn control_footings(&mut self, control: usize, events: &mut Events) {
+        for r in self.controls[control].refs.clone() {
+            if self.lines[r].flags & REPORT_CONTROL_FOOTING == 0 { continue; }
+            let print = self.print_line(r);
+            if !self.controls[control].suppress { self.report_line_and(r, REPORT_CONTROL_FOOTING, events); }
+            self.controls[control].suppress = false;
+            self.zero_all_counters(REPORT_CONTROL_FOOTING, Some(print), events);
+            self.clear_group_indicate();
+            self.next_just_set = false;
+            if self.next_page {
+                self.foot_next_page = true;
+                self.next_page = false;
+            }
+        }
+    }
+
+    fn control_headings(&mut self, control: usize, events: &mut Events) {
+        for r in self.controls[control].refs.clone() {
+            if self.lines[r].flags & REPORT_CONTROL_HEADING != 0 { self.report_line_and(r, REPORT_CONTROL_HEADING, events); }
+        }
+    }
+
     /// cob_report_generate of a DETAIL group, or of the report (None).
     pub fn generate(&mut self, group: Option<usize>, events: &mut Events) {
         if !self.initiate_done { fail(&format!("GENERATE {} but no INITIATE was done", self.name)); }
+        self.foot_next_page = false;
         if self.incr_line {
             self.incr_line = false;
             self.curr_line += 1;
@@ -2201,16 +2418,65 @@ impl Report {
         if self.first_generate {
             self.report_line_type(Some(0), REPORT_HEADING, events);
             self.page_heading(events);
-        } else if self.curr_line > self.def_last_detail {
-            self.page_footing(events);
-            self.curr_line = 1;
-            self.page_heading(events);
-            self.first_detail = false;
-        } else if self.curr_line <= 1 || self.first_detail {
-            if self.first_detail { self.curr_line = 1; }
-            self.page_heading(events);
-            self.first_detail = false;
+            for c in 0..self.controls.len() {
+                self.control_headings(c, events);
+                self.controls[c].val = events(ReportEvent::Get(self.controls[c].field));
+                self.controls[c].data_change = false;
+            }
+        } else {
+            if self.curr_line > self.def_last_detail {
+                self.page_footing(events);
+                self.curr_line = 1;
+                self.page_heading(events);
+                self.first_detail = false;
+            } else if self.curr_line <= 1 || self.first_detail {
+                if self.first_detail { self.curr_line = 1; }
+                self.page_heading(events);
+                self.first_detail = false;
+            }
+            // A changed control breaks the controls of lower sequences too;
+            // each holds its previous value while the footings print.
+            let mut maxctl = 0;
+            for c in 0..self.controls.len() {
+                let field = self.controls[c].field;
+                let changed = events(ReportEvent::Differs(field, &self.controls[c].val)) == [1];
+                self.controls[c].data_change = changed;
+                if changed {
+                    self.controls[c].sf = events(ReportEvent::Get(field));
+                    events(ReportEvent::Put(field, &self.controls[c].val));
+                    maxctl = maxctl.max(self.controls[c].sequence);
+                }
+            }
+            if maxctl > 0 {
+                for c in 0..self.controls.len() {
+                    if self.controls[c].sequence < maxctl && !self.controls[c].data_change {
+                        self.controls[c].data_change = true;
+                        let field = self.controls[c].field;
+                        self.controls[c].sf = events(ReportEvent::Get(field));
+                        events(ReportEvent::Put(field, &self.controls[c].val));
+                    }
+                }
+            }
+            for c in 0..self.controls.len() {
+                if !self.controls[c].data_change { continue; }
+                self.control_footings(c, events);
+                events(ReportEvent::Put(self.controls[c].field, &self.controls[c].sf));
+            }
+            if self.foot_next_page {
+                self.next_page = false;
+                self.foot_next_page = false;
+                self.page_footing(events);
+                self.page_heading(events);
+            }
+            for c in 0..self.controls.len() {
+                if self.controls[c].data_change {
+                    self.control_headings(c, events);
+                    self.controls[c].val = events(ReportEvent::Get(self.controls[c].field));
+                }
+                self.controls[c].data_change = false;
+            }
         }
+        self.sum_all_detail(events);
         if let Some(mut l) = group {
             let mut whole_group = false;
             if let Some(child) = self.lines[l].child {
@@ -2241,21 +2507,38 @@ impl Report {
             while let Some(index) = pl {
                 if self.lines[index].flags & NOT_DETAIL != 0 { break; }
                 let print = self.print_line(index);
+                self.next_just_set = false;
                 self.report_line(print, events);
                 if !whole_group { break; }
                 pl = self.lines[index].sister;
             }
         }
+        self.zero_all_counters(REPORT_DETAIL, None, events);
         self.first_generate = false;
+        self.next_just_set = false;
         self.curr_line -= 1;
         self.incr_line = true;
         self.save_line_counter();
     }
 
-    /// cob_report_terminate without control footings.
+    /// cob_report_terminate: the CONTROL FOOTINGs, CONTROL FOOTING FINAL,
+    /// the page footing and the REPORT FOOTING.
     pub fn terminate(&mut self, events: &mut Events) {
         if !self.initiate_done { fail(&format!("TERMINATE {} but no INITIATE was done", self.name)); }
         if self.first_generate { return; }
+        for c in 0..self.controls.len() {
+            for r in self.controls[c].refs.clone() {
+                if self.lines[r].flags & REPORT_CONTROL_FOOTING == 0 { continue; }
+                let print = self.print_line(r);
+                if !self.controls[c].suppress { self.report_line_and(r, REPORT_CONTROL_FOOTING, events); }
+                self.controls[c].suppress = false;
+                self.zero_all_counters(REPORT_CONTROL_FOOTING, Some(print), events);
+            }
+        }
+        if Self::find(&self.lines, Some(0), REPORT_CONTROL_FOOTING_FINAL) {
+            self.report_line_type(Some(0), REPORT_CONTROL_FOOTING_FINAL, events);
+        }
+        self.zero_all_counters(REPORT_CONTROL_FOOTING_FINAL, None, events);
         self.page_footing(events);
         if Self::find(&self.lines, Some(0), REPORT_FOOTING) {
             self.in_report_footing = true;

@@ -858,7 +858,11 @@ class Parser:
                     length = None if self.at(")") else self.expr()
                     self.expect(")")
         descriptor = self.fields[self.conditions[key].parent] if conditions else self.fields[key]
-        if len(indices) != len(descriptor.dimensions):
+        deferred = getattr(self, "deferred_subscripts", None)
+        if deferred is not None and not conditions:
+            # REPORT SECTION: dimensions are known after the storage layout.
+            deferred.append((label, key, len(indices), self.t.line))
+        elif len(indices) != len(descriptor.dimensions):
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
         if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
             self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
@@ -1011,6 +1015,9 @@ class Parser:
                 self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        for label, key, count, line in getattr(self, "report_subscripts", []):
+            if count != len(self.fields[key].dimensions):
+                raise CobolError(f"ligne {line}: {label} requiert {len(self.fields[key].dimensions)} sous-script(s), reçu {count}")
         for key, index, text in self.group_fills:
             condition = self.conditions[key]
             size = self.fields[condition.parent].size
@@ -2485,7 +2492,12 @@ class Parser:
             if report.entries:
                 self.error(f"RD dupliqué: {name}")
             self.current_report = name
-            report_description(self, report)
+            self.deferred_subscripts = []
+            try:
+                report_description(self, report)
+            finally:
+                self.report_subscripts = getattr(self, "report_subscripts", []) + self.deferred_subscripts
+                self.deferred_subscripts = None
         self.current_report = None
         if not self.at("PROCEDURE"):
             self.error("PROCEDURE DIVISION attendue après la REPORT SECTION")
@@ -2515,6 +2527,12 @@ class Parser:
         """The storage of a report item (CB_STORAGE_REPORT): its PICTURE."""
         key = f"^report^{report.name}^{sum(1 for k in self.fields if k.startswith(f'^report^{report.name}^'))}"
         return self.hidden_item(list(picture), key)
+
+    def sum_counter(self, report, picture):
+        """build_sum_counter: a WORKING-STORAGE DISPLAY counter, VALUE ZERO."""
+        key = f"^sum^{report.name}^{sum(1 for k in self.fields if k.startswith(f'^sum^{report.name}^'))}"
+        line = self.t.line
+        return self.hidden_item([Token("PIC", line), Token(picture, line), Token("VALUE", line), Token("0", line)], key)
 
     def report_records(self):
         """finalize_report: the report file's record has the report's line

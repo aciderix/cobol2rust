@@ -63,15 +63,29 @@ class ReportParseTests(unittest.TestCase):
         generates = [s for s in entry if s.op == "generate"]
         self.assertEqual([s.args for s in generates], [("R", 0), ("R", None)])
 
+    def test_controls_sums_and_next_group(self):
+        groups = ("01 type control heading w.\n    03 line plus 1 column 1 pic x(4) source w group indicate.\n"
+                  + DETAIL_GROUP +
+                  "\n01 f type control footing w next group plus 2.\n    03 line plus 1.\n"
+                  "        05 t column 1 pic z9 sum n.\n"
+                  "01 type control footing final.\n    03 line plus 1 column 1 pic zz9 sum t.")
+        report = Parser(program("controls final w page 20", groups)).parse().reports["R"]
+        self.assertEqual(report.controls, ["W"])
+        self.assertTrue(report.control_final)
+        # cob_report_sum_ctr list (the sum_prv chain): T's counter, then the
+        # FINAL counter, a subtotal of T.
+        (counter, sources, control, _, _), (final, final_sources, final_control, is_final, subtotal) = report.sums
+        self.assertEqual((final_sources, final_control, is_final, subtotal), ([counter], None, True, True))
+        self.assertEqual((sources, control), (["N"], "W"))
+        footing = next(line for line in report.report_lines if line.control == "W" and line.next_group)
+        self.assertEqual(footing.next_group, 2)
+
     def test_unmodelled_forms_are_refused(self):
         cases = [
-            program("controls are w page 20", DETAIL_GROUP),
             program("page 20", DETAIL_GROUP.replace("source w", "sum n")),
             program("page 20", DETAIL_GROUP.replace('pic x(2) value "OK"', 'pic 9(2) value "12"')),
             program("page 20", DETAIL_GROUP.replace("column 9", "column plus 2")),
-            program("page 20", DETAIL_GROUP.replace("type detail", "type control heading w")),
             program("page 20", DETAIL_GROUP.replace("line plus 1", "line next page")),
-            program("page 20", DETAIL_GROUP.replace("source w", "source w group indicate")),
             program("page 20 heading 5 first detail 3", DETAIL_GROUP),
             program("page 20 last detail 10 footing 8", DETAIL_GROUP),
             program("page 20", DETAIL_GROUP, "write out-file."),
@@ -93,6 +107,12 @@ class ReportNativeTests(unittest.TestCase):
         self.assertTrue(report["files_match"], report)
         self.assertIn("03 line 10 page 0000000001\n", report["cobol_stdout"])
         self.assertEqual(report["cobol_files"]["SUMMARY.TXT"]["bytes"], 77)
+
+    def test_control_breaks_match_native(self):
+        report = verify(ROOT / "tests" / "fixtures" / "report_controls.cob",
+                        data_dir=ROOT / "tests" / "fixtures" / "report_controls.data")
+        self.assertTrue(report["match"], report)
+        self.assertIn("report.txt", report["cobol_files"])
 
     def test_report_without_page_clause(self):
         # Limits 0 with FIRST DETAIL 1: every line passes LAST DETAIL 0, so

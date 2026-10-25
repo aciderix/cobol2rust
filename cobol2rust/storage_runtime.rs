@@ -942,6 +942,15 @@ pub fn table_sort(table: &Value, keys: &[(usize, usize, Kind, bool, bool)]) {
     }
 }
 
+/// cob_field_dup holding `bytes`: an item of the same description.
+pub fn copy_of(item: &Value, bytes: &[u8]) -> Value {
+    match item {
+        Value::View(view) => Value::View(View { memory: Rc::new(RefCell::new(bytes.to_vec())), offset: 0, size: bytes.len(),
+            kind: view.kind, dimensions: vec![], initializers: vec![] }),
+        _ => fail("report control requires storage"),
+    }
+}
+
 /// The temporary alphanumeric field of a literal or a function result.
 pub fn temporary(value: &Value) -> Value {
     let bytes = value.bytes();

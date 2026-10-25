@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T18:18:38+00:00",
- "git_head": "0f4cf12bba98105c89a19a55de98ef83ebc1650f",
- "implementation_sha256": "f16b83fb2df5cb12e8ca703d6b35cb72f309909fbf969392dffed43ab249448d",
+ "measured_at": "2026-10-25T18:46:36+00:00",
+ "git_head": "59ea98600c5e47efeb189b4bbc7b67ec8fc227f4",
+ "implementation_sha256": "8b854938fcc5ca03f78eb12a368a01b797a9a8dbe0460555cdd00db0edea43a7",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
-  "accepted": 713,
+  "accepted": 715,
   "cobc_accepted": 738,
-  "gap": 25,
+  "gap": 23,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -133,7 +133,7 @@
     "kind": "livre, programmes complets"
    },
    "sources": 113,
-   "accepted": 62,
+   "accepted": 64,
    "internal_errors": 0,
    "blockers": [
     [
@@ -143,10 +143,6 @@
     [
      "instruction non prise en charge: *",
      4
-    ],
-    [
-     "clause RD CONTROL non prise en charge",
-     3
     ],
     [
      "caractère non pris en charge '?'",
@@ -183,31 +179,23 @@
     [
      "littéral multiligne non pris en charge",
      1
+    ],
+    [
+     "USAGE/clause non pris en charge",
+     1
     ]
    ],
    "cobc_accepted": 65,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 3,
+   "gap": 1,
    "gap_sources": [
     [
      "978-1-4302-6253-4_Coughlan_Ch16/Listing16-2.cbl",
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-1.cbl",
-     "clause RD CONTROL non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-2.cbl",
-     "clause RD CONTROL non prise en charge"
     ]
    ],
    "gap_blockers": [
-    [
-     "clause RD CONTROL non prise en charge",
-     2
-    ],
     [
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
      1
@@ -512,9 +500,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T18:18:38+00:00",
-  "git_head": "0f4cf12bba98105c89a19a55de98ef83ebc1650f",
-  "implementation_sha256": "f16b83fb2df5cb12e8ca703d6b35cb72f309909fbf969392dffed43ab249448d",
+  "measured_at": "2026-10-25T18:46:36+00:00",
+  "git_head": "59ea98600c5e47efeb189b4bbc7b67ec8fc227f4",
+  "implementation_sha256": "8b854938fcc5ca03f78eb12a368a01b797a9a8dbe0460555cdd00db0edea43a7",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -638,9 +626,9 @@
     }
    },
    "beg-cobol-for-programmers": {
-    "programs": 59,
+    "programs": 61,
     "identical": 52,
-    "different": 1,
+    "different": 3,
     "refused": 0,
     "timeout": 6,
     "error": 0,
@@ -878,6 +866,22 @@
      "978-1-4302-6253-4_Coughlan_Ch16/Listing16-1.cbl": {
       "status": "identical",
       "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-1.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing18-1.Rpt",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 159: COBOL subscript out of bounds\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-2.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing18-2.Rpt",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 180: COBOL subscript out of bounds\n"
      }
     }
    }

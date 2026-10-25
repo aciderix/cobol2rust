@@ -85,39 +85,39 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T18:18:38+00:00 (commit `0f4cf12bba`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T18:46:36+00:00 (commit `59ea98600c`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 14 | 14 | 0 | 0 |
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
-| beg-cobol-for-programmers | livre, programmes complets | 113 | 62 | 65 | 3 | 0 |
+| beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 300 | 311 | 11 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 320 | 331 | 11 | 0 |
-| **Total** | | **2458** | **713** | **738** | **25** | **0** |
+| **Total** | | **2458** | **715** | **738** | **23** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T18:18:38+00:00, commit `0f4cf12bba`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T18:46:36+00:00, commit `59ea98600c`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
 | zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
 | cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
-| beg-cobol-for-programmers | 59 | 52 | 1 | 0 | 6 |
+| beg-cobol-for-programmers | 61 | 52 | 3 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 4 × instruction non prise en charge: XML
-2. 2 × clause RD CONTROL non prise en charge
-3. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
-4. 2 × PROCEDURE attendu
-5. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
-6. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
-7. 1 × clause SELECT non prise en charge
-8. 1 × paragraphe CONFIGURATION non pris en charge
-9. 1 × entrée SPECIAL-NAMES non prise en charge: <EOF>
-10. 1 × instruction non prise en charge: GIVING
+2. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
+3. 2 × PROCEDURE attendu
+4. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
+5. 1 × CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge
+6. 1 × clause SELECT non prise en charge
+7. 1 × paragraphe CONFIGURATION non pris en charge
+8. 1 × entrée SPECIAL-NAMES non prise en charge: <EOF>
+9. 1 × instruction non prise en charge: GIVING
+10. 1 × expression non prise en charge: Z
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -198,3 +198,13 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Prochain chantier de code réel : Report Writer avec CONTROLS (livre
   18-1/18-2, port de reportio.c) ; le reste de l'écart est fait de
   fragments de tests de parseur (XML, SCREEN, COMMUNICATION, dialectes).
+- 2026-10-25 — Report Writer avec ruptures de contrôle (port de
+  `cob_report_generate`/`cob_report_terminate` : CONTROLS [FINAL], CH/CF,
+  pieds imprimés avec la valeur précédente du contrôle, SUM et
+  `build_sum_counter`, report des compteurs, NEXT GROUP, GROUP INDICATE,
+  VALUE ALL) : **713 → 715** acceptées, livre **64/65** (cobc 65 ; reste
+  16-2). Fixture `report_controls` identique à cobc ; NIST RW 6/6 conformes
+  (40 PASS), émission 451/458. Exécution du livre : 52/61 identiques ; 18-1 et
+  18-2 sont identiques sur plus de 1200 lignes puis s'arrêtent, comme 13-6,
+  sur un indice hors bornes que GnuCOBOL lit sans contrôle (la dernière ligne
+  sans fin de ligne est relue par libcob, d'où StateName(70)).
