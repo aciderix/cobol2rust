@@ -1,5 +1,17 @@
 # Validation — 22 octobre 2026
 
+## Exécution comparée sur code réel — 25 octobre 2026
+
+`tools/real_corpora.py --cobc --execute --record` compile, exécute (stdin
+vide, fichiers du dossier du programme, build release) et compare à cobc les
+programmes acceptés : CardDemo 8/8 identiques, zopeneditor 3/3, cours 8/11
+(1 divergent : COMP-3 invalide ; 2 boucles infinies aussi en natif), livre
+41/52 (5 divergents, 6 délais de programmes interactifs). Nouvelles fixtures
+natives : `call_not_found`, `call_not_found_dynamic`, `file_exit_messages`,
+`divide_by_zero`, `line_sequential_split`, `line_sequential_bad_char`,
+`non_ascii_literals`, `literal_concatenation`. Vérification NIST complète sur
+566aece : 427/427, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT.
+
 ## Corpus réels après les premières étapes du cap — 25 octobre 2026
 
 `tools/real_corpora.py --cobc --record` : **685/2458** acceptées (référence

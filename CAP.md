@@ -85,7 +85,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T12:32:35+00:00 (commit `7c4ab9bc65`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T14:01:12+00:00 (commit `2ea07f74d5`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,6 +96,15 @@ Dernière mesure : 2026-10-25T12:32:35+00:00 (commit `7c4ab9bc65`, cobc (GnuCOBO
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 290 | 311 | 21 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 316 | 331 | 15 | 0 |
 | **Total** | | **2458** | **685** | **738** | **53** | **0** |
+
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T13:54:42+00:00, commit `566aece3ed`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+
+| Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| carddemo | 8 | 8 | 0 | 0 | 0 |
+| zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
+| cobol-programming-course | 11 | 8 | 1 | 0 | 2 |
+| beg-cobol-for-programmers | 52 | 41 | 5 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
@@ -138,3 +147,12 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   le journal de référence). Prochains : ENTRY (CardDemo), comparaisons à
   `ALL littéral`, Report Writer avec ruptures (CONTROLS), puis compilation et
   exécution des programmes batch acceptés (niveaux 3-4 sur code réel).
+- 2026-10-25 — Exécution comparée sur code réel (`--execute`) : les
+  divergences trouvées sont portées de libcob (cob_call_error, cob_fatal_error
+  et avertissements implicit CLOSE, NaN de division par zéro, lineseq_read
+  avec COB_LS_SPLIT/VALIDATE, bogue IS_BAD_CHAR de lineseq_write), plus les
+  littéraux X"…", non ASCII et `&`. Programmes identiques à cobc : CardDemo
+  **0 → 8/8**, zopeneditor 3/3, cours 8/11, livre 39 → **41/52** ; NIST
+  complet 427/427 (9610 PASS). Acceptation statique inchangée (685/2458).
+  Restent : données invalides sans `-debug`, indices hors bornes, programmes
+  interactifs sans jeu d'entrée, performance.

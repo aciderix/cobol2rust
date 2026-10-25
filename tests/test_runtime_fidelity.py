@@ -39,8 +39,10 @@ class NativeTests(unittest.TestCase):
         self.assertTrue(report["match"], report)
 
     def test_non_ascii_and_hexadecimal_literals_are_bytes(self):
-        report = verify(FIXTURES / "non_ascii_literals.cob", fmt="free")
-        self.assertTrue(report["match"], report)
+        for name in ("non_ascii_literals", "literal_concatenation"):
+            with self.subTest(name=name):
+                report = verify(FIXTURES / f"{name}.cob", fmt="free")
+                self.assertTrue(report["match"], report)
 
 
 if __name__ == "__main__":

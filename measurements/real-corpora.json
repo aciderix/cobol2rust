@@ -1,10 +1,10 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T12:32:35+00:00",
- "git_head": "7c4ab9bc65d44da919e6aee0ca7e3cc3e2d84e6c",
- "implementation_sha256": "62b01678e1a165e12b7421619fb8291d578a2e32aa350fa0d3f8b8be07ccf7e3",
+ "measured_at": "2026-10-25T14:01:12+00:00",
+ "git_head": "2ea07f74d5cbf6aa12e1ff29612426976cfdb89b",
+ "implementation_sha256": "9db224dc0f19987953b2eb8104744ef0f03d89584af9bdd0c515b04528427ae7",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
- "scope": "niveau 2 (émission acceptée) seulement : rien n'est compilé, exécuté ni comparé",
+ "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 2458,
   "accepted": 685,
@@ -201,7 +201,7 @@
    "blockers": [
     [
      "PROCEDURE attendu",
-     23
+     24
     ],
     [
      "instruction non prise en charge: *",
@@ -216,7 +216,7 @@
      2
     ],
     [
-     "seuls les littéraux ASCII sont pris en charge",
+     "mot PICTURE ASCII contigu attendu",
      2
     ],
     [
@@ -445,7 +445,7 @@
     ],
     [
      "src/test/resources/io/proleap/cobol/ast/variable/Literal.cbl",
-     "expression non prise en charge: X"
+     "expression non prise en charge: Z"
     ],
     [
      "src/test/resources/io/proleap/cobol/ast/variable/XoptsApost.cbl",
@@ -518,7 +518,7 @@
      1
     ],
     [
-     "expression non prise en charge: X",
+     "expression non prise en charge: Z",
      1
     ],
     [
@@ -541,7 +541,7 @@
    "blockers": [
     [
      "clause ENVIRONMENT DIVISION non prise en charge",
-     355
+     356
     ],
     [
      "IDENTIFICATION DIVISION attendue",
@@ -560,15 +560,15 @@
      20
     ],
     [
-     "seuls les littéraux ASCII sont pris en charge",
-     18
-    ],
-    [
      "instruction non prise en charge: EXEC",
      16
     ],
     [
      "expression attendue",
+     16
+    ],
+    [
+     "OCCURS limité à 1..10000, minimum variable 0..maximum",
      16
     ],
     [
@@ -692,6 +692,366 @@
      1
     ]
    ]
+  }
+ },
+ "execution": {
+  "measured_at": "2026-10-25T13:54:42+00:00",
+  "git_head": "566aece3ed5eb8d803ec5d39193ce8d3110637b6",
+  "implementation_sha256": "9db224dc0f19987953b2eb8104744ef0f03d89584af9bdd0c515b04528427ae7",
+  "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
+  "corpora": {
+   "carddemo": {
+    "programs": 8,
+    "identical": 8,
+    "different": 0,
+    "refused": 0,
+    "timeout": 0,
+    "error": 0,
+    "results": {
+     "app/cbl/CBACT01C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBACT02C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBACT03C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBCUS01C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBTRN01C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBTRN02C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/CBTRN03C.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "app/cbl/COBSWAIT.cbl": {
+      "status": "identical",
+      "exit": 1
+     }
+    }
+   },
+   "zopeneditor-sample": {
+    "programs": 3,
+    "identical": 3,
+    "different": 0,
+    "refused": 0,
+    "timeout": 0,
+    "error": 0,
+    "results": {
+     "COBOL/SAM1.cbl": {
+      "status": "identical",
+      "exit": 16
+     },
+     "COBOL/SAM1LIB.cbl": {
+      "status": "identical",
+      "exit": 16
+     },
+     "multiroot/sam/SAM1.cbl": {
+      "status": "identical",
+      "exit": 16
+     }
+    }
+   },
+   "cobol-programming-course": {
+    "programs": 11,
+    "identical": 8,
+    "different": 1,
+    "refused": 0,
+    "timeout": 2,
+    "error": 0,
+    "results": {
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/ADDAMT.cobol": {
+      "status": "timeout"
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBL0013.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBL0014.cobol": {
+      "status": "different",
+      "reasons": [
+       "stdout",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 13: invalid packed decimal sign\n"
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBL0015.cobol": {
+      "status": "timeout"
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBLC2.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/HELLO.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/PAYROL00.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/SRCHBIN.cobol": {
+      "status": "identical",
+      "exit": 1
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/SRCHSER.cobol": {
+      "status": "identical",
+      "exit": 1
+     },
+     "COBOL Programming Course #4 - Testing/Labs/cbl/DEPTPAY.CBL": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #4 - Testing/Labs/cbl/EMPPAY.CBL": {
+      "status": "identical",
+      "exit": 0
+     }
+    }
+   },
+   "beg-cobol-for-programmers": {
+    "programs": 52,
+    "identical": 41,
+    "different": 5,
+    "refused": 0,
+    "timeout": 6,
+    "error": 0,
+    "results": {
+     "978-1-4302-6253-4_Coughlan_Ch02/Listing 2-1  Shortest COBOL program.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch02/Listing 2-2  The COBOL Greeting program.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch02/Listing 2-3  The DoCalc example program.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch04/Listing4-1 AcceptAndDisplayExamples.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch04/Listing4-2 Add two numbers.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-10.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-11.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-2.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-4.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-5.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-6.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-7.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-1.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-2.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-4.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-5.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-6.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch06/Listing6-7.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch07/Listing 7-2  Reading the Employee file and displaying the records.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch07/Listing 7-3 Writing and Reading the Employee file.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch08/Listing8-1.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch08/Listing8-2.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch08/Listing8-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch09/Listing9-1.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch09/Listint9-5.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch12/Listing12-3.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch12/Listing12-4.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch12/Listing12-5.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch12/Lsiting12-6.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-1.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-2.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-4.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-6.cbl": {
+      "status": "different",
+      "reasons": [
+       "stdout",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 75: COBOL subscript out of bounds\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Listing13-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch13/Lsiting12-6.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-1.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-10.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-2.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing14-2.Srt, Listing14-2.prn",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 91: invalid DISPLAY numeric data\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-3.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing14-3.Srt, Listing14-3.prn",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 99: invalid DISPLAY numeric data\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-5.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing14-5.Srt",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 44: invalid DISPLAY numeric data\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-6.cbl": {
+      "status": "identical",
+      "exit": 1
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-9.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing14-9.sum",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 68: invalid DISPLAY numeric data\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Lsiting12-6.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl": {
+      "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-6.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-7.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch16/Listing16-1.cbl": {
+      "status": "identical",
+      "exit": 0
+     }
+    }
+   }
   }
  }
 }
