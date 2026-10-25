@@ -17,6 +17,8 @@ working-storage section.
 01 m pic 999 value 120.
 01 w pic 999 value 12.
 01 q pic s99v99 value 12.30.
+01 pa pic 99p value 120.
+01 pc pic pp99 value .0012.
 procedure division.
     if n2 < "AA" display "1 lt" else display "1 ge" end-if.
     if d2 = "22" display "2 eq" else display "2 ne" end-if.
@@ -54,4 +56,9 @@ procedure division.
     evaluate w when "012" display "c4b when" when other display "c4b other" end-evaluate.
     if q = "1230" display "c5 eq" else display "c5 ne" end-if.
     if q = "123" display "c5b eq" else display "c5b ne" end-if.
+    if pa = "12" display "d1 eq" else display "d1 ne" end-if.
+    if pa = "120" display "d2 eq" else display "d2 ne" end-if.
+    if pa < "13" display "d3 lt" else display "d3 ge" end-if.
+    if pc = "12" display "d4 eq" else display "d4 ne" end-if.
+    if pc = "0012" display "d5 eq" else display "d5 ne" end-if.
     stop run.

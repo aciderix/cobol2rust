@@ -126,6 +126,15 @@ identifiant, `target_variable` marque les receveurs ; `Stmt.debug_checks`
 blocages : FD GLOBAL/EXTERNAL et USE GLOBAL (IC227A/233A/234A), RANDOM,
 NC103A, NC214M, ST137A, SQ401M.
 
+Dernière étape : horloge et cas isolés. `runtime::current_datetime` (port de
+`cob_get_current_datetime`, UTC, nanosecondes toujours lues sous Linux) et
+`check_current_date` ; Stmt `accept_clock`, Expr `clock`. `intrinsic::random`
+= `MersenneTwister` de GMP (`mangle_seed`, 2000 tirages de chauffe, 63 bits).
+`Emitter.folded_comparison` (= `compare_field_literal`), `spec.variable_sort`
+(RELEASE/RETURN refusés). `nist_verify.RUNNER_CLOCK` fige NC214M. NIST
+**439/458**, 414/415. Prochains blocages : FD GLOBAL/EXTERNAL et USE GLOBAL
+(IC227A/233A/234A), programmes INITIAL (IC401M).
+
 Dernière étape : `Parser.special_names` (tables `mnemonics`, `switch_conditions`,
 `alphabets`, `classes`, `symbolic`), `runtime::switch_on`/`set_switch`,
 `display_error`, `Value::accept` = `cob_accept`. `verify --runtime-env` accepte

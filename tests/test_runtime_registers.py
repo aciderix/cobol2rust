@@ -71,6 +71,8 @@ class NativeTests(unittest.TestCase):
         report = self.fixture("mixed_literal_compare")
         self.assertIn("2 ne\n", report["cobol_stdout"])
         self.assertIn("b4 eq\n", report["cobol_stdout"])
+        # P-scaled items compare their stored digits (99P 120: "12").
+        self.assertIn("d1 eq\nd2 ne\nd3 lt\nd4 eq\nd5 ne\n", report["cobol_stdout"])
 
 
 if __name__ == "__main__":

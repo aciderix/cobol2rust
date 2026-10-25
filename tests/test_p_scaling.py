@@ -24,8 +24,7 @@ class PScalingTests(unittest.TestCase):
 
     def test_refusals(self):
         for data, body in [("01 a pic 99p comp.", "stop run."), ("01 a pic 9p9.", "stop run."),
-                           ("01 a pic pp99. 01 x pic xx.", "move a to x. stop run."),
-                           ("01 a pic 99p. 01 x pic xx.", "if a = '12' stop run end-if.")]:
+                           ("01 a pic pp99. 01 x pic xx.", "move a to x. stop run.")]:
             with self.subTest(data=data, body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(data, body)).parse()).generate()
 

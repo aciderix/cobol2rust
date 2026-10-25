@@ -737,3 +737,14 @@ option `--fno-ec-data-incompatible` pour DB201A. Émission acceptée :
 **434/458** ; revérification : **409/410 programmes principaux conformes**,
 9438 PASS, 0 FAIL (`build/nist-verify-debug-items.json`,
 `build/coverage-nist-debug-items.json`).
+
+## Progression : horloge, RANDOM, comparaisons littérales, SD à ODO
+
+Port de `cob_get_current_datetime` et `check_current_date` (ACCEPT FROM
+DATE/DAY/DAY-OF-WEEK/TIME, COB_CURRENT_DATE), de FUNCTION RANDOM (Mersenne
+Twister de GMP 6.3.0, `mpf_urandomb` puis `mpf_get_d`), de
+`compare_field_literal` pour les comparaisons d'un numérique à un littéral
+alphanumérique, et de `cob_file_sort_using/giving` pour un SD à OCCURS
+DEPENDING. Émission acceptée : **439/458** ; revérification : **414/415
+programmes principaux conformes**, 9555 PASS, 0 FAIL
+(`build/nist-verify-isolated.json`, `build/coverage-nist-isolated.json`).

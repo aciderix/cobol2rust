@@ -1,5 +1,23 @@
 # Validation — 22 octobre 2026
 
+## Horloge, RANDOM, comparaisons littérales, SD à ODO — 25 octobre 2026
+
+- **354 tests découverts : 352 réussis, un test PE Windows ignoré** ; l'échec
+  restant (`test_p_scaling`) encodait l'ancien refus d'un article P comparé à un
+  littéral alphanumérique, comparaison désormais émise et vérifiée en natif
+  (fixture `mixed_literal_compare.cob`, cas d1-d5).
+- **122/122 comparaisons locales conformes** ; nouvelles fixtures
+  `clock_accept.cob` (ACCEPT FROM DATE/DAY/DAY-OF-WEEK/TIME sous
+  COB_CURRENT_DATE, normalisation de mktime), `random_function.cob`
+  (Mersenne Twister de GMP) et `mixed_literal_compare.cob`
+  (`compare_field_literal` de cobc).
+- NIST : **439/458** émissions acceptées (dont 24 sous-programmes `lib`) ;
+  **414/415 programmes principaux conformes** (9555 PASS, 0 FAIL, 16 DELETED,
+  118 INSPECT) : `build/nist-verify-isolated.json`,
+  `build/coverage-nist-isolated.json`. 5 programmes ajoutés : IF131A, IF403M,
+  NC103A, NC214M (horloge figée au moment du log de référence), ST137A.
+  Écart connu inchangé : OBNC1M (SIGINT).
+
 ## USE FOR DEBUGGING sur articles — 25 octobre 2026
 
 - **347 tests découverts : 346 réussis, un test PE Windows ignoré.**
