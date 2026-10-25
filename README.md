@@ -440,6 +440,19 @@ refusés. `--fno-ec-data-incompatible` (convert, verify) reproduit
 alphanumérique d'un article à signe séparé invalide copie ses chiffres tels
 quels et réécrit l'octet de signe (`COB_PUT_SIGN`) ; sans l'option ce cas reste
 un arrêt nommé, comme `--debug` arrête cobc.
+Sans `--runtime-checks`, les données numériques invalides se lisent comme
+libcob sans `-debug` : chaque octet DISPLAY vaut son quartet bas (`COB_D2I`),
+un premier octet X"FF" ou X"00" vaut ±10^taille en lecture décimale
+(`cob_decimal_set_display`), le packé garde ses quartets (tout signe autre que
+D est positif). Les comparaisons numériques reprennent la routine choisie par
+cobc (`memcmp` entre DISPLAY non signés de même description, `cob_cmp_numdisp`,
+`cob_cmp_llint`, `cob_numeric_cmp`, `cob_cmp` en DEBUGGING MODE), le MOVE entre
+articles de même description copie les octets (`cb_build_move_field`), DISPLAY
+montre l'article tel qu'il est stocké (`cob_move_display_to_edited`) et les
+clés numériques de SORT passent par `cob_numeric_cmp`. Restent des arrêts
+nommés : DISPLAY signé ou binaire invalide, quartet packé supérieur à 9, indice
+hors bornes. `--runtime-checks` (convert, verify ; `cobc -debug` pour
+l'original) rétablit l'arrêt sur toute donnée invalide.
 `--std {default,cobol85}` (convert, verify) choisit le dialecte cobc modélisé ;
 `verify --std cobol85` compile aussi l'original avec `-std=cobol85`. Seule
 différences modélisées à ce jour : `section-segments` (numéros de segment

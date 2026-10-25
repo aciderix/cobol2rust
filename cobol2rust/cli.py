@@ -159,16 +159,17 @@ def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
 
 
 def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), debugging_lines=False,
-            std="default", no_ec_data_incompatible=False):
+            std="default", no_ec_data_incompatible=False, runtime_checks=False):
     from . import frontend
     if std not in frontend.STANDARDS:
         raise CobolError(f"dialecte non modélisé: {std}; choisir parmi {', '.join(frontend.STANDARDS)}")
-    previous = frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE
-    frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = debugging_lines, std, no_ec_data_incompatible
+    previous = frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS
+    frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS = \
+        debugging_lines, std, no_ec_data_incompatible, runtime_checks
     try:
         program, expanded, copies, subprograms, rust, mapping = emit_unit(source, fmt, includes, call_paths)
     finally:
-        frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE = previous
+        frontend.DEBUGGING_LINES, frontend.STD, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS = previous
     output = output.resolve()
     # Never replace an existing project or an unrelated directory implicitly.
     if output.exists() and any(output.iterdir()):
@@ -237,6 +238,7 @@ def main(argv=None):
     source.add_argument("--debugging-lines", action="store_true", help="compiler les lignes D comme cobc -fdebugging-line")
     source.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc modélisé (-std)")
     source.add_argument("--fno-ec-data-incompatible", action="store_true", help="comme cobc -fno-ec=data-incompatible (MOVE sans cob_check_numeric)")
+    source.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution de cobc -debug (arrêt sur donnée invalide)")
     source.add_argument("--build", action="store_true", help="compiler le Rust généré")
     source.add_argument("--run", action="store_true", help="compiler et exécuter le Rust généré")
     binary = subs.add_parser("inspect", help="inspecter un exécutable COBOL potentiel (sans le lancer)")
@@ -256,6 +258,7 @@ def main(argv=None):
     verification.add_argument("--debugging-lines", action="store_true", help="lignes D actives (cobc -fdebugging-line)")
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
+    verification.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution (cobc -debug) des deux côtés")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -292,7 +295,8 @@ def main(argv=None):
                     target[key] = value
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
                             args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
-                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env)
+                            std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env,
+                            runtime_checks=args.runtime_checks)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():
@@ -316,7 +320,7 @@ def main(argv=None):
             if (args.build or args.run) and not cargo:
                 raise CobolError("Cargo introuvable; installer Rust ou omettre --build/--run")
             report = convert(args.source, args.output, args.format, args.copybook_path, args.call_path,
-                             args.debugging_lines, args.std, args.fno_ec_data_incompatible)
+                             args.debugging_lines, args.std, args.fno_ec_data_incompatible, args.runtime_checks)
             print(f"{report['program']} -> {args.output.resolve()}", flush=True)
             if cargo:
                 command = [cargo, "run" if args.run else "build", "--quiet"]

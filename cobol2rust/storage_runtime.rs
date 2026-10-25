@@ -71,6 +71,11 @@ pub fn set_unchecked_data() { UNCHECKED_DATA.store(true, std::sync::atomic::Orde
 
 fn unchecked_data() -> bool { UNCHECKED_DATA.load(std::sync::atomic::Ordering::Relaxed) }
 
+static RUNTIME_CHECKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// cobc -debug: invalid numeric data stops the run instead of being read.
+pub fn set_runtime_checks() { RUNTIME_CHECKS.store(true, std::sync::atomic::Ordering::Relaxed); }
+fn runtime_checks() -> bool { RUNTIME_CHECKS.load(std::sync::atomic::Ordering::Relaxed) }
+
 fn display_digits(bytes: &[u8], usage: Usage, signed: bool) -> (Vec<u8>, bool) {
     let mut digits = bytes.to_vec();
     if !signed || digits.is_empty() { return (digits, false); }
@@ -425,6 +430,63 @@ impl View {
         let text = format!("{:0>width$}", absolute(&integer).to_string(), width = width);
         Some(if signed { format!("{}{text}", if integer.sign() == Sign::Minus { '-' } else { '+' }) } else { text })
     }
+    /// cob_display of an unsigned DISPLAY item holding invalid data, without
+    /// runtime checks: pretty_display_numeric moves it to 9(n)[.9(s)] with
+    /// cob_move_display_to_edited, which keeps the bytes as they are, except
+    /// after the decimal point where other bytes than digits, ".,+-/B" are
+    /// zero.
+    pub fn invalid_display(&self) -> Option<Vec<u8>> {
+        let (digits, scale) = match self.kind {
+            Kind::Numeric { digits, scale, signed: false, usage: Usage::Display } if scale >= 0 && scale as u32 <= digits => (digits as usize, scale as usize),
+            _ => return None,
+        };
+        if runtime_checks() || self.number().is_ok() { return None; }
+        let bytes = self.raw();
+        let mut out = bytes[..digits - scale].to_vec();
+        if scale > 0 {
+            out.push(crate::runtime::module_symbols().0);
+            out.extend(bytes[digits - scale..].iter().map(|&b| if b.is_ascii_digit() || b",.+-/B".contains(&b) { b } else { b'0' }));
+        }
+        Some(out)
+    }
+    /// An operand as libcob reads it without runtime checks. An unsigned
+    /// DISPLAY item counts COB_D2I (low nibble) of each byte; as a decimal
+    /// (cob_decimal_set_display: computations, cob_cmp_llint) a first byte
+    /// 0xFF is 10^size and 0x00 is -10^size, as an integer (cob_get_llint,
+    /// cob_cmp_numdisp) it is not special. A packed item keeps its digit
+    /// nibbles, any sign but D is positive (cob_decimal_set_packed); a digit
+    /// nibble above 9 or a signed DISPLAY item is a named stop.
+    pub fn operand_value(&self, integer: bool) -> Value {
+        let error = match self.kind {
+            Kind::Numeric { .. } => match self.number() { Ok(value) => return value, Err(error) => error },
+            _ => return self.value(),
+        };
+        if runtime_checks() { fail(error); }
+        let (digits, scale, signed, usage) = match self.kind {
+            Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage), _ => unreachable!(),
+        };
+        let bytes = self.raw();
+        match usage {
+            Usage::Display if !signed => {
+                let units = if !integer && bytes[0] == 0xff { power(bytes.len() as u32) }
+                    else if !integer && bytes[0] == 0 { -power(bytes.len() as u32) }
+                    else { bytes.iter().fold(BigInt::from(0), |n, &b| n * 10 + (b & 0x0f)) };
+                Value::Num(Number::scaled(units, scale), Some((digits, scale, signed, false)))
+            },
+            Usage::Packed => {
+                let mut nibbles: Vec<u8> = bytes.iter().flat_map(|b| [b >> 4, b & 15]).collect();
+                let sign = nibbles.pop().unwrap_or(0);
+                let padding = nibbles.len() - digits as usize;
+                if nibbles[padding..].iter().any(|&n| n > 9) {
+                    fail(&format!("{error} (digit nibble above 9 read differently by libcob's paths)"));
+                }
+                let units = nibbles[padding..].iter().fold(BigInt::from(0), |n, &d| n * 10 + d);
+                let units = if signed && sign == 13 { -units } else { units };
+                Value::Num(Number::scaled(units, scale), Some((digits, scale, signed, false)))
+            },
+            _ => fail(&format!("{error} (signed or binary invalid data without runtime checks not modelled)")),
+        }
+    }
     pub fn value(&self) -> Value {
         match self.kind {
             Kind::Text | Kind::Justified | Kind::Edited { .. } | Kind::AlnumEdited { .. } => Value::Bytes(self.raw()),
@@ -509,7 +571,7 @@ impl View {
         if matches!(self.kind, Kind::Numeric { usage: Usage::Index, .. }) {
             fail("MOVE of text to an index requires native index semantics");
         }
-        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register, .. }) {
+        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register, .. }) && !raw_group {
             fail("MOVE of text to a COMP-5 item not modelled");
         }
         if raw_group {

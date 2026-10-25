@@ -219,7 +219,9 @@ class Emitter:
     def expression(self, e):
         op, args = e.op, e.args
         if op == "var":
-            return self.reference(args[0]) + ".snapshot()"
+            # An operand of a computation, condition or subscript: invalid
+            # numeric data is read like libcob without runtime checks.
+            return self.reference(args[0]) + ".operand()"
         if op == "shared":
             return f"{self.shared}.clone()"
         if op == "linage":
@@ -418,6 +420,72 @@ class Emitter:
         picture = re.sub(r"\(\d+\)", "", field.picture.upper())
         return bool(picture) and set(picture) <= {"A", "B"} and "A" in picture
 
+    def numeric_comparison(self, left, right):
+        """The libcob routine cobc chooses (cb_build_cond_default,
+        cb_check_num_cond, cb_build_optim_cond, cob_numeric_cmp): they agree
+        on valid data but read invalid DISPLAY data as a decimal or as an
+        integer."""
+        def field(e):
+            if e.op == "var" and e.args[0].start is None:
+                f = self.program.fields[e.args[0].name]
+                return f if f.kind == "number" else None
+            return None
+
+        def literal(e):
+            e = e.args[0] if e.op in {"unary+", "unary-"} else e
+            return e.args[0] if e.op == "number" else None
+
+        def fits_long_long(e, f):  # cb_fits_long_long
+            if f is not None:
+                usage = self.storage_usage(f)
+                if f.usage == "INDEX":
+                    return True
+                if usage in {"Binary", "Native", "Register"}:
+                    return f.scale <= 0 and f.size <= 8
+                if usage == "Packed":
+                    return f.scale <= 0 and f.digits < 19
+                return usage == "Display" and f.scale <= 0 and f.size < 19
+            text = literal(e)
+            if text is None or "." in text:
+                return False
+            digits = text.lstrip("+-").lstrip("0")
+            return len(digits) < 19 or (len(digits) == 19 and digits <= (
+                "9223372036854775808" if e.op == "unary-" else "9223372036854775807"))
+
+        def shape(e, f):
+            if f is not None:
+                return f.digits, f.scale
+            text = literal(e)
+            if text is None:
+                return None
+            return len(text.lstrip("+-").replace(".", "")), len(text.split(".")[1]) if "." in text else 0
+
+        def operand(e, integer):
+            if integer and field(e) is not None:
+                return f"{self.reference(e.args[0])}.operand_integer()"
+            return self.expression(e)
+
+        def compare(left_integer, right_integer):
+            return f"({operand(left, left_integer)}).compare(&({operand(right, right_integer)}))"
+        if any(e.op not in {"var", "number"} and literal(e) is None for e in (left, right)):
+            return compare(False, False)  # cob_decimal_cmp
+        lf, rf = field(left), field(right)
+        if not getattr(self.program, "debugging_mode", False):
+            if (lf is not None and rf is not None and lf.usage == rf.usage == "DISPLAY" and not lf.signed and not rf.signed
+                    and (lf.digits, lf.scale) == (rf.digits, rf.scale)):
+                data = [f"storage_runtime::Operand::of(&{self.reference(e.args[0])}).data" for e in (left, right)]
+                return f"runtime::memcmp(&{data[0]}, &{data[1]})"
+            if fits_long_long(right, rf):
+                if lf is None or lf.scale or self.storage_usage(lf) != "Display":
+                    return compare(False, True)  # cob_cmp_llint, cob_cmp_packed, cob_cmp_s32…
+                if not lf.sign_leading and not lf.sign_separate and fits_long_long(left, lf):
+                    return compare(True, True)  # cob_cmp_numdisp
+                return compare(False, True)
+        shapes = shape(left, lf), shape(right, rf)
+        integer = (None not in shapes and shapes[0][1] == shapes[1][1]
+                   and shapes[0][0] < 19 and shapes[1][0] < 19)
+        return compare(integer, integer)  # cob_numeric_cmp
+
     def comparison_order(self, left, right):
         # A numeric-edited item is not numeric for libcob's cob_cmp: it
         # compares as alphanumeric, by its edited bytes.
@@ -441,6 +509,8 @@ class Emitter:
             pattern = f"Value::Bytes({byte_pattern(figurative.args[0])}.iter().cycle().take(({value}).text_size()).copied().collect())"
             result = f"({value}).compare(&{pattern})"
             return result if left is other else result + ".reverse()"
+        if kinds == ("number", "number"):
+            return self.numeric_comparison(left, right)
         if kinds[0] == kinds[1]:
             return f"({self.expression(left)}).compare(&({self.expression(right)}))"
         if set(kinds) != {"number", "text"}:
@@ -489,11 +559,18 @@ class Emitter:
             destination = "text" if ref.start is not None else field.kind
             if ref.start is None and self.is_alphabetic(field) and source_kind in {"number", "edited"}:
                 raise CobolError("MOVE numérique vers alphabétique (PIC A) invalide, comme pour GnuCOBOL")
+            if move and self.move_copy(expr, ref):
+                conversions[-1] = "copy"
+                continue
             if move and source_kind == "text" and destination in {"number", "edited"}:
                 if expr.figurative_space:
                     raise CobolError("MOVE de la constante figurative SPACE vers nombre ou champ édité non pris en charge")
                 if destination == "number" and field.usage == "INDEX":
                     raise CobolError("MOVE texte vers index non pris en charge")
+                if destination == "number" and expr.op == "all" and expr.memset:
+                    # cb_build_move_high / cb_build_move_low: memset of the item.
+                    conversions[-1] = ("bytes", expr.args[0].encode("latin-1") * field.size)
+                    continue
                 if destination == "number" and expr.op != "var":
                     usage = self.storage_usage(field)
                     if usage in {"Display", "SignLeading"} and field.scale == 0 and expr.op == "text":
@@ -581,6 +658,8 @@ class Emitter:
         for ref, conversion in zip(targets, conversions):
             if isinstance(conversion, tuple):
                 self.write(f"{self.receiver(ref)}.assign_text_move(&Value::Bytes(vec![{', '.join(str(b) for b in conversion[1])}]), true);")
+            elif conversion == "copy":
+                self.write(f"{self.receiver(ref)}.assign_text_move(&Value::Bytes(storage_runtime::Operand::of(&{temp}).data), true);")
             elif conversion == "deedit":
                 self.write(f"{self.receiver(ref)}.move_deedited(&{temp});")
             elif conversion in {"raw_text", "parsed_text"}:
@@ -614,6 +693,27 @@ class Emitter:
                     self.write(f"{self.receiver(ref)}.assign(&{value}, {str(rounded).lower()});")
             if ref in negative_zero:
                 self.write(f"{self.receiver(ref)}.negative_zero();")
+
+    def move_copy(self, expr, ref):
+        """cb_build_move_field: a numeric sender at least as long as its
+        receiver is copied byte for byte (cb_build_move_copy), without
+        reading its digits, to a numeric item of the same description or to
+        an alphanumeric item when it is unsigned DISPLAY."""
+        if expr.op != "var" or expr.args[0].start is not None or ref.start is not None:
+            return False
+        src, dst = self.program.fields[expr.args[0].name], self.program.fields[ref.name]
+        def variable(f):  # cb_field_variable_size
+            return bool(f.depending) or any(variable(self.program.fields[c]) for c in f.children)
+        if src.kind != "number" or src.size < dst.size or variable(src) or variable(dst):
+            return False
+        if dst.kind == "number":
+            return (src.usage != "INDEX" and self.storage_usage(src) == self.storage_usage(dst)
+                    and (src.size, src.digits, src.scale, src.signed) == (dst.size, dst.digits, dst.scale, dst.signed))
+        alphanumeric = (dst.kind == "text" and not dst.alnum_edit and not dst.justified
+                        and not (dst.picture and self.is_alphabetic(dst)))
+        # validate_move refuses a non-integer sender to an elementary item.
+        return (alphanumeric and self.storage_usage(src) == "Display" and not src.signed
+                and (src.scale <= 0 or not dst.picture))
 
     def check_packed_literal_move(self, expr, field):
         """cobc stores a small integer literal with cob_set_packed_int, which
@@ -839,9 +939,13 @@ class Emitter:
                     literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
                     values.append(f"Value::text({quoted(literal)})")
                 elif (e.op == "var" and e.args[0].start is None
-                      and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register"}):
-                    # cob_print_realbin reads the stored integer of the item itself.
+                      and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display"}):
+                    # cob_print_realbin reads the stored integer of the item
+                    # itself; an invalid DISPLAY item is shown as it is stored.
                     values.append(f"{self.reference(e.args[0])}.clone()")
+                elif e.op == "var":
+                    # DISPLAY moves the item as it is stored (no invalid-data reading).
+                    values.append(f"{self.reference(e.args[0])}.snapshot()")
                 else:
                     values.append(self.expression(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
@@ -1925,6 +2029,8 @@ def generate_unit(emitters):
             main_mapping = [{**item, "rust_line": item["rust_line"] + offset} for item in mapping]
         lines += body
     unchecked = "storage_runtime::set_unchecked_data(); " if getattr(emitters[0].program, "unchecked_data", False) else ""
+    if getattr(emitters[0].program, "runtime_checks", False):
+        unchecked += "storage_runtime::set_runtime_checks(); "
     run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); program.run(&mut unit);"
     # cob_terminate_routines: the warnings for files left open, then the files
     # closed (dropped with the program), also after a fatal runtime error.

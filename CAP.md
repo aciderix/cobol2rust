@@ -85,7 +85,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T14:01:12+00:00 (commit `2ea07f74d5`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T14:30:05+00:00 (commit `dcf6440596`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -97,14 +97,14 @@ Dernière mesure : 2026-10-25T14:01:12+00:00 (commit `2ea07f74d5`, cobc (GnuCOBO
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 316 | 331 | 15 | 0 |
 | **Total** | | **2458** | **685** | **738** | **53** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T13:54:42+00:00, commit `566aece3ed`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T14:30:05+00:00, commit `dcf6440596`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
 | zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
-| cobol-programming-course | 11 | 8 | 1 | 0 | 2 |
-| beg-cobol-for-programmers | 52 | 41 | 5 | 0 | 6 |
+| cobol-programming-course | 11 | 9 | 0 | 0 | 2 |
+| beg-cobol-for-programmers | 52 | 45 | 1 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
@@ -156,3 +156,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   complet 427/427 (9610 PASS). Acceptation statique inchangée (685/2458).
   Restent : données invalides sans `-debug`, indices hors bornes, programmes
   interactifs sans jeu d'entrée, performance.
+- 2026-10-25 — Données numériques invalides sans contrôles d'exécution
+  (étape 4 de la feuille de route, justifiée par les divergences du livre et
+  du cours) : lecture `COB_D2I`, premiers octets X"FF"/X"00" en lecture
+  décimale, routine de comparaison choisie par cobc (`memcmp`,
+  `cob_cmp_numdisp`, `cob_cmp_llint`, `cob_numeric_cmp`), copie d'octets de
+  `cb_build_move_field`, MOVE HIGH/LOW-VALUE en `memset`, DISPLAY tel que
+  stocké, clés de SORT par `cob_numeric_cmp` ; `--runtime-checks` garde
+  l'arrêt nommé (`-debug`). Programmes identiques à cobc : cours **8 → 9/11**,
+  livre **41 → 45/52**, CardDemo 8/8, zopeneditor 3/3. Acceptation statique
+  inchangée (685/2458), NIST 451/458. Restent : indices hors bornes
+  (Listing13-6), DISPLAY signé ou binaire invalide, programmes interactifs.

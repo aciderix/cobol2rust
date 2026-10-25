@@ -118,7 +118,7 @@ def rust_seed(corpus: Path, chain: list[Path], copybooks: list[Path], call_paths
     seed.mkdir()
     for program in chain:
         project = work / f"rust_{program.stem}"
-        convert(program, project, fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
+        convert(program, project, fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85", runtime_checks=True)
         binary = build_rust(project)
         stdin = program.with_suffix(".DAT")
         with (stdin.open("rb") if stdin.exists() else open(os.devnull, "rb")) as stream:
@@ -156,7 +156,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     call_paths = [path for path in [corpus / name[:2] / "lib"] if path.is_dir()]
     work.mkdir(parents=True)
     if name in COMPILE_ONLY or name[:2] in UNTESTED_MODULES:
-        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85")
+        convert(source, work / "rust", fmt="fixed", includes=copybooks, call_paths=call_paths, std="cobol85",
+                runtime_checks=True)
         build_rust(work / "rust")
         return {"program": name, "source": source.name, "compile_only": True, "passed": True,
                 "runner_counts": runner_counts(native_logs, name)}
@@ -167,7 +168,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
                     stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
                     data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
                     runtime_env=runner_env(name), debugging_lines=name in DEBUGGING_LINES,
-                    cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE)
+                    cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE,
+                    runtime_checks=True)
     entry = {"program": name, "source": source.name, "predecessors": [path.stem for path in chain],
              "match": report["match"], "cobol_exit": report["cobol_exit"], "rust_exit": report["rust_exit"],
              "rust_stderr": report["rust_stderr"][-300:], "seed_files": report.get("input_files", {})}
@@ -183,7 +185,8 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
                        stdin=stdin.read_bytes() if stdin.exists() else RAW_INPUT.get(name, b""),
                        data_dir=seed, rust_data_dir=rust_data, call_paths=call_paths,
                        runtime_env={**runner_env(name), **RERUN_ENV[name]}, debugging_lines=name in DEBUGGING_LINES,
-                       cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE)
+                       cobc_flags=RUNNER_FLAGS, std="cobol85", no_ec_data_incompatible=name in NO_EC_DATA_INCOMPATIBLE,
+                    runtime_checks=True)
         entry["rerun_match"] = rerun["match"]
         entry["passed"] = entry["passed"] and rerun["match"]
     return entry

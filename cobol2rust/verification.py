@@ -94,7 +94,7 @@ def validate_file_paths(conversion, file_env=()):
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
            call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
-           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False):
+           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False, runtime_checks=False):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
     files written by converted predecessors in cobol2rust's own format."""
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
@@ -121,7 +121,11 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible)
+        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible,
+                             runtime_checks)
+        # The runtime checks of the conversion are cobc's -debug.
+        if runtime_checks and not any(flag in {"-debug", "--debug"} for flag in cobc_flags):
+            cobc_flags = [*cobc_flags, "-debug"]
         validate_file_paths(conversion, file_env)
         suffix = ".exe" if os.name == "nt" else ""
         native = work / ("original" + suffix)

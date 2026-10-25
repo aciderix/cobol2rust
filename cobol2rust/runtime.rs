@@ -56,6 +56,9 @@ thread_local! {
 /// The value of an arithmetic statement's expression, or None when a
 /// division by zero made it NaN: cob_decimal_get_field then leaves the
 /// receiver unchanged and the statement goes on (EC-SIZE-ZERO-DIVIDE).
+/// memcmp of two items' storage (cb_check_num_cond), ignoring the collation.
+pub fn memcmp(a: &[u8], b: &[u8]) -> std::cmp::Ordering { a.cmp(b) }
+
 pub fn decimal_nan(expression: impl FnOnce() -> Value) -> Option<Value> {
     let previous = DECIMAL_NAN.with(|nan| nan.replace(Some(false)));
     let value = expression();
@@ -196,6 +199,11 @@ impl Value {
         match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Justified | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
     pub fn snapshot(&self) -> Self { match self { Self::View(view) => view.value(), _ => self.clone() } }
+    /// The value of an operand: as snapshot, but invalid numeric data is read
+    /// as libcob does without runtime checks (COB_D2I).
+    pub fn operand(&self) -> Self { match self { Self::View(view) => view.operand_value(false), _ => self.clone() } }
+    /// The operand as an integer read (cob_get_llint, cob_cmp_numdisp).
+    pub fn operand_integer(&self) -> Self { match self { Self::View(view) => view.operand_value(true), _ => self.clone() } }
     pub fn at(&self, indices: &[Value]) -> Self {
         match self { Self::View(view) => Self::View(view.at(indices)), _ => fail("subscript requires storage view") }
     }
@@ -223,7 +231,8 @@ impl Value {
     }
     pub fn bytes(&self) -> Vec<u8> {
         match self {
-            Self::View(view) => view.native_display().map(String::into_bytes).unwrap_or_else(|| view.value().bytes()),
+            Self::View(view) => view.native_display().map(String::into_bytes).or_else(|| view.invalid_display())
+                .unwrap_or_else(|| view.value().bytes()),
             Self::Bytes(b) => b.clone(),
             _ => self.show().into_bytes(),
         }

@@ -59,6 +59,9 @@ DEBUGGING_LINES = False
 STD = "default"
 # cobc -fno-ec=data-incompatible: MOVE from DISPLAY data without cob_check_numeric.
 NO_EC_DATA_INCOMPATIBLE = False
+# cobc -debug: runtime checks (EC-ALL); without them, libcob computes with
+# invalid numeric data (COB_D2I) instead of stopping.
+RUNTIME_CHECKS = False
 STANDARDS = ("default", "cobol85")
 
 
@@ -439,6 +442,9 @@ class Expr:
     figurative_zero: bool = False
     figurative_space: bool = False
     literal_all: bool = False
+    # HIGH-VALUE / LOW-VALUE of the native collating sequence (cb_norm_high,
+    # cb_norm_low): a MOVE to any numeric item is a memset.
+    memset: bool = False
 
 
 @dataclass
@@ -1141,6 +1147,7 @@ class Parser:
         program.reports = self.reports
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
+        program.runtime_checks = RUNTIME_CHECKS
         program.debug_fields = self.debug_fields if self.debugging_mode else {}
         self.debugging_program(program, debug_sections, fall_through)
         # defaultbyte: init (default.conf) sets items without VALUE from
@@ -2375,9 +2382,9 @@ class Parser:
             # Like ALL '"': a figurative constant fills its receiver.
             left = Expr("all", ('"',))
         elif t.key in {"HIGH-VALUE", "HIGH-VALUES"}:
-            left = Expr("all", (self.high_value,))
+            left = Expr("all", (self.high_value,), memset=self.high_value == "\xff")
         elif t.key in {"LOW-VALUE", "LOW-VALUES"}:
-            left = Expr("all", (self.low_value,))
+            left = Expr("all", (self.low_value,), memset=self.low_value == "\x00")
         elif t.key == "ALL" and self.t.string:
             # ALL "literal" repeats the literal over the receiver; MOVE only.
             left = Expr("all", (self.take().text,), literal_all=True)
@@ -3780,7 +3787,9 @@ class Parser:
             return Expr("all", operand.args, literal_all=True) if operand.op == "text" else operand
         if t.key in INSPECT_FIGURATIVES:
             self.take()
-            return Expr("all", (self.figurative_value(t.key),))
+            value = self.figurative_value(t.key)
+            native = {"HIGH": "\xff", "LOW-": "\x00"}.get(t.key[:4])
+            return Expr("all", (value,), memset=value == native)
         if t.key in self.symbolic and not self.candidates(t.key):
             self.take()
             return Expr("all", (chr(self.symbolic[t.key]),))

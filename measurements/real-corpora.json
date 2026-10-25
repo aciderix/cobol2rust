@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T14:01:12+00:00",
- "git_head": "2ea07f74d5cbf6aa12e1ff29612426976cfdb89b",
- "implementation_sha256": "9db224dc0f19987953b2eb8104744ef0f03d89584af9bdd0c515b04528427ae7",
+ "measured_at": "2026-10-25T14:30:05+00:00",
+ "git_head": "dcf6440596bd1fcee645b7bb425d133fe73f6fb1",
+ "implementation_sha256": "b7e2355113d2b431f2ddaaeffcc1c01f6cc63477e967132f8913da4a4d8eb74e",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
@@ -695,9 +695,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T13:54:42+00:00",
-  "git_head": "566aece3ed5eb8d803ec5d39193ce8d3110637b6",
-  "implementation_sha256": "9db224dc0f19987953b2eb8104744ef0f03d89584af9bdd0c515b04528427ae7",
+  "measured_at": "2026-10-25T14:30:05+00:00",
+  "git_head": "dcf6440596bd1fcee645b7bb425d133fe73f6fb1",
+  "implementation_sha256": "b7e2355113d2b431f2ddaaeffcc1c01f6cc63477e967132f8913da4a4d8eb74e",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -766,8 +766,8 @@
    },
    "cobol-programming-course": {
     "programs": 11,
-    "identical": 8,
-    "different": 1,
+    "identical": 9,
+    "different": 0,
     "refused": 0,
     "timeout": 2,
     "error": 0,
@@ -780,12 +780,8 @@
       "exit": 0
      },
      "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBL0014.cobol": {
-      "status": "different",
-      "reasons": [
-       "stdout",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 13: invalid packed decimal sign\n"
+      "status": "identical",
+      "exit": 0
      },
      "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBL0015.cobol": {
       "status": "timeout"
@@ -822,8 +818,8 @@
    },
    "beg-cobol-for-programmers": {
     "programs": 52,
-    "identical": 41,
-    "different": 5,
+    "identical": 45,
+    "different": 1,
     "refused": 0,
     "timeout": 6,
     "error": 0,
@@ -992,40 +988,24 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-2.cbl": {
-      "status": "different",
-      "reasons": [
-       "fichiers Listing14-2.Srt, Listing14-2.prn",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 91: invalid DISPLAY numeric data\n"
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-3.cbl": {
-      "status": "different",
-      "reasons": [
-       "fichiers Listing14-3.Srt, Listing14-3.prn",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 99: invalid DISPLAY numeric data\n"
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-5.cbl": {
-      "status": "different",
-      "reasons": [
-       "fichiers Listing14-5.Srt",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 44: invalid DISPLAY numeric data\n"
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-6.cbl": {
       "status": "identical",
       "exit": 1
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-9.cbl": {
-      "status": "different",
-      "reasons": [
-       "fichiers Listing14-9.sum",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 68: invalid DISPLAY numeric data\n"
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch14/Lsiting12-6.cbl": {
       "status": "identical",

@@ -1324,9 +1324,10 @@ impl SortFile {
     fn key_value(&self, record: &[u8], key: &SortKey) -> Value {
         let bytes = record[key.offset..key.offset + key.size].to_vec();
         match key.kind {
-            crate::storage_runtime::Kind::Numeric { .. } => Value::View(crate::storage_runtime::View {
+            // cob_numeric_cmp: as integers below 19 digits, else as decimals.
+            crate::storage_runtime::Kind::Numeric { digits, .. } => crate::storage_runtime::View {
                 memory: std::rc::Rc::new(std::cell::RefCell::new(bytes)), offset: 0, size: key.size, kind: key.kind,
-                dimensions: vec![], initializers: vec![] }).snapshot(),
+                dimensions: vec![], initializers: vec![] }.operand_value(digits < 19),
             _ => Value::Bytes(bytes),
         }
     }

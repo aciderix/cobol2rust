@@ -766,3 +766,18 @@ ne compile pas) ; revérification : **427/427 programmes principaux
 conformes**, 9610 PASS, 0 FAIL, 20 DELETED, 118 INSPECT, le bilan exact du
 runner natif (`build/nist-verify-final.json`, `build/coverage-nist-final.json`).
 
+## Progression : données invalides sans contrôles d'exécution
+
+Sans `-debug`, libcob calcule avec les données numériques invalides : port de
+`COB_D2I` et des cas X"FF"/X"00" de `cob_decimal_set_display`, du packé lu
+par quartets, de la sélection de cobc pour les comparaisons
+(`cb_build_cond_default`, `cb_check_num_cond`, `cb_build_optim_cond`,
+`cob_numeric_cmp`), des copies de `cb_build_move_field`, de
+`cb_build_move_high/low`, de l'affichage par `cob_move_display_to_edited` et
+des clés de `cob_file_sort_compare`. Fixtures `invalid_numeric_data`,
+`invalid_numeric_compare`, `invalid_numeric_move` identiques à cobc. Sur code
+réel (`tools/real_corpora.py --execute`) : 65/74 programmes acceptés
+identiques (CardDemo 8/8, zopeneditor 3/3, cours 9/11, livre 45/52) ; les
+autres sont un indice hors bornes et des programmes interactifs sans jeu
+d'entrée (délai). Avec `--runtime-checks`, toute donnée invalide reste un arrêt
+nommé.

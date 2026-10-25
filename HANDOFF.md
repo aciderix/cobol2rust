@@ -865,8 +865,11 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
 4. **SIZE ERROR.** Division par zéro et dépassement de PICTURE sont récupérables
    par le chemin contrôlé. L'arrondi précède le contrôle, et une erreur laisse
    la destination intacte. Un résultat négatif non signé perd son signe dans ce
-   chemin, conformément aux essais. Une donnée numérique invalide reste un
-   arrêt nommé ; ne pas intercepter globalement les erreurs pour la masquer.
+   chemin, conformément aux essais. Une donnée numérique invalide est un
+   arrêt nommé avec `--runtime-checks` (cobc `-debug`) ; sans, elle se lit
+   comme libcob (`View::operand_value`, lecture décimale ou entière selon la
+   routine de comparaison de cobc). Ne pas intercepter globalement les
+   erreurs pour la masquer.
 5. **Index.** Initialement 1, ordinaux signés de 32 bits, affichage signé avec
    au moins 9 chiffres. SET UP/DOWN évalue son opérande pour chaque destination :
    si le premier index sert d'opérande, sa nouvelle valeur affecte le second.
