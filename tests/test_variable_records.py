@@ -35,8 +35,9 @@ class VariableRecordTests(unittest.TestCase):
                    "fd f record varying from 6 to 4. 01 a pic x(5)."):
             with self.subTest(fd=fd), self.assertRaises(CobolError):
                 Parser(sequential(fd, "01 fs pic xx. 01 len pic 99. 01 txt pic x.")).parse()
-        with self.assertRaises(CobolError):
-            Parser(file_program(fd="fd f. 01 a pic x(4). 01 b pic x(9).")).parse()
+        # LINE SEQUENTIAL records of several sizes: record_min 0 at run time.
+        spec = Parser(file_program(fd="fd f. 01 a pic x(4). 01 b pic x(9).")).parse().files["F"]
+        self.assertEqual((spec.record_min, spec.record_max), (4, 9))
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cargo"), "GnuCOBOL and Cargo required")

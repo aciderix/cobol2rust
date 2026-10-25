@@ -38,7 +38,6 @@ class FileFrontendTests(unittest.TestCase):
             file_program(storage="01 fs. 02 a pic x."),
             file_program(storage="01 fs. 02 a pic x(3)."),
             file_program(storage="01 g. 02 fs occurs 2. 03 a pic xx."),
-            file_program(fd="fd f. 01 rec pic x(8). 01 another-rec pic x(4)."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
