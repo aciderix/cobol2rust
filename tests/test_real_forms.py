@@ -103,7 +103,8 @@ class RealFormsNativeTests(unittest.TestCase):
                      "exit_implicit_section", "indexed_missing_key", "stop_run_status",
                      "evaluate_literal_when", "display_clauses", "function_trim", "constants_78",
                      "digits_38", "rounded_modes", "delete_file", "c_type_usages", "repository_intrinsic",
-                     "comp6", "directives", "value_negative_zero", "picture_p_usages"):
+                     "comp6", "directives", "value_negative_zero", "picture_p_usages",
+                     "mf_directives"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

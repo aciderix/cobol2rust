@@ -121,12 +121,49 @@ class Directives:
                     return self.compare(operand(m[1]), operand(m[4]), condition) ^ bool(m[2])
         raise CobolError(f"ligne {number}: invalid IF directive")
 
+    # $SET options without effect here: checks already off by default,
+    # SPZERO (a TODO of cobc) and the names ppparse.y passes on as #OPTION.
+    SET_KNOWN = {"ADD-RSV", "ADD-SYN", "ADDRSV", "ADDSYN", "AREA-CHECK", "AREACHECK", "ASSIGN", "BOUND", "CALLFH",
+                 "CHECK-NUM", "CHECKNUM", "COMP-1", "COMP1", "CONSTANT", "DPC-IN-DATA", "DPCINDATA",
+                 "FOLD-COPY-NAME", "FOLDCOPYNAME", "MAKE-SYN", "MAKESYN", "NO-AREA-CHECK", "NO-AREACHECK",
+                 "NO-BOUND", "NO-CHECK-NUM", "NO-CHECKNUM", "NO-DPC-IN-DATA", "NO-DPCINDATA", "NO-FOLD-COPY-NAME",
+                 "NO-ODOSLIDE", "NO-SPZERO", "NO-SSRANGE", "NOAREACHECK", "NOBOUND", "NOCHECKNUM", "NODPC-IN-DATA",
+                 "NODPCINDATA", "NOFOLD-COPY-NAME", "NOFOLDCOPYNAME", "NOODOSLIDE", "NOSPZERO", "NOSSRANGE",
+                 "ODOSLIDE", "OVERRIDE", "REMOVE", "SOURCE-FORMAT", "SOURCEFORMAT", "SPZERO", "SSRANGE"}
+    SET_NO_EFFECT = {"NO-AREA-CHECK", "NO-AREACHECK", "NOAREACHECK", "NO-BOUND", "NOBOUND", "NO-CHECK-NUM",
+                     "NO-CHECKNUM", "NOCHECKNUM", "NO-DPC-IN-DATA", "NO-DPCINDATA", "NODPC-IN-DATA", "NODPCINDATA",
+                     "NO-ODOSLIDE", "NOODOSLIDE", "NO-SPZERO", "NOSPZERO", "SPZERO", "NO-SSRANGE", "NOSSRANGE"}
+
+    def set_directive(self, rest, number):
+        """set_directive: each set_choice in turn."""
+        options = re.findall(r"""([A-Za-z0-9][A-Za-z0-9_-]*)((?:\s*\([^)]*\))?(?:\s*(?:AS\s+)?(?:"[^"]*"|'[^']*'))?)""", rest)
+        for name, argument in options:
+            key = name.upper()
+            if key == "CONSTANT":
+                raise CobolError(f"ligne {number}: $SET CONSTANT non pris en charge")
+            if key in self.SET_KNOWN and key not in self.SET_NO_EFFECT:
+                raise CobolError(f"ligne {number}: option $SET {key} non prise en charge")
+            # Any other name is an #OPTION line that cobc's scanner ignores.
+
     def line(self, text, number):
         """True when the line is a directive or is skipped."""
         m = re.match(r"\s*>>\s*([A-Za-z-]+)(.*)", text)
+        dollar = None if m else re.match(r"\s*\$([A-Za-z-]+)(.*)", text)
+        if dollar:
+            # MF style: $SET, $IF, $ELSE, $END, $DISPLAY.
+            verb = dollar[1].upper()
+            m = dollar
+            verb = {"END": "END-IF"}.get(verb, verb)
+            if verb not in {"SET", "IF", "ELIF", "ELSE", "END-IF", "DISPLAY"}:
+                raise CobolError(f"ligne {number}: directive ${dollar[1]} non prise en charge")
+            rest = re.sub(r"\s*\*>.*$", "", m[2]).strip()
+            if verb == "SET":
+                if not self.skipping:
+                    self.set_directive(rest, number)
+                return True
         if not m:
             return self.skipping
-        verb, rest = m[1].upper(), re.sub(r"\s*\*>.*$", "", m[2]).strip()
+        verb, rest = (verb if dollar else m[1].upper()), re.sub(r"\s*\*>.*$", "", m[2]).strip()
         if verb in {"IF", "ELIF"}:
             if verb == "IF":
                 outer = self.skipping
@@ -170,6 +207,9 @@ class Directives:
                 raise CobolError(f"ligne {number}: duplicate DEFINE directive '{d[2]}'")
             self.defines[name] = self.value(value)
             return True
+        if verb == "DISPLAY" and re.search(r"[=<>]", re.sub(r"\"[^\"]*\"|'[^']*'", "", rest)):
+            # display_directive takes words and literals only.
+            raise CobolError(f"ligne {number}: syntax error in DISPLAY directive")
         if verb in {"DISPLAY", "LISTING", "PAGE"}:
             # Compile-time output or listing control: nothing at run time.
             return True
@@ -221,6 +261,13 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 result.append("")
                 continue
             indicator = line[6]
+            if indicator == "$":
+                # pplex: a '$' indicator starts an MF directive line.
+                if quotation is not None and not consecutive:
+                    raise CobolError(f"ligne {number}: directive au milieu d'un littéral fixe continué")
+                directives.line(line[6:72], number)
+                result.append("")
+                continue
             if indicator in "*/":
                 result.append("")
                 continue

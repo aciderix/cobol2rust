@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T09:41:48+00:00 (commit `fb19085181`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T10:15:33+00:00 (commit `15db07865d`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -94,12 +94,12 @@ Dernière mesure : 2026-10-26T09:41:48+00:00 (commit `fb19085181`, cobc (GnuCOBO
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 305 | 311 | 6 | 0 |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 394 | 879 | 485 | 0 |
-| **Total** | | **3593** | **1117** | **1617** | **500** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 398 | 879 | 481 | 0 |
+| **Total** | | **3593** | **1122** | **1617** | **495** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T09:41:48+00:00, commit `fb19085181`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T10:15:33+00:00, commit `15db07865d`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -117,9 +117,9 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 5. 12 × clause SELECT non prise en charge
 6. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
 7. 9 × expression non prise en charge: LINE
-8. 8 × indicateur fixe '$' non pris en charge
-9. 8 × PROGRAM-ID attendu
-10. 7 × USAGE/clause non pris en charge: ANY
+8. 8 × PROGRAM-ID attendu
+9. 7 × USAGE/clause non pris en charge: ANY
+10. 7 × USAGE/clause non pris en charge: DEPENDING
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -295,3 +295,10 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Testsuite **384 → 394**, total **1107 → 1117**/3593. Des 10 sources
   débloquées, exécutées face à cobc : 9 identiques, 1 arrêt nommé (MOVE
   binaire remplissant le demi-octet de remplissage). NIST 451/458.
+- 2026-10-26 — Directives MF (`$` en zone d'indicateur ou en tête de ligne) :
+  `$SET` (options sans effet ignorées comme les `#OPTION` de cobc, options
+  actives refusées), `$IF`/`$ELSE`/`$END`, `$DISPLAY` (mots et littéraux
+  seulement, sinon l'erreur de syntaxe de cobc). Total **1117 → 1122**/3593
+  (proleap 305 → 306, testsuite 394 → 398), à examiner 0. Des 5 sources
+  débloquées, exécutées face à cobc : 3 identiques, 2 arrêts nommés (indice
+  hors bornes lu par cobc sans contrôle). NIST 451/458.

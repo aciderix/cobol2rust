@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T09:41:48+00:00",
- "git_head": "fb1908518143e6b2114ee3bb44c2926c025aa0fa",
- "implementation_sha256": "5b926109f566a8b96b2531e9f03fb4d7f68b6199295bfff987c04a348df9b28f",
+ "measured_at": "2026-10-26T10:15:33+00:00",
+ "git_head": "15db07865d59d93e6666d30bcd6a0165e30b419b",
+ "implementation_sha256": "81b00800b0e68d15ae49232dd77fee075af42e5c131aa728f0531aa12ca21c50",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1117,
+  "accepted": 1122,
   "cobc_accepted": 1617,
-  "gap": 500,
+  "gap": 495,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -165,7 +165,7 @@
      2
     ],
     [
-     "indicateur fixe '$' non pris en charge",
+     "option $SET SOURCEFORMAT non prise en charge",
      2
     ],
     [
@@ -211,7 +211,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 305,
+   "accepted": 306,
    "internal_errors": 0,
    "blockers": [
     [
@@ -266,7 +266,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 6,
+   "gap": 5,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -287,10 +287,6 @@
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/ScreenFiller.cbl",
      "PROCEDURE attendu"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/fixed/CompilerDirective.cbl",
-     "indicateur fixe '$' non pris en charge"
     ]
    ],
    "gap_blockers": [
@@ -304,10 +300,6 @@
     ],
     [
      "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge",
-     1
-    ],
-    [
-     "indicateur fixe '$' non pris en charge",
      1
     ]
    ]
@@ -443,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 394,
+   "accepted": 398,
    "internal_errors": 0,
    "blockers": [
     [
@@ -487,18 +479,18 @@
      10
     ],
     [
-     "indicateur fixe '$' non pris en charge",
+     "USAGE/clause non pris en charge: IS",
      10
     ],
     [
-     "USAGE/clause non pris en charge: IS",
+     "expression non prise en charge: LINE",
      10
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 485,
+   "gap": 481,
    "gap_sources": [
     [
      "data_packed-021/prog.cob",
@@ -773,10 +765,6 @@
      ". attendu"
     ],
     [
-     "run_extensions-080/prog.cob",
-     "caractère non pris en charge '$'"
-    ],
-    [
      "run_extensions-086/prog.cob",
      "IDENTIFICATION DIVISION attendue"
     ],
@@ -970,7 +958,7 @@
     ],
     [
      "run_file-078/prog.cob",
-     "indicateur fixe '$' non pris en charge"
+     "copybook introuvable: xfhfcd.cpy"
     ],
     [
      "run_file-087/prog.cob",
@@ -2018,7 +2006,7 @@
     ],
     [
      "run_ml-006/prog.cob",
-     "indicateur fixe '$' non pris en charge"
+     "option $SET DPC-IN-DATA non prise en charge"
     ],
     [
      "run_ml-008/prog.cob",
@@ -2042,7 +2030,7 @@
     ],
     [
      "run_ml-013/prog.cob",
-     "indicateur fixe '$' non pris en charge"
+     "option $SET DPC-IN-DATA non prise en charge"
     ],
     [
      "run_reportwriter-001/prog.cob",
@@ -2134,15 +2122,7 @@
     ],
     [
      "run_subscripts-011/prog.cob",
-     "indicateur fixe '$' non pris en charge"
-    ],
-    [
-     "run_subscripts-011/progn.cob",
-     "indicateur fixe '$' non pris en charge"
-    ],
-    [
-     "run_subscripts-011/progn2.cob",
-     "indicateur fixe '$' non pris en charge"
+     "option $SET BOUND non prise en charge"
     ],
     [
      "syn_copy-010/prog.cob",
@@ -2361,10 +2341,6 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "syn_misc-128/prog.cob",
-     "indicateur fixe '$' non pris en charge"
-    ],
-    [
      "syn_misc-147/prog.cob",
      "USAGE/clause non pris en charge: DEPENDING"
     ],
@@ -2374,7 +2350,7 @@
     ],
     [
      "syn_occurs-005/prog3.cob",
-     "caractère non pris en charge '$'"
+     "option $SET ODOSLIDE non prise en charge"
     ],
     [
      "syn_occurs-006/prog.cob",
@@ -2483,20 +2459,20 @@
      7
     ],
     [
-     "indicateur fixe '$' non pris en charge",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      7
     ],
     [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "FUNCTION EXCEPTION-STATUS non prise en charge",
      7
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T09:41:48+00:00",
-  "git_head": "fb1908518143e6b2114ee3bb44c2926c025aa0fa",
-  "implementation_sha256": "5b926109f566a8b96b2531e9f03fb4d7f68b6199295bfff987c04a348df9b28f",
+  "measured_at": "2026-10-26T10:15:33+00:00",
+  "git_head": "15db07865d59d93e6666d30bcd6a0165e30b419b",
+  "implementation_sha256": "81b00800b0e68d15ae49232dd77fee075af42e5c131aa728f0531aa12ca21c50",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
