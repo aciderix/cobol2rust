@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T10:15:33+00:00 (commit `15db07865d`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T11:02:08+00:00 (commit `9d301a3d95`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T10:15:33+00:00 (commit `15db07865d`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 398 | 879 | 481 | 0 |
-| **Total** | | **3593** | **1122** | **1617** | **495** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 410 | 879 | 469 | 0 |
+| **Total** | | **3593** | **1134** | **1617** | **483** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T10:15:33+00:00, commit `15db07865d`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T11:02:08+00:00, commit `9d301a3d95`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,15 +111,15 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T10:15:33+00:00, commit `
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 37 × niveau de donnée attendu
-2. 18 × . attendu
-3. 14 × USAGE/clause non pris en charge: POINTER
-4. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
-5. 12 × clause SELECT non prise en charge
-6. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
-7. 9 × expression non prise en charge: LINE
-8. 8 × PROGRAM-ID attendu
-9. 7 × USAGE/clause non pris en charge: ANY
-10. 7 × USAGE/clause non pris en charge: DEPENDING
+2. 14 × USAGE/clause non pris en charge: POINTER
+3. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
+4. 12 × clause SELECT non prise en charge
+5. 9 × expression non prise en charge: LINE
+6. 8 × . attendu
+7. 8 × PROGRAM-ID attendu
+8. 7 × USAGE/clause non pris en charge: ANY
+9. 7 × USAGE/clause non pris en charge: DEPENDING
+10. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -302,3 +302,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   (proleap 305 → 306, testsuite 394 → 398), à examiner 0. Des 5 sources
   débloquées, exécutées face à cobc : 3 identiques, 2 arrêts nommés (indice
   hors bornes lu par cobc sans contrôle). NIST 451/458.
+- 2026-10-26 — En-têtes de programme : `PROCEDURE DIVISION CHAINING`
+  (`cob_chain_setup`, vérifié à la main avec arguments : octets identiques ;
+  CALL d'un programme CHAINING = erreur libcob du test officiel),
+  `PROGRAM-ID nom AS "externe"`, `RETURNING OMITTED` (principal en module),
+  programme suivant sans IDENTIFICATION DIVISION ; `ASSIGN LINE ADVANCING
+  FILE` (`flag_line_adv` : LINE SEQUENTIAL sans validation, WRITE sans
+  ADVANCING = AFTER 1). Testsuite **398 → 410**, total **1122 → 1134**/3593.
+  Des 12 sources débloquées, exécutées face à cobc : 9 identiques, 2 mêmes
+  erreur et code (fichier d'entrée absent), 1 où cobc meurt de SIGSEGV hors
+  de son test (le test officiel attend l'erreur CHAINING reproduite). NIST
+  451/458.

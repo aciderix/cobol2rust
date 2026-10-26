@@ -46,7 +46,7 @@ class Emitter:
         self.subprogram = subprogram
         # A main program with PROCEDURE DIVISION USING is a module (cobc
         # refuses -x): it runs as cobcrun calls it, without arguments.
-        self.module = not subprogram and bool(program.using)
+        self.module = not subprogram and (bool(program.using) or getattr(program, "returning_omitted", False))
         # CALL targets converted with this run unit (literal names).
         self.called = set(called or ())
         # ENTRY names of the run unit: unresolved until their program is loaded.
@@ -1780,6 +1780,8 @@ class Emitter:
                 created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]).named({quoted(spec.select_text or name)})"
             else:
                 linage = ".with_linage()" if spec.linage else ""
+                if getattr(spec, "line_advancing", False):
+                    linage += ".line_advancing()"
                 if spec.organization == "LINE SEQUENTIAL":
                     # finalize_file: a LINE SEQUENTIAL record_min is 0.
                     limits = f"0, {spec.record_max}"
@@ -1811,6 +1813,9 @@ class Emitter:
                 # No address until a CALL passes the item (NULL for cobc).
                 self.write(f"result.{self.names[name]} = storage_runtime::unbind(&result.{self.names[name]});")
         self.initialize("result", lambda field: True)
+        for number, key in enumerate(getattr(self.program, "chaining", []), 1):
+            # output_initialize_chaining: after the normal initialization.
+            self.write(f"storage_runtime::chain_setup(&result.{self.names[key]}, {number});")
         self.write("result")
         self.indent -= 1
         self.write("}")
@@ -2213,6 +2218,11 @@ def generate_unit(emitters):
         entries = getattr(emitter.program, "entries", [])
         for number, name in enumerate([emitter.program.entry_name, *(entry for entry, _ in entries)]):
             guard = f" if self.p{index}_loaded" if number else ""
+            if getattr(emitter.program, "chaining", None):
+                # cob_fatal_error (COB_FERROR_CHAINING): a CHAINING program
+                # is a main program only.
+                unit.append(f"            {quoted(name)}{guard} => runtime::fatal_error(b\"CALL of program with CHAINING clause\"),")
+                continue
             unit += [f"            {quoted(name)}{guard} => {{",
                      f"                if self.p{index}_active {{ self.recursive({quoted(emitter.program.entry_name)}); }}",
                      f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",

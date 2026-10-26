@@ -36,6 +36,7 @@ pub struct CobolFile {
     record_min: usize,
     record_max: usize,
     linage: Option<Linage>,
+    line_advancing: bool,
 }
 
 /// FD LINAGE (cob_linage): the values cob_get_int reads from the clause,
@@ -384,7 +385,7 @@ impl CobolFile {
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
                validate: line && setting("COB_LS_VALIDATE", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
-               linage: None }
+               linage: None, line_advancing: false }
     }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
@@ -400,6 +401,14 @@ impl CobolFile {
     pub fn error_name(&self) -> Vec<u8> { filename_print(&self.select, &self.assign) }
 
     /// An FD with LINAGE: cobc makes the file LINE SEQUENTIAL.
+    /// ASSIGN LINE ADVANCING (flag_line_adv): no LINE SEQUENTIAL data
+    /// validation, and a WRITE without ADVANCING is AFTER 1 LINE.
+    pub fn line_advancing(mut self) -> Self {
+        self.validate = false;
+        self.line_advancing = true;
+        self
+    }
+
     pub fn with_linage(mut self) -> Self {
         if self.organization != Organization::LineSequential { fail("LINAGE requires a LINE SEQUENTIAL file"); }
         self.linage = Some(Linage::default());
@@ -804,7 +813,7 @@ impl CobolFile {
         let area_bytes = area.bytes();
         let bad = self.validate && write_bad_char(&area_bytes, kept);
         // cb_emit_write: a LINE SEQUENTIAL WRITE without ADVANCING is BEFORE 1 LINE.
-        let advance = advancing.unwrap_or(Advance::BeforeLines(1));
+        let advance = advancing.unwrap_or(if self.line_advancing { Advance::AfterLines(1) } else { Advance::BeforeLines(1) });
         if let Advance::BeforeLines(count) | Advance::AfterLines(count) = advance {
             if count > u16::MAX as u32 { fail("ADVANCING count exceeds supported range 0..65535"); }
         }

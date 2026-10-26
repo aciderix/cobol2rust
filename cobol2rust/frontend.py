@@ -1160,6 +1160,12 @@ class Parser:
         if length_value is not None and length_value > size - offset + 1:
             self.error(f"length of '{label}' out of bounds: {length_value}")
 
+    def program_start(self):
+        """_identification_header is optional: IDENTIFICATION DIVISION or
+        PROGRAM-ID starts the next program."""
+        return ((self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION") \
+            or (self.at("PROGRAM-ID") and self.tokens[self.i + 1].key == ".")
+
     def program_end(self):
         """_procedure_division may be empty: the program ends here."""
         return self.at("<EOF>") or (self.at("END") and self.tokens[self.i + 1].key == "PROGRAM")
@@ -1177,6 +1183,13 @@ class Parser:
         self.check_valid_name(entry_name)
         # program_id_name: a word or an alphanumeric literal.
         name = self.take().text if self.t.string else self.name()
+        internal = entry_name
+        if self.accept("AS"):
+            # program_id_name AS literal: the external name of the module.
+            if not self.t.string:
+                self.error("littéral attendu après AS")
+            entry_name = self.program_name = self.take().text
+            self.check_valid_name(entry_name)
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
         common = initial = False
@@ -1324,8 +1337,35 @@ class Parser:
         if procedure:
             self.expect("PROCEDURE")
             self.expect("DIVISION")
-        if procedure and self.accept("USING"):
-            using = self.using_list(lambda: self.at("."))
+        returning_omitted = lambda: self.at("RETURNING") and self.tokens[self.i + 1].key == "OMITTED"
+        self.chaining = []
+        if procedure and self.accept("CHAINING"):
+            # procedure_using_chaining: WORKING-STORAGE 01/77 items set from
+            # the command-line arguments at initialization (cob_chain_setup).
+            while not self.at(".") and not returning_omitted():
+                self.accept("BY")
+                self.accept("REFERENCE")
+                if self.at("VALUE"):
+                    self.error("BY VALUE not allowed in CHAINED programs")
+                key = self.resolve(self.name())
+                field = self.fields[key]
+                if field.linkage or getattr(field, "local", False) or field.file_record:
+                    self.error(f"'{field.label}' is not in WORKING-STORAGE SECTION")
+                if field.parent is not None:
+                    self.error(f"'{field.label}' not level 01 or 77")
+                if field.redefines:
+                    self.error(f"'{field.label}' REDEFINES field not allowed here")
+                self.chaining.append(key)
+            if not self.chaining:
+                self.error("CHAINING requiert au moins un paramètre")
+        elif procedure and self.accept("USING"):
+            using = self.using_list(lambda: self.at(".") or returning_omitted())
+        if procedure and returning_omitted():
+            # procedure_returning: RETURNING OMITTED declares no return item;
+            # cobc refuses it for a main program (-x): the program is a module.
+            self.take()
+            self.take()
+            self.returning_omitted = True
         if procedure:
             self.expect(".")
         self.entries = []
@@ -1365,18 +1405,18 @@ class Parser:
                 main_block = len(blocks)
                 blocks.append(ProcedureBlock(None, None, current_body))
                 continue
-            if (self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION":
+            if self.program_start():
                 # Contained programs end the PROCEDURE DIVISION.
                 nested_start = True
                 break
             if self.accept("END"):
                 self.expect("PROGRAM")
                 # cobc compares the names as written, case included.
-                if self.t.text != entry_name or self.name() != name:
+                if self.t.text != internal or self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
                 ended = True
-                if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
+                if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
                     self.expect("<EOF>")
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
@@ -1443,6 +1483,8 @@ class Parser:
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
+        program.returning_omitted = getattr(self, "returning_omitted", False)
+        program.chaining = self.chaining
         program.entries = self.entries
         program.segments = segments
         program.collating = self.collating
@@ -1468,7 +1510,7 @@ class Parser:
                 self.error("REPORT SECTION avec programmes contenus non pris en charge")
             inherited = self.global_items(entry_name)
             inherited_files = self.global_files(entry_name)
-            while self.at("IDENTIFICATION") or self.at("ID"):
+            while self.program_start():
                 child_parser = Parser.__new__(Parser)
                 child_parser.__init__("")
                 child_parser.tokens, child_parser.i = self.tokens, self.i
@@ -1484,12 +1526,12 @@ class Parser:
                 child.siblings = []
             self.expect("END")
             self.expect("PROGRAM")
-            if self.t.text != entry_name or self.name() != name:
+            if self.t.text != internal or self.name() != name:
                 self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
             self.expect(".")
-            if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
+            if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
                 self.expect("<EOF>")
-        if self.at("IDENTIFICATION") or self.at("ID"):
+        if self.program_start():
             # A sibling program after END PROGRAM: same source, separate names.
             sibling = Parser.__new__(Parser)
             sibling.__init__("")
@@ -2437,7 +2479,7 @@ class Parser:
         select_text = self.tokens[self.i - 1].text
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
-        path, assign_field = None, None
+        path, assign_field, line_advancing = None, None, False
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
         relative_key, record_key, alternate_keys = None, None, []
 
@@ -2470,6 +2512,7 @@ class Parser:
                 # SELECT clauses come in any order (file_control_entry).
                 self.take()
                 path, assign_field, assign_organization = self.assign_clause(name, select_text)
+                line_advancing = self.line_advancing
                 if assign_organization and not organization_seen:
                     organization = assign_organization
             elif self.accept("PADDING"):
@@ -2556,6 +2599,8 @@ class Parser:
         # the default dialect, an error in cobol85.
         if STD == "cobol85" or not any(self.at(word) for word in ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE")):
             self.expect(".")
+        if line_advancing:
+            organization = "LINE SEQUENTIAL"
         if organization != "RELATIVE" and relative_key:
             self.error("RELATIVE KEY requiert ORGANIZATION RELATIVE")
         if organization not in {"RELATIVE", "INDEXED"} and access not in {None, "SEQUENTIAL"}:
@@ -2568,6 +2613,7 @@ class Parser:
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
                                     record_key=record_key, alternate_keys=alternate_keys,
                                     assign_field=assign_field, select_text=select_text)
+        self.files[name].line_advancing = line_advancing
 
     # assign_device of parser.y: general devices keep the SELECT name as file
     # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.
@@ -2587,8 +2633,13 @@ class Parser:
         kind = kind or ("external" if STD == "cobol85" else "default")
         if explicit and STD == "cobol85":
             self.error("ASSIGN EXTERNAL/DYNAMIC non conforme à -std=cobol85")
+        self.line_advancing = False
         if self.at("LINE") and self.tokens[self.i + 1].key == "ADVANCING":
-            self.error("ASSIGN LINE ADVANCING FILE non pris en charge")
+            # line_adv_file: flag_line_adv (LINE SEQUENTIAL in cb_validate_one).
+            self.take()
+            self.take()
+            self.accept("FILE")
+            self.line_advancing = True
         organization, device = None, None
         if not self.t.string and self.t.key in {"DISPLAY", "KEYBOARD", "PRINTER", "PRINTER-1", "PRINT"}:
             self.error(f"ASSIGN TO {self.t.key} (périphérique spécial) non pris en charge")

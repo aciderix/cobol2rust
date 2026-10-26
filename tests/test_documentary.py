@@ -117,7 +117,7 @@ class DocumentaryTests(unittest.TestCase):
     def test_inline_headers_and_semantic_identification_clauses_are_not_skipped(self):
         for source in (
             "identification division. program-id. documentary-case. AUTHOR. payload\nprocedure division. stop run.",
-            'identification division.\nprogram-id. documentary-case as "external-name".\nprocedure division. stop run.',
+            'identification division.\nprogram-id. documentary-case as external-name.\nprocedure division. stop run.',
             "identification division.\nprogram-id. documentary-case.\nAUTHORSHIP. payload\nprocedure division. stop run.",
         ):
             with self.subTest(source=source), self.assertRaises(CobolError):

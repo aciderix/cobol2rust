@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T10:15:33+00:00",
- "git_head": "15db07865d59d93e6666d30bcd6a0165e30b419b",
- "implementation_sha256": "81b00800b0e68d15ae49232dd77fee075af42e5c131aa728f0531aa12ca21c50",
+ "measured_at": "2026-10-26T11:02:08+00:00",
+ "git_head": "9d301a3d95754f4348e1d536721982fff545b7c4",
+ "implementation_sha256": "23c22b371975e2c19fb63223c1912c6202fd17431d6c26d2ae11f3e1f476638a",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1122,
+  "accepted": 1134,
   "cobc_accepted": 1617,
-  "gap": 495,
+  "gap": 483,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,16 +435,12 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 398,
+   "accepted": 410,
    "internal_errors": 0,
    "blockers": [
     [
      "niveau de donnée attendu",
      43
-    ],
-    [
-     ". attendu",
-     22
     ],
     [
      "PROGRAM-ID attendu",
@@ -463,8 +459,8 @@
      13
     ],
     [
-     "ASSIGN LINE ADVANCING FILE non pris en charge",
-     13
+     ". attendu",
+     12
     ],
     [
      "USAGE/clause non pris en charge: ANY",
@@ -485,12 +481,16 @@
     [
      "expression non prise en charge: LINE",
      10
+    ],
+    [
+     "USAGE/clause non pris en charge: BASED",
+     9
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 481,
+   "gap": 469,
    "gap_sources": [
     [
      "data_packed-021/prog.cob",
@@ -581,14 +581,6 @@
      "CALL USING limité à BY REFERENCE et BY CONTENT"
     ],
     [
-     "run_extensions-031/prog.cob",
-     "mot réservé de GnuCOBOL utilisé comme nom: PROGRAM-ID"
-    ],
-    [
-     "run_extensions-033/prog.cob",
-     ". attendu"
-    ],
-    [
      "run_extensions-034/callee.cob",
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
@@ -605,24 +597,8 @@
      "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE"
     ],
     [
-     "run_extensions-038/caller.cob",
-     "programme appelé prog3.cob: ligne 9: . attendu"
-    ],
-    [
      "run_extensions-038/init.cob",
-     ". attendu"
-    ],
-    [
-     "run_extensions-038/prog.cob",
-     ". attendu"
-    ],
-    [
-     "run_extensions-038/prog2.cob",
-     ". attendu"
-    ],
-    [
-     "run_extensions-038/prog3.cob",
-     ". attendu"
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
     ],
     [
      "run_extensions-042/prog.cob",
@@ -754,7 +730,7 @@
     ],
     [
      "run_extensions-074/prog.cob",
-     ". attendu"
+     "CALL USING requiert au moins un argument"
     ],
     [
      "run_extensions-075/prog.cob",
@@ -811,10 +787,6 @@
     [
      "run_file-021/prog2.cob",
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_file-022/prog.cob",
-     ". attendu"
     ],
     [
      "run_file-024/prog.cob",
@@ -1917,20 +1889,16 @@
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
-     "run_misc-133/callee.cob",
-     ". attendu"
-    ],
-    [
      "run_misc-133/caller.cob",
      "CALL RETURNING/GIVING non pris en charge"
     ],
     [
      "run_misc-142/caller.cob",
-     "programme appelé prog.cob: ligne 11: . attendu"
+     "programme appelé prog.cob: ligne 34: REPOSITORY PROGRAM non pris en charge"
     ],
     [
      "run_misc-142/prog.cob",
-     ". attendu"
+     "REPOSITORY PROGRAM non pris en charge"
     ],
     [
      "run_misc-143/prog.cob",
@@ -2053,44 +2021,36 @@
      "article de rapport sans COLUMN non pris en charge"
     ],
     [
-     "run_reportwriter-007/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
-    ],
-    [
      "run_reportwriter-008/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "expression non prise en charge: DISCOUNT-IX"
     ],
     [
      "run_reportwriter-009/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "expression non prise en charge: DISCOUNT-IX"
     ],
     [
      "run_reportwriter-010/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "COLUMN PLUS non pris en charge"
     ],
     [
      "run_reportwriter-011/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "AFTER attendu"
     ],
     [
      "run_reportwriter-012/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "NEXT GROUP entier attendu"
     ],
     [
      "run_reportwriter-014/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
-    ],
-    [
-     "run_reportwriter-015/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "plusieurs rapports dans un FD non pris en charge"
     ],
     [
      "run_reportwriter-016/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "clause de groupe de rapport non prise en charge"
     ],
     [
      "run_reportwriter-017/prog.cob",
-     "ASSIGN LINE ADVANCING FILE non pris en charge"
+     "options multiples de LINE non prises en charge"
     ],
     [
      "run_reportwriter-019/prog.cob",
@@ -2115,10 +2075,6 @@
     [
      "run_reportwriter-028/prog.cob",
      "clause RD non prise en charge"
-    ],
-    [
-     "run_returncode-003/prog.cob",
-     "mot réservé de GnuCOBOL utilisé comme nom: PROGRAM-ID"
     ],
     [
      "run_subscripts-011/prog.cob",
@@ -2155,10 +2111,6 @@
     [
      "syn_definition-019/prog.cob",
      "condition dupliquée ou réservée"
-    ],
-    [
-     "syn_definition-023/prog.cob",
-     ". attendu"
     ],
     [
      "syn_definition-025/prog.cob",
@@ -2423,10 +2375,6 @@
      37
     ],
     [
-     ". attendu",
-     18
-    ],
-    [
      "USAGE/clause non pris en charge: POINTER",
      14
     ],
@@ -2439,12 +2387,12 @@
      12
     ],
     [
-     "ASSIGN LINE ADVANCING FILE non pris en charge",
-     10
-    ],
-    [
      "expression non prise en charge: LINE",
      9
+    ],
+    [
+     ". attendu",
+     8
     ],
     [
      "PROGRAM-ID attendu",
@@ -2465,14 +2413,18 @@
     [
      "FUNCTION EXCEPTION-STATUS non prise en charge",
      7
+    ],
+    [
+     "USAGE/clause non pris en charge: IS",
+     7
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T10:15:33+00:00",
-  "git_head": "15db07865d59d93e6666d30bcd6a0165e30b419b",
-  "implementation_sha256": "81b00800b0e68d15ae49232dd77fee075af42e5c131aa728f0531aa12ca21c50",
+  "measured_at": "2026-10-26T11:02:08+00:00",
+  "git_head": "9d301a3d95754f4348e1d536721982fff545b7c4",
+  "implementation_sha256": "23c22b371975e2c19fb63223c1912c6202fd17431d6c26d2ae11f3e1f476638a",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

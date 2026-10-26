@@ -1024,6 +1024,22 @@ pub fn unbind(item: &Value) -> Value {
     }
 }
 
+/// cob_chain_setup: a CHAINING item takes the command-line argument of its
+/// rank, space filled or truncated, when it is given.
+pub fn chain_setup(item: &Value, parameter: usize) {
+    use std::os::unix::ffi::OsStringExt;
+    let Some(argument) = std::env::args_os().nth(parameter) else { return };
+    match item {
+        Value::View(view) => {
+            let mut bytes = argument.into_vec();
+            bytes.resize(view.size, b' ');
+            check_writable(&view.memory);
+            view.memory.borrow_mut()[view.offset..view.offset + view.size].copy_from_slice(&bytes);
+        },
+        _ => crate::runtime::fail("CHAINING requires a data item"),
+    }
+}
+
 /// CALL ... USING OMITTED: a NULL address.
 pub fn omitted() -> Value {
     Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,

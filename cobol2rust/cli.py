@@ -227,7 +227,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
               "conditions": [asdict(c) for c in program.conditions.values()],
               "memory_size": program.memory_size,
               # PROCEDURE DIVISION USING: a module, run as cobcrun runs it.
-              "module": program.entry_name if program.using else None,
+              "module": program.entry_name if program.using or getattr(program, "returning_omitted", False) else None,
               "subprograms": [{"program": sub.entry_name, "source": str(path.resolve()),
                                "in_main_source": Path(path).resolve() == Path(source).resolve(),
                                "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
