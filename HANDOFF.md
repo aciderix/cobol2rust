@@ -5,6 +5,39 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
+## État courant — 26 octobre 2026 (à tenir à jour à chaque commit)
+
+Branche de travail `claude/hopeful-allen-q389mo`. Mesure des corpus réels :
+**1147/3593 sources acceptées** (cobc 1617, écart 470, à examiner 0) ;
+testsuite GnuCOBOL 423/1135, six corpus d'origine 724/2458. Exécution
+comparée inchangée : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
+52/61. NIST CCVS85 (non-régression) : 451/458 émissions, 427/427 conformes.
+
+Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
+blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
+quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des
+formes, y compris les cas limites ; fixture native dans
+`tests/fixtures/` enregistrée dans `tests/test_real_forms.py` ; exécuter
+chaque source débloquée face à cobc (`cobol2rust.verification.verify` avec
+`includes`, `data_dir` et `call_paths` = dossier de la source) ; puis suite
+Python, `tools/real_corpora.py --cobc --execute --record`, couverture NIST,
+ligne au journal de CAP.md, commit et push. Ne pas modifier `cobol2rust/`
+pendant une mesure (elle serait périmée) : préparer l'étape suivante dans une
+copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
+pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
+
+Dernières étapes : COPY REPLACING LEADING/TRAILING ; en cours : DISPLAY du
+champ résultat des fonctions numériques (`cob_alloc_field`, copies
+d'argument de MAX/MIN/MEDIAN, entiers non signés) et fonctions ABS,
+FRACTION-PART, EXP10, CONCATENATE, SUBSTITUTE(-CASE), STORED-CHAR-LENGTH,
+HIGHEST/LOWEST-ALGEBRAIC, TEST-DATE/TEST-DAY, YEAR-TO-YYYY,
+DATE-TO-YYYYMMDD, DAY-TO-YYYYDDD. Blocages suivants : SCREEN SECTION (37),
+POINTER (14), CALL BY VALUE (13), clauses SELECT de verrouillage (12),
+DISPLAY ... LINE (9), RECURSIVE, FUNCTION-ID, ANY LENGTH, EXCEPTION-STATUS,
+fonctions FORMATTED-*/MODULE-*/LOCALE-*.
+
+## Historique
+
 État au 25 octobre 2026 : version **0.4.0** livrée, branche
 `claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
 
@@ -935,7 +968,10 @@ normalisation et expansion des COPY, et non toujours le source d'origine.
 
 ## Limites connues et suite conseillée
 
-Les limites détaillées sont dans le README. Restent notamment hors périmètre :
+Liste historique, antérieure à la mesure des corpus réels : COPY REPLACING,
+SEARCH, COMP-5, fichiers relatifs/indexés, appels et une grande partie des
+fonctions intrinsèques sont pris en charge depuis (README, COVERAGE.md).
+Les limites détaillées sont dans le README. Restaient alors hors périmètre :
 SEARCH, tables à glissement ou stride variable, ODO dans un FD, USAGE INDEX
 explicite, COMP-5, images éditées complexes et déédition, profils IBM/Micro Focus/EBCDIC, COPY REPLACING,
 fonctions intrinsèques, appels interprogrammes, enregistrements variables,

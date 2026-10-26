@@ -109,6 +109,10 @@ class RealFormsNativeTests(unittest.TestCase):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)
 
+    def test_copy_replacing_leading_trailing(self):
+        report = verify(FIXTURES / "copy_partial.cob", includes=[FIXTURES / "copy_partial"])
+        self.assertTrue(report["match"], report)
+
     def test_literal_call_arguments(self):
         report = verify(FIXTURES / "call_literals.cob", call_paths=[FIXTURES / "call_literals_calls"])
         self.assertTrue(report["match"], report)

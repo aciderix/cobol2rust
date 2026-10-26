@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T11:31:07+00:00",
- "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
- "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
+ "measured_at": "2026-10-26T14:29:02+00:00",
+ "git_head": "ceda0aa14bedd0be746b08a3827b46656669dc8c",
+ "implementation_sha256": "111a24810a73512ace8472412b1133d63e40e9a0fdb911092616f400b101c42b",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1142,
+  "accepted": 1147,
   "cobc_accepted": 1617,
-  "gap": 475,
+  "gap": 470,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 418,
+   "accepted": 423,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 461,
+   "gap": 456,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -2049,28 +2049,8 @@
      "option $SET BOUND non prise en charge"
     ],
     [
-     "syn_copy-010/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-011/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
      "syn_copy-013/prog.cob",
      "COPY REPLACING d'un copybook contenant COPY non pris en charge"
-    ],
-    [
-     "syn_copy-017/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-019/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-020/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
     ],
     [
      "syn_definition-005/containing-prog.cob",
@@ -2390,9 +2370,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T11:31:07+00:00",
-  "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
-  "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
+  "measured_at": "2026-10-26T14:29:02+00:00",
+  "git_head": "ceda0aa14bedd0be746b08a3827b46656669dc8c",
+  "implementation_sha256": "111a24810a73512ace8472412b1133d63e40e9a0fdb911092616f400b101c42b",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

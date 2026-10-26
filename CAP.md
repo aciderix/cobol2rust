@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T11:31:07+00:00 (commit `0ab0aec9da`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T14:29:02+00:00 (commit `ceda0aa14b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T11:31:07+00:00 (commit `0ab0aec9da`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 418 | 879 | 461 | 0 |
-| **Total** | | **3593** | **1142** | **1617** | **475** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 423 | 879 | 456 | 0 |
+| **Total** | | **3593** | **1147** | **1617** | **470** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T11:31:07+00:00, commit `0ab0aec9da`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T14:29:02+00:00, commit `ceda0aa14b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -323,3 +323,9 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   HEX-TO-CHAR. Testsuite **410 → 418**, total **1134 → 1142**/3593. Des 8
   sources débloquées (dont 6 tests de 500 champs packed), exécutées face à
   cobc : 7 identiques, 1 arrêt nommé. NIST 451/458.
+- 2026-10-26 — `COPY`/`REPLACE ... REPLACING LEADING|TRAILING` (remplacement
+  partiel d'un mot, `is_leading_or_trailing` et `ppecho_leading_or_trailing`
+  de pplex ; cible littérale plus longue exigée, cible de plusieurs mots
+  refusée comme ppparse). Testsuite **418 → 423**, total **1142 → 1147**/3593,
+  à examiner 0. Des 5 sources débloquées, exécutées face à cobc : 5
+  identiques. Exécution des corpus inchangée. NIST 451/458.

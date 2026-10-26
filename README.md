@@ -463,8 +463,11 @@ cherche `bibliothèque/nom` comme `ppcopy` (tel quel puis dans chaque dossier
 `-I`), puis le nom seul. L'instruction `REPLACE ==…== BY ==…== .` et
 `REPLACE OFF` s'appliquent au texte qui suit, COPY développés compris (deux
 filtres de `replace.c`) ; l'instruction est effacée et les numéros de ligne
-conservés. LEADING/TRAILING, REPLACE ALSO/LAST, `COB_COPY_LIB_*` et REPLACING
-d'un copybook qui contient lui-même un COPY restent refusés. En format fixe, la
+conservés. `LEADING ==mot== BY ==…==` et `TRAILING` (COPY et REPLACE)
+remplacent le début ou la fin d'un seul mot, comme `is_leading_or_trailing` et
+`ppecho_leading_or_trailing` ; une cible littérale exige un mot plus long, une
+cible de plusieurs mots est refusée comme par ppparse. REPLACE ALSO/LAST,
+`COB_COPY_LIB_*` et REPLACING d'un copybook qui contient lui-même un COPY restent refusés. En format fixe, la
 zone de séquence (colonnes 1-6) est ignorée quel que soit son contenu.
 `--debugging-lines` reproduit `cobc -fdebugging-line`.
 `SOURCE-COMPUTER ... WITH DEBUGGING MODE` et `USE FOR DEBUGGING` (procédures,
