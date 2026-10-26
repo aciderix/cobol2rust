@@ -10,6 +10,9 @@ def layout_fields(fields):
                 f.size = f.edit_size
             elif f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
                 f.size = (f.digits + 2) // 2
+            elif f.usage == "COMP-6":
+                # compute_size: no sign nibble.
+                f.size = (f.digits + 1) // 2
             elif f.usage != "DISPLAY":
                 f.size = 1 if f.digits <= 2 else 2 if f.digits <= 4 else 4 if f.digits <= 9 else 8
             else:
@@ -69,7 +72,7 @@ def layout_fields(fields):
         while cursor.parent:
             cursor = fields[cursor.parent]
             synced = synced or (cursor.synchronized and f.usage != "DISPLAY")
-        if not synced or not f.picture or f.usage in {"DISPLAY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+        if not synced or not f.picture or f.usage in {"DISPLAY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-6"}:
             continue
         align = f.size if f.size in {2, 4, 8} else 1
         if f.index_for or f.usage == "INDEX":

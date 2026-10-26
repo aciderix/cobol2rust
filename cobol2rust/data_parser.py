@@ -6,7 +6,7 @@ from .frontend import Condition, ConstantToken, Field, Token, VERBS
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
           "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
           "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
-          "UNSIGNED-LONG"}
+          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6"}
 # field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
 # digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
 FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18,
@@ -718,6 +718,8 @@ def declaration(p, file_record=False):
                 usage = "COMP-5"
             elif usage == "COMPUTATIONAL-5":
                 usage = "COMP-5"
+            elif usage == "COMPUTATIONAL-6":
+                usage = "COMP-6"
     p.expect(".")
     if fixed_binary:
         if picture:
@@ -812,6 +814,9 @@ def declaration(p, file_record=False):
                                                        "COMP-5", "COMPUTATIONAL-5"}:
         # compute_size: BINARY and COMP-5 items hold at most 18 digits.
         p.error(f"'{label}' binary field cannot be larger than 18 digits")
+    if usage == "COMP-6" and kind == "number" and signed:
+        # validate_field_1: "COMP-6 with sign - changing to COMP-3".
+        usage = "COMP-3"
     if blank_zero:
         # field.c: a numeric DISPLAY item with BLANK WHEN ZERO becomes
         # numeric-edited with a reconstructed 9(n) picture.

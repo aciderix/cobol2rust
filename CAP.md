@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T01:21:09+00:00 (commit `7a0a14b5e9`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T07:55:04+00:00 (commit `0f450825e0`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T01:21:09+00:00 (commit `7a0a14b5e9`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 305 | 311 | 6 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 363 | 879 | 516 | 0 |
-| **Total** | | **3593** | **1086** | **1617** | **531** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 370 | 879 | 509 | 0 |
+| **Total** | | **3593** | **1093** | **1617** | **524** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T01:21:09+00:00, commit `7a0a14b5e9`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T07:55:04+00:00, commit `0f450825e0`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,15 +111,15 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T01:21:09+00:00, commit `
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 37 × niveau de donnée attendu
-2. 18 × . attendu
-3. 16 × USAGE/clause non pris en charge: COMP-6
+2. 21 × instruction non prise en charge: >
+3. 18 × . attendu
 4. 15 × USAGE/clause non pris en charge: POINTER
-5. 13 × instruction non prise en charge: >
-6. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
-7. 12 × clause SELECT non prise en charge
+5. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
+6. 12 × clause SELECT non prise en charge
+7. 10 × PICTURE P limitée à 18 chiffres USAGE DISPLAY
 8. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
-9. 9 × PICTURE P limitée à 18 chiffres USAGE DISPLAY
-10. 9 × expression non prise en charge: LINE
+9. 9 × expression non prise en charge: LINE
+10. 8 × PROGRAM-ID attendu
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -272,3 +272,10 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   sources débloquées, exécutées face à cobc : 39 identiques, 2 arrêts
   nommés (indice et sous-chaîne hors bornes lus par cobc sans contrôle).
   Exécution des corpus inchangée ; NIST 451/458.
+- 2026-10-26 — `COMP-6` (packed sans demi-octet de signe,
+  `COB_FLAG_NO_SIGN_NIBBLE` ; signé, il devient COMP-3 comme pour cobc) et
+  test de classe NUMERIC d'un packed comme `cob_is_numeric` (le demi-octet de
+  remplissage n'est pas contrôlé à part, COMP-3 compris). Testsuite **363 →
+  370**, total **1086 → 1093**/3593. Des 7 sources débloquées, exécutées
+  face à cobc : 5 identiques, 2 arrêts nommés (MOVE binaire remplissant le
+  demi-octet de remplissage). Exécution des corpus inchangée ; NIST 451/458.

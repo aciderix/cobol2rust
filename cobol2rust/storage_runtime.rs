@@ -34,6 +34,8 @@ pub fn external(name: &str, size: usize) -> Memory {
 #[derive(Clone, Copy, Debug)]
 pub enum Usage {
     Display, Packed, Binary, Index,
+    /// COMP-6: packed decimal without sign nibble (COB_FLAG_NO_SIGN_NIBBLE).
+    PackedNoSign,
     /// COMP-5 (and BINARY-CHAR/SHORT/LONG/DOUBLE): COB_FLAG_REAL_BINARY,
     /// native little-endian storage bounded by its size, not its PICTURE.
     /// Register is an internal register (RETURN-CODE): same storage,
@@ -414,6 +416,15 @@ impl View {
                 let n = BigInt::parse_bytes(&ascii, 10).ok_or("invalid packed decimal")?;
                 if sign == 13 { -n } else { n }
             },
+            Usage::PackedNoSign => {
+                let nibbles: Vec<u8> = bytes.iter().flat_map(|b| [b >> 4, b & 15]).collect();
+                let padding = nibbles.len() - digits as usize;
+                if nibbles[..padding].iter().any(|n| *n != 0) || nibbles.iter().any(|n| *n > 9) {
+                    return Err("invalid packed decimal digits");
+                }
+                let ascii: Vec<u8> = nibbles.into_iter().map(|n| b'0' + n).collect();
+                BigInt::parse_bytes(&ascii, 10).ok_or("invalid packed decimal")?
+            },
             // An index is a native int: little endian on x86-64.
             Usage::Index => BigInt::from_signed_bytes_le(&bytes),
             Usage::Native | Usage::Register => {
@@ -509,6 +520,19 @@ impl View {
     pub fn is_numeric(&self) -> bool {
         match self.kind {
             Kind::Text | Kind::Justified | Kind::Edited { .. } | Kind::AlnumEdited { .. } => self.raw().iter().all(u8::is_ascii_digit),
+            Kind::Numeric { signed, usage: usage @ (Usage::Packed | Usage::PackedNoSign), .. } => {
+                // cob_is_numeric: the sign (or last digit) nibble, then every
+                // other nibble a digit; the pad nibble is not checked apart.
+                let bytes = self.raw();
+                let last = bytes[bytes.len() - 1];
+                let sign = last & 0x0f;
+                let sign_ok = match usage {
+                    Usage::PackedNoSign => sign <= 9,
+                    _ if signed => sign == 0x0c || sign == 0x0d,
+                    _ => sign == 0x0f,
+                };
+                sign_ok && last >> 4 <= 9 && bytes[..bytes.len() - 1].iter().all(|b| b >> 4 <= 9 && b & 0x0f <= 9)
+            },
             _ => self.number().is_ok(),
         }
     }
@@ -569,7 +593,7 @@ impl View {
                 if !comparison { bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize)); }
                 bytes
             },
-            Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
+            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
                 let number = self.number().unwrap_or_else(|error| fail(error));
                 let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
                 format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
@@ -670,10 +694,11 @@ impl View {
     /// Native reads of such a field disagree with each other: stop instead.
     pub fn move_binary_to_packed(&mut self, source: &Value) {
         self.resolved();
-        if let Kind::Numeric { digits, scale, usage: Usage::Packed, .. } = self.kind {
+        if let Kind::Numeric { digits, scale, usage: usage @ (Usage::Packed | Usage::PackedNoSign), .. } = self.kind {
             let units = source.num().units(scale, false);
             let fits = units >= BigInt::from(i32::MIN) && units <= BigInt::from(i32::MAX);
-            if fits && digits % 2 == 0 && (absolute(&units) / power(digits)) % BigInt::from(10) != BigInt::from(0) {
+            let pad = if matches!(usage, Usage::Packed) { digits % 2 == 0 } else { digits % 2 == 1 };
+            if fits && pad && (absolute(&units) / power(digits)) % BigInt::from(10) != BigInt::from(0) {
                 fail("binary MOVE would fill the packed pad nibble; native semantics not modelled");
             }
         }
@@ -683,7 +708,7 @@ impl View {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
-            Usage::Binary | Usage::Index | Usage::Native | Usage::Register => return,
+            Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::PackedNoSign => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
@@ -753,6 +778,11 @@ impl View {
                     Usage::Packed => {
                         let mut nibbles: Vec<u8> = ascii.iter().map(|b| b - b'0').collect();
                         nibbles.push(if !signed { 15 } else if negative { 13 } else { 12 });
+                        if nibbles.len() % 2 != 0 { nibbles.insert(0, 0); }
+                        nibbles.chunks_exact(2).map(|n| (n[0] << 4) | n[1]).collect()
+                    },
+                    Usage::PackedNoSign => {
+                        let mut nibbles: Vec<u8> = ascii.iter().map(|b| b - b'0').collect();
                         if nibbles.len() % 2 != 0 { nibbles.insert(0, 0); }
                         nibbles.chunks_exact(2).map(|n| (n[0] << 4) | n[1]).collect()
                     },
@@ -1126,7 +1156,7 @@ impl Inspect {
                 Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
                 _ => fail("INSPECT of a binary or packed item not modelled"),
             }
-        } else if let Kind::Numeric { usage: Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
             fail("INSPECT of a binary or packed item not modelled");
         }
         // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.

@@ -4634,7 +4634,7 @@ class Parser:
             return False
         if field.usage == "DISPLAY":
             return field.digits + field.sign_separate < 10
-        if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+        if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-6"}:
             return field.digits < 10
         return field.digits <= 9
 

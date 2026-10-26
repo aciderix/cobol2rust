@@ -462,7 +462,7 @@ class Emitter:
                     return True
                 if usage in {"Binary", "Native", "Register"}:
                     return f.scale <= 0 and f.size <= 8
-                if usage == "Packed":
+                if usage in {"Packed", "PackedNoSign"}:
                     return f.scale <= 0 and f.digits < 19
                 return usage == "Display" and f.scale <= 0 and f.size < 19
             text = literal(e)
@@ -705,7 +705,7 @@ class Emitter:
                     self.write(f"{self.receiver(ref)}.move_edited(&{value});")
                 elif conversion is None and truncating and ref.start is None and field.kind == "number":
                     method = "move_number"
-                    if self.storage_usage(field) == "Packed":
+                    if self.storage_usage(field) in {"Packed", "PackedNoSign"}:
                         self.check_packed_literal_move(expr, field)
                         if (expr.op == "var" and
                                 self.storage_usage(self.program.fields[expr.args[0].name]) in {"Binary", "Native", "Register"}):
@@ -748,7 +748,8 @@ class Emitter:
         if digits is None:
             return
         number = expr if expr.op == "number" else expr.args[0]
-        if "." in number.args[0] or len(digits) + field.scale > 9 or field.digits % 2:
+        # The pad nibble: even digits for COMP-3, odd digits for COMP-6.
+        if "." in number.args[0] or len(digits) + field.scale > 9 or field.digits % 2 == (field.usage != "COMP-6"):
             return
         if (int(digits) * 10 ** field.scale // 10 ** field.digits) % 10:
             raise CobolError("MOVE littéral vers COMP-3 à nombre pair de chiffres remplissant le quartet "
@@ -1123,7 +1124,7 @@ class Emitter:
     def set_int(self, ref, value):
         """cob_set_int: a MOVE from a native int."""
         field = self.program.fields[ref.name]
-        method = "move_binary_to_packed" if self.storage_usage(field) == "Packed" else "move_number"
+        method = "move_binary_to_packed" if self.storage_usage(field) in {"Packed", "PackedNoSign"} else "move_number"
         self.write(f"{self.reference(ref)}.{method}(&Value::number(&{value}.to_string()));")
 
     def debug_item(self, label):
@@ -1689,6 +1690,8 @@ class Emitter:
             return f.usage.capitalize()
         if f.usage == "COMP-5":
             return "Register" if getattr(f, "register", False) else "Native"
+        if f.usage == "COMP-6":
+            return "PackedNoSign"
         return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
 
     def storage_kind(self, f):
