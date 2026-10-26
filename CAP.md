@@ -56,10 +56,9 @@ décide de la prochaine.
    COVERAGE.md), pas seulement les accepter : `tools/real_corpora.py
    --execute` (stdin vide, fichiers du dossier du programme). Étendre ensuite
    avec de vrais jeux d'entrée (stdin, fichiers, variables DD).
-3. **Limites du modèle** : 38 chiffres comme cobc (aujourd'hui 18), champs
-   texte au-delà de 256 caractères, OCCURS et mémoire plus grands,
-   niveau 78, Report Writer avec ruptures de contrôle, ENTRY, comparaisons à
-   `ALL littéral`.
+3. **Limites du modèle** : OCCURS et mémoire plus grands, comparaisons à
+   `ALL littéral`, PICTURE P au-delà de 18 chiffres ou hors DISPLAY
+   (38 chiffres, niveau 78, Report Writer avec ruptures et ENTRY sont faits).
 4. **Profil des contrôles d'exécution** : sans `-debug`, cobc calcule avec
    les données numériques invalides (COMP-3 ou DISPLAY corrompus) au lieu de
    s'arrêter ; le runtime s'arrête aujourd'hui toujours (arrêt nommé). Porter
@@ -87,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T00:49:38+00:00 (commit `a0a8db0722`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T01:21:09+00:00 (commit `7a0a14b5e9`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -97,10 +96,10 @@ Dernière mesure : 2026-10-26T00:49:38+00:00 (commit `a0a8db0722`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 305 | 311 | 6 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 322 | 879 | 557 | 0 |
-| **Total** | | **3593** | **1045** | **1617** | **572** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 363 | 879 | 516 | 0 |
+| **Total** | | **3593** | **1086** | **1617** | **531** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T00:49:38+00:00, commit `a0a8db0722`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T01:21:09+00:00, commit `7a0a14b5e9`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -112,15 +111,15 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T00:49:38+00:00, commit `
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 37 × niveau de donnée attendu
-2. 22 × PIC numérique limité à 18 chiffres
-3. 18 × . attendu
+2. 18 × . attendu
+3. 16 × USAGE/clause non pris en charge: COMP-6
 4. 15 × USAGE/clause non pris en charge: POINTER
-5. 14 × clause SELECT non prise en charge
-6. 13 × paragraphe CONFIGURATION non pris en charge
-7. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
-8. 11 × fichier non déclaré: FILE
-9. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
-10. 9 × = attendu
+5. 13 × instruction non prise en charge: >
+6. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
+7. 12 × clause SELECT non prise en charge
+8. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
+9. 9 × PICTURE P limitée à 18 chiffres USAGE DISPLAY
+10. 9 × expression non prise en charge: LINE
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -262,3 +261,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   sortie et code d'erreur (pile d'appels de libcob sur stderr non
   reproduite). Exécution des corpus inchangée ; NIST 451/458, les 24
   programmes IC (CALL/CANCEL) conformes, 245 PASS, 0 FAIL.
+- 2026-10-26 — Limites et formes de la testsuite : champs DISPLAY et COMP-3
+  jusqu'à 38 chiffres (`COB_MAX_DIGITS`, BINARY/COMP-5 refusés au-delà de 18
+  avec l'erreur de cobc), `ROUNDED MODE` (huit modes de
+  `cob_decimal_do_round`), `DELETE FILE` (`cob_delete_file`, sans
+  DECLARATIVES), types C `[UN]SIGNED-SHORT/INT/LONG` et `BINARY-C-LONG`,
+  alias réservés de default.conf (`BINARY-INT`, `ORGANISATION`,
+  `INITIALISE`…), `REPOSITORY` des fonctions intrinsèques. Testsuite **322 →
+  363**, total **1045 → 1086**/3593 (cobc 1617, à examiner 0). Des 41
+  sources débloquées, exécutées face à cobc : 39 identiques, 2 arrêts
+  nommés (indice et sous-chaîne hors bornes lus par cobc sans contrôle).
+  Exécution des corpus inchangée ; NIST 451/458.

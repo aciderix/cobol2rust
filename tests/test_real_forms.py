@@ -5,7 +5,8 @@ entries without IDENTIFICATION DIVISION, CLASS with figurative constants, an
 FD with a numeric record, CBL/PROCESS lines, EXIT SECTION of the implicit
 MAIN SECTION, LOCAL-STORAGE, READ KEY of an item no key starts at, STOP RUN
 RETURNING and Z literals, configuration paragraphs in any order, DISPLAY
-clauses, FUNCTION TRIM, level 78 and 01 CONSTANT."""
+clauses, FUNCTION TRIM, level 78 and 01 CONSTANT, 38 digits, ROUNDED MODE,
+DELETE FILE, C type usages and reserved aliases, REPOSITORY intrinsics."""
 from __future__ import annotations
 
 import unittest
@@ -49,6 +50,8 @@ class RealFormsFrontendTests(unittest.TestCase):
             "invalid PROGRAM-ID": "identification division. program-id. cob_x.\nprocedure division. stop run.",
             "literal length": program("01 n pic 9.", 'display "' + "x" * 8192 + '". stop run.'),
             "littéral numérique": program("01 n pic 9.", 'call "x" using by content 1. stop run.'),
+            "binary field cannot be larger than 18 digits": program("01 n pic 9(19) comp.", "stop run."),
+            "cannot be larger than 38 digits": program("01 n pic 9(39).", "stop run."),
         }
         for message, source in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
@@ -90,7 +93,8 @@ class RealFormsNativeTests(unittest.TestCase):
     def test_fixtures_match_cobc(self):
         for name in ("table_sort", "scope_and_function_forms", "numeric_record", "compiler_options",
                      "exit_implicit_section", "indexed_missing_key", "stop_run_status",
-                     "evaluate_literal_when", "display_clauses", "function_trim", "constants_78"):
+                     "evaluate_literal_when", "display_clauses", "function_trim", "constants_78",
+                     "digits_38", "rounded_modes", "delete_file", "c_type_usages", "repository_intrinsic"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

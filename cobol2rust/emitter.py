@@ -12,6 +12,11 @@ def numeric_text(text):
     return re.sub(r"^([+-]?)\.", r"\g<1>0.", text)
 
 
+# cob_decimal_do_round options of ROUNDED MODE (runtime::round_mode).
+ROUNDING_MODES = {"TRUNCATION": 1, "PROHIBITED": 2, "AWAY-FROM-ZERO": 3, "NEAREST-TOWARD-ZERO": 4,
+                  "TOWARD-GREATER": 5, "TOWARD-LESSER": 6, "NEAREST-EVEN": 7}
+
+
 def quoted(text):
     escapes = {'"': '\\"', "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
     return '"' + ''.join(escapes.get(c, f"\\x{ord(c):02x}" if ord(c) < 32 or ord(c) == 127 else c) for c in text) + '"'
@@ -706,6 +711,10 @@ class Emitter:
                                 self.storage_usage(self.program.fields[expr.args[0].name]) in {"Binary", "Native", "Register"}):
                             method = "move_binary_to_packed"
                     self.write(f"{self.receiver(ref)}.{method}(&{value});")
+                elif isinstance(rounded, str):
+                    # cob_decimal_do_round: PROHIBITED keeps the receiver.
+                    self.write(f"if let Some(rounded) = runtime::round_mode(&{value}, {field.scale}, "
+                               f"{ROUNDING_MODES[rounded]}) {{ {self.receiver(ref)}.assign(&rounded, false); }}")
                 else:
                     self.write(f"{self.receiver(ref)}.assign(&{value}, {str(rounded).lower()});")
             if ref in negative_zero:
@@ -892,6 +901,13 @@ class Emitter:
             size = self.record_size(record)
             self.write(f"let status = {self.handle(name)}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
+        elif op == "delete_file":
+            for name in a[0]:
+                self.assign_name(name)
+                self.write(f"let status = {self.handle(name)}.delete_file();")
+                status = self.program.files[name].status
+                if status:
+                    self.write(f"file_runtime::file_status(status, Some(&mut self.{self.names[status]}), false, false, true, &|| Vec::new());")
         elif op == "delete":
             name = a[0]
             if self.program.files[name].organization == "INDEXED":
@@ -1651,6 +1667,11 @@ class Emitter:
                 self.write(f"if (|| -> Result<(), runtime::SizeError> {{")
                 self.indent += 1
                 self.write(f"let value: Value = {self.checked_expression(expr)}?;")
+                if isinstance(rounded, str):
+                    # cob_decimal_do_round: PROHIBITED is EC-SIZE-TRUNCATION.
+                    scale = self.program.fields[ref.name].scale
+                    self.write(f"let value = runtime::round_mode(&value, {scale}, {ROUNDING_MODES[rounded]}).ok_or(runtime::SizeError)?;")
+                    rounded = False
                 self.write(f"{self.reference(ref)}.checked_assign(&value, {str(rounded).lower()})")
                 self.indent -= 1
                 self.write(f"}})().is_err() {{ {failed} = true; }}")

@@ -1,0 +1,19 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. REPOINTR.
+      * REPOSITORY: intrinsic functions named without FUNCTION
+      * (FUNCTION ALL INTRINSIC, FUNCTION name... INTRINSIC).
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       REPOSITORY.
+           FUNCTION TRIM UPPER-CASE INTRINSIC
+           FUNCTION REVERSE INTRINSIC.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 T PIC X(10) VALUE "  abc  ".
+       01 R PIC X(10).
+       PROCEDURE DIVISION.
+           DISPLAY "[" TRIM(T) "]"
+           MOVE UPPER-CASE(TRIM(T LEADING)) TO R
+           DISPLAY "[" R "]"
+           DISPLAY "[" FUNCTION REVERSE(R) "][" REVERSE("xyz") "]"
+           STOP RUN.

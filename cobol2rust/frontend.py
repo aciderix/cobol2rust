@@ -611,6 +611,26 @@ def source_format(source: str, fmt="auto"):
     return "fixed" if last in " -dD*/\\$" else "free"
 
 
+# reserved.c function_list: every intrinsic function name of cobc 3.2.
+INTRINSIC_NAMES = set("""ABS ABSOLUTE-VALUE ACOS ANNUITY ASIN ATAN BASECONVERT BIT-OF BIT-TO-CHAR BOOLEAN-OF-INTEGER
+BYTE-LENGTH CHAR CHAR-NATIONAL COMBINED-DATETIME CONCAT CONCATENATE CONTENT-LENGTH CONTENT-OF CONVERT COS
+CURRENCY-SYMBOL CURRENT-DATE DATE-OF-INTEGER DATE-TO-YYYYMMDD DAY-OF-INTEGER DAY-TO-YYYYDDD DISPLAY-OF E
+EXCEPTION-FILE EXCEPTION-FILE-N EXCEPTION-LOCATION EXCEPTION-LOCATION-N EXCEPTION-STATEMENT EXCEPTION-STATUS EXP
+EXP10 FACTORIAL FIND-STRING FORMATTED-CURRENT-DATE FORMATTED-DATE FORMATTED-DATETIME FORMATTED-TIME FRACTION-PART
+HEX-OF HEX-TO-CHAR HIGHEST-ALGEBRAIC INTEGER INTEGER-OF-BOOLEAN INTEGER-OF-DATE INTEGER-OF-DAY
+INTEGER-OF-FORMATTED-DATE INTEGER-PART LENGTH LENGTH-AN LOCALE-COMPARE LOCALE-DATE LOCALE-TIME
+LOCALE-TIME-FROM-SECONDS LOG LOG10 LOWER-CASE LOWEST-ALGEBRAIC MAX MEAN MEDIAN MIDRANGE MIN MOD MODULE-CALLER-ID
+MODULE-DATE MODULE-FORMATTED-DATE MODULE-ID MODULE-NAME MODULE-PATH MODULE-SOURCE MODULE-TIME
+MONETARY-DECIMAL-POINT MONETARY-THOUSANDS-SEPARATOR NATIONAL-OF NUMERIC-DECIMAL-POINT NUMERIC-THOUSANDS-SEPARATOR
+NUMVAL NUMVAL-C NUMVAL-F ORD ORD-MAX ORD-MIN PI PRESENT-VALUE RANDOM RANGE REM REVERSE SECONDS-FROM-FORMATTED-TIME
+SECONDS-PAST-MIDNIGHT SIGN SIN SQRT STANDARD-COMPARE STANDARD-DEVIATION STORED-CHAR-LENGTH SUBSTITUTE
+SUBSTITUTE-CASE SUM TAN TEST-DATE-YYYYMMDD TEST-DAY-YYYYDDD TEST-FORMATTED-DATETIME TEST-NUMVAL TEST-NUMVAL-C
+TEST-NUMVAL-F TRIM UPPER-CASE VARIANCE WHEN-COMPILED YEAR-TO-YYYY""".split())
+
+RESERVED_ALIASES = {"BINARY-INT": "BINARY-LONG", "BINARY-LONG-LONG": "BINARY-DOUBLE", "INITIALISE": "INITIALIZE",
+                    "INITIALISED": "INITIALIZED", "ORGANISATION": "ORGANIZATION", "SYNCHRONISED": "SYNCHRONIZED",
+                    "TIMEOUT": "TIME-OUT"}
+
 # Figurative constants as CALL arguments: a field of one character.
 CALL_FIGURATIVES = {
     **dict.fromkeys(("ZERO", "ZEROS", "ZEROES"), lambda p: "0"),
@@ -630,6 +650,10 @@ class Parser:
                                  for k in range(len(keys)))
         if self.decimal_comma:
             self.tokens = lex(source, True)
+        if STD != "cobol85":
+            # default.conf "reserved: ALIAS=WORD" entries outside the screen ones.
+            self.tokens = [Token(RESERVED_ALIASES[t.key], t.line, False, t.start, t.end)
+                           if not t.string and t.key in RESERVED_ALIASES else t for t in self.tokens]
         self.currency = "$"
         self.i = 0
         self.fields = {}
@@ -1827,6 +1851,48 @@ class Parser:
                 or name in self.indexes):
             self.error(f"nom de procédure homonyme d'une donnée non pris en charge: {name}")
 
+    def repository(self):
+        """repository_paragraph: FUNCTION ALL INTRINSIC or FUNCTION name...
+        INTRINSIC make the scanner return those names as functions, without
+        the word FUNCTION, in the rest of the program and its contained
+        programs (functions_are_all, cb_repository_list)."""
+        names = set()
+        while not self.t.string and self.t.key in {"FUNCTION", "PROGRAM", "CLASS", "INTERFACE", "PROPERTY"}:
+            if not self.accept("FUNCTION"):
+                self.error(f"REPOSITORY {self.t.key} non pris en charge")
+            if self.accept("ALL"):
+                self.expect("INTRINSIC")
+                names |= INTRINSIC_NAMES
+                continue
+            listed = []
+            while not self.t.string and self.t.key not in {"INTRINSIC", ".", "AS", "FUNCTION", "<EOF>"}:
+                listed.append(self.take().key)
+            if not listed or not self.accept("INTRINSIC"):
+                self.error("FUNCTION utilisateur (FUNCTION-ID) non prise en charge")
+            for name in listed:
+                if name not in INTRINSIC_NAMES:
+                    self.error(f"FUNCTION '{name}' is not a known intrinsic function")
+            names |= set(listed)
+        if names or self.at("."):
+            self.expect(".")
+        end, depth = self.i, 0
+        while end < len(self.tokens) and self.tokens[end].key != "<EOF>":
+            t = self.tokens[end]
+            if not t.string and t.key == "PROGRAM-ID":
+                depth += 1
+            if not t.string and t.key == "END" and self.tokens[end + 1].key == "PROGRAM":
+                if depth == 0:
+                    break
+                depth -= 1
+            end += 1
+        replaced = []
+        for t in self.tokens[self.i:end]:
+            if not t.string and t.key in names and not (replaced and not replaced[-1].string
+                                                         and replaced[-1].key == "FUNCTION"):
+                replaced.append(Token("FUNCTION", t.line, False, t.start, t.start))
+            replaced.append(t)
+        self.tokens[self.i:end] = replaced
+
     def environment_division(self):
         self.expect("DIVISION")
         self.expect(".")
@@ -1837,13 +1903,18 @@ class Parser:
             collating = None
             # configuration_paragraphs: in any order, each once; an empty
             # paragraph keeps only its header.
-            ends = {"SOURCE-COMPUTER", "OBJECT-COMPUTER", "SPECIAL-NAMES", "INPUT-OUTPUT", "DATA", "PROCEDURE"}
-            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES"):
+            ends = {"SOURCE-COMPUTER", "OBJECT-COMPUTER", "SPECIAL-NAMES", "REPOSITORY", "INPUT-OUTPUT", "DATA",
+                    "PROCEDURE"}
+            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES") \
+                    or self.at("REPOSITORY"):
                 paragraph = self.take().key
                 if paragraph in computers:
                     self.error(f"paragraphe {paragraph} dupliqué")
                 computers.add(paragraph)
                 self.expect(".")
+                if paragraph == "REPOSITORY":
+                    self.repository()
+                    continue
                 if paragraph == "SPECIAL-NAMES":
                     if not (self.t.key in ends and not self.t.string) and not self.program_end():
                         self.special_names()
@@ -2819,6 +2890,22 @@ class Parser:
             total = size if total is None else Expr("+", (total, size))
         return total
 
+    ROUNDING_MODES = {"AWAY-FROM-ZERO", "NEAREST-AWAY-FROM-ZERO", "NEAREST-EVEN", "NEAREST-TOWARD-ZERO",
+                      "PROHIBITED", "TOWARD-GREATER", "TOWARD-LESSER", "TRUNCATION"}
+
+    def rounded_phrase(self):
+        """flag_rounded: False, True (the default rounding), or the name of
+        the round_choice of ROUNDED MODE [IS]."""
+        if not self.accept("ROUNDED"):
+            return False
+        if not self.accept("MODE"):
+            return True
+        self.accept("IS")
+        if self.t.string or self.t.key not in self.ROUNDING_MODES:
+            self.error("mode d'arrondi attendu")
+        mode = self.take().key
+        return True if mode == "NEAREST-AWAY-FROM-ZERO" else mode
+
     def no_advancing(self) -> bool:
         # scanner.l: ("WITH"[ ,;\n]+)?"NO"[ ,;\n]+"ADVANCING" is one token.
         i = self.i + (not self.t.string and self.t.key == "WITH")
@@ -3233,6 +3320,22 @@ class Parser:
             invalid, valid = self.key_handlers(files[0], "END-REWRITE")
             return Stmt("rewrite", (files[0], record.name, value, invalid, valid), line)
         if verb == "DELETE":
+            if self.at("FILE") and not self.tokens[self.i + 1].string and self.tokens[self.i + 1].key in self.files \
+                    and "FILE" not in self.files:
+                # TOK_FILE delete_file_list (cb_emit_delete_file): no
+                # declaratives, the status only reaches FILE STATUS.
+                self.take()
+                names = []
+                while not self.t.string and self.t.key in self.files:
+                    name = self.take().key
+                    if self.files[name].sort:
+                        self.error("DELETE FILE not allowed on SORT files")
+                    names.append(name)
+                    self.accept(",")
+                if self.at("ON") or self.at("EXCEPTION") or self.at("NOT"):
+                    self.error("DELETE FILE ... ON EXCEPTION non pris en charge")
+                self.accept("END-DELETE")
+                return Stmt("delete_file", (names,), line)
             name = self.file_name()
             if self.files[name].organization not in {"RELATIVE", "INDEXED"}:
                 self.error("DELETE limité aux fichiers RELATIVE et INDEXED")
@@ -3421,7 +3524,7 @@ class Parser:
             source = self.corresponding_group()
             self.expect("TO" if verb == "ADD" else "FROM")
             target = self.corresponding_group()
-            rounded = self.accept("ROUNDED")
+            rounded = self.rounded_phrase()
             op = "+" if verb == "ADD" else "-"
             pairs = self.corresponding_pairs(target, source, True)
             items = [(t, Expr(op, (Expr("var", (t,)), Expr("var", (u,)))), rounded) for t, u in pairs]
@@ -3949,9 +4052,9 @@ class Parser:
         return pairs
 
     def rounded_receivers(self):
-        receivers = [(self.target_variable(), self.accept("ROUNDED"))]
+        receivers = [(self.target_variable(), self.rounded_phrase())]
         while not self.t.string and self.candidates(self.t.key):
-            receivers.append((self.target_variable(), self.accept("ROUNDED")))
+            receivers.append((self.target_variable(), self.rounded_phrase()))
         return receivers
 
     def target_variable(self):

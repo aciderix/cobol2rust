@@ -289,6 +289,29 @@ fn fatal_file_error(status: u8, name: Vec<u8>) -> ! {
     crate::runtime::fatal_error(&[format!("{message} (status = {status:02}) for file ").as_bytes(), &name].concat())
 }
 
+/// cob_delete_file of a closed file: unlink of each name, the status read
+/// from errno (errno_cob_sts) after the last one, 00 by default.
+fn delete_names(names: &[String]) -> u8 {
+    let mut status = 0;
+    for name in names {
+        status = match std::fs::remove_file(name) {
+            Ok(()) => 0,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => 35,
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(21) => 37,
+            Err(error) if error.raw_os_error() == Some(28) || error.raw_os_error() == Some(122) => 34,
+            Err(_) => 0,
+        };
+    }
+    status
+}
+
+/// The name cob_delete_file unlinks: cob_field_to_string of the ASSIGN, then
+/// cob_chk_file_mapping (without cob_open's checks).
+fn delete_name(assign: &[u8]) -> String {
+    if assign.is_empty() { fail("DELETE FILE with an empty ASSIGN name not modelled"); }
+    String::from_utf8(file_mapping(assign)).unwrap_or_else(|_| fail("non UTF-8 file name not modelled"))
+}
+
 /// cob_open checks on the ASSIGN name (status 31), then cob_chk_file_mapping.
 fn open_name(assign: &[u8]) -> Result<String, u8> {
     if assign.is_empty() { return Err(31); }
@@ -551,6 +574,15 @@ impl CobolFile {
 
     fn usable(&self) {
         if matches!(self.state, State::HalfOpen) { fail("file left half open by OPEN status 57 (closed FILE reused by libcob) not modelled"); }
+    }
+
+    /// DELETE FILE (cob_delete_file): 38 after CLOSE WITH LOCK, 41 when open.
+    pub fn delete_file(&mut self) -> u8 {
+        match self.state {
+            State::Locked => 38,
+            State::Closed => delete_names(&[delete_name(&self.assign)]),
+            _ => 41,
+        }
     }
 
     pub fn close(&mut self, lock: bool) -> u8 {
@@ -1034,6 +1066,13 @@ impl RelativeFile {
             Err(error) if error.kind() == io::ErrorKind::PermissionDenied => 37,
             Err(error) => fail(&format!("unmodelled RELATIVE OPEN failure: {error}")),
         }
+    }
+
+    /// DELETE FILE (cob_delete_file): 38 after CLOSE WITH LOCK, 41 when open.
+    pub fn delete_file(&mut self) -> u8 {
+        if self.locked { return 38; }
+        if !self.open_mode.is_empty() { return 41; }
+        delete_names(&[delete_name(&self.assign)])
     }
 
     pub fn close(&mut self, lock: bool) -> u8 {
@@ -1595,6 +1634,16 @@ impl IndexedFile {
         }
         self.open_mode = self.last_open_mode;
         if self.optional && nonexistent && mode != "OUTPUT" { 5 } else { 0 }
+    }
+
+    /// DELETE FILE (cob_delete_file, indexed_file_delete for BDB): the
+    /// database of each key, the status from the last unlink.
+    pub fn delete_file(&mut self) -> u8 {
+        if self.locked { return 38; }
+        if !self.open_mode.is_empty() { return 41; }
+        let name = delete_name(&self.assign);
+        let names: Vec<String> = (0..self.keys.len()).map(|i| if i == 0 { name.clone() } else { format!("{name}.{i}") }).collect();
+        delete_names(&names)
     }
 
     pub fn close(&mut self, lock: bool) -> u8 {

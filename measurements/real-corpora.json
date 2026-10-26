@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T00:49:38+00:00",
- "git_head": "a0a8db072283768066c37440cb581a272206b2fa",
- "implementation_sha256": "f16825b6df34313be7053d9f966be9fd4b86b9544aa93b8b204146674a57cf7a",
+ "measured_at": "2026-10-26T01:21:09+00:00",
+ "git_head": "7a0a14b5e9b8544c13449037d91d9f7155f7bda0",
+ "implementation_sha256": "b3ee16b25b66bf7161122236cf7ec48ff8982ee4b3f613e2a2799449072c9bf5",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1045,
+  "accepted": 1086,
   "cobc_accepted": 1617,
-  "gap": 572,
+  "gap": 531,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -443,16 +443,12 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 322,
+   "accepted": 363,
    "internal_errors": 0,
    "blockers": [
     [
      "niveau de donnée attendu",
      43
-    ],
-    [
-     "PIC numérique limité à 18 chiffres",
-     22
     ],
     [
      ". attendu",
@@ -463,12 +459,8 @@
      21
     ],
     [
-     "paragraphe CONFIGURATION non pris en charge",
-     16
-    ],
-    [
-     "clause SELECT non prise en charge",
-     16
+     "USAGE/clause non pris en charge: COMP-6",
+     17
     ],
     [
      "USAGE/clause non pris en charge: POINTER",
@@ -477,6 +469,14 @@
     [
      "IDENTIFICATION DIVISION attendue",
      14
+    ],
+    [
+     "clause SELECT non prise en charge",
+     14
+    ],
+    [
+     "instruction non prise en charge: >",
+     13
     ],
     [
      "CALL USING limité à BY REFERENCE et BY CONTENT",
@@ -491,18 +491,18 @@
      11
     ],
     [
-     "fichier non déclaré: FILE",
-     11
+     "PROCEDURE attendu",
+     10
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 557,
+   "gap": 516,
    "gap_sources": [
     [
      "data_binary-013/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
      "data_binary-014/prog.cob",
@@ -521,28 +521,24 @@
      "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
-     "data_display-004/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
-    ],
-    [
      "data_display-005/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
+     "instruction non prise en charge: >"
     ],
     [
      "data_display-008/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "instruction non prise en charge: >"
     ],
     [
      "data_display-008/prog2.cob",
-     "PIC numérique limité à 18 chiffres"
+     "instruction non prise en charge: >"
     ],
     [
      "data_display-009/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "instruction non prise en charge: >"
     ],
     [
      "data_display-009/prog2.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "instruction non prise en charge: >"
     ],
     [
      "data_packed-004/prog.cob",
@@ -558,11 +554,11 @@
     ],
     [
      "data_packed-008/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-009/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "instruction non prise en charge: >"
     ],
     [
      "data_packed-012/prog.cob",
@@ -586,7 +582,7 @@
     ],
     [
      "data_packed-017/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-019/prog.cob",
@@ -594,27 +590,27 @@
     ],
     [
      "data_packed-021/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-021/prog2.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-022/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-022/prog2.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-023/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_packed-023/prog2.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "data_pointer-001/prog.cob",
@@ -905,14 +901,6 @@
      "USAGE/clause non pris en charge: DEPENDING"
     ],
     [
-     "run_file-003/prog.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
-     "run_file-006/prog.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
      "run_file-020/prog.cob",
      "USAGE/clause non pris en charge: BASED"
     ],
@@ -954,7 +942,7 @@
     ],
     [
      "run_file-030/prog.cob",
-     "fichier non déclaré: FILE"
+     "START KEY limité à =, > ou NOT <"
     ],
     [
      "run_file-031/prog.cob",
@@ -963,10 +951,6 @@
     [
      "run_file-032/prog.cob",
      "START KEY limité à =, > ou NOT <"
-    ],
-    [
-     "run_file-034/prog.cob",
-     "fichier non déclaré: FILE"
     ],
     [
      "run_file-038/prog.cob",
@@ -997,14 +981,6 @@
      "CALL USING limité à BY REFERENCE et BY CONTENT"
     ],
     [
-     "run_file-044/prog.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
-     "run_file-045/prog.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
      "run_file-054/prog.cob",
      "littéral attendu"
     ],
@@ -1031,14 +1007,6 @@
     [
      "run_file-059/prog2.cob",
      "NO attendu"
-    ],
-    [
-     "run_file-060/prog.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
-     "run_file-061/prog.cob",
-     "fichier non déclaré: FILE"
     ],
     [
      "run_file-064/prog.cob",
@@ -1090,7 +1058,7 @@
     ],
     [
      "run_file-074/prog.cob",
-     "fichier non déclaré: FILE"
+     "START KEY limité à =, > ou NOT <"
     ],
     [
      "run_file-078/prog.cob",
@@ -1121,14 +1089,6 @@
      "USING limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING"
     ],
     [
-     "run_file-097/prog.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-098/prog.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
      "run_file-105/prog.cob",
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
     ],
@@ -1137,32 +1097,16 @@
      "USE GLOBAL sur un fichier non pris en charge"
     ],
     [
-     "run_file-106/prog1.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
-     "run_file-106/prog2.cob",
-     "fichier non déclaré: FILE"
-    ],
-    [
      "run_functions-001/prog.cob",
      "FUNCTION ABS non prise en charge"
     ],
     [
      "run_functions-002/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
-     "run_functions-003/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "run_functions-004/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
-     "run_functions-005/prog.cob",
-     "PIC numérique limité à 18 chiffres"
+     "USAGE/clause non pris en charge: COMP-6"
     ],
     [
      "run_functions-006/prog.cob",
@@ -1197,10 +1141,6 @@
      "CALL USING requiert au moins un argument"
     ],
     [
-     "run_functions-016/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
      "run_functions-017/prog.cob",
      "FUNCTION CURRENCY-SYMBOL non prise en charge"
     ],
@@ -1211,10 +1151,6 @@
     [
      "run_functions-022/prog.cob",
      "FUNCTION DAY-TO-YYYYDDD non prise en charge"
-    ],
-    [
-     "run_functions-023/prog.cob",
-     "PIC numérique limité à 18 chiffres"
     ],
     [
      "run_functions-024/prog.cob",
@@ -1235,10 +1171,6 @@
     [
      "run_functions-027/prog.cob",
      "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_functions-028/prog.cob",
-     "PIC numérique limité à 18 chiffres"
     ],
     [
      "run_functions-029/prog.cob",
@@ -1285,10 +1217,6 @@
      "FUNCTION HIGHEST-ALGEBRAIC non prise en charge"
     ],
     [
-     "run_functions-041/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
      "run_functions-044/prog.cob",
      "FUNCTION INTEGER-OF-FORMATTED-DATE non prise en charge"
     ],
@@ -1307,14 +1235,6 @@
     [
      "run_functions-050/prog.cob",
      "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
-    ],
-    [
-     "run_functions-051/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
-     "run_functions-052/prog.cob",
-     "PIC numérique limité à 18 chiffres"
     ],
     [
      "run_functions-055/prog.cob",
@@ -1409,10 +1329,6 @@
      "DISPLAY de FUNCTION ORD-MIN numérique non pris en charge"
     ],
     [
-     "run_functions-081/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
      "run_functions-082/prog.cob",
      "DISPLAY de FUNCTION PRESENT-VALUE numérique non pris en charge"
     ],
@@ -1433,18 +1349,6 @@
      "USAGE/clause non pris en charge: FLOAT-LONG"
     ],
     [
-     "run_functions-092/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
-     "run_functions-093/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
-     "run_functions-094/prog.cob",
-     "PIC numérique limité à 18 chiffres"
-    ],
-    [
      "run_functions-095/prog.cob",
      "FUNCTION STORED-CHAR-LENGTH non prise en charge"
     ],
@@ -1463,10 +1367,6 @@
     [
      "run_functions-099/prog.cob",
      "FUNCTION SUBSTITUTE-CASE non prise en charge"
-    ],
-    [
-     "run_functions-101/prog.cob",
-     "PIC numérique limité à 18 chiffres"
     ],
     [
      "run_functions-102/prog.cob",
@@ -1597,44 +1497,8 @@
      "78 VALUE LENGTH OF non pris en charge"
     ],
     [
-     "run_fundamental-047/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
-    ],
-    [
      "run_fundamental-048/prog.cob",
      ". attendu"
-    ],
-    [
-     "run_fundamental-050/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-052/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-053/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-054/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-055/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-056/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-057/prog.cob",
-     "= attendu"
-    ],
-    [
-     "run_fundamental-058/prog.cob",
-     "= attendu"
     ],
     [
      "run_fundamental-064/prog.cob",
@@ -1670,7 +1534,7 @@
     ],
     [
      "run_fundamental-094/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
+     "expression non prise en charge: >"
     ],
     [
      "run_fundamental-096/prog.cob",
@@ -1690,7 +1554,7 @@
     ],
     [
      "run_fundamental-112/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-C-LONG"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
     ],
     [
      "run_fundamental-114/prog.cob",
@@ -1706,7 +1570,7 @@
     ],
     [
      "run_initialize-013/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
+     "zone de données trop grande: T01-ALL.T01-REC"
     ],
     [
      "run_manual_screen-001/prog.cob",
@@ -2049,10 +1913,6 @@
      "opérande INSPECT attendu"
     ],
     [
-     "run_misc-051/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
-    ],
-    [
      "run_misc-060/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-LONG"
     ],
@@ -2154,11 +2014,11 @@
     ],
     [
      "run_misc-122/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-C-LONG"
+     "USAGE/clause non pris en charge: COMP-1"
     ],
     [
      "run_misc-123/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-C-LONG"
+     "USAGE/clause non pris en charge: COMP-1"
     ],
     [
      "run_misc-127/prog.cob",
@@ -2213,10 +2073,6 @@
      "CALL DIR/SUB: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-157/prog.cob",
-     "= attendu"
-    ],
-    [
      "run_misc-163/prog.cob",
      "78 VALUE LENGTH OF non pris en charge"
     ],
@@ -2249,24 +2105,8 @@
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
-     "run_misc-174/prog.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
-    ],
-    [
-     "run_misc-174/prog2.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
-    ],
-    [
-     "run_misc-174/prog3.cob",
-     "USAGE/clause non pris en charge: BINARY-INT"
-    ],
-    [
      "run_misc-176/prog.cob",
      "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
-    ],
-    [
-     "run_misc-178/prog.cob",
-     "USAGE/clause non pris en charge: signed-int"
     ],
     [
      "run_ml-002/prog.cob",
@@ -2510,7 +2350,7 @@
     ],
     [
      "syn_functions-002/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "DISPLAY de FUNCTION E numérique non pris en charge"
     ],
     [
      "syn_functions-003/prog.cob",
@@ -2575,10 +2415,6 @@
     [
      "syn_misc-055/prog.cob",
      "USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "syn_misc-058/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
     ],
     [
      "syn_misc-059/prog.cob",
@@ -2735,23 +2571,19 @@
      37
     ],
     [
-     "PIC numérique limité à 18 chiffres",
-     22
-    ],
-    [
      ". attendu",
      18
+    ],
+    [
+     "USAGE/clause non pris en charge: COMP-6",
+     16
     ],
     [
      "USAGE/clause non pris en charge: POINTER",
      15
     ],
     [
-     "clause SELECT non prise en charge",
-     14
-    ],
-    [
-     "paragraphe CONFIGURATION non pris en charge",
+     "instruction non prise en charge: >",
      13
     ],
     [
@@ -2759,15 +2591,15 @@
      13
     ],
     [
-     "fichier non déclaré: FILE",
-     11
+     "clause SELECT non prise en charge",
+     12
     ],
     [
      "ASSIGN LINE ADVANCING FILE non pris en charge",
      10
     ],
     [
-     "= attendu",
+     "PICTURE P limitée à 18 chiffres USAGE DISPLAY",
      9
     ],
     [
@@ -2775,16 +2607,20 @@
      9
     ],
     [
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY",
+     "PROGRAM-ID attendu",
      8
+    ],
+    [
+     "USAGE/clause non pris en charge: ANY",
+     7
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T00:49:38+00:00",
-  "git_head": "a0a8db072283768066c37440cb581a272206b2fa",
-  "implementation_sha256": "f16825b6df34313be7053d9f966be9fd4b86b9544aa93b8b204146674a57cf7a",
+  "measured_at": "2026-10-26T01:21:09+00:00",
+  "git_head": "7a0a14b5e9b8544c13449037d91d9f7155f7bda0",
+  "implementation_sha256": "b3ee16b25b66bf7161122236cf7ec48ff8982ee4b3f613e2a2799449072c9bf5",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

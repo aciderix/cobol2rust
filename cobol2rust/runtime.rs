@@ -192,6 +192,10 @@ impl Number {
     /// The value at a PICTURE scale, as libcob's scale: negative for
     /// trailing P positions (units of 10^-scale), above the digit count for
     /// leading P positions. Excess digits are truncated or ROUNDED.
+    /// A value of a possibly negative decimal scale.
+    fn at(n: BigInt, scale: i32) -> Self {
+        if scale < 0 { Self::new(n * power((-scale) as u32), 0) } else { Self::new(n, scale as u32) }
+    }
     pub(crate) fn units(&self, scale: i32, rounded: bool) -> BigInt {
         let own = self.scale as i32;
         if scale >= own { return &self.n * power((scale - own) as u32); }
@@ -202,6 +206,52 @@ impl Number {
             q + if self.n.sign() == Sign::Minus { -1 } else { 1 }
         } else { q }
     }
+}
+
+/// cob_decimal_do_round for ROUNDED MODE: 1 TRUNCATION, 2 PROHIBITED (None
+/// when digits would be lost), 3 AWAY-FROM-ZERO, 4 NEAREST-TOWARD-ZERO,
+/// 5 TOWARD-GREATER, 6 TOWARD-LESSER, 7 NEAREST-EVEN; the store then
+/// truncates to the receiver's scale.
+pub fn round_mode(value: &Value, scale: i32, mode: u8) -> Option<Value> {
+    let number = value.num();
+    let (mut n, mut own) = (number.n.clone(), number.scale as i32);
+    let negative = n.sign() == Sign::Minus;
+    if n.sign() == Sign::NoSign || scale >= own { return Some(Value::Num(number, None)); }
+    let shift = |n: &mut BigInt, own: &mut i32, by: i32| {
+        if by > 0 { *n *= power(by as u32); } else if by < 0 { *n /= power((-by) as u32); }
+        *own += by;
+    };
+    let step = |n: &mut BigInt| { *n += if negative { -5 } else { 5 }; };
+    match mode {
+        1 => {}
+        2 => return None,
+        3 | 5 | 6 => {
+            let unit = power((own - scale) as u32);
+            let remainder: BigInt = &n % &unit;
+            if remainder.sign() != Sign::NoSign && (mode == 3 || (mode == 5) != negative) {
+                if negative { n -= unit; } else { n += unit; }
+            }
+        }
+        4 | 7 => {
+            let half = power((own - scale - 1) as u32) * 5;
+            let remainder: BigInt = &n % &half;
+            let by = scale - own + 1;
+            shift(&mut n, &mut own, by);
+            if remainder.sign() == Sign::NoSign {
+                if mode == 4 { return Some(Value::Num(Number::at(n, own), None)); }
+                let last: BigInt = absolute(&n) % 100u32;
+                let last = last.to_string();
+                if ["5", "25", "45", "65", "85"].contains(&last.as_str()) { return Some(Value::Num(Number::at(n, own), None)); }
+            }
+            step(&mut n);
+        }
+        _ => {
+            let by = scale - own + 1;
+            shift(&mut n, &mut own, by);
+            step(&mut n);
+        }
+    }
+    Some(Value::Num(Number::at(n, own), None))
 }
 
 #[derive(Clone, Debug)]

@@ -39,7 +39,7 @@ class FrontendTests(unittest.TestCase):
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
             program("stop run.", "01 n usage comp-1."),
-            program("stop run.", "01 n pic 9(19)."),
+            program("stop run.", "01 n pic 9(39)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("display n.", "01 n pic 9. 01 n pic 9."),   # ambiguous reference
             program("stop run.", "01 x pic x(0)."),

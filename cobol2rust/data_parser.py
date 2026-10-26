@@ -4,10 +4,16 @@ import re
 from .frontend import Condition, ConstantToken, Field, Token, VERBS
 
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
-          "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE"}
+          "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
+          "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
+          "UNSIGNED-LONG"}
 # field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
 # digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
-FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18}
+FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18,
+                       "BINARY-C-LONG": 18}
+# validate_field_1: C type usages are COMP-5 with the picture of a fixed binary.
+C_TYPE_USAGES = {"SIGNED-SHORT": (4, True), "UNSIGNED-SHORT": (4, False), "SIGNED-INT": (9, True),
+                 "UNSIGNED-INT": (9, False), "SIGNED-LONG": (18, True), "UNSIGNED-LONG": (18, False)}
 
 
 def literal(p):
@@ -706,12 +712,16 @@ def declaration(p, file_record=False):
                     p.accept("SIGNED")
                 fixed_binary = ("S" if signed_binary else "") + f"9({FIXED_BINARY_DIGITS[usage]})"
                 usage = "COMP-5"
+            elif usage in C_TYPE_USAGES:
+                digits, signed_binary = C_TYPE_USAGES[usage]
+                fixed_binary = ("S" if signed_binary else "") + f"9({digits})"
+                usage = "COMP-5"
             elif usage == "COMPUTATIONAL-5":
                 usage = "COMP-5"
     p.expect(".")
     if fixed_binary:
         if picture:
-            p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE")
+            p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE et les types C")
         picture = fixed_binary
     # USAGE INDEX without PICTURE is an elementary index data item, unless
     # subordinate entries follow (a group whose USAGE they inherit).
@@ -778,8 +788,9 @@ def declaration(p, file_record=False):
     elif re.fullmatch(r"S?(?:9+(?:V9*)?|V9+)", expanded):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
-        if digits > 18:
-            p.error("PIC numérique limité à 18 chiffres")
+        if digits > 38:
+            # cb_build_picture: COB_MAX_DIGITS.
+            p.error("numeric field cannot be larger than 38 digits")
     elif re.fullmatch(r"S?9+P+V?|S?V?P+9+", expanded):
         # Scaling positions, as cobc's picture analysis: trailing P give a
         # negative scale (units of 10^n), leading P an implicit V before them.
@@ -793,10 +804,14 @@ def declaration(p, file_record=False):
           and set(re.sub(r"\(\d+\)", "", picture.upper())) - set("9VP")):
         kind = "edited"
         symbols, edit_size, digits, scale, signed = edited_picture(p, picture)
-        if digits > 18 or edit_size > 256 or usage != "DISPLAY":
-            p.error("PIC éditée limitée à 18 chiffres, 256 caractères DISPLAY")
+        if digits > 38 or edit_size > 256 or usage != "DISPLAY":
+            p.error("PIC éditée limitée à 38 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
+    if kind == "number" and digits > 18 and usage in {"COMP", "COMPUTATIONAL", "BINARY", "COMP-4", "COMPUTATIONAL-4",
+                                                       "COMP-5", "COMPUTATIONAL-5"}:
+        # compute_size: BINARY and COMP-5 items hold at most 18 digits.
+        p.error(f"'{label}' binary field cannot be larger than 18 digits")
     if blank_zero:
         # field.c: a numeric DISPLAY item with BLANK WHEN ZERO becomes
         # numeric-edited with a reconstructed 9(n) picture.
