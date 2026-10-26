@@ -453,7 +453,7 @@ def declaration(p, file_record=False):
             p.error("VALUE attendu au niveau 88")
         p.accept("IS") or p.accept("ARE")
         values = []
-        while not p.at(".") and not p.at("WHEN"):
+        while not p.at(".") and not p.at("WHEN") and not p.at("FALSE"):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
@@ -492,6 +492,10 @@ def declaration(p, file_record=False):
         false_value = None
         if p.accept("WHEN"):
             p.expect("SET"); p.expect("TO"); p.expect("FALSE")
+            p.accept("IS")
+            false_value = literal(p)
+        elif p.accept("FALSE"):
+            # _false_is: FALSE [IS] literal, without WHEN SET TO.
             p.accept("IS")
             false_value = literal(p)
         p.expect(".")

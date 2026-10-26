@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T11:02:08+00:00",
- "git_head": "9d301a3d95754f4348e1d536721982fff545b7c4",
- "implementation_sha256": "23c22b371975e2c19fb63223c1912c6202fd17431d6c26d2ae11f3e1f476638a",
+ "measured_at": "2026-10-26T11:31:07+00:00",
+ "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
+ "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1134,
+  "accepted": 1142,
   "cobc_accepted": 1617,
-  "gap": 483,
+  "gap": 475,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 410,
+   "accepted": 418,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,32 +490,8 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 469,
+   "gap": 461,
    "gap_sources": [
-    [
-     "data_packed-021/prog.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
-    [
-     "data_packed-021/prog2.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
-    [
-     "data_packed-022/prog.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
-    [
-     "data_packed-022/prog2.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
-    [
-     "data_packed-023/prog.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
-    [
-     "data_packed-023/prog2.cob",
-     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
-    ],
     [
      "data_pointer-001/prog.cob",
      "USAGE/clause non pris en charge: POINTER"
@@ -847,10 +823,6 @@
     [
      "run_file-043/prog.cob",
      "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_file-054/prog.cob",
-     "littéral attendu"
     ],
     [
      "run_file-055/prog1.cob",
@@ -1375,10 +1347,6 @@
     [
      "run_fundamental-069/prog.cob",
      "invalid IF directive"
-    ],
-    [
-     "run_fundamental-072/prog.cob",
-     "littéral attendu"
     ],
     [
      "run_fundamental-075/prog.cob",
@@ -2422,9 +2390,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T11:02:08+00:00",
-  "git_head": "9d301a3d95754f4348e1d536721982fff545b7c4",
-  "implementation_sha256": "23c22b371975e2c19fb63223c1912c6202fd17431d6c26d2ae11f3e1f476638a",
+  "measured_at": "2026-10-26T11:31:07+00:00",
+  "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
+  "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

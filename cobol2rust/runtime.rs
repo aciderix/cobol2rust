@@ -265,6 +265,9 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn packed_int_add_guard(&self, operand: &Value) {
+        if let Self::View(view) = self { view.packed_int_add_guard(operand); }
+    }
     pub fn is_text(&self) -> bool {
         match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Justified | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
@@ -492,6 +495,9 @@ impl Value {
                 let (units, width) = if *scale < 0 { (n.units(0, false), (*digits as i32 - *scale) as usize) }
                                      else { (n.units(*scale, false), (*digits).max(*scale as u32) as usize) };
                 let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = width);
+                // The move to a DISPLAY field of the PICTURE's size keeps the
+                // low-order digits of a binary value beyond its PICTURE.
+                if s.len() > width { s = s[s.len() - width..].to_string(); }
                 if *scale > 0 { s.insert(s.len() - *scale as usize, module_symbols().0 as char); }
                 if *signed {
                     let sign = if units.sign() == Sign::Minus { '-' } else { '+' };
@@ -1187,6 +1193,17 @@ pub mod intrinsic {
     pub fn upper_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "UPPER-CASE"); Value::Bytes(b.to_ascii_uppercase()) }
     pub fn lower_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "LOWER-CASE"); Value::Bytes(b.to_ascii_lowercase()) }
     pub fn reverse(v: &Value) -> Value { let mut b = v.bytes(); b.reverse(); Value::Bytes(b) }
+    /// cob_intr_hex_of: two upper-case hexadecimal digits per byte.
+    pub fn hex_of(v: &Value) -> Value {
+        Value::Bytes(v.bytes().iter().flat_map(|b| { let h = b"0123456789ABCDEF"; [h[(b >> 4) as usize], h[(b & 15) as usize]] }).collect())
+    }
+    /// cob_intr_hex_to_char: each pair of digits gives a byte; an invalid
+    /// digit counts as 0 (EC-ARGUMENT-FUNCTION, not modelled), an odd last
+    /// digit is ignored.
+    pub fn hex_to_char(v: &Value) -> Value {
+        let digit = |c: u8| match c { b'0'..=b'9' => c - b'0', b'A'..=b'F' => c - b'A' + 10, b'a'..=b'f' => c - b'a' + 10, _ => 0 };
+        Value::Bytes(v.bytes().chunks_exact(2).map(|pair| digit(pair[0]).wrapping_mul(16).wrapping_add(digit(pair[1]))).collect())
+    }
     /// cob_intr_trim: direction 1 LEADING, 2 TRAILING; all spaces give an empty field.
     pub fn trim(v: &Value, direction: u8) -> Value {
         let b = v.bytes();

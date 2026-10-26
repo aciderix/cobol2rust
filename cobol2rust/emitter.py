@@ -320,7 +320,8 @@ class Emitter:
 
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
-        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM"}
+        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM",
+                           "HEX-OF", "HEX-TO-CHAR"}
         values = []
         direction = "0"
         if name == "TRIM" and len(args) == 2:
@@ -344,7 +345,7 @@ class Emitter:
                 values.append(self.expression(a))
         rust = {"INTEGER": "integer", "INTEGER-PART": "integer_part", "FACTORIAL": "factorial",
                 "CHAR": "char_of", "ORD": "ord", "UPPER-CASE": "upper_case", "LOWER-CASE": "lower_case",
-                "REVERSE": "reverse", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
+                "REVERSE": "reverse", "HEX-OF": "hex_of", "HEX-TO-CHAR": "hex_to_char", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
                 "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer",
                 "SQRT": "sqrt_of", "LOG": "log", "LOG10": "log10", "EXP": "exp_of", "SIN": "sin",
                 "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of"}
@@ -902,6 +903,12 @@ class Emitter:
             size = self.record_size(record)
             self.write(f"let status = {self.handle(name)}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
+        elif op == "packed_add_guard":
+            ref, operand, negate = a
+            delta = self.expression(operand)
+            if negate:
+                delta = f"Value::number(\"0\").minus(&{delta})"
+            self.write(f"{self.reference(ref)}.packed_int_add_guard(&{delta});")
         elif op == "delete_file":
             for name in a[0]:
                 self.assign_name(name)

@@ -1094,8 +1094,10 @@ class Parser:
             deferred.append((label, key, len(indices), self.t.line))
         elif len(indices) != len(descriptor.dimensions):
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
-        if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
-            self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
+        if start is not None and conditions:
+            # cb_build_identifier: a reference modification of any item reads
+            # its storage bytes as alphanumeric data.
+            self.error("modification de référence d'une condition")
         if deferred is None and descriptor.size > 0 and getattr(descriptor, "parse_size", None) is None:
             self.check_constant_positions(label, descriptor, indices, start, length)
         bound = getattr(descriptor, "parse_size", None)
@@ -2969,7 +2971,7 @@ class Parser:
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
-        "RANDOM": (0, "number"), "TRIM": (1, "text"),
+        "RANDOM": (0, "number"), "TRIM": (1, "text"), "HEX-OF": (1, "text"), "HEX-TO-CHAR": (1, "text"),
     }
 
     def function_call(self):
@@ -3828,6 +3830,11 @@ class Parser:
                     (ref, Expr("p_int_add", (ref, operand, max(0, -self.fields[ref.name].scale), verb == "SUBTRACT")), rounded)
                     if not rounded and self.fields[ref.name].kind == "number" and self.cob_add_int(self.fields[ref.name])
                     else (ref, expr, rounded) for ref, expr, rounded in items]), line)
+                guards = [Stmt("packed_add_guard", (ref, operand, verb == "SUBTRACT"), line) for ref, _, rounded in items
+                          if not rounded and self.fields[ref.name].usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}
+                          and not self.cob_add_int(self.fields[ref.name])]
+                if guards:
+                    stmt = Stmt("sequence", (guards + [stmt],), line)
             return stmt
         if verb == "IF":
             cond = self.condition()

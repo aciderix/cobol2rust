@@ -704,6 +704,22 @@ impl View {
         }
         self.move_number(source)
     }
+    /// cob_add_packed_int (ADD/SUBTRACT of an int to a COMP-3 item of less
+    /// than 19 digits, same sign): the carry of an even-digit item lands in
+    /// its pad nibble instead of being dropped.
+    pub fn packed_int_add_guard(&self, operand: &Value) {
+        if let Kind::Numeric { digits, scale, usage: Usage::Packed, .. } = self.kind {
+            if digits % 2 != 0 { return; }
+            let Ok(current) = self.number() else { return };
+            let current = current.num().units(scale, false);
+            let delta = operand.num().units(scale, false);
+            let negative = self.raw().last().map_or(false, |b| b & 0x0f == 0x0d);
+            if delta.sign() == Sign::NoSign || (delta.sign() == Sign::Minus) != negative { return; }
+            if absolute(&(current + delta)) >= power(digits) {
+                fail("cob_add_packed_int would carry into the pad nibble; native semantics not modelled");
+            }
+        }
+    }
     pub(crate) fn mark_negative_zero(&mut self) {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
@@ -765,7 +781,12 @@ impl View {
                     // low-order digits and the sign of the whole result.
                     // Binary and packed receivers reach native or BCD add
                     // routines in cobc with other overflow rules.
-                    if !usage.is_display() { fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled"); }
+                    // cob_decimal_get_packed does the same (cob_set_packed_u64
+                    // of the remainder, sign nibble kept); binary receivers
+                    // follow other rules.
+                    if !usage.is_display() && !matches!(usage, Usage::Packed | Usage::PackedNoSign) {
+                        fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled");
+                    }
                     let negative = units.sign() == Sign::Minus;
                     let kept = absolute(&units) % power(digits);
                     truncated_negative_zero = negative && signed && kept == BigInt::from(0);
