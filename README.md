@@ -367,6 +367,33 @@ sans graine au premier appel, libcob tire la graine de l'heure et de l'adresse
 du module, valeur non reproductible : le port prend l'heure et une adresse du
 programme Rust, ce qui donne une suite native possible.
 
+## Fonctions intrinsèques
+
+Portées de libcob/intrinsic.c : INTEGER, INTEGER-PART, FRACTION-PART, MOD,
+REM, ABS, FACTORIAL, EXP10, SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE,
+STANDARD-DEVIATION, ORD-MAX, ORD-MIN, MAX, MIN, ANNUITY, PRESENT-VALUE,
+SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS, ATAN, PI, E, RANDOM, CHAR,
+ORD, UPPER-CASE, LOWER-CASE, REVERSE, TRIM, CONCATENATE (et CONCAT),
+SUBSTITUTE, SUBSTITUTE-CASE, STORED-CHAR-LENGTH, HEX-OF, HEX-TO-CHAR, NUMVAL,
+NUMVAL-C, LENGTH, HIGHEST-ALGEBRAIC et LOWEST-ALGEBRAIC (selon l'usage de
+l'argument, à la compilation), INTEGER-OF-DATE/DAY, DATE-OF-INTEGER,
+DAY-OF-INTEGER, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
+DATE-TO-YYYYMMDD, DAY-TO-YYYYDDD (année courante de `localtime`, non de
+`COB_CURRENT_DATE`, comme libcob), CURRENT-DATE et WHEN-COMPILED.
+
+`DISPLAY` d'un résultat numérique montre le champ temporaire de libcob :
+copie de l'argument retenu pour MAX, MIN, MEDIAN (tri stable de glibc) et
+MEAN d'un seul argument, l'argument d'ABS avec sa valeur absolue,
+`cob_alloc_field` pour un résultat décimal (binaire de 9 ou 20 chiffres, ou
+DISPLAY de `mpz_sizeinbase` chiffres, estimation de GMP reproduite), entier
+non signé de 9 chiffres pour ORD, LENGTH, INTEGER-OF-DATE… Restent refusés
+le DISPLAY de RANDOM (double imprimé par `%G`), d'un argument PICTURE P
+(échelle négative) et d'une expression en argument de MAX/MIN/MEDIAN. Un
+littéral alphanumérique vide vaut une espace, comme le scanner de cobc, et
+est refusé sous `-std=cobol85`. Les fonctions FORMATTED-*, LOCALE-*,
+MODULE-*, EXCEPTION-*, NUMVAL-F, TEST-NUMVAL*, BIT-OF, COMBINED-DATETIME,
+SECONDS-* et les fonctions utilisateur restent refusées.
+
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
 
 SPECIAL-NAMES accepte les noms mnémoniques de périphériques (DISPLAY UPON

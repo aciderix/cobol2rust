@@ -412,6 +412,11 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             # One character per source byte (decode_source): a non-ASCII
             # literal holds the bytes of its source text, as for cobc.
             limit = 160 if STD == "cobol85" else 8191   # literal-length
+            if not value:
+                # scanner.l: a zero-length literal is a SPACE (zero-length-literals).
+                if STD == "cobol85":
+                    raise CobolError(f"ligne {start}: zero-length literal does not conform to COBOL 85")
+                value = " "
             if len(value) > limit:
                 raise CobolError(f"ligne {start}: invalid literal: literal length exceeds {limit} characters")
             tokens.append(Token(value, start, True, token_start, i))
@@ -2972,7 +2977,14 @@ class Parser:
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
         "RANDOM": (0, "number"), "TRIM": (1, "text"), "HEX-OF": (1, "text"), "HEX-TO-CHAR": (1, "text"),
+        "ABS": (1, "number"), "FRACTION-PART": (1, "number"), "EXP10": (1, "number"),
+        "CONCATENATE": (-1, "text"), "CONCAT": (-1, "text"), "SUBSTITUTE": (-3, "text"),
+        "SUBSTITUTE-CASE": (-3, "text"), "STORED-CHAR-LENGTH": (1, "number"),
+        "HIGHEST-ALGEBRAIC": (1, "number"), "LOWEST-ALGEBRAIC": (1, "number"),
+        "TEST-DATE-YYYYMMDD": (1, "number"), "TEST-DAY-YYYYDDD": (1, "number"),
+        "YEAR-TO-YYYY": (-1, "number"), "DATE-TO-YYYYMMDD": (-1, "number"), "DAY-TO-YYYYDDD": (-1, "number"),
     }
+    MAX_ARGUMENTS = {"NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3}
 
     def function_call(self):
         """FUNCTION name [(exp_list)] [(start:[length])]: a reference
@@ -3013,7 +3025,8 @@ class Parser:
         if name.key == "RANDOM":
             count = len(args) if len(args) <= 1 else 0
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
-                or (name.key == "NUMVAL-C" and len(args) > 2):
+                or len(args) > self.MAX_ARGUMENTS.get(name.key, len(args)) \
+                or (name.key in {"SUBSTITUTE", "SUBSTITUTE-CASE"} and len(args) % 2 == 0):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
         if name.key == "WHEN-COMPILED":
             # cb_set_intr_when_compiled: a literal of the compilation time,

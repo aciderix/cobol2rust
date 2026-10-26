@@ -791,6 +791,41 @@ pub mod intrinsic {
         (best, args[best].snapshot())
     }
     pub fn max(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Greater).1 }
+    /// cob_alloc_field: binary of 9 or 20 digits when the trimmed decimal
+    /// fits 4 or 8 bytes, else DISPLAY of mpz_sizeinbase (value, 10) digits,
+    /// GMP's estimate from the bit count; signed only when negative.
+    pub fn alloc_field(v: Value) -> Value {
+        let n = v.num().trimmed();
+        let negative = n.n.sign() == Sign::Minus;
+        let bits = absolute(&n.n).bits().max(1);
+        let digits = if bits < 33 - negative as u64 && n.scale < 10 { 9 }
+            else if bits < 65 - negative as u64 && n.scale < 19 { 20 }
+            else { ((((0x4d104d427de7fbccu128 + 2) * bits as u128) >> 64) as u32 + 1).max(n.scale) };
+        let scale = n.scale as i32;
+        Value::Num(n, Some((digits, scale, negative, false)))
+    }
+    /// cob_alloc_set_field_uint: an unsigned binary of 9 digits.
+    pub fn uint_field(v: Value) -> Value { Value::Num(v.num(), Some((9, 0, false, false))) }
+    /// cob_intr_date_of_integer, cob_intr_day_of_integer: unsigned DISPLAY.
+    pub fn display_field(v: Value, digits: u32) -> Value { Value::Num(v.num(), Some((digits, 0, false, false))) }
+    /// cob_intr_max, min, median and mean of one argument return a copy of
+    /// the chosen argument's field, shown as that argument; qsort in
+    /// cob_intr_median is glibc's merge sort, which keeps equal arguments
+    /// in order. The mean of the two middle arguments is cob_alloc_field.
+    pub fn chosen_field(name: &str, args: &[Value], shown: Vec<Value>) -> Value {
+        let index = match name {
+            "MAX" => select(args, std::cmp::Ordering::Greater).0,
+            "MIN" => select(args, std::cmp::Ordering::Less).0,
+            _ if args.len() == 1 => 0,
+            _ => {
+                if args.len() % 2 == 0 { return alloc_field(median(args)); }
+                let mut order: Vec<usize> = (0..args.len()).collect();
+                order.sort_by(|a, b| args[*a].compare(&args[*b]));
+                order[args.len() / 2]
+            }
+        };
+        shown.into_iter().nth(index).unwrap()
+    }
     pub fn min(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Less).1 }
     pub fn ord_max(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Greater).0 as i128 + 1) }
     pub fn ord_min(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Less).0 as i128 + 1) }
@@ -1258,6 +1293,112 @@ pub mod intrinsic {
     }
     /// numval: the digits, sign and decimal point of a NUMVAL/NUMVAL-C argument.
     pub fn length(v: &Value) -> Value { int_of(v.bytes().len() as i128) }
+    pub fn abs(v: &Value) -> Value {
+        let n = v.num();
+        value(Number::new(absolute(&n.n), n.scale))
+    }
+    /// cob_intr_abs: make_field_entry (srcfield), then the absolute value.
+    pub fn abs_field(v: Value) -> Value {
+        match v {
+            Value::Num(n, attrs) => Value::Num(Number::new(absolute(&n.n), n.scale), attrs),
+            other => other,
+        }
+    }
+    /// A numeric literal's field (cb_build_numeric_literal): its digits as
+    /// written, signed and SIGN LEADING SEPARATE when a sign is written.
+    pub fn literal_field(text: &str) -> Value {
+        let digits = text.bytes().filter(u8::is_ascii_digit).count() as u32;
+        let scale = text.split('.').nth(1).map_or(0, |f| f.len()) as i32;
+        Value::Num(Number::parse(text), Some((digits, scale, text.starts_with(['-', '+']), false)))
+    }
+    /// cob_intr_fraction_part: mpz_tdiv_r keeps the sign of the argument.
+    pub fn fraction_part(v: &Value) -> Value {
+        let n = v.num();
+        value(Number::new(&n.n % power(n.scale), n.scale))
+    }
+    pub fn exp10(v: &Value) -> Value {
+        let n = v.num().trimmed();
+        if n.n.sign() == Sign::NoSign { return int_of(1); }
+        if n.scale == 0 && n.n.sign() == Sign::Minus {
+            if let Ok(e) = u32::try_from(absolute(&n.n)) {
+                if e <= i32::MAX as u32 { return value(Number::new(BigInt::from(1), e)); }
+            }
+        }
+        value(Number::new(BigInt::from(10), 0).power(n))
+    }
+    pub fn concatenate(args: &[Value]) -> Value { Value::Bytes(args.iter().flat_map(|a| a.bytes()).collect()) }
+    /// substitute: the first match at each position, in argument order;
+    /// SUBSTITUTE-CASE compares with strncasecmp, which stops at a NUL.
+    pub fn substitute(args: &[Value], case: bool) -> Value {
+        let original = args[0].bytes();
+        let pairs: Vec<(Vec<u8>, Vec<u8>)> = args[1..].chunks(2).map(|p| (p[0].bytes(), p[1].bytes())).collect();
+        if pairs.iter().any(|(m, _)| m.is_empty()) { fail("SUBSTITUTE of an empty match never ends in libcob"); }
+        let same = |a: &[u8], b: &[u8]| -> bool {
+            if !case { return a == b; }
+            for (x, y) in a.iter().zip(b) {
+                let (x, y) = (x.to_ascii_lowercase(), y.to_ascii_lowercase());
+                if x != y { return false; }
+                if x == 0 { return true; }
+            }
+            true
+        };
+        let (mut out, mut i) = (Vec::new(), 0);
+        'scan: while i < original.len() {
+            for (m, r) in &pairs {
+                if i + m.len() <= original.len() && same(&original[i..i + m.len()], m) {
+                    out.extend_from_slice(r);
+                    i += m.len();
+                    continue 'scan;
+                }
+            }
+            out.push(original[i]);
+            i += 1;
+        }
+        Value::Bytes(out)
+    }
+    pub fn stored_char_length(v: &Value) -> Value {
+        let bytes = v.bytes();
+        int_of(bytes.iter().rposition(|b| *b != b' ').map_or(0, |i| i + 1) as i128)
+    }
+    fn valid_year(year: i64) -> bool { (1601..=9999).contains(&year) }
+    pub fn test_date_yyyymmdd(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
+        if !valid_year(year) { return int_of(1); }
+        if !(1..=12).contains(&month) { return int_of(2); }
+        let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+        int_of(if (1..=table[month as usize] - table[month as usize - 1]).contains(&day) { 0 } else { 3 })
+    }
+    pub fn test_day_yyyyddd(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, day) = (date / 1000, date % 1000);
+        if !valid_year(year) { return int_of(1); }
+        int_of(if (1..=if leap(year) { 366 } else { 365 }).contains(&day) { 0 } else { 2 })
+    }
+    /// get_interval_and_current_year_from_args: time (NULL) and localtime,
+    /// not COB_CURRENT_DATE.
+    fn window(args: &[Value]) -> (i64, i64) {
+        let interval = if args.len() > 1 { get_int(&args[1]) } else { 50 };
+        let current = if args.len() > 2 { get_int(&args[2]) } else { super::local_year() };
+        (interval, current)
+    }
+    /// The century window of YEAR-TO-YYYY, DATE-TO-YYYYMMDD and
+    /// DAY-TO-YYYYDDD; an invalid argument gives 0 (EC-ARGUMENT-FUNCTION).
+    fn windowed(year: i64, args: &[Value], limit: i64) -> Option<i64> {
+        let (interval, current) = window(args);
+        let max = current + interval;
+        if year < 0 || year > limit || !valid_year(current) || !(1700..=9999).contains(&max) { return None; }
+        Some(year + 100 * if max % 100 >= year { max / 100 } else { max / 100 - 1 })
+    }
+    pub fn year_to_yyyy(args: &[Value]) -> Value { int_of(windowed(get_int(&args[0]), args, 99).unwrap_or(0) as i128) }
+    pub fn date_to_yyyymmdd(args: &[Value]) -> Value {
+        let date = get_int(&args[0]);
+        int_of(windowed(date / 10000, args, 999999).map_or(0, |y| y * 10000 + date % 10000) as i128)
+    }
+    pub fn day_to_yyyyddd(args: &[Value]) -> Value {
+        let date = get_int(&args[0]);
+        int_of(windowed(date / 1000, args, 999999).map_or(0, |y| y * 1000 + date % 1000) as i128)
+    }
     pub fn numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
         // cob_intr_numval: the module's decimal point and currency sign.
         let data = crate::runtime::internal_symbols(&v.bytes(), currency_sign && currency.is_none());
@@ -1483,6 +1624,13 @@ fn check_current_date(text: &str, now: &CobTime) -> TimeConstant {
 /// cob_get_current_datetime: the local time (UTC only) with its nanoseconds
 /// (on Linux clock_gettime gives them whatever the resolution asked: only
 /// the Windows branch drops them), then the parts COB_CURRENT_DATE fixes.
+/// The local year of time (NULL), as localtime gives it.
+pub fn local_year() -> i64 {
+    utc_only("the current date and time");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));
+    broken_down(now.as_secs() as i64).year
+}
+
 pub fn current_datetime() -> CobTime {
     utc_only("the current date and time");
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));

@@ -6,7 +6,8 @@ FD with a numeric record, CBL/PROCESS lines, EXIT SECTION of the implicit
 MAIN SECTION, LOCAL-STORAGE, READ KEY of an item no key starts at, STOP RUN
 RETURNING and Z literals, configuration paragraphs in any order, DISPLAY
 clauses, FUNCTION TRIM, level 78 and 01 CONSTANT, 38 digits, ROUNDED MODE,
-DELETE FILE, C type usages and reserved aliases, REPOSITORY intrinsics."""
+DELETE FILE, C type usages and reserved aliases, REPOSITORY intrinsics,
+DISPLAY of numeric function results and more intrinsic functions."""
 from __future__ import annotations
 
 import unittest
@@ -57,6 +58,21 @@ class RealFormsFrontendTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
                 Parser(source).parse()
 
+    def test_intrinsic_argument_counts_and_empty_literal(self):
+        from cobol2rust import frontend
+        for source in (program("01 x pic x(9).", 'move function substitute(x "a") to x. stop run.'),
+                       program("01 n pic 9(4).", "move function year-to-yyyy(1 2 3 4) to n. stop run."),
+                       program("01 n pic 9(4).", "move function abs(1 2) to n. stop run.")):
+            with self.subTest(source=source), self.assertRaisesRegex(CobolError, "wrong number of arguments"):
+                Parser(source).parse()
+        self.assertEqual(frontend.lex('""')[0].text, " ")
+        previous, frontend.STD = frontend.STD, "cobol85"
+        try:
+            with self.assertRaisesRegex(CobolError, "zero-length literal does not conform"):
+                frontend.lex('""')
+        finally:
+            frontend.STD = previous
+
     def test_constant_refusals_follow_cobc(self):
         cases = {
             "a constant may not be used here": program("78 c value 1. 01 c pic x.", "stop run."),
@@ -104,7 +120,8 @@ class RealFormsNativeTests(unittest.TestCase):
                      "evaluate_literal_when", "display_clauses", "function_trim", "constants_78",
                      "digits_38", "rounded_modes", "delete_file", "c_type_usages", "repository_intrinsic",
                      "comp6", "directives", "value_negative_zero", "picture_p_usages",
-                     "mf_directives", "program_header_forms", "line_advancing_file", "packed_truncation"):
+                     "mf_directives", "program_header_forms", "line_advancing_file", "packed_truncation",
+                     "function_display", "function_more"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

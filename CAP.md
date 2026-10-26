@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T14:29:02+00:00 (commit `ceda0aa14b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T14:46:13+00:00 (commit `cbdf79599d`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T14:29:02+00:00 (commit `ceda0aa14b`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 423 | 879 | 456 | 0 |
-| **Total** | | **3593** | **1147** | **1617** | **470** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 453 | 879 | 426 | 0 |
+| **Total** | | **3593** | **1177** | **1617** | **440** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T14:29:02+00:00, commit `ceda0aa14b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T14:46:13+00:00, commit `cbdf79599d`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -329,3 +329,13 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   refusée comme ppparse). Testsuite **418 → 423**, total **1142 → 1147**/3593,
   à examiner 0. Des 5 sources débloquées, exécutées face à cobc : 5
   identiques. Exécution des corpus inchangée. NIST 451/458.
+- 2026-10-26 — Fonctions intrinsèques : DISPLAY du champ résultat numérique
+  (`cob_alloc_field` avec l'estimation `mpz_sizeinbase` de GMP, copie de
+  l'argument de MAX/MIN/MEDIAN/MEAN et d'ABS, entier non signé de 9
+  chiffres, DISPLAY de DATE-OF-INTEGER) ; ABS, FRACTION-PART, EXP10,
+  CONCATENATE/CONCAT, SUBSTITUTE(-CASE), STORED-CHAR-LENGTH,
+  HIGHEST/LOWEST-ALGEBRAIC, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD,
+  YEAR-TO-YYYY, DATE-TO-YYYYMMDD, DAY-TO-YYYYDDD ; littéral vide = une
+  espace (refusé sous cobol85). Testsuite **423 → 453**, total
+  **1147 → 1177**/3593, à examiner 0. Des 30 sources débloquées, exécutées
+  face à cobc : 30 identiques. Exécution des corpus inchangée. NIST 451/458.

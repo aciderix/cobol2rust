@@ -618,6 +618,13 @@ sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
 revérification : **289/289 programmes principaux conformes**, 6608 PASS,
 0 FAIL (`build/nist-verify-intrinsics.json`).
 
+Depuis (mesure des corpus réels) : ABS, FRACTION-PART, EXP10, CONCATENATE,
+CONCAT, SUBSTITUTE, SUBSTITUTE-CASE, STORED-CHAR-LENGTH, HIGHEST-ALGEBRAIC,
+LOWEST-ALGEBRAIC, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
+DATE-TO-YYYYMMDD et DAY-TO-YYYYDDD, et le DISPLAY du champ résultat des
+fonctions numériques (`cob_alloc_field`, `cob_alloc_set_field_uint`, copie
+d'argument) ; voir le README, « Fonctions intrinsèques ».
+
 ## Progression : ALTER, noms de procédure, dialecte cobol85
 
 ALTER (label_N de cobc, remise à zéro des paragraphes de segments
