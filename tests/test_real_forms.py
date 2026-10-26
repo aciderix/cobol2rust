@@ -69,6 +69,14 @@ class RealFormsFrontendTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
                 Parser(source).parse()
 
+    def test_directive_errors_follow_cobc(self):
+        from cobol2rust.frontend import normalize
+        cases = {"without matching IF": ">>END-IF\n", "duplicate DEFINE": ">>DEFINE A AS 1\n>>DEFINE A AS 2\n",
+                 "invalid IF directive": ">>IF A\n>>END-IF\n", "sans >>END-IF": ">>IF A DEFINED\n"}
+        for message, text in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
+                normalize(text, "free")
+
     def test_parser_forms_cobc_accepts(self):
         # Configuration paragraphs in any order or empty, a missing period
         # before the next SELECT, two 01 items of one name (a warning).
@@ -95,7 +103,7 @@ class RealFormsNativeTests(unittest.TestCase):
                      "exit_implicit_section", "indexed_missing_key", "stop_run_status",
                      "evaluate_literal_when", "display_clauses", "function_trim", "constants_78",
                      "digits_38", "rounded_modes", "delete_file", "c_type_usages", "repository_intrinsic",
-                     "comp6"):
+                     "comp6", "directives", "value_negative_zero"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

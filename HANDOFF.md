@@ -925,6 +925,10 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
     (`cb_add_78`), un signe touchant les chiffres formant un seul littéral
     signé ; une liste DISPLAY est faite d'opérandes `x`, sans arithmétique :
     `DISPLAY A -1` affiche A puis le littéral `-1`.
+15. **Zéro négatif et cob_add_int.** `VALUE -0` (et `MOVE -0`) d'un DISPLAY
+    signé garde le signe ; ADD/SUBTRACT d'un entier vers un receveur DISPLAY,
+    mis à l'échelle ou COMP-6 ne touche pas au receveur si l'opérande est nul
+    (`Parser.cob_add_int`).
 
 Les lignes des diagnostics et source maps désignent `expanded.cob`, après
 normalisation et expansion des COPY, et non toujours le source d'origine.

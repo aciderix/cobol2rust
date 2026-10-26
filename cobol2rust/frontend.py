@@ -71,6 +71,119 @@ RUNTIME_CHECKS = False
 STANDARDS = ("default", "cobol85")
 
 
+class Directives:
+    """Conditional compilation of pplex.l/ppparse.y: >>DEFINE, >>IF, >>ELIF,
+    >>ELSE, >>END-IF; >>DISPLAY only writes at compile time. While a branch
+    is skipped, only the conditional directives are read."""
+    WORD = r"[A-Za-z0-9][A-Za-z0-9_-]*"
+    LITERAL = r"\"[^\"]*\"|'[^']*'|[+-]?\d*\.?\d+|\(\s*[+-]?\d*\.?\d+\s*\)"
+    CONDITIONS = [(r"GREATER\s+(?:THAN\s+)?OR\s+EQUAL(?:\s+TO)?|>=", ">="), (r"GREATER(?:\s+THAN)?|>", ">"),
+                  (r"LESS\s+(?:THAN\s+)?OR\s+EQUAL(?:\s+TO)?|<=", "<="), (r"LESS(?:\s+THAN)?|<", "<"),
+                  (r"EQUAL(?:\s+TO)?|=", "="), (r"<>", "<>")]
+
+    def __init__(self, defines):
+        self.defines = defines
+        self.stack = []   # (skip, taken) of each open >>IF
+
+    @property
+    def skipping(self):
+        return bool(self.stack) and self.stack[-1][0]
+
+    @staticmethod
+    def value(text):
+        """ppp_set_value: ('L', text) for an alphanumeric literal, ('N', number)."""
+        if text[0] in "\"'":
+            return ("L", text[1:-1])
+        from decimal import Decimal
+        return ("N", Decimal(text.strip("() ")))
+
+    def compare(self, left, right, condition):
+        if left is None or right is None:
+            return False
+        if left[0] != right[0]:
+            return False   # "directive comparison on different types"
+        a, b = left[1], right[1]
+        return {"=": a == b, "<>": a != b, "<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b}[condition]
+
+    def condition(self, text, number):
+        m = re.fullmatch(rf"({self.WORD})\s+(?:IS\s+)?(NOT\s+)?DEFINED", text, re.I)
+        if m:
+            found = m[1].upper() in self.defines
+            return found ^ bool(m[2])
+        m = re.fullmatch(rf"({self.WORD}|{self.LITERAL})\s+(?:IS\s+)?(NOT\s+)?(.+?)\s*({self.WORD}|{self.LITERAL})", text, re.I)
+        if m:
+            for pattern, condition in self.CONDITIONS:
+                if re.fullmatch(pattern, m[3], re.I):
+                    def operand(t):
+                        if re.fullmatch(self.LITERAL, t):
+                            return self.value(t)
+                        return self.defines.get(t.upper())
+                    return self.compare(operand(m[1]), operand(m[4]), condition) ^ bool(m[2])
+        raise CobolError(f"ligne {number}: invalid IF directive")
+
+    def line(self, text, number):
+        """True when the line is a directive or is skipped."""
+        m = re.match(r"\s*>>\s*([A-Za-z-]+)(.*)", text)
+        if not m:
+            return self.skipping
+        verb, rest = m[1].upper(), re.sub(r"\s*\*>.*$", "", m[2]).strip()
+        if verb in {"IF", "ELIF"}:
+            if verb == "IF":
+                outer = self.skipping
+                result = False if outer else self.condition(rest, number)
+                self.stack.append([outer or not result, result, outer])
+            else:
+                if not self.stack:
+                    raise CobolError(f"ligne {number}: ELIF directive without matching IF/ELIF")
+                entry = self.stack[-1]
+                result = False if entry[2] or entry[1] else self.condition(rest, number)
+                entry[1] = entry[1] or result
+                entry[0] = entry[2] or not result
+            return True
+        if verb == "ELSE":
+            if not self.stack:
+                raise CobolError(f"ligne {number}: ELSE directive without matching IF/ELIF")
+            entry = self.stack[-1]
+            entry[0] = entry[2] or entry[1]
+            entry[1] = True
+            return True
+        if verb == "END-IF":
+            if not self.stack:
+                raise CobolError(f"ligne {number}: END-IF directive without matching IF/ELIF")
+            self.stack.pop()
+            return True
+        if self.skipping:
+            return True
+        if verb == "DEFINE":
+            d = re.fullmatch(rf"(CONSTANT\s+)?({self.WORD})\s+(?:AS\s+)?(OFF|PARAMETER|{self.LITERAL})(\s+OVERRIDE)?", rest, re.I)
+            if not d:
+                raise CobolError(f"ligne {number}: invalid DEFINE/SET directive")
+            if d[1]:
+                raise CobolError(f"ligne {number}: >>DEFINE CONSTANT non pris en charge")
+            name, value = d[2].upper(), d[3]
+            if value.upper() == "OFF":
+                self.defines.pop(name, None)
+                return True
+            if value.upper() == "PARAMETER":
+                raise CobolError(f"ligne {number}: >>DEFINE ... PARAMETER non pris en charge")
+            if name in self.defines and not d[4]:
+                raise CobolError(f"ligne {number}: duplicate DEFINE directive '{d[2]}'")
+            self.defines[name] = self.value(value)
+            return True
+        if verb in {"DISPLAY", "LISTING", "PAGE"}:
+            # Compile-time output or listing control: nothing at run time.
+            return True
+        if verb == "SOURCE":
+            return False
+        raise CobolError(f"ligne {number}: directive >>{verb} non prise en charge")
+
+
+# ppparse_clear_vars: the standard DEFINEs of cobc on Linux x86-64.
+STANDARD_DEFINES = {"PERFORM-TYPE": ("L", "MF"), "SIGN": ("L", "ASCII"), "ENDIAN": ("L", "LITTLE"),
+                    "CHARSET": ("L", "ASCII")}
+DEFINES = dict(STANDARD_DEFINES)
+
+
 def normalize(source: str, fmt: str = "auto") -> str:
     from .documentary import DocumentaryFilter
 
@@ -85,6 +198,7 @@ def normalize(source: str, fmt: str = "auto") -> str:
     # after it, as -fdebugging-line does for the whole source.
     debugging_lines = DEBUGGING_LINES
     recent = []
+    directives = Directives(DEFINES)
     for number, line in enumerate(lines, 1):
         directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
         if directive:
@@ -119,6 +233,9 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if indicator not in " -":
                 raise CobolError(f"ligne {number}: indicateur fixe {indicator!r} non pris en charge")
             line = line[7:72]
+            if indicator != "-" and quotation is None and directives.line(line, number):
+                result.append("")
+                continue
             directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
             if directive:
                 if quotation is not None and not consecutive:
@@ -173,7 +290,12 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 if not debugging_lines and re.search(r"(?<![\w-])DEBUGGING[\s,;]+MODE(?![\w-])", "\n".join(recent), re.I):
                     debugging_lines = True
             continue
+        if directives.line(line, number):
+            result.append("")
+            continue
         result.append("" if COMPILER_OPTIONS.match(line) or documentary.is_comment(line, fmt, line=number) else line)
+    if directives.stack:
+        raise CobolError("directive >>IF sans >>END-IF")
     return "\n".join(result)
 
 
@@ -325,6 +447,9 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
     source = decode_source(path.read_bytes())
+    if not stack:
+        DEFINES.clear()
+        DEFINES.update(STANDARD_DEFINES)
     # The format detected on the main source also applies to its copybooks.
     fmt = source_format(source, fmt)
     text = normalize(source, fmt)
@@ -3532,8 +3657,8 @@ class Parser:
             if stmt.op == "compute":
                 # cb_build_optim_add for int operands without ROUNDED/SIZE ERROR.
                 stmt = Stmt("compute", (None, [
-                    (t, Expr("p_int_add", (t, Expr("var", (u,)), -self.fields[t.name].scale, verb == "SUBTRACT")), r)
-                    if not r and self.fields[t.name].scale < 0 and self.fits_int(Expr("var", (u,)))
+                    (t, Expr("p_int_add", (t, Expr("var", (u,)), max(0, -self.fields[t.name].scale), verb == "SUBTRACT")), r)
+                    if not r and self.cob_add_int(self.fields[t.name]) and self.fits_int(Expr("var", (u,)))
                     else (t, e, r) for (t, e, r), (_, u) in zip(items, pairs)]), line)
             return stmt
         if verb == "MOVE":
@@ -3602,8 +3727,8 @@ class Parser:
                 # operand goes through cob_add_int, which first truncates it
                 # to the receiver's trailing P positions (15 TO 99P adds 10).
                 stmt = Stmt("compute", (None, [
-                    (ref, Expr("p_int_add", (ref, operand, -self.fields[ref.name].scale, verb == "SUBTRACT")), rounded)
-                    if not rounded and self.fields[ref.name].kind == "number" and self.fields[ref.name].scale < 0
+                    (ref, Expr("p_int_add", (ref, operand, max(0, -self.fields[ref.name].scale), verb == "SUBTRACT")), rounded)
+                    if not rounded and self.fields[ref.name].kind == "number" and self.cob_add_int(self.fields[ref.name])
                     else (ref, expr, rounded) for ref, expr, rounded in items]), line)
             return stmt
         if verb == "IF":
@@ -4637,6 +4762,14 @@ class Parser:
         if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-6"}:
             return field.digits < 10
         return field.digits <= 9
+
+    @staticmethod
+    def cob_add_int(field):
+        """cb_build_optim_add/sub: receivers that reach cob_add_int (scaled,
+        DISPLAY, COMP-6, packed of 19 digits or more), which leaves the
+        receiver untouched when the operand is zero."""
+        return (field.scale != 0 or field.usage in {"DISPLAY", "COMP-6"}
+                or (field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} and field.digits >= 19))
 
     def arithmetic(self, verb, shared, items, line):
         ending = "END-" + verb

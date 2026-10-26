@@ -2067,6 +2067,13 @@ class Emitter:
             initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
             value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
             self.write(f"{receiver}.{self.names[name]}.declare(&{value});")
+            if (constructor == "number" and initial.startswith("-") and not initial.replace(".", "").strip("-0")
+                    and field.kind == "number" and field.signed and field.usage == "DISPLAY"):
+                # cob_move of the literal at initialization keeps its sign:
+                # a signed DISPLAY item starts as a negative zero.
+                if field.dimensions:
+                    raise CobolError(f"VALUE -0 d'un article de table non pris en charge: {field.label}")
+                self.write(f"{receiver}.{self.names[name]}.negative_zero();")
         # A group VALUE fills the whole group as alphanumeric data after its
         # leaves, on every occurrence: GnuCOBOL gives it precedence.
         for name, field in self.program.fields.items():

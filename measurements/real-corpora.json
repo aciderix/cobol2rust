@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T07:55:04+00:00",
- "git_head": "0f450825e037bf918b39ee7935d5c031ff9aeb45",
- "implementation_sha256": "11445476963bf16574a37b68ac61fb262943a781811cca2b1209f330234eab54",
+ "measured_at": "2026-10-26T09:20:27+00:00",
+ "git_head": "30a39f02690c563ba5f5fe68a6e5d8373bcdf1e7",
+ "implementation_sha256": "132db0c31f1e6e51e1f2bd19550382666a3160949f91fcc8969e27fca88cfa1b",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1093,
+  "accepted": 1107,
   "cobc_accepted": 1617,
-  "gap": 524,
+  "gap": 510,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -443,7 +443,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 370,
+   "accepted": 384,
    "internal_errors": 0,
    "blockers": [
     [
@@ -455,19 +455,11 @@
      22
     ],
     [
-     "instruction non prise en charge: >",
-     21
-    ],
-    [
      "PROGRAM-ID attendu",
-     21
+     20
     ],
     [
      "USAGE/clause non pris en charge: POINTER",
-     15
-    ],
-    [
-     "IDENTIFICATION DIVISION attendue",
      14
     ],
     [
@@ -493,12 +485,20 @@
     [
      "PROCEDURE attendu",
      10
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     10
+    ],
+    [
+     "indicateur fixe '$' non pris en charge",
+     10
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 509,
+   "gap": 495,
    "gap_sources": [
     [
      "data_binary-013/prog.cob",
@@ -521,26 +521,6 @@
      "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
-     "data_display-005/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_display-008/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_display-008/prog2.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_display-009/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_display-009/prog2.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
      "data_packed-004/prog.cob",
      "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
@@ -553,44 +533,32 @@
      "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
-     "data_packed-009/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_packed-016/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "data_packed-017/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
      "data_packed-019/prog.cob",
      "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
      "data_packed-021/prog.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_packed-021/prog2.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_packed-022/prog.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_packed-022/prog2.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_packed-023/prog.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_packed-023/prog2.cob",
-     "instruction non prise en charge: >"
+     "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
     ],
     [
      "data_pointer-001/prog.cob",
@@ -602,7 +570,7 @@
     ],
     [
      "run_accept-003/prog.cob",
-     "instruction non prise en charge: >"
+     "ACCEPT FROM MICROSECOND-TIME non pris en charge"
     ],
     [
      "run_accept-004/prog.cob",
@@ -843,10 +811,6 @@
     [
      "run_extensions-080/prog.cob",
      "caractère non pris en charge '$'"
-    ],
-    [
-     "run_extensions-081/prog.cob",
-     "instruction non prise en charge: >"
     ],
     [
      "run_extensions-086/prog.cob",
@@ -1410,7 +1374,7 @@
     ],
     [
      "run_fundamental-003/prog.cob",
-     "instruction non prise en charge: >"
+     "CALL dump: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_fundamental-012/prog.cob",
@@ -1486,7 +1450,7 @@
     ],
     [
      "run_fundamental-069/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "invalid IF directive"
     ],
     [
      "run_fundamental-072/prog.cob",
@@ -1503,10 +1467,6 @@
     [
      "run_fundamental-086/prog.cob",
      "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
-    ],
-    [
-     "run_fundamental-094/prog.cob",
-     "expression non prise en charge: >"
     ],
     [
      "run_fundamental-096/prog.cob",
@@ -1814,7 +1774,7 @@
     ],
     [
      "run_misc-026/prog.cob",
-     "IDENTIFICATION DIVISION attendue"
+     "directive >>TURN non prise en charge"
     ],
     [
      "run_misc-027/prog.cob",
@@ -2018,7 +1978,7 @@
     ],
     [
      "run_misc-142/caller.cob",
-     "expression non prise en charge: >"
+     "programme appelé prog.cob: ligne 11: . attendu"
     ],
     [
      "run_misc-142/prog.cob",
@@ -2050,7 +2010,7 @@
     ],
     [
      "run_misc-164/prog.cob",
-     "IDENTIFICATION DIVISION attendue"
+     "littéral attendu"
     ],
     [
      "run_misc-166/prog.cob",
@@ -2398,7 +2358,7 @@
     ],
     [
      "syn_misc-059/prog3.cob",
-     "IDENTIFICATION DIVISION attendue"
+     "directive >>CALL-CONVENTION non prise en charge"
     ],
     [
      "syn_misc-062/prog.cob",
@@ -2441,24 +2401,8 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "syn_misc-126/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "syn_misc-127/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
      "syn_misc-128/prog.cob",
      "indicateur fixe '$' non pris en charge"
-    ],
-    [
-     "syn_misc-132/prog.cob",
-     "instruction non prise en charge: >"
-    ],
-    [
-     "syn_misc-133/prog.cob",
-     "instruction non prise en charge: >"
     ],
     [
      "syn_misc-147/prog.cob",
@@ -2543,16 +2487,12 @@
      37
     ],
     [
-     "instruction non prise en charge: >",
-     21
-    ],
-    [
      ". attendu",
      18
     ],
     [
      "USAGE/clause non pris en charge: POINTER",
-     15
+     14
     ],
     [
      "CALL USING limité à BY REFERENCE et BY CONTENT",
@@ -2585,14 +2525,18 @@
     [
      "USAGE/clause non pris en charge: DEPENDING",
      7
+    ],
+    [
+     "indicateur fixe '$' non pris en charge",
+     7
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T07:55:04+00:00",
-  "git_head": "0f450825e037bf918b39ee7935d5c031ff9aeb45",
-  "implementation_sha256": "11445476963bf16574a37b68ac61fb262943a781811cca2b1209f330234eab54",
+  "measured_at": "2026-10-26T09:20:27+00:00",
+  "git_head": "30a39f02690c563ba5f5fe68a6e5d8373bcdf1e7",
+  "implementation_sha256": "132db0c31f1e6e51e1f2bd19550382666a3160949f91fcc8969e27fca88cfa1b",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
