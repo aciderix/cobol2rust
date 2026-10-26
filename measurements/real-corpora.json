@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T23:50:11+00:00",
- "git_head": "783812c95f058a0d37a65b1d0e55f3cd8c7e54c7",
- "implementation_sha256": "b0b0d84a983d07189789725937aae79906c2da12b79724094128a1e97ef056dd",
+ "measured_at": "2026-10-26T00:49:38+00:00",
+ "git_head": "a0a8db072283768066c37440cb581a272206b2fa",
+ "implementation_sha256": "f16825b6df34313be7053d9f966be9fd4b86b9544aa93b8b204146674a57cf7a",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1030,
+  "accepted": 1045,
   "cobc_accepted": 1617,
-  "gap": 587,
+  "gap": 572,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -211,7 +211,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 306,
+   "accepted": 305,
    "internal_errors": 0,
    "blockers": [
     [
@@ -266,7 +266,7 @@
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 5,
+   "gap": 6,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -275,6 +275,10 @@
     [
      "src/test/resources/gov/nist/DB304M.CBL",
      "COMMUNICATION SECTION non conforme hors -std=cobol85"
+    ],
+    [
+     "src/test/resources/gov/nist/IC114A.CBL",
+     "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
@@ -297,6 +301,10 @@
     [
      "PROCEDURE attendu",
      2
+    ],
+    [
+     "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge",
+     1
     ],
     [
      "indicateur fixe '$' non pris en charge",
@@ -435,7 +443,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 306,
+   "accepted": 322,
    "internal_errors": 0,
    "blockers": [
     [
@@ -455,10 +463,6 @@
      21
     ],
     [
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT",
-     17
-    ],
-    [
      "paragraphe CONFIGURATION non pris en charge",
      16
     ],
@@ -475,7 +479,7 @@
      14
     ],
     [
-     "CALL callee: programme non converti ou routine système non pris en charge",
+     "CALL USING limité à BY REFERENCE et BY CONTENT",
      13
     ],
     [
@@ -483,14 +487,18 @@
      13
     ],
     [
-     "CALL USING limité à BY REFERENCE et BY CONTENT",
-     12
+     "USAGE/clause non pris en charge: ANY",
+     11
+    ],
+    [
+     "fichier non déclaré: FILE",
+     11
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 573,
+   "gap": 557,
    "gap_sources": [
     [
      "data_binary-013/prog.cob",
@@ -634,7 +642,7 @@
     ],
     [
      "run_extensions-001/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_extensions-002/prog.cob",
@@ -669,10 +677,6 @@
      "CALL USING requiert au moins un argument"
     ],
     [
-     "run_extensions-027/prog_a.cob",
-     "CALL prog_b: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_extensions-028/prog.cob",
      "CALL USING limité à BY REFERENCE et BY CONTENT"
     ],
@@ -690,7 +694,7 @@
     ],
     [
      "run_extensions-034/caller.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_extensions-037/callee.cob",
@@ -698,11 +702,11 @@
     ],
     [
      "run_extensions-037/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE"
     ],
     [
      "run_extensions-038/caller.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "programme appelé prog3.cob: ligne 9: . attendu"
     ],
     [
      "run_extensions-038/init.cob",
@@ -719,10 +723,6 @@
     [
      "run_extensions-038/prog3.cob",
      ". attendu"
-    ],
-    [
-     "run_extensions-041/caller.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
     ],
     [
      "run_extensions-042/prog.cob",
@@ -754,7 +754,7 @@
     ],
     [
      "run_extensions-054/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
     ],
     [
      "run_extensions-055/callee.cob",
@@ -762,11 +762,11 @@
     ],
     [
      "run_extensions-055/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-056/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-057/prog.cob",
@@ -774,7 +774,7 @@
     ],
     [
      "run_extensions-058/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-059/prog.cob",
@@ -922,11 +922,11 @@
     ],
     [
      "run_file-021/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_file-021/prog2.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_file-022/prog.cob",
@@ -969,12 +969,8 @@
      "fichier non déclaré: FILE"
     ],
     [
-     "run_file-035/prog.cob",
-     "CALL prog2: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_file-038/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_file-039/prog.cob",
@@ -998,7 +994,7 @@
     ],
     [
      "run_file-043/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
     ],
     [
      "run_file-044/prog.cob",
@@ -1350,7 +1346,7 @@
     ],
     [
      "run_functions-063/prog.cob",
-     "CALL prog2: programme non converti ou routine système non pris en charge"
+     "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge"
     ],
     [
      "run_functions-063/prog2.cob",
@@ -1553,10 +1549,6 @@
      "USAGE/clause non pris en charge: FLOAT-LONG"
     ],
     [
-     "run_fundamental-015/prog2.cob",
-     "CALL subprog: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_fundamental-021/prog.cob",
      "nom ambigu: X; qualifier avec OF/IN si nécessaire"
     ],
@@ -1571,10 +1563,6 @@
     [
      "run_fundamental-025/prog.cob",
      "PROGRAM-ID attendu"
-    ],
-    [
-     "run_fundamental-026/prog.cob",
-     "CALL modulepart: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_fundamental-027/prog.cob",
@@ -1603,14 +1591,6 @@
     [
      "run_fundamental-037/prog.cob",
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    [
-     "run_fundamental-040/prog.cob",
-     "CALL prog2: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_fundamental-041/prog.cob",
-     "CALL prog2: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_fundamental-044/prog.cob",
@@ -1965,10 +1945,6 @@
      "USAGE/clause non pris en charge: is"
     ],
     [
-     "run_misc-012/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_misc-013/callee.cob",
      "EXTERNAL AS non pris en charge"
     ],
@@ -2018,11 +1994,7 @@
     ],
     [
      "run_misc-034/caller.cob",
-     "CALL callee2: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-036/caller.cob",
-     "CALL m1: programme non converti ou routine système non pris en charge"
+     "CALL callee1: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_misc-037/callee.cob",
@@ -2037,32 +2009,8 @@
      ". attendu"
     ],
     [
-     "run_misc-038/callee.cob",
-     "CALL callee2: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-038/callee2.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-038/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-039/callee.cob",
-     "CALL callee2: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-039/callee2.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_misc-039/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_misc-040/callee.cob",
-     "CALL callee2: programme non converti ou routine système non pris en charge"
+     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_misc-040/callee2.cob",
@@ -2070,19 +2018,19 @@
     ],
     [
      "run_misc-040/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_misc-041/callee.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_misc-041/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_misc-042/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_misc-045/prog.cob",
@@ -2158,7 +2106,7 @@
     ],
     [
      "run_misc-101/caller.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_misc-110/callee.cob",
@@ -2166,7 +2114,7 @@
     ],
     [
      "run_misc-110/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
     ],
     [
      "run_misc-111/callee.cob",
@@ -2174,7 +2122,7 @@
     ],
     [
      "run_misc-111/caller.cob",
-     "CALL callee: programme non converti ou routine système non pris en charge"
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
     ],
     [
      "run_misc-112/prog.cob",
@@ -2198,7 +2146,7 @@
     ],
     [
      "run_misc-116/caller.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_misc-120/prog.cob",
@@ -2254,15 +2202,15 @@
     ],
     [
      "run_misc-148/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "END PROGRAM ne correspond pas au PROGRAM-ID"
     ],
     [
      "run_misc-149/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_misc-150/prog.cob",
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT"
+     "CALL DIR/SUB: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_misc-157/prog.cob",
@@ -2447,10 +2395,6 @@
     [
      "run_reportwriter-028/prog.cob",
      "clause RD non prise en charge"
-    ],
-    [
-     "run_returncode-002/prog.cob",
-     "CALL mod2: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_returncode-003/prog.cob",
@@ -2799,10 +2743,6 @@
      18
     ],
     [
-     "CALL USING limité aux identifiants BY REFERENCE/CONTENT",
-     17
-    ],
-    [
      "USAGE/clause non pris en charge: POINTER",
      15
     ],
@@ -2815,12 +2755,8 @@
      13
     ],
     [
-     "CALL callee: programme non converti ou routine système non pris en charge",
-     13
-    ],
-    [
      "CALL USING limité à BY REFERENCE et BY CONTENT",
-     12
+     13
     ],
     [
      "fichier non déclaré: FILE",
@@ -2833,14 +2769,22 @@
     [
      "= attendu",
      9
+    ],
+    [
+     "expression non prise en charge: LINE",
+     9
+    ],
+    [
+     "PICTURE P limitée à 18 chiffres USAGE DISPLAY",
+     8
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T23:50:11+00:00",
-  "git_head": "783812c95f058a0d37a65b1d0e55f3cd8c7e54c7",
-  "implementation_sha256": "b0b0d84a983d07189789725937aae79906c2da12b79724094128a1e97ef056dd",
+  "measured_at": "2026-10-26T00:49:38+00:00",
+  "git_head": "a0a8db072283768066c37440cb581a272206b2fa",
+  "implementation_sha256": "f16825b6df34313be7053d9f966be9fd4b86b9544aa93b8b204146674a57cf7a",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

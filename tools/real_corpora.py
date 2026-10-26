@@ -141,7 +141,10 @@ def measure_corpus(name: str) -> dict:
     settings = CORPORA[name]
     frontend.STD = settings["std"]
     root = CORPORA_DIR / name
-    report, _ = measure(root, settings["format"], copy_dirs(root), corpus_id=name, extensions=SOURCE_SUFFIXES)
+    # The called programs are looked up in the directory of the caller, as
+    # for the execution (execute_source) and cobc's default COB_LIBRARY_PATH.
+    report, _ = measure(root, settings["format"], copy_dirs(root), corpus_id=name, extensions=SOURCE_SUFFIXES,
+                        call_paths=(Path("."),))
     return report
 
 

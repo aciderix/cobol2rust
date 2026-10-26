@@ -611,6 +611,16 @@ def source_format(source: str, fmt="auto"):
     return "fixed" if last in " -dD*/\\$" else "free"
 
 
+# Figurative constants as CALL arguments: a field of one character.
+CALL_FIGURATIVES = {
+    **dict.fromkeys(("ZERO", "ZEROS", "ZEROES"), lambda p: "0"),
+    **dict.fromkeys(("SPACE", "SPACES"), lambda p: " "),
+    **dict.fromkeys(("QUOTE", "QUOTES"), lambda p: '"'),
+    **dict.fromkeys(("HIGH-VALUE", "HIGH-VALUES"), lambda p: p.high_value),
+    **dict.fromkeys(("LOW-VALUE", "LOW-VALUES"), lambda p: p.low_value),
+}
+
+
 class Parser:
     def __init__(self, source: str):
         self.tokens = lex(source)
@@ -3727,9 +3737,25 @@ class Parser:
                         mode = "REFERENCE"
                     elif self.accept("CONTENT"):
                         mode = "CONTENT"
-                    if self.at("OMITTED") or self.at("VALUE") or self.t.string or (not self.t.string and self.t.text[:1].isdigit()):
+                    if self.at("OMITTED") and mode == "REFERENCE":
+                        # A NULL address: the callee's item is not passed.
+                        self.take()
+                        arguments.append((mode, None))
+                        continue
+                    if self.at("OMITTED") or self.at("VALUE"):
                         self.error("CALL USING limité aux identifiants BY REFERENCE/CONTENT")
-                    if self.t.string or not self.candidates(self.t.key):
+                    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", self.t.text) and not self.t.string:
+                        # output_call: an 8-byte union whose int holds the
+                        # literal's digits, the rest left uninitialized.
+                        self.error("CALL USING d'un littéral numérique non pris en charge (entier C de cobc)")
+                    if self.t.string or (self.t.key in CALL_FIGURATIVES and not self.candidates(self.t.key)):
+                        # output_call: a literal (or a figurative, one
+                        # character) passed as a field of its own size.
+                        t = self.take()
+                        value = t.text if t.string else CALL_FIGURATIVES[t.key](self)
+                        arguments.append((mode, Expr("text", (value,))))
+                        continue
+                    if not self.candidates(self.t.key):
                         break
                     arguments.append((mode, self.variable()))
                 if not arguments:

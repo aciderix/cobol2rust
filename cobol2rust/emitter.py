@@ -1299,6 +1299,16 @@ class Emitter:
             target, arguments, continuation, exception, success = a
             values = []
             for mode, ref in arguments:
+                if ref is None:
+                    values.append("storage_runtime::omitted()")
+                    continue
+                if isinstance(ref, Expr):
+                    # BY CONTENT: a fresh copy at each CALL; BY REFERENCE: the
+                    # program's constant itself.
+                    data = self.byte_vector(ref.args[0])
+                    values.append(f"storage_runtime::temporary(&Value::Bytes({data}))" if mode == "CONTENT" else
+                                  f"storage_runtime::literal_argument({quoted(self.struct + ':' + ref.args[0])}, &{data})")
+                    continue
                 # BY REFERENCE passes an address: a variable group's LINKAGE
                 # item may address its whole allocation, not only the active part.
                 view = self.reference(ref, active=mode == "CONTENT" or ref.start is not None) + ".clone()"
@@ -2139,7 +2149,8 @@ def generate_unit(emitters):
     subprograms = emitters[1:]
     global_uses = any(getattr(emitter.program, "global_uses", None) for emitter in emitters)
     shared = any(emitter.file_registry(name) for emitter in emitters for name in emitter.files)
-    unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status"]
+    unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status",
+            "    callers: Vec<&'static str>, // module names of the active programs, innermost last"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
         if getattr(emitter.program, "entries", None):
@@ -2148,7 +2159,9 @@ def generate_unit(emitters):
     if global_uses:
         # The active programs with USE GLOBAL, innermost last.
         unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
-    unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {", "            returned: None, exit_code: 0,"]
+    main_name = quoted(emitters[0].program.entry_name)
+    unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {",
+             f"            returned: None, exit_code: 0, callers: vec![{main_name}],"]
     for index, emitter in enumerate(subprograms, 1):
         loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
         unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
@@ -2170,19 +2183,29 @@ def generate_unit(emitters):
         for number, name in enumerate([emitter.program.entry_name, *(entry for entry, _ in entries)]):
             guard = f" if self.p{index}_loaded" if number else ""
             unit += [f"            {quoted(name)}{guard} => {{",
-                     f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
+                     f"                if self.p{index}_active {{ self.recursive({quoted(emitter.program.entry_name)}); }}",
                      f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
                      f"                self.p{index}_active = true;",
+                     f"                self.callers.push({quoted(emitter.program.entry_name)});",
                      *([f"                self.p{index}_loaded = true;"] if entries else []),
                      f"                let outcome = program.call_entry(self, arguments, {number});",
                      "                self.returned = program.return_code();",
                      f"                self.p{index}_active = false;",
+                     "                self.callers.pop();",
                      f"                {kept}",
                      "                Some(outcome)",
                      "            }"]
+    # The main program is active for the whole run: calling it is recursive.
+    if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
+        unit.append(f"            {main_name} => self.recursive({main_name}),")
     for name, _ in getattr(emitters[0].program, "entries", []):
-        unit.append(f"            {quoted(name)} => runtime::fail(\"CALL of an active program (recursion) not modelled\"),")
+        unit.append(f"            {quoted(name)} => self.recursive({main_name}),")
     unit += ["            _ => None,", "        }", "    }",
+             "    /// cob_fatal_error (COB_FERROR_RECURSIVE): a program without RECURSIVE called while active.",
+             "    fn recursive(&self, callee: &str) -> ! {",
+             "        let caller = self.callers.last().copied().unwrap_or(\"\");",
+             "        runtime::fatal_error(format!(\"recursive CALL from '{caller}' to '{callee}' which is NOT RECURSIVE\").as_bytes())",
+             "    }",
              "    /// CANCEL: the next CALL finds the program in its initial state.",
              "    fn cancel(&mut self, name: &str) {",
              "        match name {"]

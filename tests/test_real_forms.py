@@ -48,6 +48,7 @@ class RealFormsFrontendTests(unittest.TestCase):
             "is not defined": program("01 n pic 9.", "stop run\nnext-para. stop run."),
             "invalid PROGRAM-ID": "identification division. program-id. cob_x.\nprocedure division. stop run.",
             "literal length": program("01 n pic 9.", 'display "' + "x" * 8192 + '". stop run.'),
+            "littéral numérique": program("01 n pic 9.", 'call "x" using by content 1. stop run.'),
         }
         for message, source in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
@@ -93,6 +94,10 @@ class RealFormsNativeTests(unittest.TestCase):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)
+
+    def test_literal_call_arguments(self):
+        report = verify(FIXTURES / "call_literals.cob", call_paths=[FIXTURES / "call_literals_calls"])
+        self.assertTrue(report["match"], report)
 
     def test_local_storage_is_initialized_at_each_call(self):
         report = verify(FIXTURES / "local_storage.cob", call_paths=[FIXTURES / "local_storage_calls"])

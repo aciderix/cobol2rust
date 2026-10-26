@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .binary import inspect_binary
-from .emitter import Emitter, generate_unit
+from .emitter import Emitter, generate_unit, surely_absent
 from .frontend import CobolError, Parser, Stmt, load_source
 from .toolchain import compiler_env, find_tool
 
@@ -93,18 +93,35 @@ def run_unit(source: Path, fmt, includes, call_paths):
         gather(program)
     check_nested_calls(main, local)
     pending, dynamic = call_targets(main)
-    if dynamic:
-        pending |= set(local)
-    if dynamic:
+    targets = set(pending)
+    scanned = set()
+
+    def bring_all():
+        # A dynamic CALL may reach every program of the run unit's sources
+        # and of the call path: those that convert are brought in.
+        pending.update(local)
         for directory in directories:
             for path in sorted(directory.iterdir()) if directory.is_dir() else []:
                 if path.suffix in SOURCE_SUFFIXES:
                     try:
                         load_source(path, list(includes), fmt)
+                        scanned.add(path.stem)
                         pending.add(path.stem)
                     except (CobolError, OSError):
                         continue
+    if dynamic:
+        bring_all()
     seen = set()
+
+    def follow(program, required):
+        nonlocal dynamic
+        literals, more = call_targets(program)
+        if required:
+            targets.update(literals)
+        pending.update(literals)
+        if more and not dynamic:
+            dynamic = True
+            bring_all()
     while pending:
         name = pending.pop()
         if name in seen or name == main.entry_name:
@@ -112,34 +129,47 @@ def run_unit(source: Path, fmt, includes, call_paths):
         seen.add(name)
         if name in local:
             program = local[name]
-            literals, more = call_targets(program)
-            if more:
-                raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
             units[name] = (source, program, expanded, copies)
-            pending |= literals
+            follow(program, name in targets)
             continue
         path = next((directory / (name + suffix) for directory in directories for suffix in SOURCE_SUFFIXES
                      if (directory / (name + suffix)).is_file()), None)
         if path is None:
             continue
-        sub_expanded, sub_copies = load_source(path, list(includes), fmt)
+        # A source found only by scanning the call path joins the run unit
+        # when it converts as a single program of that name.
+        optional = name not in targets
         try:
+            sub_expanded, sub_copies = load_source(path, list(includes), fmt)
             program = Parser(sub_expanded).parse()
         except CobolError as exc:
-            if dynamic and name not in call_targets(main)[0]:
+            if optional:
                 continue
             raise CobolError(f"programme appelé {path.name}: {exc}") from exc
-        if program.siblings or program.nested:
-            raise CobolError(f"plusieurs programmes dans le source appelé non pris en charge: {path.name}")
+        if program.entry_name != name and (optional or program.entry_name.upper() != name.upper()):
+            if optional:
+                continue
+            raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
         if program.entry_name != name:
-            if program.entry_name.upper() == name.upper() or dynamic is False:
-                raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
-            continue
+            raise CobolError(f"PROGRAM-ID {program.entry_name} de {path.name} différent du nom appelé {name}")
+        if program.siblings or program.nested:
+            if optional:
+                continue
+            raise CobolError(f"plusieurs programmes dans le source appelé non pris en charge: {path.name}")
         units[name] = (path, program, sub_expanded, sub_copies)
-        literals, more = call_targets(program)
-        if more:
-            raise CobolError(f"CALL dynamique dans un programme appelé non pris en charge: {name}")
-        pending |= literals
+        follow(program, not optional)
+    # An optional program whose literal CALL reaches a program of the call
+    # path that did not convert would be refused: it leaves the run unit.
+    present = {path.stem for directory in directories if directory.is_dir()
+               for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
+    pruned = True
+    while pruned:
+        pruned = False
+        for name in [name for name in units if name not in targets]:
+            if any(callee not in units and callee != main.entry_name and not surely_absent(callee, present)
+                   for callee in call_targets(units[name][1])[0]):
+                del units[name]
+                pruned = True
     return main, expanded, copies, [units[name] for name in sorted(units)]
 
 

@@ -345,6 +345,7 @@ impl View {
         memory
     }
     fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
+        check_writable(&self.memory);
         let memory = self.memory.borrow_mut();
         if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
         memory
@@ -951,6 +952,32 @@ pub fn copy_of(item: &Value, bytes: &[u8]) -> Value {
     }
 }
 
+thread_local! {
+    static LITERAL_ARGUMENTS: RefCell<Vec<(String, Memory)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A literal or figurative constant passed BY REFERENCE (output_call): the
+/// address of the program's constant, the same at each CALL, in read-only
+/// storage for a literal.
+pub fn literal_argument(key: &str, bytes: &[u8]) -> Value {
+    let memory = LITERAL_ARGUMENTS.with(|literals| {
+        let mut literals = literals.borrow_mut();
+        if let Some((_, memory)) = literals.iter().find(|(name, _)| name == key) { return memory.clone(); }
+        let memory: Memory = Rc::new(RefCell::new(bytes.to_vec()));
+        literals.push((key.to_string(), memory.clone()));
+        memory
+    });
+    Value::View(View { memory, offset: 0, size: bytes.len(), kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+}
+
+fn check_writable(memory: &Memory) {
+    LITERAL_ARGUMENTS.with(|literals| {
+        if literals.borrow().iter().any(|(_, constant)| Rc::ptr_eq(constant, memory)) {
+            fail("write into a literal passed BY REFERENCE (SIGSEGV in GnuCOBOL); not modelled");
+        }
+    })
+}
+
 /// The temporary alphanumeric field of a literal or a function result.
 pub fn temporary(value: &Value) -> Value {
     let bytes = value.bytes();
@@ -967,11 +994,20 @@ pub fn unbind(item: &Value) -> Value {
     }
 }
 
+/// CALL ... USING OMITTED: a NULL address.
+pub fn omitted() -> Value {
+    Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
+                       dimensions: vec![], initializers: vec![] })
+}
+
 pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
     let (source, template) = match (argument, item) {
         (Value::View(source), Value::View(template)) => (source, template),
         _ => crate::runtime::fail("CALL argument and LINKAGE item require storage"),
     };
+    if source.size == 0 && source.memory.borrow().is_empty() {
+        return unbind(item);
+    }
     let offset = source.offset + delta;
     let extent = template.dimensions.iter().map(|(stride, count)| stride * count.saturating_sub(1)).sum::<usize>() + template.size;
     // GnuCOBOL passes only an address: a LINKAGE item longer than its
@@ -1286,7 +1322,7 @@ impl Inspect {
         })
     }
     fn put_sign(&self) {
-        if let Some((position, -1)) = self.sign { self.memory.borrow_mut()[position] |= 0x40; }
+        if let Some((position, -1)) = self.sign { check_writable(&self.memory); self.memory.borrow_mut()[position] |= 0x40; }
     }
     /// cob_inspect_converting; it restores the sign itself, unless it returns early.
     pub fn convert(&mut self, from: &Operand, to: &Operand) {
@@ -1299,6 +1335,7 @@ impl Inspect {
         let mut table = [None; 256];
         for (&a, &b) in from.data.iter().zip(&f2) { if table[a as usize].is_none() { table[a as usize] = Some(b); } }
         {
+            check_writable(&self.memory);
             let mut memory = self.memory.borrow_mut();
             for byte in &mut memory[self.offset + self.start..self.offset + self.end] {
                 if let Some(b) = table[*byte as usize] { *byte = b; }
@@ -1311,6 +1348,7 @@ impl Inspect {
             INSPECT.with(|buffers| {
                 let b = buffers.borrow();
                 if b.repdata_size != 0 && b.mark_at(b.mark_min) != 0 {
+                    check_writable(&self.memory);
                     let mut memory = self.memory.borrow_mut();
                     let mut i = b.mark_min;
                     while i <= b.mark_max {
@@ -1355,6 +1393,7 @@ impl StringInto {
             if let Some(i) = (0..limit.max(0) as usize).find(|&i| data[i..i + d.len()] == d[..]) { size = i; }
         }
         let room = self.size as i64 - self.position;
+        check_writable(&self.memory);
         let mut memory = self.memory.borrow_mut();
         let start = self.offset + self.position as usize;
         if size as i64 <= room {

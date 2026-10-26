@@ -87,7 +87,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T23:50:11+00:00 (commit `783812c95f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T00:49:38+00:00 (commit `a0a8db0722`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -95,12 +95,12 @@ Dernière mesure : 2026-10-25T23:50:11+00:00 (commit `783812c95f`, cobc (GnuCOBO
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 305 | 311 | 6 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 306 | 879 | 573 | 0 |
-| **Total** | | **3593** | **1030** | **1617** | **587** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 322 | 879 | 557 | 0 |
+| **Total** | | **3593** | **1045** | **1617** | **572** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T23:50:11+00:00, commit `783812c95f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T00:49:38+00:00, commit `a0a8db0722`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -114,13 +114,13 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 37 × niveau de donnée attendu
 2. 22 × PIC numérique limité à 18 chiffres
 3. 18 × . attendu
-4. 17 × CALL USING limité aux identifiants BY REFERENCE/CONTENT
-5. 15 × USAGE/clause non pris en charge: POINTER
-6. 14 × clause SELECT non prise en charge
-7. 13 × paragraphe CONFIGURATION non pris en charge
-8. 13 × CALL callee: programme non converti ou routine système non pris en charge
-9. 12 × CALL USING limité à BY REFERENCE et BY CONTENT
-10. 11 × fichier non déclaré: FILE
+4. 15 × USAGE/clause non pris en charge: POINTER
+5. 14 × clause SELECT non prise en charge
+6. 13 × paragraphe CONFIGURATION non pris en charge
+7. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
+8. 11 × fichier non déclaré: FILE
+9. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
+10. 9 × = attendu
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -248,3 +248,17 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   troncature native, CALL non converti), aucune sortie divergente après
   correction de CANCEL. Exécution des corpus inchangée ; NIST 451/458,
   échantillon de 8 programmes (EVALUATE, CANCEL) conforme 173/173 PASS.
+- 2026-10-26 — Paramètre de mesure changé (mesures précédentes non
+  strictement comparables) : la mesure statique cherche désormais les
+  programmes appelés dans le dossier de l'appelant, comme l'exécution le
+  faisait déjà ; un CALL par identifiant d'un appelé est pris en charge et
+  une source trouvée par balayage qui ne se convertit pas seule est écartée
+  au lieu de faire refuser l'unité. Arguments CALL littéraux et figuratives
+  (BY CONTENT copie, BY REFERENCE constante en lecture seule), `OMITTED`,
+  erreurs libcob de CALL récursif et de CANCEL actif. Résultat : **1030 →
+  1045**/3593 (testsuite 306 → 322, proleap 306 → 305 : IC114A appelle
+  IC115A, que cobc refuse aussi, et n'est plus accepté seul). Des 12
+  sources débloquées exécutées face à cobc : 9 identiques, 3 de mêmes
+  sortie et code d'erreur (pile d'appels de libcob sur stderr non
+  reproduite). Exécution des corpus inchangée ; NIST 451/458, les 24
+  programmes IC (CALL/CANCEL) conformes, 245 PASS, 0 FAIL.

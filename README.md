@@ -76,7 +76,11 @@ python -m cobol2rust convert principal.cob --call-path sousprogrammes -o build/u
 `--call-path` désigne les dossiers des programmes appelés par CALL : comme le
 CALL dynamique de GnuCOBOL, un nom littéral `X` se résout en `X.cbl`/`X.cob`
 dont le PROGRAM-ID est `X`. Le programme principal et tous ses appelés
-(transitivement) forment une seule unité d'exécution Rust.
+(transitivement) forment une seule unité d'exécution Rust. Un CALL par
+identifiant, dans le principal ou dans un appelé, y ajoute chaque source du
+chemin d'appel qui se convertit seule sous son nom ; une telle source dont un
+CALL littéral vise un programme du chemin qui ne se convertit pas en est
+retirée.
 
 Le projet produit contient :
 
@@ -220,12 +224,22 @@ nécessairement la ligne d'origine avant expansion des copybooks.
 
 ## Programmes appelés (CALL)
 
-CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT, ON EXCEPTION/
+CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT/OMITTED, ON EXCEPTION/
 OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
 (`output_call` de codegen.c, `cob_call_field`/`cob_cancel` de call.c) :
 
 - un appelé conserve sa WORKING-STORAGE entre deux CALL ; CANCEL la réinitialise
-  et ferme ses fichiers ouverts ; CALL ou CANCEL d'un programme actif s'arrête ;
+  et ferme ses fichiers ouverts ; CANCEL d'un programme actif (le principal
+  compris) est l'erreur libcob `attempt to CANCEL active program` (`P_cancel`,
+  code 1) ; un CALL d'un programme actif est `recursive CALL from 'A' to 'B'
+  which is NOT RECURSIVE` (`COB_FERROR_RECURSIVE`, code 1 ; RECURSIVE n'est
+  pas pris en charge) ;
+- un littéral alphanumérique ou une figurative en argument (`output_call`)
+  : BY CONTENT, une copie neuve de ses octets (une figurative vaut un
+  caractère) ; BY REFERENCE, la constante du programme elle-même, en lecture
+  seule (une écriture de l'appelé est un arrêt nommé, cobc mourant de
+  SIGSEGV) ; `OMITTED` passe une adresse nulle. Un littéral numérique (entier C
+  dans 8 octets en partie non initialisés) et BY VALUE restent refusés ;
 - les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
   de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
   son argument s'arrête au lieu de lire la mémoire voisine ; un article que
