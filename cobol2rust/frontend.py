@@ -412,6 +412,11 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             # One character per source byte (decode_source): a non-ASCII
             # literal holds the bytes of its source text, as for cobc.
             limit = 160 if STD == "cobol85" else 8191   # literal-length
+            if not value:
+                # scanner.l: a zero-length literal is a SPACE (zero-length-literals).
+                if STD == "cobol85":
+                    raise CobolError(f"ligne {start}: zero-length literal does not conform to COBOL 85")
+                value = " "
             if len(value) > limit:
                 raise CobolError(f"ligne {start}: invalid literal: literal length exceeds {limit} characters")
             tokens.append(Token(value, start, True, token_start, i))
@@ -2972,7 +2977,24 @@ class Parser:
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
         "RANDOM": (0, "number"), "TRIM": (1, "text"), "HEX-OF": (1, "text"), "HEX-TO-CHAR": (1, "text"),
+        "ABS": (1, "number"), "FRACTION-PART": (1, "number"), "EXP10": (1, "number"),
+        "CONCATENATE": (-1, "text"), "CONCAT": (-1, "text"), "SUBSTITUTE": (-3, "text"),
+        "SUBSTITUTE-CASE": (-3, "text"), "STORED-CHAR-LENGTH": (1, "number"),
+        "HIGHEST-ALGEBRAIC": (1, "number"), "LOWEST-ALGEBRAIC": (1, "number"),
+        "TEST-DATE-YYYYMMDD": (1, "number"), "TEST-DAY-YYYYDDD": (1, "number"),
+        "YEAR-TO-YYYY": (-1, "number"), "DATE-TO-YYYYMMDD": (-1, "number"), "DAY-TO-YYYYDDD": (-1, "number"),
+        "FORMATTED-DATE": (2, "text"), "FORMATTED-TIME": (-2, "text"), "FORMATTED-DATETIME": (-3, "text"),
+        "FORMATTED-CURRENT-DATE": (1, "text"), "TEST-FORMATTED-DATETIME": (2, "number"),
+        "INTEGER-OF-FORMATTED-DATE": (2, "number"), "SECONDS-FROM-FORMATTED-TIME": (2, "number"),
     }
+    MAX_ARGUMENTS = {"NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
+                     "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
+    # valid_format (tree.c): the formats a literal first argument may have.
+    DATE_TIME_FORMATS = {"FORMATTED-CURRENT-DATE": ("datetime",), "FORMATTED-DATE": ("date",),
+                         "FORMATTED-DATETIME": ("datetime",), "FORMATTED-TIME": ("time",),
+                         "INTEGER-OF-FORMATTED-DATE": ("date", "datetime"),
+                         "SECONDS-FROM-FORMATTED-TIME": ("time", "datetime"),
+                         "TEST-FORMATTED-DATETIME": ("time", "date", "datetime")}
 
     def function_call(self):
         """FUNCTION name [(exp_list)] [(start:[length])]: a reference
@@ -2996,12 +3018,21 @@ class Parser:
             self.error(f"FUNCTION {name.text} non prise en charge")
         count, _ = self.FUNCTIONS[name.key]
         args = []
+        system_offset = False
         # A function without arguments: "(" starts a reference modification.
         if self.at("(") and (count != 0 or name.key == "RANDOM" or self.tokens[self.i + 1].key == ")") and self.accept("("):
             while not self.accept(")"):
                 self.accept(",")
                 if self.at(")"):
                     continue
+                if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"} and self.at("SYSTEM-OFFSET"):
+                    # formatted_datetime_args: the implicit last argument.
+                    self.take()
+                    self.expect(")")
+                    if len(args) == {"FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}[name.key]:
+                        self.error("cannot specify offset and SYSTEM-OFFSET at the same time")
+                    system_offset = True
+                    break
                 args.append(self.expr())
                 ahead = self.tokens[self.i + self.at(",")]
                 if name.key == "TRIM" and len(args) == 1 and not ahead.string and ahead.key in {"LEADING", "TRAILING"}:
@@ -3012,8 +3043,15 @@ class Parser:
                     return Expr("function", (name.key, tuple(args) + (Expr("number", (direction,)),)))
         if name.key == "RANDOM":
             count = len(args) if len(args) <= 1 else 0
+        if name.key in self.DATE_TIME_FORMATS and args:
+            # valid_const_date_time_args: a literal format is checked here.
+            from .datetime_formats import valid_format
+            if args[0].op == "text" and not valid_format(self.DATE_TIME_FORMATS[name.key], args[0].args[0],
+                                                         "," if self.decimal_comma else "."):
+                self.error(f"FUNCTION '{name.key}' has invalid date/time format")
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
-                or (name.key == "NUMVAL-C" and len(args) > 2):
+                or len(args) > self.MAX_ARGUMENTS.get(name.key, len(args)) \
+                or (name.key in {"SUBSTITUTE", "SUBSTITUTE-CASE"} and len(args) % 2 == 0):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
         if name.key == "WHEN-COMPILED":
             # cb_set_intr_when_compiled: a literal of the compilation time,
@@ -3041,6 +3079,8 @@ class Parser:
                     return Expr("number", (str(getattr(f, "parse_size", f.size)),))
             if arg.op != "function":
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
+        if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"}:
+            args.append(Expr("number", ("1" if system_offset else "0",)))
         return Expr("function", (name.key, tuple(args)))
 
     def using_list(self, ended):

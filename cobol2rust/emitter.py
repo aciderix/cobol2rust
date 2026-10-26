@@ -318,10 +318,41 @@ class Emitter:
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
 
+    DATE_TIME_TEXT = {"FORMATTED-DATE": {0}, "FORMATTED-TIME": {0}, "FORMATTED-DATETIME": {0},
+                      "FORMATTED-CURRENT-DATE": {0}, "TEST-FORMATTED-DATETIME": {0, 1},
+                      "INTEGER-OF-FORMATTED-DATE": {0, 1}, "SECONDS-FROM-FORMATTED-TIME": {0, 1}}
+
+    def text_argument(self, name, a):
+        if a.op == "var":
+            # The function sees the argument's storage bytes.
+            return f"Value::Bytes(storage_runtime::Operand::of(&{self.reference(a.args[0])}).data)"
+        if a.op == "text":
+            return text_value(a.args[0])
+        if a.op == "function" and self.kind(a) == "text":
+            return self.expression(a)
+        raise CobolError(f"FUNCTION {name}: argument alphanumérique attendu")
+
+    def numeric_argument(self, name, a):
+        if self.kind(a) != "number" or a.op == "all":
+            raise CobolError(f"FUNCTION {name}: argument numérique attendu")
+        return self.expression(a)
+
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
         textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM",
-                           "HEX-OF", "HEX-TO-CHAR"}
+                           "HEX-OF", "HEX-TO-CHAR", "CONCATENATE", "CONCAT", "SUBSTITUTE", "SUBSTITUTE-CASE",
+                           "STORED-CHAR-LENGTH"}
+        if name in {"HIGHEST-ALGEBRAIC", "LOWEST-ALGEBRAIC"}:
+            return f"Value::number({quoted(self.algebraic_limit(name, args[0]))})"
+        if name in self.DATE_TIME_TEXT:
+            # intrinsic.c ISO 8601 functions: formats and formatted values are
+            # alphanumeric, the other arguments numeric.
+            values = [self.text_argument(name, a) if i in self.DATE_TIME_TEXT[name] else self.numeric_argument(name, a)
+                      for i, a in enumerate(args)]
+            if name == "SECONDS-FROM-FORMATTED-TIME":
+                return (f"runtime::intrinsic::seconds_from_formatted_time(&{values[0]}, &{values[1]}, "
+                        f"{str(args[1].op == 'text').lower()})")
+            return f"runtime::intrinsic::{name.lower().replace('-', '_')}(&[{', '.join(values)}])"
         values = []
         direction = "0"
         if name == "TRIM" and len(args) == 2:
@@ -348,10 +379,15 @@ class Emitter:
                 "REVERSE": "reverse", "HEX-OF": "hex_of", "HEX-TO-CHAR": "hex_to_char", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
                 "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer",
                 "SQRT": "sqrt_of", "LOG": "log", "LOG10": "log10", "EXP": "exp_of", "SIN": "sin",
-                "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of"}
+                "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of",
+                "ABS": "abs", "FRACTION-PART": "fraction_part", "EXP10": "exp10",
+                "STORED-CHAR-LENGTH": "stored_char_length", "TEST-DATE-YYYYMMDD": "test_date_yyyymmdd",
+                "TEST-DAY-YYYYDDD": "test_day_yyyyddd"}
         listed = {"SUM": "sum", "MEAN": "mean", "MEDIAN": "median", "MIDRANGE": "midrange", "RANGE": "range",
                   "VARIANCE": "variance", "ORD-MAX": "ord_max", "ORD-MIN": "ord_min", "MAX": "max", "MIN": "min",
-                  "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation"}
+                  "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation",
+                  "CONCATENATE": "concatenate", "CONCAT": "concatenate", "YEAR-TO-YYYY": "year_to_yyyy",
+                  "DATE-TO-YYYYMMDD": "date_to_yyyymmdd", "DAY-TO-YYYYDDD": "day_to_yyyyddd"}
         if name == "CURRENT-DATE":
             return "runtime::intrinsic::current_date()"
         if name == "RANDOM":
@@ -373,7 +409,102 @@ class Emitter:
             return f"runtime::intrinsic::length(&{values[0]})"
         if name == "TRIM":
             return f"runtime::intrinsic::trim(&{values[0]}, {direction})"
+        if name in {"SUBSTITUTE", "SUBSTITUTE-CASE"}:
+            return f"runtime::intrinsic::substitute(&[{', '.join(values)}], {str(name == 'SUBSTITUTE-CASE').lower()})"
         raise CobolError(f"FUNCTION {name} non prise en charge")
+
+    def display_operand(self, e):
+        """A DISPLAY operand: a literal as written, or an item as cob_display shows it."""
+        if e.op in {"unary-", "unary+"} and e.args[0].op == "number":
+            # A signed numeric literal is shown with its sign.
+            literal = ("-" if e.op == "unary-" else "+") + e.args[0].args[0]
+            if getattr(self.program, "decimal_comma", False):
+                literal = literal.replace(".", ",")
+            return f"Value::text({quoted(literal)})"
+        if e.op not in {"text", "number", "var"}:
+            raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
+        # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
+        if e.op == "number":
+            literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
+            return f"Value::text({quoted(literal)})"
+        if (e.op == "var" and e.args[0].start is None
+                and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display"}):
+            # cob_print_realbin reads the stored integer of the item
+            # itself; an invalid DISPLAY item is shown as it is stored.
+            return f"{self.reference(e.args[0])}.clone()"
+        if e.op == "var":
+            # DISPLAY moves the item as it is stored (no invalid-data reading).
+            return f"{self.reference(e.args[0])}.snapshot()"
+        return self.expression(e)
+
+    def algebraic_limit(self, name, arg):
+        """cob_intr_highest_algebraic / cob_intr_lowest_algebraic of a
+        numeric or numeric-edited item, known at compile time."""
+        f = self.program.fields.get(arg.args[0].name) if arg.op == "var" and arg.args[0].start is None else None
+        if f is None or f.kind not in {"number", "edited"}:
+            raise CobolError(f"FUNCTION '{name}' has invalid argument")
+        usage = self.storage_usage(f) if f.kind == "number" else "Display"
+        if f.scale < 0 or usage not in {"Display", "SignLeading", "SignLeadingSeparate", "SignTrailingSeparate",
+                                        "Packed", "PackedNoSign", "Binary", "Native"}:
+            raise CobolError(f"FUNCTION {name} de cet usage non pris en charge")
+        if name == "LOWEST-ALGEBRAIC" and not f.signed:
+            return "0"
+        if usage == "Native":
+            # COB_FIELD_REAL_BINARY: the limits of the storage size.
+            bits = f.size * 8 - (1 if f.signed else 0)
+            units = 2 ** bits - (1 if name == "HIGHEST-ALGEBRAIC" else 0)
+        else:
+            units = 10 ** f.digits - 1
+        text = str(units).rjust(f.scale + 1, "0")
+        if f.scale:
+            text = text[:-f.scale] + "." + text[-f.scale:]
+        return ("-" if name == "LOWEST-ALGEBRAIC" else "") + text
+
+    def function_field(self, e):
+        """The temporary field libcob returns for a numeric intrinsic, shown
+        by cob_display (pretty_display_numeric)."""
+        name, args = e.args
+        if name in {"MAX", "MIN", "MEDIAN"} or (name == "MEAN" and len(args) == 1):
+            # cob_intr_max/min/median/mean: a copy of the chosen argument's field.
+            for a in args:
+                literal = a.args[0] if a.op in {"unary-", "unary+"} else a
+                if literal.op not in {"var", "number"}:
+                    raise CobolError(f"DISPLAY de FUNCTION {name} d'une expression non pris en charge")
+            shown = ", ".join(self.display_operand(a) for a in args)
+            values = ", ".join(self.expression(a) for a in args)
+            return f"runtime::intrinsic::chosen_field({quoted(name)}, &[{values}], vec![{shown}])"
+        if name == "ABS":
+            # cob_intr_abs: the argument's field holding the absolute value.
+            arg = args[0]
+            literal = arg.args[0] if arg.op in {"unary-", "unary+"} else arg
+            if literal.op == "number":
+                text = ("-" if arg.op == "unary-" else "+" if arg.op == "unary+" else "") + literal.args[0]
+                return f"runtime::intrinsic::abs_field(runtime::intrinsic::literal_field({quoted(text)}))"
+            if (arg.op != "var" or arg.args[0].start is not None
+                    or self.storage_usage(self.program.fields[arg.args[0].name]) in {"Native", "Register"}):
+                raise CobolError("DISPLAY de FUNCTION ABS de cet argument non pris en charge")
+            return f"runtime::intrinsic::abs_field({self.reference(arg.args[0])}.snapshot())"
+        if name in {"ORD", "ORD-MAX", "ORD-MIN", "LENGTH", "INTEGER-OF-DATE", "INTEGER-OF-DAY",
+                    "STORED-CHAR-LENGTH", "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD",
+                    "TEST-FORMATTED-DATETIME", "INTEGER-OF-FORMATTED-DATE"}:
+            return f"runtime::intrinsic::uint_field({self.expression(e)})"
+        if name in {"DATE-OF-INTEGER", "DAY-OF-INTEGER"}:
+            return f"runtime::intrinsic::display_field({self.expression(e)}, {8 if name == 'DATE-OF-INTEGER' else 7})"
+        if name in {"SUM", "MEAN", "MIDRANGE", "RANGE", "MOD", "REM", "INTEGER", "INTEGER-PART", "FACTORIAL",
+                    "NUMVAL", "NUMVAL-C", "PRESENT-VALUE", "ANNUITY", "VARIANCE", "STANDARD-DEVIATION", "SQRT",
+                    "LOG", "LOG10", "EXP", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "E", "PI",
+                    "FRACTION-PART", "EXP10", "HIGHEST-ALGEBRAIC", "LOWEST-ALGEBRAIC",
+                    "YEAR-TO-YYYY", "DATE-TO-YYYYMMDD", "DAY-TO-YYYYDDD", "SECONDS-FROM-FORMATTED-TIME"}:
+            def scaled(x):
+                return isinstance(x, Expr) and ((x.op == "var" and x.args[0].start is None and x.args[0].name in self.program.fields
+                                                 and self.program.fields[x.args[0].name].scale < 0)
+                                                or any(scaled(y) for y in x.args if isinstance(y, Expr))
+                                                or any(scaled(z) for y in x.args if isinstance(y, tuple) for z in y))
+            if scaled(e):
+                # cob_alloc_field sizes the field from a negative decimal scale.
+                raise CobolError(f"DISPLAY de FUNCTION {name} d'un argument PICTURE P non pris en charge")
+            return f"runtime::intrinsic::alloc_field({self.expression(e)})"
+        raise CobolError(f"DISPLAY de FUNCTION {name} numérique non pris en charge")
 
     def occurs(self, table):
         """output_occurs: the maximum, or the current ODO value."""
@@ -978,31 +1109,7 @@ class Emitter:
                     # cob_display of the alphanumeric result field, as stored.
                     values.append(f"Value::Bytes(({self.expression(e)}).bytes())")
                     continue
-                if e.op == "function":
-                    raise CobolError(f"DISPLAY de FUNCTION {e.args[0]} numérique non pris en charge")
-                if e.op in {"unary-", "unary+"} and e.args[0].op == "number":
-                    # A signed numeric literal is shown with its sign.
-                    literal = ("-" if e.op == "unary-" else "+") + e.args[0].args[0]
-                    if getattr(self.program, "decimal_comma", False):
-                        literal = literal.replace(".", ",")
-                    values.append(f"Value::text({quoted(literal)})")
-                    continue
-                if e.op not in {"text", "number", "var"}:
-                    raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
-                # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
-                if e.op == "number":
-                    literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
-                    values.append(f"Value::text({quoted(literal)})")
-                elif (e.op == "var" and e.args[0].start is None
-                      and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display"}):
-                    # cob_print_realbin reads the stored integer of the item
-                    # itself; an invalid DISPLAY item is shown as it is stored.
-                    values.append(f"{self.reference(e.args[0])}.clone()")
-                elif e.op == "var":
-                    # DISPLAY moves the item as it is stored (no invalid-data reading).
-                    values.append(f"{self.reference(e.args[0])}.snapshot()")
-                else:
-                    values.append(self.expression(e))
+                values.append(self.function_field(e) if e.op == "function" else self.display_operand(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
             self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
         elif op == "table_sort":

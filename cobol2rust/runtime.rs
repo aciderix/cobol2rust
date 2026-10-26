@@ -791,6 +791,41 @@ pub mod intrinsic {
         (best, args[best].snapshot())
     }
     pub fn max(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Greater).1 }
+    /// cob_alloc_field: binary of 9 or 20 digits when the trimmed decimal
+    /// fits 4 or 8 bytes, else DISPLAY of mpz_sizeinbase (value, 10) digits,
+    /// GMP's estimate from the bit count; signed only when negative.
+    pub fn alloc_field(v: Value) -> Value {
+        let n = v.num().trimmed();
+        let negative = n.n.sign() == Sign::Minus;
+        let bits = absolute(&n.n).bits().max(1);
+        let digits = if bits < 33 - negative as u64 && n.scale < 10 { 9 }
+            else if bits < 65 - negative as u64 && n.scale < 19 { 20 }
+            else { ((((0x4d104d427de7fbccu128 + 2) * bits as u128) >> 64) as u32 + 1).max(n.scale) };
+        let scale = n.scale as i32;
+        Value::Num(n, Some((digits, scale, negative, false)))
+    }
+    /// cob_alloc_set_field_uint: an unsigned binary of 9 digits.
+    pub fn uint_field(v: Value) -> Value { Value::Num(v.num(), Some((9, 0, false, false))) }
+    /// cob_intr_date_of_integer, cob_intr_day_of_integer: unsigned DISPLAY.
+    pub fn display_field(v: Value, digits: u32) -> Value { Value::Num(v.num(), Some((digits, 0, false, false))) }
+    /// cob_intr_max, min, median and mean of one argument return a copy of
+    /// the chosen argument's field, shown as that argument; qsort in
+    /// cob_intr_median is glibc's merge sort, which keeps equal arguments
+    /// in order. The mean of the two middle arguments is cob_alloc_field.
+    pub fn chosen_field(name: &str, args: &[Value], shown: Vec<Value>) -> Value {
+        let index = match name {
+            "MAX" => select(args, std::cmp::Ordering::Greater).0,
+            "MIN" => select(args, std::cmp::Ordering::Less).0,
+            _ if args.len() == 1 => 0,
+            _ => {
+                if args.len() % 2 == 0 { return alloc_field(median(args)); }
+                let mut order: Vec<usize> = (0..args.len()).collect();
+                order.sort_by(|a, b| args[*a].compare(&args[*b]));
+                order[args.len() / 2]
+            }
+        };
+        shown.into_iter().nth(index).unwrap()
+    }
     pub fn min(args: &[Value]) -> Value { select(args, std::cmp::Ordering::Less).1 }
     pub fn ord_max(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Greater).0 as i128 + 1) }
     pub fn ord_min(args: &[Value]) -> Value { int_of(select(args, std::cmp::Ordering::Less).0 as i128 + 1) }
@@ -1258,6 +1293,538 @@ pub mod intrinsic {
     }
     /// numval: the digits, sign and decimal point of a NUMVAL/NUMVAL-C argument.
     pub fn length(v: &Value) -> Value { int_of(v.bytes().len() as i128) }
+    pub fn abs(v: &Value) -> Value {
+        let n = v.num();
+        value(Number::new(absolute(&n.n), n.scale))
+    }
+    /// cob_intr_abs: make_field_entry (srcfield), then the absolute value.
+    pub fn abs_field(v: Value) -> Value {
+        match v {
+            Value::Num(n, attrs) => Value::Num(Number::new(absolute(&n.n), n.scale), attrs),
+            other => other,
+        }
+    }
+    /// A numeric literal's field (cb_build_numeric_literal): its digits as
+    /// written, signed and SIGN LEADING SEPARATE when a sign is written.
+    pub fn literal_field(text: &str) -> Value {
+        let digits = text.bytes().filter(u8::is_ascii_digit).count() as u32;
+        let scale = text.split('.').nth(1).map_or(0, |f| f.len()) as i32;
+        Value::Num(Number::parse(text), Some((digits, scale, text.starts_with(['-', '+']), false)))
+    }
+    /// cob_intr_fraction_part: mpz_tdiv_r keeps the sign of the argument.
+    pub fn fraction_part(v: &Value) -> Value {
+        let n = v.num();
+        value(Number::new(&n.n % power(n.scale), n.scale))
+    }
+    pub fn exp10(v: &Value) -> Value {
+        let n = v.num().trimmed();
+        if n.n.sign() == Sign::NoSign { return int_of(1); }
+        if n.scale == 0 && n.n.sign() == Sign::Minus {
+            if let Ok(e) = u32::try_from(absolute(&n.n)) {
+                if e <= i32::MAX as u32 { return value(Number::new(BigInt::from(1), e)); }
+            }
+        }
+        value(Number::new(BigInt::from(10), 0).power(n))
+    }
+    pub fn concatenate(args: &[Value]) -> Value { Value::Bytes(args.iter().flat_map(|a| a.bytes()).collect()) }
+    /// substitute: the first match at each position, in argument order;
+    /// SUBSTITUTE-CASE compares with strncasecmp, which stops at a NUL.
+    pub fn substitute(args: &[Value], case: bool) -> Value {
+        let original = args[0].bytes();
+        let pairs: Vec<(Vec<u8>, Vec<u8>)> = args[1..].chunks(2).map(|p| (p[0].bytes(), p[1].bytes())).collect();
+        if pairs.iter().any(|(m, _)| m.is_empty()) { fail("SUBSTITUTE of an empty match never ends in libcob"); }
+        let same = |a: &[u8], b: &[u8]| -> bool {
+            if !case { return a == b; }
+            for (x, y) in a.iter().zip(b) {
+                let (x, y) = (x.to_ascii_lowercase(), y.to_ascii_lowercase());
+                if x != y { return false; }
+                if x == 0 { return true; }
+            }
+            true
+        };
+        let (mut out, mut i) = (Vec::new(), 0);
+        'scan: while i < original.len() {
+            for (m, r) in &pairs {
+                if i + m.len() <= original.len() && same(&original[i..i + m.len()], m) {
+                    out.extend_from_slice(r);
+                    i += m.len();
+                    continue 'scan;
+                }
+            }
+            out.push(original[i]);
+            i += 1;
+        }
+        Value::Bytes(out)
+    }
+    // ISO 8601 date and time functions (intrinsic.c): strings are the C
+    // buffers of libcob, read as NUL beyond their end.
+    const DATESTR_MAX: usize = 10;
+    const TIMESTR_MAX: usize = 25;
+    const DATETIMESTR_MAX: usize = 36;
+
+    fn at(s: &[u8], i: usize) -> u8 { s.get(i).copied().unwrap_or(0) }
+    fn c_string(s: &[u8]) -> &[u8] { &s[..s.iter().position(|b| *b == 0).unwrap_or(s.len())] }
+    /// copy_data_to_null_terminated_str: up to the first white space, at
+    /// most `max` characters, as strncpy copies them.
+    fn leading(data: &[u8], max: usize) -> Vec<u8> {
+        let n = data.iter().position(|b| matches!(b, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')).unwrap_or(data.len());
+        c_string(&data[..n.min(max)]).to_vec()
+    }
+    fn decimal_point() -> u8 { super::module_symbols().0 as u8 }
+    fn valid_date_format(f: &[u8]) -> bool {
+        matches!(f, b"YYYYMMDD" | b"YYYY-MM-DD" | b"YYYYDDD" | b"YYYY-DDD" | b"YYYYWwwD" | b"YYYY-Www-D")
+    }
+    fn decimal_places_for_seconds(s: &[u8], point: usize) -> usize {
+        let mut places = 0;
+        while at(s, point + 1 + places) == b's' { places += 1; }
+        places
+    }
+    fn valid_time_format(f: &[u8], point: u8) -> bool {
+        let (colons, mut offset) = if f.starts_with(b"hhmmss") { (false, 6) } else if f.starts_with(b"hh:mm:ss") { (true, 8) } else { return false };
+        if at(f, offset) == point {
+            let places = decimal_places_for_seconds(f, offset);
+            offset += places + 1;
+            if places == 0 || places > 9 { return false; }
+        }
+        let rest = &f[offset.min(f.len())..];
+        f.len() <= offset || rest == b"Z" || rest == if colons { &b"+hh:mm"[..] } else { &b"+hhmm"[..] }
+    }
+    /// split_around_t: the parts around the first 'T', and the position
+    /// past an overlong part.
+    fn split_around_t(s: &[u8]) -> (Vec<u8>, Vec<u8>, usize) {
+        let s = c_string(s);
+        let i = s.iter().position(|b| *b == b'T').unwrap_or(s.len());
+        let mut error = 0;
+        if i > DATESTR_MAX { error = DATESTR_MAX + 1; }
+        let first = s[..i.min(DATESTR_MAX)].to_vec();
+        let mut second = Vec::new();
+        if i < s.len() {
+            let rest = &s[i + 1..];
+            if rest.len() > TIMESTR_MAX { error = TIMESTR_MAX + 1 + i; }
+            second = rest[..rest.len().min(TIMESTR_MAX)].to_vec();
+        }
+        (first, second, error)
+    }
+    fn valid_datetime_format(f: &[u8], point: u8) -> bool {
+        let (date, time, error) = split_around_t(f);
+        if error != 0 || !valid_date_format(&date) || !valid_time_format(&time, point) { return false; }
+        parse_date_format(&date).hyphens == parse_time_format(&time).colons
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum Days { Mmdd, Ddd, Wwwd }
+    #[derive(Clone, Copy)]
+    struct DateFormat { days: Days, hyphens: bool }
+    #[derive(Clone, Copy, PartialEq)]
+    enum Extra { Plain, Z, Offset }
+    #[derive(Clone, Copy)]
+    struct TimeFormat { colons: bool, decimals: usize, extra: Extra }
+    fn parse_date_format(f: &[u8]) -> DateFormat {
+        let days = match f { b"YYYYMMDD" | b"YYYY-MM-DD" => Days::Mmdd, b"YYYYDDD" | b"YYYY-DDD" => Days::Ddd, _ => Days::Wwwd };
+        DateFormat { days, hyphens: at(f, 4) == b'-' }
+    }
+    fn parse_time_format(s: &[u8]) -> TimeFormat {
+        let (colons, mut offset) = if s.starts_with(b"hhmmss") { (false, 6) } else { (true, 8) };
+        let mut decimals = 0;
+        if matches!(at(s, offset), b'.' | b',') {
+            decimals = decimal_places_for_seconds(s, offset);
+            offset += decimals + 1;
+        }
+        let extra = if s.len() > offset { if &s[offset..] == b"Z" { Extra::Z } else { Extra::Offset } } else { Extra::Plain };
+        TimeFormat { colons, decimals, extra }
+    }
+    /// date_of_integer, without the range check of DATE-OF-INTEGER.
+    fn date_parts(day_num: i64) -> (i64, i64, i64) {
+        let (year, mut days) = year_of(day_num);
+        let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+        let mut month = 0;
+        while month < 13 {
+            if month > 0 && days <= table[month] { days -= table[month - 1]; break; }
+            month += 1;
+        }
+        (year, month as i64, days)
+    }
+    fn day_of_week(day_num: i64) -> i64 { (day_num - 1) % 7 }
+    fn iso_week_one(day_num: i64, day_of_year: i64) -> i64 {
+        let jan_4 = day_num - day_of_year + 4;
+        jan_4 - day_of_week(jan_4)
+    }
+    /// get_iso_week (Julian M. Bucknall's method, as in libcob).
+    fn iso_week(day_num: i64) -> (i64, i64) {
+        let (mut year, day_of_year) = year_of(day_num);
+        let dec_29 = day_num - day_of_year + days_in_year(year) - 2;
+        let week_one;
+        if day_num >= dec_29 {
+            let next = iso_week_one(day_num + days_in_year(year), day_of_year);
+            if day_num < next { week_one = iso_week_one(day_num, day_of_year); } else { week_one = next; year += 1; }
+        } else {
+            let mut first = iso_week_one(day_num, day_of_year);
+            if day_num < first {
+                year -= 1;
+                first = iso_week_one(day_num - day_of_year, days_in_year(year));
+            }
+            week_one = first;
+        }
+        (year, (day_num - week_one) / 7 + 1)
+    }
+    fn max_week(year: i64) -> i64 {
+        let first = days_up_to_year(year) + 1;
+        iso_week(first + days_in_year(year) - 1).1
+    }
+    fn format_date(format: DateFormat, days: i64) -> Vec<u8> {
+        let h = if format.hyphens { "-" } else { "" };
+        match format.days {
+            Days::Mmdd => { let (y, m, d) = date_parts(days); format!("{y:04}{h}{m:02}{h}{d:02}") }
+            Days::Ddd => { let (y, d) = year_of(days); format!("{y:04}{h}{d:03}") }
+            Days::Wwwd => { let (y, w) = iso_week(days); format!("{y:04}{h}W{w:02}{h}{}", day_of_week(days) + 1) }
+        }.into_bytes()
+    }
+    /// The digits of a fraction of a second, as add_decimal_digits reads
+    /// them (an unsigned int, cob_s32_pow): left to right, then zeros.
+    fn fraction_digits(fraction: &Number, places: usize) -> String {
+        if fraction.scale > 9 { fail("fraction of a second with more than 9 decimals (unsigned int of add_decimal_digits) not modelled"); }
+        let digits = format!("{:0>width$}", absolute(&fraction.n).to_string(), width = fraction.scale as usize);
+        let mut out: String = digits.chars().take(places).collect();
+        while out.len() < places { out.push('0'); }
+        out
+    }
+    /// format_time: the time, its decimals, and Z or the offset; the day
+    /// overflow of the conversion to UTC.
+    fn format_time(format: TimeFormat, time: i64, fraction: &Number, offset: Option<i64>) -> (Vec<u8>, i64) {
+        let (mut hours, mut minutes, seconds) = (time / 3600, time % 3600 / 60, time % 60);
+        let mut overflow = 0;
+        if format.extra == Extra::Z {
+            let offset = offset.unwrap_or_else(|| fail("UTC offset unknown (EC-IMP-UTC-UNKNOWN) not modelled"));
+            hours -= offset / 60;
+            minutes -= offset % 60;
+            if minutes >= 60 { minutes -= 60; hours += 1; } else if minutes < 0 { minutes += 60; hours -= 1; }
+            if hours >= 24 { hours -= 24; overflow = 1; } else if hours < 0 { hours += 24; overflow = -1; }
+        }
+        let mut s = if format.colons { format!("{hours:02}:{minutes:02}:{seconds:02}") } else { format!("{hours:02}{minutes:02}{seconds:02}") };
+        if format.decimals != 0 {
+            s.push(decimal_point() as char);
+            s.push_str(&fraction_digits(fraction, format.decimals));
+        }
+        match (format.extra, offset) {
+            (Extra::Z, _) => s.push('Z'),
+            (Extra::Offset, Some(offset)) => {
+                // add_offset_time: the sign is that of offset / 60.
+                let (h, m) = (offset / 60, offset.abs() % 60);
+                let sign = if h < 0 { '-' } else { '+' };
+                s.push_str(&if format.colons { format!("{sign}{:02}:{m:02}", h.abs()) } else { format!("{sign}{:02}{m:02}", h.abs()) });
+            }
+            (Extra::Offset, None) => s.push_str("00000"),
+            (Extra::Plain, _) => {}
+        }
+        (s.into_bytes(), overflow)
+    }
+    /// The result field: the size of the format, memcpy of the zeroed buffer.
+    fn sized(mut buff: Vec<u8>, length: usize) -> Value {
+        buff.resize(length, 0);
+        Value::Bytes(buff)
+    }
+    fn spaces(length: usize) -> Value { Value::Bytes(vec![b' '; length]) }
+    /// get_fractional_seconds: the argument less its cob_get_int.
+    fn fractional_seconds(v: &Value) -> Number {
+        let n = v.num();
+        n.plus(Number::new(BigInt::from(-get_int(v)), 0))
+    }
+    /// The offset in minutes: SYSTEM-OFFSET, the argument (|offset| < 1440)
+    /// or zero.
+    fn offset_argument(args: &[Value], given: usize) -> Result<Option<i64>, ()> {
+        if get_int(args.last().unwrap()) != 0 { return Ok(Some(super::current_datetime().utc_offset)); }
+        if args.len() - 1 > given {
+            let offset = get_int(&args[given]);
+            return if offset.abs() < 1440 { Ok(Some(offset)) } else { Err(()) };
+        }
+        Ok(Some(0))
+    }
+    pub fn formatted_date(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), DATESTR_MAX);
+        let days = get_int(&args[1]);
+        if !(1..=3067671).contains(&days) || !valid_date_format(&format) { return spaces(format.len()); }
+        sized(format_date(parse_date_format(&format), days), format.len())
+    }
+    pub fn formatted_time(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), TIMESTR_MAX);
+        let seconds = get_int(&args[1]);
+        if !(0..=86400).contains(&seconds) || !valid_time_format(&format, decimal_point()) { return spaces(format.len()); }
+        let fraction = fractional_seconds(&args[1]);
+        let Ok(offset) = offset_argument(args, 2) else { return spaces(format.len()) };
+        sized(format_time(parse_time_format(&format), seconds, &fraction, offset).0, format.len())
+    }
+    fn format_datetime(date: DateFormat, time: TimeFormat, days: i64, seconds: i64, fraction: &Number, offset: Option<i64>) -> Vec<u8> {
+        let (formatted_time, overflow) = format_time(time, seconds, fraction, offset);
+        let mut out = format_date(date, days + overflow);
+        out.push(b'T');
+        out.extend(formatted_time);
+        out
+    }
+    pub fn formatted_datetime(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
+        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        let (days, seconds) = (get_int(&args[1]), get_int(&args[2]));
+        if !(1..=3067671).contains(&days) || !(0..=86400).contains(&seconds) { return spaces(format.len()); }
+        let (date_format, time_format, _) = split_around_t(&format);
+        let Ok(offset) = offset_argument(args, 3) else { return spaces(format.len()) };
+        let fraction = fractional_seconds(&args[2]);
+        sized(format_datetime(parse_date_format(&date_format), parse_time_format(&time_format), days, seconds, &fraction, offset), format.len())
+    }
+    pub fn formatted_current_date(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
+        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        let (date_format, time_format, _) = split_around_t(&format);
+        let t = super::current_datetime();
+        let table = if leap(t.year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+        let days = days_up_to_year(t.year) + table[t.month as usize - 1] + t.day;
+        let seconds = t.hour * 3600 + t.minute * 60 + t.second;
+        let fraction = Number::new(BigInt::from(t.nanosecond), 9);
+        sized(format_datetime(parse_date_format(&date_format), parse_time_format(&time_format), days, seconds, &fraction, Some(t.utc_offset)), format.len())
+    }
+    // test_formatted_date / test_formatted_time: 0, or the position of the
+    // first wrong character.
+    fn test_char_cond(cond: bool, offset: &mut usize) -> Result<(), usize> {
+        if cond { *offset += 1; Ok(()) } else { Err(*offset + 1) }
+    }
+    fn test_range(min: u8, max: u8, ch: u8, offset: &mut usize) -> Result<(), usize> { test_char_cond(min <= ch && ch <= max, offset) }
+    fn test_digit(ch: u8, offset: &mut usize) -> Result<(), usize> { test_range(b'0', b'9', ch, offset) }
+    fn digit(s: &[u8], offset: usize) -> i64 { at(s, offset - 1) as i64 - b'0' as i64 }
+    fn test_year(s: &[u8], o: &mut usize) -> Result<i64, usize> {
+        test_range(b'1', b'9', at(s, *o), o)?;
+        let mut state = digit(s, *o);
+        if state != 1 { test_digit(at(s, *o), o)?; } else { test_range(b'6', b'9', at(s, *o), o)?; }
+        state = state * 10 + digit(s, *o);
+        test_digit(at(s, *o), o)?;
+        state = state * 10 + digit(s, *o);
+        if state != 160 { test_digit(at(s, *o), o)?; } else { test_range(b'1', b'9', at(s, *o), o)?; }
+        Ok(state * 10 + digit(s, *o))
+    }
+    fn test_hyphen(hyphens: bool, s: &[u8], o: &mut usize) -> Result<(), usize> {
+        if hyphens { test_char_cond(at(s, *o) == b'-', o) } else { Ok(()) }
+    }
+    fn test_date_end(format: DateFormat, s: &[u8], year: i64, o: &mut usize) -> Result<(), usize> {
+        match format.days {
+            Days::Mmdd => {
+                test_char_cond(at(s, *o) == b'0' || at(s, *o) == b'1', o)?;
+                let first = digit(s, *o);
+                if first == 0 { test_range(b'1', b'9', at(s, *o), o)?; } else { test_range(b'0', b'2', at(s, *o), o)?; }
+                let month = first * 10 + digit(s, *o);
+                test_hyphen(format.hyphens, s, o)?;
+                let days = if leap(year) { LEAP_MONTH[month as usize] } else { NORMAL_MONTH[month as usize] };
+                let (max_first, max_second) = (b'0' + (days / 10) as u8, b'0' + (days % 10) as u8);
+                test_range(b'0', max_first, at(s, *o), o)?;
+                let first = at(s, *o - 1);
+                if first == b'0' { test_range(b'1', b'9', at(s, *o), o) }
+                else if first != max_first { test_digit(at(s, *o), o) }
+                else { test_range(b'0', max_second, at(s, *o), o) }
+            }
+            Days::Ddd => {
+                test_range(b'0', b'3', at(s, *o), o)?;
+                let mut state = digit(s, *o);
+                if state != 3 { test_digit(at(s, *o), o)?; } else { test_range(b'0', b'6', at(s, *o), o)?; }
+                state = state * 10 + digit(s, *o);
+                if state == 0 { test_range(b'1', b'9', at(s, *o), o) }
+                else if state != 36 { test_digit(at(s, *o), o) }
+                else { test_range(b'0', if leap(year) { b'6' } else { b'5' }, at(s, *o), o) }
+            }
+            Days::Wwwd => {
+                test_char_cond(at(s, *o) == b'W', o)?;
+                test_range(b'0', b'5', at(s, *o), o)?;
+                let first = digit(s, *o);
+                if first == 0 { test_range(b'1', b'9', at(s, *o), o)?; }
+                else if first != 5 { test_digit(at(s, *o), o)?; }
+                else { test_range(b'0', if max_week(year) == 53 { b'3' } else { b'2' }, at(s, *o), o)?; }
+                test_hyphen(format.hyphens, s, o)?;
+                test_range(b'1', b'7', at(s, *o), o)
+            }
+        }
+    }
+    fn test_no_trailing_junk(s: &[u8], mut offset: usize, end_of_string: bool) -> Result<(), usize> {
+        if end_of_string {
+            while at(s, offset) != 0 {
+                if at(s, offset) != b' ' { return Err(offset + 1); }
+                offset += 1;
+            }
+            Ok(())
+        } else if at(s, offset) == 0 { Ok(()) } else { Err(offset + 1) }
+    }
+    fn test_formatted_date(format: DateFormat, s: &[u8], end_of_string: bool) -> usize {
+        let mut o = 0;
+        let result = (|| {
+            let year = test_year(s, &mut o)?;
+            test_hyphen(format.hyphens, s, &mut o)?;
+            test_date_end(format, s, year, &mut o)?;
+            test_no_trailing_junk(s, o, end_of_string)
+        })();
+        result.err().unwrap_or(0)
+    }
+    fn test_less_than_60(s: &[u8], o: &mut usize) -> Result<(), usize> {
+        test_range(b'0', b'5', at(s, *o), o)?;
+        test_digit(at(s, *o), o)
+    }
+    fn test_hour(s: &[u8], o: &mut usize) -> Result<(), usize> {
+        test_range(b'0', b'2', at(s, *o), o)?;
+        if digit(s, *o) != 2 { test_digit(at(s, *o), o) } else { test_range(b'0', b'3', at(s, *o), o) }
+    }
+    fn test_colon(colons: bool, s: &[u8], o: &mut usize) -> Result<(), usize> {
+        if colons { test_char_cond(at(s, *o) == b':', o) } else { Ok(()) }
+    }
+    fn test_formatted_time(format: TimeFormat, s: &[u8], point: u8) -> usize {
+        let mut o = 0;
+        let result = (|| {
+            test_hour(s, &mut o)?;
+            test_colon(format.colons, s, &mut o)?;
+            test_less_than_60(s, &mut o)?;
+            test_colon(format.colons, s, &mut o)?;
+            test_less_than_60(s, &mut o)?;
+            if format.decimals != 0 {
+                test_char_cond(at(s, o) == point, &mut o)?;
+                for _ in 0..format.decimals { test_digit(at(s, o), &mut o)?; }
+            }
+            match format.extra {
+                Extra::Z => test_char_cond(at(s, o) == b'Z', &mut o)?,
+                Extra::Offset => {
+                    if matches!(at(s, o), b'+' | b'-') {
+                        o += 1;
+                        test_hour(s, &mut o)?;
+                        test_colon(format.colons, s, &mut o)?;
+                        test_less_than_60(s, &mut o)?;
+                    } else if at(s, o) == b'0' {
+                        o += 1;
+                        for _ in 0..2 { test_char_cond(at(s, o) == b'0', &mut o)?; }
+                        test_colon(format.colons, s, &mut o)?;
+                        for _ in 0..2 { test_char_cond(at(s, o) == b'0', &mut o)?; }
+                    } else {
+                        return Err(o + 1);
+                    }
+                }
+                Extra::Plain => {}
+            }
+            test_no_trailing_junk(s, o, true)
+        })();
+        result.err().unwrap_or(0)
+    }
+    pub fn test_formatted_datetime(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
+        let value = leading(&args[1].bytes(), DATETIMESTR_MAX);
+        let point = decimal_point();
+        let (date_present, time_present) = if valid_date_format(&format) { (true, false) }
+            else if valid_time_format(&format, point) { (false, true) }
+            else if valid_datetime_format(&format, point) { (true, true) }
+            else { return int_of(0) };
+        let (date_format, time_format) = if date_present && time_present { let (d, t, _) = split_around_t(&format); (d, t) }
+            else if date_present { (format.clone(), Vec::new()) } else { (Vec::new(), format.clone()) };
+        let (date, time) = if date_present && time_present { let (d, t, _) = split_around_t(&value); (d, t) }
+            else if date_present { (value.clone(), Vec::new()) } else { (Vec::new(), value.clone()) };
+        let time_offset = if date_present { date.len() + 1 } else { 0 };
+        if date_present {
+            let error = test_formatted_date(parse_date_format(&date_format), &date, !time_present);
+            if error != 0 { return int_of(error as i128); }
+        }
+        if date_present && time_present && at(&value, date.len()) != b'T' { return int_of(date.len() as i128 + 1); }
+        if time_present {
+            let error = test_formatted_time(parse_time_format(&time_format), &time, point);
+            if error != 0 { return int_of((time_offset + error) as i128); }
+        }
+        int_of(0)
+    }
+    pub fn integer_of_formatted_date(args: &[Value]) -> Value {
+        let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
+        let value = leading(&args[1].bytes(), DATETIMESTR_MAX);
+        let is_date = valid_date_format(&format);
+        let date_format = if is_date { format } else if valid_datetime_format(&format, decimal_point()) { split_around_t(&format).0 } else { return int_of(0) };
+        let date = if is_date { value } else { split_around_t(&value).0 };
+        let date_format = parse_date_format(&date_format);
+        if test_formatted_date(date_format, &date, true) != 0 { return int_of(0); }
+        // integer_of_formatted_date: the parts read back with sscanf.
+        let number = |from: usize, len: usize| -> i64 { std::str::from_utf8(&date[from..from + len]).unwrap().parse().unwrap() };
+        let year = number(0, 4);
+        let start = 4 + date_format.hyphens as usize;
+        int_of(match date_format.days {
+            Days::Mmdd => {
+                let (month, day) = (number(start, 2), number(start + 2 + date_format.hyphens as usize, 2));
+                let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+                days_up_to_year(year) + table[month as usize - 1] + day
+            }
+            Days::Ddd => days_up_to_year(year) + number(start, 3),
+            Days::Wwwd => {
+                let (week, day) = (number(start + 1, 2), number(start + 3 + date_format.hyphens as usize, 1));
+                iso_week_one(days_up_to_year(year) + 1, 1) + (week - 1) * 7 + day - 1
+            }
+        } as i128)
+    }
+    /// cob_intr_seconds_from_formatted_time: a datetime argument is read as
+    /// a C string, which only a literal (NUL-terminated by cobc) bounds.
+    pub fn seconds_from_formatted_time(format: &Value, time: &Value, terminated: bool) -> Value {
+        let data = format.bytes();
+        let length = data.iter().position(|b| matches!(b, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')).unwrap_or(data.len());
+        let format = c_string(&data[..length]).to_vec();
+        let point = decimal_point();
+        let is_datetime = valid_datetime_format(&format, point);
+        if !is_datetime && !valid_time_format(&format, point) { return int_of(0); }
+        let data = time.bytes();
+        let (time_format, time) = if is_datetime {
+            if !terminated { fail("SECONDS-FROM-FORMATTED-TIME of a datetime item reads past the item (C string)"); }
+            (split_around_t(&format).1, split_around_t(&data).1)
+        } else {
+            if data.len() < length { fail("SECONDS-FROM-FORMATTED-TIME of an item shorter than its format reads past the item"); }
+            (format.clone(), c_string(&data[..length]).to_vec())
+        };
+        let time_format = parse_time_format(&time_format);
+        if test_formatted_time(time_format, &time, point) != 0 { return int_of(0); }
+        let number = |from: usize| -> i64 { (at(&time, from) - b'0') as i64 * 10 + (at(&time, from + 1) - b'0') as i64 };
+        let step = if time_format.colons { 3 } else { 2 };
+        let seconds = number(0) * 3600 + number(step) * 60 + number(2 * step);
+        let mut result = Number::new(BigInt::from(seconds), 0);
+        if time_format.decimals != 0 {
+            let start = if time_format.colons { 9 } else { 7 };
+            let digits = std::str::from_utf8(&time[start..start + time_format.decimals]).unwrap();
+            result = result.plus(Number::new(digits.parse::<BigInt>().unwrap(), time_format.decimals as u32));
+        }
+        value(result)
+    }
+    pub fn stored_char_length(v: &Value) -> Value {
+        let bytes = v.bytes();
+        int_of(bytes.iter().rposition(|b| *b != b' ').map_or(0, |i| i + 1) as i128)
+    }
+    fn valid_year(year: i64) -> bool { (1601..=9999).contains(&year) }
+    pub fn test_date_yyyymmdd(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
+        if !valid_year(year) { return int_of(1); }
+        if !(1..=12).contains(&month) { return int_of(2); }
+        let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
+        int_of(if (1..=table[month as usize] - table[month as usize - 1]).contains(&day) { 0 } else { 3 })
+    }
+    pub fn test_day_yyyyddd(v: &Value) -> Value {
+        let date = get_int(v);
+        let (year, day) = (date / 1000, date % 1000);
+        if !valid_year(year) { return int_of(1); }
+        int_of(if (1..=if leap(year) { 366 } else { 365 }).contains(&day) { 0 } else { 2 })
+    }
+    /// get_interval_and_current_year_from_args: time (NULL) and localtime,
+    /// not COB_CURRENT_DATE.
+    fn window(args: &[Value]) -> (i64, i64) {
+        let interval = if args.len() > 1 { get_int(&args[1]) } else { 50 };
+        let current = if args.len() > 2 { get_int(&args[2]) } else { super::local_year() };
+        (interval, current)
+    }
+    /// The century window of YEAR-TO-YYYY, DATE-TO-YYYYMMDD and
+    /// DAY-TO-YYYYDDD; an invalid argument gives 0 (EC-ARGUMENT-FUNCTION).
+    fn windowed(year: i64, args: &[Value], limit: i64) -> Option<i64> {
+        let (interval, current) = window(args);
+        let max = current + interval;
+        if year < 0 || year > limit || !valid_year(current) || !(1700..=9999).contains(&max) { return None; }
+        Some(year + 100 * if max % 100 >= year { max / 100 } else { max / 100 - 1 })
+    }
+    pub fn year_to_yyyy(args: &[Value]) -> Value { int_of(windowed(get_int(&args[0]), args, 99).unwrap_or(0) as i128) }
+    pub fn date_to_yyyymmdd(args: &[Value]) -> Value {
+        let date = get_int(&args[0]);
+        int_of(windowed(date / 10000, args, 999999).map_or(0, |y| y * 10000 + date % 10000) as i128)
+    }
+    pub fn day_to_yyyyddd(args: &[Value]) -> Value {
+        let date = get_int(&args[0]);
+        int_of(windowed(date / 1000, args, 999999).map_or(0, |y| y * 1000 + date % 1000) as i128)
+    }
     pub fn numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
         // cob_intr_numval: the module's decimal point and currency sign.
         let data = crate::runtime::internal_symbols(&v.bytes(), currency_sign && currency.is_none());
@@ -1483,6 +2050,13 @@ fn check_current_date(text: &str, now: &CobTime) -> TimeConstant {
 /// cob_get_current_datetime: the local time (UTC only) with its nanoseconds
 /// (on Linux clock_gettime gives them whatever the resolution asked: only
 /// the Windows branch drops them), then the parts COB_CURRENT_DATE fixes.
+/// The local year of time (NULL), as localtime gives it.
+pub fn local_year() -> i64 {
+    utc_only("the current date and time");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));
+    broken_down(now.as_secs() as i64).year
+}
+
 pub fn current_datetime() -> CobTime {
     utc_only("the current date and time");
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_else(|_| fail("system clock before 1970"));

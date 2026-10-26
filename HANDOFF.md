@@ -5,6 +5,46 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
+## État courant — 26 octobre 2026 (à tenir à jour à chaque commit)
+
+Branche de travail `claude/hopeful-allen-q389mo`. Mesure des corpus réels :
+**1191/3593 sources acceptées** (cobc 1617, écart 426, à examiner 0) ;
+testsuite GnuCOBOL 467/1135, six corpus d'origine 724/2458. Exécution
+comparée inchangée : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
+52/61. NIST CCVS85 (non-régression) : 451/458 émissions, 427/427 conformes.
+
+Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
+blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
+quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des
+formes, y compris les cas limites ; fixture native dans
+`tests/fixtures/` enregistrée dans `tests/test_real_forms.py` ; exécuter
+chaque source débloquée face à cobc (`cobol2rust.verification.verify` avec
+`includes`, `data_dir` et `call_paths` = dossier de la source) ; puis suite
+Python, `tools/real_corpora.py --cobc --execute --record`, couverture NIST,
+ligne au journal de CAP.md, commit et push. Ne pas modifier `cobol2rust/`
+pendant une mesure (elle serait périmée) : préparer l'étape suivante dans une
+copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
+pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
+
+Dernières étapes (26 octobre) : COPY REPLACING LEADING/TRAILING ; DISPLAY du
+champ résultat des fonctions numériques et quinze fonctions de plus ;
+fonctions ISO 8601 (FORMATTED-*, TEST-FORMATTED-DATETIME,
+INTEGER-OF-FORMATTED-DATE, SECONDS-FROM-FORMATTED-TIME). Rien n'est en cours :
+l'arbre de travail est propre et la mesure à jour.
+
+Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
+SCREEN SECTION (37, « niveau de donnée attendu »), USAGE POINTER (14), CALL
+BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
+d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8), ANY LENGTH (7),
+EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
+modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
+(7), NUMVAL-F et TEST-NUMVAL* (4, `cob_check_numval`), fonctions LOCALE-*
+et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
+COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. Exécution : 3 programmes
+divergents et 6 délais du livre, 2 délais du cours restent à examiner.
+
+## Historique
+
 État au 25 octobre 2026 : version **0.4.0** livrée, branche
 `claude/upbeat-fermi-2hplbi` au terme de la première partie du travail.
 
@@ -935,7 +975,10 @@ normalisation et expansion des COPY, et non toujours le source d'origine.
 
 ## Limites connues et suite conseillée
 
-Les limites détaillées sont dans le README. Restent notamment hors périmètre :
+Liste historique, antérieure à la mesure des corpus réels : COPY REPLACING,
+SEARCH, COMP-5, fichiers relatifs/indexés, appels et une grande partie des
+fonctions intrinsèques sont pris en charge depuis (README, COVERAGE.md).
+Les limites détaillées sont dans le README. Restaient alors hors périmètre :
 SEARCH, tables à glissement ou stride variable, ODO dans un FD, USAGE INDEX
 explicite, COMP-5, images éditées complexes et déédition, profils IBM/Micro Focus/EBCDIC, COPY REPLACING,
 fonctions intrinsèques, appels interprogrammes, enregistrements variables,

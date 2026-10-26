@@ -88,7 +88,22 @@ def apply(source: str, replacements, line, keep_lines=False) -> str:
             out.append(stream[i])
             i += 1
             continue
-        for pattern, new_text in replacements:
+        for replacement in replacements:
+            pattern, new_text = replacement[:2]
+            if len(replacement) > 2:
+                # LEADING / TRAILING (is_leading_or_trailing): one text, a
+                # case-insensitive prefix or suffix, then the partial echo.
+                mode, strict = replacement[2:]
+                source, text = pattern[0], stream[i]
+                if len(text) > len(source) or (not strict and len(text) == len(source)):
+                    part = text[:len(source)] if mode == "LEADING" else text[len(text) - len(source):]
+                    if part.lower() == source.lower():
+                        rest = text[len(source):] if mode == "LEADING" else text[:len(text) - len(source)]
+                        out.extend(([] if mode == "LEADING" else [rest]) + new_text
+                                   + ([rest] if mode == "LEADING" else []))
+                        i += 1
+                        break
+                continue
             j, matched = i, True
             for want in (t for t in pattern if not _space(t)):
                 while j < len(stream) and _space(stream[j]):
@@ -127,8 +142,6 @@ def parse_replacing(tokens, line):
             k = end + 1
             # PSEUDO_STATE drops newlines; spaces stay as " " texts.
             return [t for t in body if t != "\n"]
-        if tokens[k].upper() in {"LEADING", "TRAILING"}:
-            raise CobolError(f"ligne {line}: COPY REPLACING LEADING/TRAILING non pris en charge")
         result = [tokens[k]]
         k += 1
         # identifier IN/OF qualifiers and (subscripts), as ppparse.y builds them.
@@ -147,7 +160,46 @@ def parse_replacing(tokens, line):
             k = end + 1
         return result
 
+    def partial(target):
+        """text_partial_src / text_partial_dst: one text between == ==, or a
+        literal (obsolete in default.conf, an error in cobol85)."""
+        nonlocal k
+        if k + 1 < len(tokens) and tokens[k] == "==" and tokens[k + 1] == "==" and target:
+            k += 2
+            return [], False
+        if tokens[k] == "==":
+            body = [t for t in tokens[k + 1:tokens.index("==", k + 1)] if not _space(t) and t != "\n"] \
+                if "==" in tokens[k + 1:] else None
+            if not body or len(body) != 1:
+                raise CobolError(f"ligne {line}: un seul mot attendu dans un remplacement partiel")
+            k = tokens.index("==", k + 1) + 1
+            return body, False
+        text = tokens[k]
+        k += 1
+        if text[:1] in "\"'":
+            from . import frontend
+            if frontend.STD == "cobol85":
+                raise CobolError(f"ligne {line}: partial replacing with literal non conforme à -std=cobol85")
+            return ([text[1:-1]] if text[1:-1] else []), True
+        if target and text.upper() in {"SPACE", "SPACES"}:
+            return [], False
+        raise CobolError(f"ligne {line}: unexpected COBOL word in partial replacement phrase")
+
     while k < len(tokens):
+        if tokens[k].upper() in {"LEADING", "TRAILING"}:
+            mode = tokens[k].upper()
+            k += 1
+            if k >= len(tokens):
+                raise CobolError(f"ligne {line}: COPY REPLACING incomplet")
+            source, strict = partial(False)
+            if k >= len(tokens) or tokens[k].upper() != "BY":
+                raise CobolError(f"ligne {line}: BY attendu dans COPY REPLACING")
+            k += 1
+            if k >= len(tokens):
+                raise CobolError(f"ligne {line}: COPY REPLACING incomplet")
+            target, _ = partial(True)
+            replacements.append((source, target, mode, strict))
+            continue
         source = operand(False)
         if k >= len(tokens) or tokens[k].upper() != "BY":
             raise CobolError(f"ligne {line}: BY attendu dans COPY REPLACING")

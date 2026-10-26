@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T11:31:07+00:00",
- "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
- "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
+ "measured_at": "2026-10-26T17:18:41+00:00",
+ "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
+ "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1142,
+  "accepted": 1191,
   "cobc_accepted": 1617,
-  "gap": 475,
+  "gap": 426,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 418,
+   "accepted": 467,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 461,
+   "gap": 412,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -503,14 +503,6 @@
     [
      "run_accept-003/prog.cob",
      "ACCEPT FROM MICROSECOND-TIME non pris en charge"
-    ],
-    [
-     "run_accept-004/prog.cob",
-     "DISPLAY de FUNCTION INTEGER-OF-DATE numérique non pris en charge"
-    ],
-    [
-     "run_accept-005/prog.cob",
-     "DISPLAY de FUNCTION INTEGER-OF-DATE numérique non pris en charge"
     ],
     [
      "run_accept-006/prog.cob",
@@ -937,24 +929,12 @@
      "USE GLOBAL sur un fichier non pris en charge"
     ],
     [
-     "run_functions-001/prog.cob",
-     "FUNCTION ABS non prise en charge"
-    ],
-    [
      "run_functions-006/prog.cob",
      "PICTURE non prise en charge: N(4)"
     ],
     [
      "run_functions-008/prog.cob",
      "FUNCTION COMBINED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-009/prog.cob",
-     "FUNCTION CONCATENATE non prise en charge"
-    ],
-    [
-     "run_functions-010/prog.cob",
-     "FUNCTION CONCATENATE non prise en charge"
     ],
     [
      "run_functions-011/prog.cob",
@@ -977,14 +957,6 @@
      "FUNCTION CURRENCY-SYMBOL non prise en charge"
     ],
     [
-     "run_functions-020/prog.cob",
-     "FUNCTION DATE-TO-YYYYMMDD non prise en charge"
-    ],
-    [
-     "run_functions-022/prog.cob",
-     "FUNCTION DAY-TO-YYYYDDD non prise en charge"
-    ],
-    [
      "run_functions-024/prog.cob",
      "FUNCTION EXCEPTION-FILE non prise en charge"
     ],
@@ -1005,52 +977,8 @@
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
-     "run_functions-029/prog.cob",
-     "FUNCTION EXP10 non prise en charge"
-    ],
-    [
-     "run_functions-031/prog.cob",
-     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
-    ],
-    [
-     "run_functions-032/prog.cob",
-     "FUNCTION FORMATTED-DATE non prise en charge"
-    ],
-    [
-     "run_functions-033/prog.cob",
-     "FUNCTION FORMATTED-DATE non prise en charge"
-    ],
-    [
-     "run_functions-034/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-035/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
-    ],
-    [
      "run_functions-036/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-037/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-038/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-039/prog.cob",
-     "FUNCTION FRACTION-PART non prise en charge"
-    ],
-    [
-     "run_functions-040/prog.cob",
-     "FUNCTION HIGHEST-ALGEBRAIC non prise en charge"
-    ],
-    [
-     "run_functions-044/prog.cob",
-     "FUNCTION INTEGER-OF-FORMATTED-DATE non prise en charge"
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-047/prog.cob",
@@ -1067,30 +995,6 @@
     [
      "run_functions-050/prog.cob",
      "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
-    ],
-    [
-     "run_functions-055/prog.cob",
-     "FUNCTION LOWEST-ALGEBRAIC non prise en charge"
-    ],
-    [
-     "run_functions-056/prog.cob",
-     "DISPLAY de FUNCTION MAX numérique non pris en charge"
-    ],
-    [
-     "run_functions-057/prog.cob",
-     "DISPLAY de FUNCTION MEAN numérique non pris en charge"
-    ],
-    [
-     "run_functions-058/prog.cob",
-     "DISPLAY de FUNCTION MEDIAN numérique non pris en charge"
-    ],
-    [
-     "run_functions-059/prog.cob",
-     "DISPLAY de FUNCTION MIDRANGE numérique non pris en charge"
-    ],
-    [
-     "run_functions-060/prog.cob",
-     "DISPLAY de FUNCTION MIN numérique non pris en charge"
     ],
     [
      "run_functions-062/prog.cob",
@@ -1149,28 +1053,8 @@
      "FUNCTION NUMVAL-F non prise en charge"
     ],
     [
-     "run_functions-078/prog.cob",
-     "DISPLAY de FUNCTION ORD numérique non pris en charge"
-    ],
-    [
-     "run_functions-079/prog.cob",
-     "DISPLAY de FUNCTION ORD-MAX numérique non pris en charge"
-    ],
-    [
-     "run_functions-080/prog.cob",
-     "DISPLAY de FUNCTION ORD-MIN numérique non pris en charge"
-    ],
-    [
-     "run_functions-082/prog.cob",
-     "DISPLAY de FUNCTION PRESENT-VALUE numérique non pris en charge"
-    ],
-    [
      "run_functions-086/prog.cob",
      "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_functions-089/prog.cob",
-     "FUNCTION SECONDS-FROM-FORMATTED-TIME non prise en charge"
     ],
     [
      "run_functions-090/prog.cob",
@@ -1179,50 +1063,6 @@
     [
      "run_functions-091/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
-     "run_functions-095/prog.cob",
-     "FUNCTION STORED-CHAR-LENGTH non prise en charge"
-    ],
-    [
-     "run_functions-096/prog.cob",
-     "FUNCTION SUBSTITUTE non prise en charge"
-    ],
-    [
-     "run_functions-097/prog.cob",
-     "FUNCTION SUBSTITUTE non prise en charge"
-    ],
-    [
-     "run_functions-098/prog.cob",
-     "FUNCTION SUBSTITUTE-CASE non prise en charge"
-    ],
-    [
-     "run_functions-099/prog.cob",
-     "FUNCTION SUBSTITUTE-CASE non prise en charge"
-    ],
-    [
-     "run_functions-102/prog.cob",
-     "FUNCTION TEST-DATE-YYYYMMDD non prise en charge"
-    ],
-    [
-     "run_functions-103/prog.cob",
-     "FUNCTION TEST-DAY-YYYYDDD non prise en charge"
-    ],
-    [
-     "run_functions-104/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-105/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-106/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-107/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
     ],
     [
      "run_functions-108/prog.cob",
@@ -1237,16 +1077,8 @@
      "FUNCTION TEST-NUMVAL-F non prise en charge"
     ],
     [
-     "run_functions-118/prog.cob",
-     "FUNCTION YEAR-TO-YYYY non prise en charge"
-    ],
-    [
      "run_functions-119/prog.cob",
-     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
-    ],
-    [
-     "run_functions-120/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -2049,28 +1881,8 @@
      "option $SET BOUND non prise en charge"
     ],
     [
-     "syn_copy-010/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-011/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
      "syn_copy-013/prog.cob",
      "COPY REPLACING d'un copybook contenant COPY non pris en charge"
-    ],
-    [
-     "syn_copy-017/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-019/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
-    ],
-    [
-     "syn_copy-020/prog.cob",
-     "COPY REPLACING LEADING/TRAILING non pris en charge"
     ],
     [
      "syn_definition-005/containing-prog.cob",
@@ -2141,20 +1953,12 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "syn_functions-002/prog.cob",
-     "DISPLAY de FUNCTION E numérique non pris en charge"
-    ],
-    [
      "syn_functions-003/prog.cob",
      "PROGRAM-ID attendu"
     ],
     [
      "syn_functions-005/prog.cob",
      "PROGRAM-ID attendu"
-    ],
-    [
-     "syn_functions-008/prog.cob",
-     "FUNCTION ABS non prise en charge"
     ],
     [
      "syn_literals-006/prog.cob",
@@ -2355,6 +2159,10 @@
      12
     ],
     [
+     "FUNCTION EXCEPTION-STATUS non prise en charge",
+     9
+    ],
+    [
      "expression non prise en charge: LINE",
      9
     ],
@@ -2379,10 +2187,6 @@
      7
     ],
     [
-     "FUNCTION EXCEPTION-STATUS non prise en charge",
-     7
-    ],
-    [
      "USAGE/clause non pris en charge: IS",
      7
     ]
@@ -2390,9 +2194,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T11:31:07+00:00",
-  "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
-  "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
+  "measured_at": "2026-10-26T17:18:41+00:00",
+  "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
+  "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

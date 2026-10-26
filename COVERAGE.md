@@ -598,6 +598,10 @@ conformes**, 6104 PASS, 0 FAIL (`build/nist-verify-corresponding.json`).
 Émission acceptée : **262/458** ; revérification : **260/260 programmes
 conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
 
+Depuis : `REPLACING LEADING ==mot== BY ==…==` et `TRAILING` (COPY et REPLACE),
+portage de `is_leading_or_trailing`/`ppecho_leading_or_trailing` ; les 5
+sources de la testsuite GnuCOBOL qui en dépendaient sont identiques à cobc.
+
 ## Progression : fonctions intrinsèques
 
 Port de libcob/intrinsic.c pour INTEGER, INTEGER-PART, MOD, REM, FACTORIAL,
@@ -613,6 +617,15 @@ ATAN, STANDARD-DEVIATION, PI et E sont portés depuis : voir plus bas).
 sous-programmes. Émission acceptée : **313/458** (dont 24 sous-programmes) ;
 revérification : **289/289 programmes principaux conformes**, 6608 PASS,
 0 FAIL (`build/nist-verify-intrinsics.json`).
+
+Depuis (mesure des corpus réels) : ABS, FRACTION-PART, EXP10, CONCATENATE,
+CONCAT, SUBSTITUTE, SUBSTITUTE-CASE, STORED-CHAR-LENGTH, HIGHEST-ALGEBRAIC,
+LOWEST-ALGEBRAIC, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
+DATE-TO-YYYYMMDD et DAY-TO-YYYYDDD, et le DISPLAY du champ résultat des
+fonctions numériques (`cob_alloc_field`, `cob_alloc_set_field_uint`, copie
+d'argument) ; puis les fonctions ISO 8601 (FORMATTED-*, TEST-FORMATTED-DATETIME,
+INTEGER-OF-FORMATTED-DATE, SECONDS-FROM-FORMATTED-TIME) ; voir le README,
+« Fonctions intrinsèques ».
 
 ## Progression : ALTER, noms de procédure, dialecte cobol85
 
