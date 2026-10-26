@@ -800,8 +800,8 @@ def declaration(p, file_record=False):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         positions = expanded.count("P")
         scale = -positions if expanded.lstrip("S").startswith("9") else positions + digits
-        if digits > 18 or usage != "DISPLAY":
-            p.error("PICTURE P limitée à 18 chiffres USAGE DISPLAY")
+        if digits > 18:
+            p.error("PICTURE P limitée à 18 chiffres")
     elif (re.fullmatch(r"[9Z*+\-$.,VPB0/()0-9]*(?:CR|DB)?", picture.upper())
           and set(re.sub(r"\(\d+\)", "", picture.upper())) - set("9VP")):
         kind = "edited"

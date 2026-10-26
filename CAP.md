@@ -57,7 +57,7 @@ décide de la prochaine.
    --execute` (stdin vide, fichiers du dossier du programme). Étendre ensuite
    avec de vrais jeux d'entrée (stdin, fichiers, variables DD).
 3. **Limites du modèle** : OCCURS et mémoire plus grands, comparaisons à
-   `ALL littéral`, PICTURE P au-delà de 18 chiffres ou hors DISPLAY
+   `ALL littéral`, PICTURE P au-delà de 18 chiffres
    (38 chiffres, niveau 78, Report Writer avec ruptures et ENTRY sont faits).
 4. **Profil des contrôles d'exécution** : sans `-debug`, cobc calcule avec
    les données numériques invalides (COMP-3 ou DISPLAY corrompus) au lieu de
@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T09:20:27+00:00 (commit `30a39f0269`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T09:41:48+00:00 (commit `fb19085181`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T09:20:27+00:00 (commit `30a39f0269`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 305 | 311 | 6 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 384 | 879 | 495 | 0 |
-| **Total** | | **3593** | **1107** | **1617** | **510** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 394 | 879 | 485 | 0 |
+| **Total** | | **3593** | **1117** | **1617** | **500** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T09:20:27+00:00, commit `30a39f0269`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T09:41:48+00:00, commit `fb19085181`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -115,11 +115,11 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 3. 14 × USAGE/clause non pris en charge: POINTER
 4. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
 5. 12 × clause SELECT non prise en charge
-6. 10 × PICTURE P limitée à 18 chiffres USAGE DISPLAY
-7. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
-8. 9 × expression non prise en charge: LINE
-9. 8 × indicateur fixe '$' non pris en charge
-10. 8 × PROGRAM-ID attendu
+6. 10 × ASSIGN LINE ADVANCING FILE non pris en charge
+7. 9 × expression non prise en charge: LINE
+8. 8 × indicateur fixe '$' non pris en charge
+9. 8 × PROGRAM-ID attendu
+10. 7 × USAGE/clause non pris en charge: ANY
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -290,3 +290,8 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   opérande nul laisse le receveur intact) ; ensuite 14/14 identiques.
   Exécution des corpus inchangée ; NIST 451/458 et 30 programmes NC
   d'ADD/SUBTRACT conformes (1755 PASS, 0 FAIL).
+- 2026-10-26 — PICTURE P (mise à l'échelle) en BINARY, COMP-3 et COMP-5, plus
+  seulement en DISPLAY (fixture `picture_p_usages` identique à cobc).
+  Testsuite **384 → 394**, total **1107 → 1117**/3593. Des 10 sources
+  débloquées, exécutées face à cobc : 9 identiques, 1 arrêt nommé (MOVE
+  binaire remplissant le demi-octet de remplissage). NIST 451/458.

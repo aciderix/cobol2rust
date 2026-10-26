@@ -1,0 +1,33 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PICPUSE.
+      * PICTURE P scaling with BINARY, COMP-3 and COMP-5 storage.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 B1 PIC 99PP COMP VALUE 1200.
+       01 B2 PIC SVPP99 COMP VALUE -.0045.
+       01 P1 PIC 999PP COMP-3 VALUE 12300.
+       01 P1X REDEFINES P1 PIC X(2).
+       01 P2 PIC SVP9(3) COMP-3 VALUE .0123.
+       01 N1 PIC 9PPP COMP-5 VALUE 7000.
+       01 D  PIC 9(6)V9(6).
+       01 R  PIC -(6)9.9(6).
+       PROCEDURE DIVISION.
+           DISPLAY B1 " " B2 " " P1 " " P2 " " N1
+           DISPLAY FUNCTION LENGTH(B1) FUNCTION LENGTH(P1)
+                   FUNCTION LENGTH(N1)
+           DISPLAY P1X
+           MOVE B1 TO D  MOVE D TO R  DISPLAY R
+           MOVE P2 TO D  MOVE D TO R  DISPLAY R
+           COMPUTE B1 = B1 + 345
+           DISPLAY B1
+           COMPUTE P1 = P1 * 2
+           DISPLAY P1
+           MOVE 98765 TO P1
+           DISPLAY P1
+           COMPUTE B2 = B2 * 2
+           DISPLAY B2
+           COMPUTE N1 ROUNDED = 7600
+           DISPLAY N1
+           IF P1 = 98700 DISPLAY "P1 EQ" END-IF
+           IF B1 > 1000 DISPLAY "B1 GT" END-IF
+           STOP RUN.

@@ -23,7 +23,7 @@ class PScalingTests(unittest.TestCase):
         self.assertEqual(rust.count("cob_add_int_operand"), 1)
 
     def test_refusals(self):
-        for data, body in [("01 a pic 99p comp.", "stop run."), ("01 a pic 9p9.", "stop run."),
+        for data, body in [("01 a pic 9(19)pp.", "stop run."), ("01 a pic 9p9.", "stop run."),
                            ("01 a pic pp99. 01 x pic xx.", "move a to x. stop run.")]:
             with self.subTest(data=data, body=body), self.assertRaises(CobolError):
                 Emitter(Parser(program(data, body)).parse()).generate()

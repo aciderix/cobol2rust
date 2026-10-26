@@ -134,7 +134,7 @@ Ces résultats portent sur les entrées testées.
 Les champs numériques DISPLAY et COMP-3 vont jusqu'à **38 chiffres** comme
 cobc (`COB_MAX_DIGITS`), les BINARY/COMP/COMP-5 jusqu'à 18 (au-delà, l'erreur
 de cobc `binary field cannot be larger than 18 digits`), les PICTURE avec P
-jusqu'à 18 ; les champs PIC X/A jusqu'à 65535 caractères, les champs édités
+jusqu'à 18 chiffres, en DISPLAY, BINARY, COMP-3 ou COMP-5 ; les champs PIC X/A jusqu'à 65535 caractères, les champs édités
 jusqu'à 38 chiffres et 256 caractères. Un groupe peut être plus grand.
 La mémoire totale est limitée à **16 Mio**, les tableaux à **7 dimensions** et
 chaque clause OCCURS à **1..10000 occurrences** (minimum variable autorisé : 0).

@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T09:20:27+00:00",
- "git_head": "30a39f02690c563ba5f5fe68a6e5d8373bcdf1e7",
- "implementation_sha256": "132db0c31f1e6e51e1f2bd19550382666a3160949f91fcc8969e27fca88cfa1b",
+ "measured_at": "2026-10-26T09:41:48+00:00",
+ "git_head": "fb1908518143e6b2114ee3bb44c2926c025aa0fa",
+ "implementation_sha256": "5b926109f566a8b96b2531e9f03fb4d7f68b6199295bfff987c04a348df9b28f",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1107,
+  "accepted": 1117,
   "cobc_accepted": 1617,
-  "gap": 510,
+  "gap": 500,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -443,7 +443,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 384,
+   "accepted": 394,
    "internal_errors": 0,
    "blockers": [
     [
@@ -479,10 +479,6 @@
      11
     ],
     [
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY",
-     10
-    ],
-    [
      "PROCEDURE attendu",
      10
     ],
@@ -493,49 +489,17 @@
     [
      "indicateur fixe '$' non pris en charge",
      10
+    ],
+    [
+     "USAGE/clause non pris en charge: IS",
+     10
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 495,
+   "gap": 485,
    "gap_sources": [
-    [
-     "data_binary-013/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_binary-014/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_binary-015/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_binary-016/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_binary-017/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_packed-004/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_packed-005/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_packed-006/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
-    [
-     "data_packed-019/prog.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
-    ],
     [
      "data_packed-021/prog.cob",
      "modification de référence limitée aux groupes, PIC X et numériques DISPLAY"
@@ -1479,10 +1443,6 @@
     [
      "run_fundamental-097/caller.cob",
      "USAGE/clause non pris en charge: IS"
-    ],
-    [
-     "run_fundamental-099/packed.cob",
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY"
     ],
     [
      "run_fundamental-112/prog.cob",
@@ -2503,10 +2463,6 @@
      12
     ],
     [
-     "PICTURE P limitée à 18 chiffres USAGE DISPLAY",
-     10
-    ],
-    [
      "ASSIGN LINE ADVANCING FILE non pris en charge",
      10
     ],
@@ -2529,14 +2485,18 @@
     [
      "indicateur fixe '$' non pris en charge",
      7
+    ],
+    [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     7
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T09:20:27+00:00",
-  "git_head": "30a39f02690c563ba5f5fe68a6e5d8373bcdf1e7",
-  "implementation_sha256": "132db0c31f1e6e51e1f2bd19550382666a3160949f91fcc8969e27fca88cfa1b",
+  "measured_at": "2026-10-26T09:41:48+00:00",
+  "git_head": "fb1908518143e6b2114ee3bb44c2926c025aa0fa",
+  "implementation_sha256": "5b926109f566a8b96b2531e9f03fb4d7f68b6199295bfff987c04a348df9b28f",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
