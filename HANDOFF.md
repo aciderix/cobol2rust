@@ -20,7 +20,7 @@ lancer les builds avec `CARGO_INCREMENTAL=0`, sinon le cache incrémental de
 `build/rust-target` dépasse 20 Go.
 
 Suite possible : corpus métier et autres dialectes (IBM, Micro Focus), formes
-encore refusées listées dans le README (niveau 78, COMP-5, EXIT PERFORM, STOP
+encore refusées listées dans le README (COMP-5, EXIT PERFORM, STOP
 identifiant, SCREEN SECTION, clauses CD), puis le parcours sans sources.
 
 ## Reprise cloud et objectif élargi
@@ -920,6 +920,11 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
     groupe ne sont pas interchangeables. Les optimisations de littéraux texte
     exigent la garde de largeur/échelle. La lecture alpha utilise un buffer fini,
     pas un parseur décimal générique ; conserver signe et zéros négatifs natifs.
+14. **Constantes et listes DISPLAY.** Une constante 78 ou `01 CONSTANT` est
+    substituée dans les jetons suivants du programme comme le scanner de cobc
+    (`cb_add_78`), un signe touchant les chiffres formant un seul littéral
+    signé ; une liste DISPLAY est faite d'opérandes `x`, sans arithmétique :
+    `DISPLAY A -1` affiche A puis le littéral `-1`.
 
 Les lignes des diagnostics et source maps désignent `expanded.cob`, après
 normalisation et expansion des COPY, et non toujours le source d'origine.

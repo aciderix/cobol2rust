@@ -1137,6 +1137,15 @@ pub mod intrinsic {
     pub fn upper_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "UPPER-CASE"); Value::Bytes(b.to_ascii_uppercase()) }
     pub fn lower_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "LOWER-CASE"); Value::Bytes(b.to_ascii_lowercase()) }
     pub fn reverse(v: &Value) -> Value { let mut b = v.bytes(); b.reverse(); Value::Bytes(b) }
+    /// cob_intr_trim: direction 1 LEADING, 2 TRAILING; all spaces give an empty field.
+    pub fn trim(v: &Value, direction: u8) -> Value {
+        let b = v.bytes();
+        let Some(first) = b.iter().position(|c| *c != b' ') else { return Value::Bytes(Vec::new()) };
+        let last = b.iter().rposition(|c| *c != b' ').unwrap();
+        let begin = if direction != 2 { first } else { 0 };
+        let end = if direction != 1 { last } else { b.len() - 1 };
+        Value::Bytes(b[begin..=end].to_vec())
+    }
 
     const NORMAL_DAYS: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
     const LEAP_DAYS: [i64; 13] = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];

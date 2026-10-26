@@ -107,7 +107,7 @@ Ces résultats portent sur les entrées testées.
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
 | Configuration | `ENVIRONMENT DIVISION`, `CONFIGURATION SECTION`, `SOURCE-COMPUTER` et `OBJECT-COMPUTER` avec nom machine seul |
 | Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
-| Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` ; `LOCAL-STORAGE SECTION` réinitialisée à chaque CALL |
+| Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` ; `LOCAL-STORAGE SECTION` réinitialisée à chaque CALL ; constantes `78 nom VALUE` et `01 nom CONSTANT [AS]` (littéral, figurative, `ALL` littéral ou expression entière de `cb_evaluate_expr`, toutes opérations de même priorité au niveau 78), substituées à chaque emploi comme le scanner de cobc, y compris `PIC X(nom)` ; `START OF`, `NEXT`, `LENGTH OF` et `FROM` refusés |
 | Édition numérique | Signe fixe `+`/`-`, `9` et point décimal explicite ; `Z` initiaux suivis de `9` obligatoires ; rendu depuis une source numérique, copie brute vers texte |
 | Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON` (objet qualifié `OF`/`IN` compris), `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, y compris de groupe avec figurative ou `ALL` (répétée sur la taille du groupe), listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
@@ -119,7 +119,7 @@ Ces résultats portent sur les entrées testées.
 | Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03 lu par un ACCEPT tue le programme par SIGINT comme `cob_raise`, arrêt nommé si un fichier est encore ouvert, libcob perdant alors ses tampons) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER`, `UNTIL EXIT` et `FOREVER`, `EXIT PERFORM [CYCLE]` dans un PERFORM en ligne (étiquettes de sortie et de cycle de codegen.c) |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` (hors section : fin de la « MAIN SECTION » implicite de cobc, avant la première SECTION), `EXIT` nu sans effet |
-| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
+| Console | `DISPLAY` de champs, littéraux (signés compris) et fonctions alphanumériques, clauses `UPON` et `[WITH] NO ADVANCING` dans tout ordre, plusieurs listes avec leurs clauses dans une instruction (`display_atom`), `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
 | Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Registres | `LENGTH [OF]` d'un article, d'un littéral ou d'une fonction (`cb_build_length` : littéral pour une taille fixe, somme sur l'OCCURS DEPENDING actif sinon, FUNCTION LENGTH pour une sous-chaîne) ; `RETURN-CODE` (BINARY-LONG par programme, partagé par les programmes contenus, recopié de l'appelé après CALL, conservé entre les CALL, code de sortie de STOP RUN et du GOBACK principal) |
 | Tri de table | `SORT table [ON ASCENDING/DESCENDING KEY [clés]]… [WITH DUPLICATES]` comme `cob_table_sort` (stable, offset de clé relatif à son parent, clé OCCURS par défaut, ODO actif) |
@@ -133,7 +133,7 @@ Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-niveau 78, REDEFINES indirects, USAGE hors liste (POINTER, COMP-1/2, COMP-X…), images
+REDEFINES indirects, USAGE hors liste (POINTER, COMP-1/2, COMP-X…), images
 éditées hors du sous-ensemble décrit ci-dessous, fonctions intrinsèques hors
 liste ci-dessous, CALL d'un programme ni converti ni sûrement absent,
 STOP identifiant,

@@ -4,7 +4,8 @@ of a function result, an IF ended by an enclosing scope terminator, comment
 entries without IDENTIFICATION DIVISION, CLASS with figurative constants, an
 FD with a numeric record, CBL/PROCESS lines, EXIT SECTION of the implicit
 MAIN SECTION, LOCAL-STORAGE, READ KEY of an item no key starts at, STOP RUN
-RETURNING and Z literals, configuration paragraphs in any order."""
+RETURNING and Z literals, configuration paragraphs in any order, DISPLAY
+clauses, FUNCTION TRIM, level 78 and 01 CONSTANT."""
 from __future__ import annotations
 
 import unittest
@@ -52,6 +53,18 @@ class RealFormsFrontendTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
                 Parser(source).parse()
 
+    def test_constant_refusals_follow_cobc(self):
+        cases = {
+            "a constant may not be used here": program("78 c value 1. 01 c pic x.", "stop run."),
+            "not an unsigned positive integer": program("78 c value -1. 01 x pic x(c).", "stop run."),
+            "CONSTANT item not at 01 level": program("01 g. 05 c constant 1.", "stop run."),
+            "Divide by ZERO": program("78 c value 1 / 0.", "stop run."),
+            "invalid operator": program('78 c value "a" "b".', "stop run."),
+        }
+        for message, source in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
+                Parser(source).parse()
+
     def test_parser_forms_cobc_accepts(self):
         # Configuration paragraphs in any order or empty, a missing period
         # before the next SELECT, two 01 items of one name (a warning).
@@ -76,7 +89,7 @@ class RealFormsNativeTests(unittest.TestCase):
     def test_fixtures_match_cobc(self):
         for name in ("table_sort", "scope_and_function_forms", "numeric_record", "compiler_options",
                      "exit_implicit_section", "indexed_missing_key", "stop_run_status",
-                     "evaluate_literal_when"):
+                     "evaluate_literal_when", "display_clauses", "function_trim", "constants_78"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

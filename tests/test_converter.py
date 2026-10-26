@@ -33,7 +33,7 @@ class FrontendTests(unittest.TestCase):
     def test_reject_unsupported_instead_of_skipping(self):
         cases = [
             program("call 'external'."), program("alter finish to proceed to other."),
-            program("open input file-a."), program("display function current-date."),
+            program("open input file-a."),
             program("exec sql select 1 end-exec."), program("alter p to proceed to q."),
             program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),

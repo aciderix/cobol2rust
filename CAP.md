@@ -87,7 +87,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T23:23:25+00:00 (commit `63ea97f8d6`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-25T23:50:11+00:00 (commit `783812c95f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -97,10 +97,10 @@ Dernière mesure : 2026-10-25T23:23:25+00:00 (commit `63ea97f8d6`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 246 | 879 | 633 | 0 |
-| **Total** | | **3593** | **970** | **1617** | **647** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 306 | 879 | 573 | 0 |
+| **Total** | | **3593** | **1030** | **1617** | **587** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T23:23:25+00:00, commit `63ea97f8d6`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T23:50:11+00:00, commit `783812c95f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,16 +111,16 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T23:23:25+00:00, commit `
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 89 × USAGE/clause non pris en charge
-2. 51 × expression non prise en charge: NO
-3. 37 × niveau de donnée attendu
-4. 22 × niveaux pris en charge: 01-49, 66, 77 et 88
-5. 21 × PIC numérique limité à 18 chiffres
-6. 18 × . attendu
-7. 17 × CALL USING limité aux identifiants BY REFERENCE/CONTENT
-8. 14 × clause SELECT non prise en charge
-9. 13 × paragraphe CONFIGURATION non pris en charge
-10. 12 × DISPLAY accepte uniquement champs et littéraux simples
+1. 37 × niveau de donnée attendu
+2. 22 × PIC numérique limité à 18 chiffres
+3. 18 × . attendu
+4. 17 × CALL USING limité aux identifiants BY REFERENCE/CONTENT
+5. 15 × USAGE/clause non pris en charge: POINTER
+6. 14 × clause SELECT non prise en charge
+7. 13 × paragraphe CONFIGURATION non pris en charge
+8. 13 × CALL callee: programme non converti ou routine système non pris en charge
+9. 12 × CALL USING limité à BY REFERENCE et BY CONTENT
+10. 11 × fichier non déclaré: FILE
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -234,3 +234,17 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Résultat : **970/3593** acceptées, cobc 1617, à examiner 13 → 0 ; six
   corpus d'origine inchangés à 724/2458 (écart 14) ; écart de la testsuite
   633. Exécution inchangée. Émission NIST 451/458.
+- 2026-10-26 — Premiers blocages de la testsuite : clauses DISPLAY dans tout
+  ordre et `NO ADVANCING` sans `WITH` (plusieurs listes par instruction,
+  `display_atom` ; opérandes `x` sans arithmétique, littéral signé affiché
+  avec son signe), DISPLAY et STRING de fonctions alphanumériques, FUNCTION
+  TRIM [LEADING|TRAILING] (`cob_intr_trim`), constantes `78` et `01
+  CONSTANT` (substitution du scanner `cb_add_78`, `cb_evaluate_expr`, `PIC
+  X(nom)`), CANCEL d'un programme actif (`P_cancel` : erreur libcob,
+  code 1). Testsuite **246 → 306** acceptées, total **970 → 1030**/3593
+  (cobc 1617, à examiner 0) ; six corpus d'origine inchangés (724). Des 60
+  sources débloquées, exécutées face à cobc hors mesure : 49 identiques, 11
+  arrêts nommés (sous-chaîne hors bornes lue par cobc au-delà du champ,
+  troncature native, CALL non converti), aucune sortie divergente après
+  correction de CANCEL. Exécution des corpus inchangée ; NIST 451/458,
+  échantillon de 8 programmes (EVALUATE, CANCEL) conforme 173/173 PASS.

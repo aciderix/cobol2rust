@@ -23,6 +23,12 @@ class Token:
         return self.text if self.string else self.text.upper()
 
 
+@dataclass(frozen=True)
+class ConstantToken(Token):
+    """The value of a level 78 constant where its name was used (scanner.l)."""
+    constant: str = field(default="", compare=False)
+
+
 def fixed_fragment(area: str, quotation=None):
     """Read columns 8..72, retaining GnuCOBOL's column-72 quote state."""
     consecutive = False
@@ -617,6 +623,7 @@ class Parser:
         self.currency = "$"
         self.i = 0
         self.fields = {}
+        self.constants = {}
         self.files = {}
         self.conditions = {}
         self.data_stack = []
@@ -2658,7 +2665,7 @@ class Parser:
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
-        "RANDOM": (0, "number"),
+        "RANDOM": (0, "number"), "TRIM": (1, "text"),
     }
 
     def function_call(self):
@@ -2690,6 +2697,13 @@ class Parser:
                 if self.at(")"):
                     continue
                 args.append(self.expr())
+                ahead = self.tokens[self.i + self.at(",")]
+                if name.key == "TRIM" and len(args) == 1 and not ahead.string and ahead.key in {"LEADING", "TRAILING"}:
+                    # parser.y trim_args: the direction is a second argument.
+                    self.accept(",")
+                    direction = {"LEADING": "1", "TRAILING": "2"}[self.take().key]
+                    self.expect(")")
+                    return Expr("function", (name.key, tuple(args) + (Expr("number", (direction,)),)))
         if name.key == "RANDOM":
             count = len(args) if len(args) <= 1 else 0
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
@@ -2794,6 +2808,12 @@ class Parser:
                 size = Expr("*", (size, Expr("number", (str(c.occurs),))))
             total = size if total is None else Expr("+", (total, size))
         return total
+
+    def no_advancing(self) -> bool:
+        # scanner.l: ("WITH"[ ,;\n]+)?"NO"[ ,;\n]+"ADVANCING" is one token.
+        i = self.i + (not self.t.string and self.t.key == "WITH")
+        return all(not self.tokens[i + k].string and self.tokens[i + k].key == word
+                   for k, word in enumerate(("NO", "ADVANCING")))
 
     def operand_start(self):
         """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
@@ -3295,28 +3315,51 @@ class Parser:
                 invalid, valid = self.key_handlers(files[0], "END-WRITE")
             return Stmt("write", (files[0], record.name, value, advancing, invalid, valid), line)
         if verb == "DISPLAY":
-            values = []
-            while self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}:
-                if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
-                    break  # scanner.l folds NO DATA (RECEIVE) into one token
-                values.append(self.expr())
-            if not values:
-                self.error("DISPLAY sans opérande")
-            device = "stdout"
-            if self.accept("UPON"):
-                # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
-                target = self.take().key
-                device = self.mnemonics.get(target, self.DEVICES.get(target))
-                device = {"console": "stdout"}.get(device, device)
-                if device not in {"stdout", "stderr"}:
-                    self.error(f"DISPLAY UPON {target} non pris en charge")
-            newline = True
-            if self.accept("WITH"):
-                self.expect("NO")
-                self.expect("ADVANCING")
-                newline = False
+            # parser.y display_list _x_list: each display_atom is a list of
+            # values followed by its display_clauses, emitted on its own.
+            atoms = []
+            while True:
+                values = []
+                while (self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}) and not self.no_advancing():
+                    if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
+                        break  # scanner.l folds NO DATA (RECEIVE) into one token
+                    # x_list: identifiers and literals, a sign touching digits
+                    # making a signed literal (scanner.l).
+                    values.append(self.expr(primary=True))
+                device, newline, seen = "stdout", True, set()
+                while True:
+                    if self.at("UPON"):
+                        clause = "UPON"
+                        self.take()
+                        # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
+                        target = self.take().key
+                        device = self.mnemonics.get(target, self.DEVICES.get(target))
+                        device = {"console": "stdout"}.get(device, device)
+                        if device not in {"stdout", "stderr"}:
+                            self.error(f"DISPLAY UPON {target} non pris en charge")
+                    elif self.no_advancing():
+                        clause = "NO ADVANCING"
+                        self.accept("WITH")
+                        self.take()
+                        self.take()
+                        newline = False
+                    elif self.at("WITH"):
+                        self.error(f"DISPLAY WITH {self.tokens[self.i + 1].text} (écran) non pris en charge")
+                    else:
+                        break
+                    if clause in seen:
+                        # check_repeated: emit_duplicate_clause_message.
+                        self.error(f"duplicate {clause} clause")
+                    seen.add(clause)
+                if not values:
+                    if atoms and not seen:
+                        break
+                    self.error("DISPLAY sans opérande")
+                atoms.append(Stmt("display", (values, newline, device), line))
+                if not seen:
+                    break
             self.accept("END-DISPLAY")
-            return Stmt("display", (values, newline, device), line)
+            return atoms[0] if len(atoms) == 1 else Stmt("sequence", (atoms,), line)
         if verb == "ACCEPT":
             if not self.t.string and self.t.key in self.cds:
                 # ACCEPT cd-name [MESSAGE] COUNT: CB_PENDING, nothing generated.
@@ -3890,9 +3933,16 @@ class Parser:
         self.debug_target()
         return ref
 
-    def string_operand(self, delimiter=False):
-        """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative."""
+    def string_operand(self, delimiter=False, function=False):
+        """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative;
+        an alphanumeric FUNCTION in STRING."""
         t = self.t
+        if function and not t.string and t.key == "FUNCTION":
+            self.take()
+            value = self.function_call()
+            if value.op == "function" and self.FUNCTIONS[value.args[0]][1] != "text":
+                self.error(f"STRING de FUNCTION {value.args[0]} numérique non pris en charge")
+            return value
         if not t.string and t.key in INSPECT_FIGURATIVES:
             self.take()
             return Expr("all", (self.figurative_value(t.key),))
@@ -3941,10 +3991,10 @@ class Parser:
     def string_statement(self, line):
         groups, items = [], []
         while not self.at("INTO"):
-            items.append(self.string_operand())
+            items.append(self.string_operand(function=True))
             if self.accept("DELIMITED"):
                 self.accept("BY")
-                delimiter = None if self.accept("SIZE") else self.string_operand()
+                delimiter = None if self.accept("SIZE") else self.string_operand(function=True)
                 groups.append((tuple(items), delimiter))
                 items = []
         if items:

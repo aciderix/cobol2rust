@@ -315,8 +315,11 @@ class Emitter:
 
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
-        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH"}
+        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM"}
         values = []
+        direction = "0"
+        if name == "TRIM" and len(args) == 2:
+            args, direction = args[:1], args[1].args[0]
         for a in args:
             if textual:
                 if a.op == "var":
@@ -362,6 +365,8 @@ class Emitter:
             return f"runtime::intrinsic::numval(&{values[0]}, {str(name == 'NUMVAL-C').lower()}, {currency})"
         if name == "LENGTH":
             return f"runtime::intrinsic::length(&{values[0]})"
+        if name == "TRIM":
+            return f"runtime::intrinsic::trim(&{values[0]}, {direction})"
         raise CobolError(f"FUNCTION {name} non prise en charge")
 
     def occurs(self, table):
@@ -945,6 +950,19 @@ class Emitter:
                 if e.op == "report_counter":
                     values.append(f"self.{self.reports[e.args[0]]}.counter_display({quoted(e.args[1])})")
                     continue
+                if e.op in {"function", "refmod"} and self.kind(e) == "text":
+                    # cob_display of the alphanumeric result field, as stored.
+                    values.append(f"Value::Bytes(({self.expression(e)}).bytes())")
+                    continue
+                if e.op == "function":
+                    raise CobolError(f"DISPLAY de FUNCTION {e.args[0]} numérique non pris en charge")
+                if e.op in {"unary-", "unary+"} and e.args[0].op == "number":
+                    # A signed numeric literal is shown with its sign.
+                    literal = ("-" if e.op == "unary-" else "+") + e.args[0].args[0]
+                    if getattr(self.program, "decimal_comma", False):
+                        literal = literal.replace(".", ",")
+                    values.append(f"Value::text({quoted(literal)})")
+                    continue
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
                 # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
@@ -1081,6 +1099,8 @@ class Emitter:
     def string_operand(self, e):
         if e.op == "var":
             return f"storage_runtime::Operand::of(&{self.reference(e.args[0])})"
+        if e.op in {"function", "refmod"}:
+            return f"storage_runtime::Operand::new(({self.expression(e)}).bytes(), false)"
         data = "vec![" + ", ".join(f"{ord(c)}u8" for c in e.args[0]) + "]"
         return f"storage_runtime::Operand::new({data}, {str(e.op == 'all').lower()})"
 
@@ -2166,10 +2186,15 @@ def generate_unit(emitters):
              "    /// CANCEL: the next CALL finds the program in its initial state.",
              "    fn cancel(&mut self, name: &str) {",
              "        match name {"]
+    # P_cancel of codegen.c: cob_fatal_error (COB_FERROR_CANCEL) for an
+    # active module, the main program included.
+    active = 'runtime::fatal_error(b"attempt to CANCEL active program")'
+    if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
+        unit.append(f"            {quoted(emitters[0].program.entry_name)} => {active},")
     for index, emitter in enumerate(subprograms, 1):
         cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_files(); }}" \
             if cancels_files(emitter) else f"self.p{index} = None;"
-        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ runtime::fail(\"CANCEL of an active program\"); }} {cancel} }},")
+        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ {active}; }} {cancel} }},")
     unit += ["            _ => {}", "        }", "    }"]
     if global_uses:
         unit += ["    /// <owner>_ (section label): a GLOBAL USE procedure of an active program.",

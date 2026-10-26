@@ -602,7 +602,8 @@ conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
 
 Port de libcob/intrinsic.c pour INTEGER, INTEGER-PART, MOD, REM, FACTORIAL,
 SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
-ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
+ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE, TRIM
+[LEADING|TRAILING] (`cob_intr_trim`, résultat vide pour un argument tout en espaces),
 INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
 LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
 Restent refusées : RANDOM et la modification de référence d'un résultat
