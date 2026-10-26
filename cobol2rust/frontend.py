@@ -2983,8 +2983,18 @@ class Parser:
         "HIGHEST-ALGEBRAIC": (1, "number"), "LOWEST-ALGEBRAIC": (1, "number"),
         "TEST-DATE-YYYYMMDD": (1, "number"), "TEST-DAY-YYYYDDD": (1, "number"),
         "YEAR-TO-YYYY": (-1, "number"), "DATE-TO-YYYYMMDD": (-1, "number"), "DAY-TO-YYYYDDD": (-1, "number"),
+        "FORMATTED-DATE": (2, "text"), "FORMATTED-TIME": (-2, "text"), "FORMATTED-DATETIME": (-3, "text"),
+        "FORMATTED-CURRENT-DATE": (1, "text"), "TEST-FORMATTED-DATETIME": (2, "number"),
+        "INTEGER-OF-FORMATTED-DATE": (2, "number"), "SECONDS-FROM-FORMATTED-TIME": (2, "number"),
     }
-    MAX_ARGUMENTS = {"NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3}
+    MAX_ARGUMENTS = {"NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
+                     "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
+    # valid_format (tree.c): the formats a literal first argument may have.
+    DATE_TIME_FORMATS = {"FORMATTED-CURRENT-DATE": ("datetime",), "FORMATTED-DATE": ("date",),
+                         "FORMATTED-DATETIME": ("datetime",), "FORMATTED-TIME": ("time",),
+                         "INTEGER-OF-FORMATTED-DATE": ("date", "datetime"),
+                         "SECONDS-FROM-FORMATTED-TIME": ("time", "datetime"),
+                         "TEST-FORMATTED-DATETIME": ("time", "date", "datetime")}
 
     def function_call(self):
         """FUNCTION name [(exp_list)] [(start:[length])]: a reference
@@ -3008,12 +3018,21 @@ class Parser:
             self.error(f"FUNCTION {name.text} non prise en charge")
         count, _ = self.FUNCTIONS[name.key]
         args = []
+        system_offset = False
         # A function without arguments: "(" starts a reference modification.
         if self.at("(") and (count != 0 or name.key == "RANDOM" or self.tokens[self.i + 1].key == ")") and self.accept("("):
             while not self.accept(")"):
                 self.accept(",")
                 if self.at(")"):
                     continue
+                if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"} and self.at("SYSTEM-OFFSET"):
+                    # formatted_datetime_args: the implicit last argument.
+                    self.take()
+                    self.expect(")")
+                    if len(args) == {"FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}[name.key]:
+                        self.error("cannot specify offset and SYSTEM-OFFSET at the same time")
+                    system_offset = True
+                    break
                 args.append(self.expr())
                 ahead = self.tokens[self.i + self.at(",")]
                 if name.key == "TRIM" and len(args) == 1 and not ahead.string and ahead.key in {"LEADING", "TRAILING"}:
@@ -3024,6 +3043,12 @@ class Parser:
                     return Expr("function", (name.key, tuple(args) + (Expr("number", (direction,)),)))
         if name.key == "RANDOM":
             count = len(args) if len(args) <= 1 else 0
+        if name.key in self.DATE_TIME_FORMATS and args:
+            # valid_const_date_time_args: a literal format is checked here.
+            from .datetime_formats import valid_format
+            if args[0].op == "text" and not valid_format(self.DATE_TIME_FORMATS[name.key], args[0].args[0],
+                                                         "," if self.decimal_comma else "."):
+                self.error(f"FUNCTION '{name.key}' has invalid date/time format")
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
                 or len(args) > self.MAX_ARGUMENTS.get(name.key, len(args)) \
                 or (name.key in {"SUBSTITUTE", "SUBSTITUTE-CASE"} and len(args) % 2 == 0):
@@ -3054,6 +3079,8 @@ class Parser:
                     return Expr("number", (str(getattr(f, "parse_size", f.size)),))
             if arg.op != "function":
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
+        if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"}:
+            args.append(Expr("number", ("1" if system_offset else "0",)))
         return Expr("function", (name.key, tuple(args)))
 
     def using_list(self, ended):

@@ -86,7 +86,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T14:46:13+00:00 (commit `cbdf79599d`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T17:18:41+00:00 (commit `2bf5f0fbcf`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +96,10 @@ Dernière mesure : 2026-10-26T14:46:13+00:00 (commit `cbdf79599d`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 453 | 879 | 426 | 0 |
-| **Total** | | **3593** | **1177** | **1617** | **440** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 467 | 879 | 412 | 0 |
+| **Total** | | **3593** | **1191** | **1617** | **426** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T14:46:13+00:00, commit `cbdf79599d`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T17:18:41+00:00, commit `2bf5f0fbcf`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -114,12 +114,12 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 2. 14 × USAGE/clause non pris en charge: POINTER
 3. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
 4. 12 × clause SELECT non prise en charge
-5. 9 × expression non prise en charge: LINE
-6. 8 × . attendu
-7. 8 × PROGRAM-ID attendu
-8. 7 × USAGE/clause non pris en charge: ANY
-9. 7 × USAGE/clause non pris en charge: DEPENDING
-10. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
+5. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
+6. 9 × expression non prise en charge: LINE
+7. 8 × . attendu
+8. 8 × PROGRAM-ID attendu
+9. 7 × USAGE/clause non pris en charge: ANY
+10. 7 × USAGE/clause non pris en charge: DEPENDING
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -339,3 +339,11 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   espace (refusé sous cobol85). Testsuite **423 → 453**, total
   **1147 → 1177**/3593, à examiner 0. Des 30 sources débloquées, exécutées
   face à cobc : 30 identiques. Exécution des corpus inchangée. NIST 451/458.
+- 2026-10-26 — Fonctions ISO 8601 : FORMATTED-DATE, FORMATTED-TIME,
+  FORMATTED-DATETIME (offset ou SYSTEM-OFFSET), FORMATTED-CURRENT-DATE,
+  TEST-FORMATTED-DATETIME, INTEGER-OF-FORMATTED-DATE,
+  SECONDS-FROM-FORMATTED-TIME (intrinsic.c, `valid_const_date_time_args`
+  de tree.c pour un format littéral). Testsuite **453 → 467**, total
+  **1177 → 1191**/3593, à examiner 0. Des 14 sources débloquées, exécutées
+  face à cobc : 14 identiques (2 autres tests ISO 8601 restent bloqués par
+  EXCEPTION-STATUS). Exécution des corpus inchangée. NIST 451/458.

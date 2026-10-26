@@ -65,6 +65,12 @@ class RealFormsFrontendTests(unittest.TestCase):
                        program("01 n pic 9(4).", "move function abs(1 2) to n. stop run.")):
             with self.subTest(source=source), self.assertRaisesRegex(CobolError, "wrong number of arguments"):
                 Parser(source).parse()
+        cases = {"has invalid date/time format": 'move function formatted-date("YYMMDD", 1) to x. stop run.',
+                 "SYSTEM-OFFSET at the same time":
+                     'move function formatted-time("hhmmss", 1, 0, system-offset) to x. stop run.'}
+        for message, body in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(CobolError, message):
+                Parser(program("01 x pic x(9).", body)).parse()
         self.assertEqual(frontend.lex('""')[0].text, " ")
         previous, frontend.STD = frontend.STD, "cobol85"
         try:
@@ -121,7 +127,8 @@ class RealFormsNativeTests(unittest.TestCase):
                      "digits_38", "rounded_modes", "delete_file", "c_type_usages", "repository_intrinsic",
                      "comp6", "directives", "value_negative_zero", "picture_p_usages",
                      "mf_directives", "program_header_forms", "line_advancing_file", "packed_truncation",
-                     "function_display", "function_more"):
+                     "function_display", "function_more",
+                     "function_iso8601"):
             with self.subTest(name=name):
                 report = verify(FIXTURES / f"{name}.cob")
                 self.assertTrue(report["match"], report)

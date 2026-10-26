@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T14:46:13+00:00",
- "git_head": "cbdf79599df406953144ebfd11d0d4382b04f133",
- "implementation_sha256": "263819e0240d82bff01fb8459bdd649cebf94ab4f2279981c84d28d01bf18c1e",
+ "measured_at": "2026-10-26T17:18:41+00:00",
+ "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
+ "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1177,
+  "accepted": 1191,
   "cobc_accepted": 1617,
-  "gap": 440,
+  "gap": 426,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 453,
+   "accepted": 467,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 426,
+   "gap": 412,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -977,40 +977,8 @@
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
-     "run_functions-031/prog.cob",
-     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
-    ],
-    [
-     "run_functions-032/prog.cob",
-     "FUNCTION FORMATTED-DATE non prise en charge"
-    ],
-    [
-     "run_functions-033/prog.cob",
-     "FUNCTION FORMATTED-DATE non prise en charge"
-    ],
-    [
-     "run_functions-034/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-035/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
-    ],
-    [
      "run_functions-036/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-037/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-038/prog.cob",
-     "FUNCTION FORMATTED-TIME non prise en charge"
-    ],
-    [
-     "run_functions-044/prog.cob",
-     "FUNCTION INTEGER-OF-FORMATTED-DATE non prise en charge"
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-047/prog.cob",
@@ -1089,32 +1057,12 @@
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
-     "run_functions-089/prog.cob",
-     "FUNCTION SECONDS-FROM-FORMATTED-TIME non prise en charge"
-    ],
-    [
      "run_functions-090/prog.cob",
      "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
     ],
     [
      "run_functions-091/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
-     "run_functions-104/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-105/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-106/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
-    ],
-    [
-     "run_functions-107/prog.cob",
-     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
     ],
     [
      "run_functions-108/prog.cob",
@@ -1130,11 +1078,7 @@
     ],
     [
      "run_functions-119/prog.cob",
-     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
-    ],
-    [
-     "run_functions-120/prog.cob",
-     "FUNCTION FORMATTED-DATETIME non prise en charge"
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -2215,6 +2159,10 @@
      12
     ],
     [
+     "FUNCTION EXCEPTION-STATUS non prise en charge",
+     9
+    ],
+    [
      "expression non prise en charge: LINE",
      9
     ],
@@ -2239,10 +2187,6 @@
      7
     ],
     [
-     "FUNCTION EXCEPTION-STATUS non prise en charge",
-     7
-    ],
-    [
      "USAGE/clause non pris en charge: IS",
      7
     ]
@@ -2250,9 +2194,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T14:46:13+00:00",
-  "git_head": "cbdf79599df406953144ebfd11d0d4382b04f133",
-  "implementation_sha256": "263819e0240d82bff01fb8459bdd649cebf94ab4f2279981c84d28d01bf18c1e",
+  "measured_at": "2026-10-26T17:18:41+00:00",
+  "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
+  "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

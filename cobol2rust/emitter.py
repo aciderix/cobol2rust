@@ -318,6 +318,25 @@ class Emitter:
             return f"({self.comparison_order(*args)}) {operator} std::cmp::Ordering::Equal"
         raise CobolError(f"expression inconnue: {op}")
 
+    DATE_TIME_TEXT = {"FORMATTED-DATE": {0}, "FORMATTED-TIME": {0}, "FORMATTED-DATETIME": {0},
+                      "FORMATTED-CURRENT-DATE": {0}, "TEST-FORMATTED-DATETIME": {0, 1},
+                      "INTEGER-OF-FORMATTED-DATE": {0, 1}, "SECONDS-FROM-FORMATTED-TIME": {0, 1}}
+
+    def text_argument(self, name, a):
+        if a.op == "var":
+            # The function sees the argument's storage bytes.
+            return f"Value::Bytes(storage_runtime::Operand::of(&{self.reference(a.args[0])}).data)"
+        if a.op == "text":
+            return text_value(a.args[0])
+        if a.op == "function" and self.kind(a) == "text":
+            return self.expression(a)
+        raise CobolError(f"FUNCTION {name}: argument alphanumérique attendu")
+
+    def numeric_argument(self, name, a):
+        if self.kind(a) != "number" or a.op == "all":
+            raise CobolError(f"FUNCTION {name}: argument numérique attendu")
+        return self.expression(a)
+
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
         textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM",
@@ -325,6 +344,15 @@ class Emitter:
                            "STORED-CHAR-LENGTH"}
         if name in {"HIGHEST-ALGEBRAIC", "LOWEST-ALGEBRAIC"}:
             return f"Value::number({quoted(self.algebraic_limit(name, args[0]))})"
+        if name in self.DATE_TIME_TEXT:
+            # intrinsic.c ISO 8601 functions: formats and formatted values are
+            # alphanumeric, the other arguments numeric.
+            values = [self.text_argument(name, a) if i in self.DATE_TIME_TEXT[name] else self.numeric_argument(name, a)
+                      for i, a in enumerate(args)]
+            if name == "SECONDS-FROM-FORMATTED-TIME":
+                return (f"runtime::intrinsic::seconds_from_formatted_time(&{values[0]}, &{values[1]}, "
+                        f"{str(args[1].op == 'text').lower()})")
+            return f"runtime::intrinsic::{name.lower().replace('-', '_')}(&[{', '.join(values)}])"
         values = []
         direction = "0"
         if name == "TRIM" and len(args) == 2:
@@ -457,7 +485,8 @@ class Emitter:
                 raise CobolError("DISPLAY de FUNCTION ABS de cet argument non pris en charge")
             return f"runtime::intrinsic::abs_field({self.reference(arg.args[0])}.snapshot())"
         if name in {"ORD", "ORD-MAX", "ORD-MIN", "LENGTH", "INTEGER-OF-DATE", "INTEGER-OF-DAY",
-                    "STORED-CHAR-LENGTH", "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD"}:
+                    "STORED-CHAR-LENGTH", "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD",
+                    "TEST-FORMATTED-DATETIME", "INTEGER-OF-FORMATTED-DATE"}:
             return f"runtime::intrinsic::uint_field({self.expression(e)})"
         if name in {"DATE-OF-INTEGER", "DAY-OF-INTEGER"}:
             return f"runtime::intrinsic::display_field({self.expression(e)}, {8 if name == 'DATE-OF-INTEGER' else 7})"
@@ -465,7 +494,7 @@ class Emitter:
                     "NUMVAL", "NUMVAL-C", "PRESENT-VALUE", "ANNUITY", "VARIANCE", "STANDARD-DEVIATION", "SQRT",
                     "LOG", "LOG10", "EXP", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "E", "PI",
                     "FRACTION-PART", "EXP10", "HIGHEST-ALGEBRAIC", "LOWEST-ALGEBRAIC",
-                    "YEAR-TO-YYYY", "DATE-TO-YYYYMMDD", "DAY-TO-YYYYDDD"}:
+                    "YEAR-TO-YYYY", "DATE-TO-YYYYMMDD", "DAY-TO-YYYYDDD", "SECONDS-FROM-FORMATTED-TIME"}:
             def scaled(x):
                 return isinstance(x, Expr) and ((x.op == "var" and x.args[0].start is None and x.args[0].name in self.program.fields
                                                  and self.program.fields[x.args[0].name].scale < 0)

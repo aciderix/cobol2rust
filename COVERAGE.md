@@ -623,7 +623,9 @@ CONCAT, SUBSTITUTE, SUBSTITUTE-CASE, STORED-CHAR-LENGTH, HIGHEST-ALGEBRAIC,
 LOWEST-ALGEBRAIC, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
 DATE-TO-YYYYMMDD et DAY-TO-YYYYDDD, et le DISPLAY du champ résultat des
 fonctions numériques (`cob_alloc_field`, `cob_alloc_set_field_uint`, copie
-d'argument) ; voir le README, « Fonctions intrinsèques ».
+d'argument) ; puis les fonctions ISO 8601 (FORMATTED-*, TEST-FORMATTED-DATETIME,
+INTEGER-OF-FORMATTED-DATE, SECONDS-FROM-FORMATTED-TIME) ; voir le README,
+« Fonctions intrinsèques ».
 
 ## Progression : ALTER, noms de procédure, dialecte cobol85
 

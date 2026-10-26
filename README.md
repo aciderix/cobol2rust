@@ -379,7 +379,15 @@ NUMVAL-C, LENGTH, HIGHEST-ALGEBRAIC et LOWEST-ALGEBRAIC (selon l'usage de
 l'argument, à la compilation), INTEGER-OF-DATE/DAY, DATE-OF-INTEGER,
 DAY-OF-INTEGER, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
 DATE-TO-YYYYMMDD, DAY-TO-YYYYDDD (année courante de `localtime`, non de
-`COB_CURRENT_DATE`, comme libcob), CURRENT-DATE et WHEN-COMPILED.
+`COB_CURRENT_DATE`, comme libcob), CURRENT-DATE et WHEN-COMPILED, et les
+fonctions ISO 8601 FORMATTED-DATE, FORMATTED-TIME, FORMATTED-DATETIME (offset
+explicite ou SYSTEM-OFFSET), FORMATTED-CURRENT-DATE, TEST-FORMATTED-DATETIME,
+INTEGER-OF-FORMATTED-DATE et SECONDS-FROM-FORMATTED-TIME : formats contrôlés
+à la compilation quand ils sont littéraux (`valid_const_date_time_args`),
+semaine ISO, passage à UTC de `Z`, signe d'offset de `add_offset_time`
+(perdu sous une heure, comme libcob), résultat en espaces pour un argument
+invalide. SECONDS-FROM-FORMATTED-TIME d'une date-heure contenue dans une
+donnée (lue en chaîne C au-delà de la donnée par libcob) est un arrêt nommé.
 
 `DISPLAY` d'un résultat numérique montre le champ temporaire de libcob :
 copie de l'argument retenu pour MAX, MIN, MEDIAN (tri stable de glibc) et
@@ -390,9 +398,9 @@ non signé de 9 chiffres pour ORD, LENGTH, INTEGER-OF-DATE… Restent refusés
 le DISPLAY de RANDOM (double imprimé par `%G`), d'un argument PICTURE P
 (échelle négative) et d'une expression en argument de MAX/MIN/MEDIAN. Un
 littéral alphanumérique vide vaut une espace, comme le scanner de cobc, et
-est refusé sous `-std=cobol85`. Les fonctions FORMATTED-*, LOCALE-*,
+est refusé sous `-std=cobol85`. Les fonctions LOCALE-*,
 MODULE-*, EXCEPTION-*, NUMVAL-F, TEST-NUMVAL*, BIT-OF, COMBINED-DATETIME,
-SECONDS-* et les fonctions utilisateur restent refusées.
+SECONDS-PAST-MIDNIGHT et les fonctions utilisateur restent refusées.
 
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
 

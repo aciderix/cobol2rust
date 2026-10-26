@@ -8,8 +8,8 @@
 ## État courant — 26 octobre 2026 (à tenir à jour à chaque commit)
 
 Branche de travail `claude/hopeful-allen-q389mo`. Mesure des corpus réels :
-**1177/3593 sources acceptées** (cobc 1617, écart 440, à examiner 0) ;
-testsuite GnuCOBOL 453/1135, six corpus d'origine 724/2458. Exécution
+**1191/3593 sources acceptées** (cobc 1617, écart 426, à examiner 0) ;
+testsuite GnuCOBOL 467/1135, six corpus d'origine 724/2458. Exécution
 comparée inchangée : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
 52/61. NIST CCVS85 (non-régression) : 451/458 émissions, 427/427 conformes.
 
@@ -26,18 +26,22 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernières étapes : COPY REPLACING LEADING/TRAILING ; DISPLAY du champ
-résultat des fonctions numériques (`cob_alloc_field`, copies d'argument de
-MAX/MIN/MEDIAN, entiers non signés) et quinze fonctions de plus (README,
-« Fonctions intrinsèques »). Étape suivante préparée mais non intégrée : les
-fonctions ISO 8601 (FORMATTED-DATE/TIME/DATETIME/CURRENT-DATE,
-TEST-FORMATTED-DATETIME, INTEGER-OF-FORMATTED-DATE,
-SECONDS-FROM-FORMATTED-TIME : intrinsic.c lignes 1877-3130 et 5825-6990,
-`valid_const_date_time_args` de tree.c, `formatted_datetime_args` de
-parser.y avec l'argument implicite SYSTEM-OFFSET ; environ 16 sources).
-Blocages suivants : SCREEN SECTION (37), POINTER (14), CALL BY VALUE (13),
-clauses SELECT de verrouillage (12), DISPLAY ... LINE (9), RECURSIVE,
-FUNCTION-ID, ANY LENGTH, EXCEPTION-STATUS, fonctions MODULE-*/LOCALE-*.
+Dernières étapes (26 octobre) : COPY REPLACING LEADING/TRAILING ; DISPLAY du
+champ résultat des fonctions numériques et quinze fonctions de plus ;
+fonctions ISO 8601 (FORMATTED-*, TEST-FORMATTED-DATETIME,
+INTEGER-OF-FORMATTED-DATE, SECONDS-FROM-FORMATTED-TIME). Rien n'est en cours :
+l'arbre de travail est propre et la mesure à jour.
+
+Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
+SCREEN SECTION (37, « niveau de donnée attendu »), USAGE POINTER (14), CALL
+BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
+d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8), ANY LENGTH (7),
+EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
+modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
+(7), NUMVAL-F et TEST-NUMVAL* (4, `cob_check_numval`), fonctions LOCALE-*
+et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
+COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. Exécution : 3 programmes
+divergents et 6 délais du livre, 2 délais du cours restent à examiner.
 
 ## Historique
 
