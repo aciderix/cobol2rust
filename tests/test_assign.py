@@ -56,7 +56,6 @@ class ParseTests(unittest.TestCase):
 
     def test_refusals(self):
         for select, data in [("select f assign to display.", ""), ("select f assign to printer.", ""),
-                             ("select f assign to line advancing file 'x'.", ""),
                              ("select f assign using undeclared.", ""),
                              ("select f assign to dynamic undeclared.", ""),
                              ("select f assign to c.", "01 v pic x. 88 c value 'y'."),

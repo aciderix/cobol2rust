@@ -1,0 +1,47 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CTYPES.
+      * C type usages (COMP-5 with a fixed binary picture), BINARY-C-LONG
+      * and the default.conf reserved aliases BINARY-INT, INITIALISE,
+      * ORGANISATION.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT OUT-FILE ASSIGN TO "ctypes.txt"
+               ORGANISATION IS LINE SEQUENTIAL.
+       DATA DIVISION.
+       FILE SECTION.
+       FD OUT-FILE.
+       01 OUT-REC PIC X(20).
+       WORKING-STORAGE SECTION.
+       01 SS  SIGNED-SHORT.
+       01 US  UNSIGNED-SHORT.
+       01 SI  SIGNED-INT.
+       01 UI  UNSIGNED-INT.
+       01 SL  SIGNED-LONG.
+       01 UL  UNSIGNED-LONG.
+       01 CL  BINARY-C-LONG.
+       01 CLU BINARY-C-LONG UNSIGNED.
+       01 BI  BINARY-INT.
+       01 G.
+          05 G-A PIC X(3) VALUE "abc".
+          05 G-N PIC 9(3) VALUE 7.
+       PROCEDURE DIVISION.
+           MOVE -32768 TO SS  DISPLAY SS
+           SUBTRACT 1 FROM SS DISPLAY SS
+           MOVE 65535 TO US   DISPLAY US
+           ADD 1 TO US        DISPLAY US
+           MOVE -2147483648 TO SI DISPLAY SI
+           MOVE 4294967295 TO UI  DISPLAY UI
+           MOVE -9223372036854775807 TO SL DISPLAY SL
+           MOVE 18446744073709551615 TO UL DISPLAY UL
+           MOVE -5 TO CL  DISPLAY CL
+           MOVE 5 TO CLU  DISPLAY CLU
+           MOVE 2147483647 TO BI DISPLAY BI
+           DISPLAY FUNCTION LENGTH (SS) FUNCTION LENGTH (UI)
+                   FUNCTION LENGTH (UL) FUNCTION LENGTH (CL)
+           INITIALISE G
+           DISPLAY "[" G "]"
+           OPEN OUTPUT OUT-FILE
+           WRITE OUT-REC FROM "line"
+           CLOSE OUT-FILE
+           STOP RUN.

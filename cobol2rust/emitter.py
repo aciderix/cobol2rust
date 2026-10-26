@@ -12,6 +12,11 @@ def numeric_text(text):
     return re.sub(r"^([+-]?)\.", r"\g<1>0.", text)
 
 
+# cob_decimal_do_round options of ROUNDED MODE (runtime::round_mode).
+ROUNDING_MODES = {"TRUNCATION": 1, "PROHIBITED": 2, "AWAY-FROM-ZERO": 3, "NEAREST-TOWARD-ZERO": 4,
+                  "TOWARD-GREATER": 5, "TOWARD-LESSER": 6, "NEAREST-EVEN": 7}
+
+
 def quoted(text):
     escapes = {'"': '\\"', "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"}
     return '"' + ''.join(escapes.get(c, f"\\x{ord(c):02x}" if ord(c) < 32 or ord(c) == 127 else c) for c in text) + '"'
@@ -41,7 +46,7 @@ class Emitter:
         self.subprogram = subprogram
         # A main program with PROCEDURE DIVISION USING is a module (cobc
         # refuses -x): it runs as cobcrun calls it, without arguments.
-        self.module = not subprogram and bool(program.using)
+        self.module = not subprogram and (bool(program.using) or getattr(program, "returning_omitted", False))
         # CALL targets converted with this run unit (literal names).
         self.called = set(called or ())
         # ENTRY names of the run unit: unresolved until their program is loaded.
@@ -102,7 +107,7 @@ class Emitter:
             return "text" if e.args[0].start is not None else self.program.fields[e.args[0].name].kind
         if e.op in {"number", "text"}:
             return e.op
-        if e.op == "all":
+        if e.op in {"all", "refmod"}:
             return "text"
         if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class"}:
             return "bool"
@@ -255,6 +260,10 @@ class Emitter:
             return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
         if op == "function":
             return self.function(*args)
+        if op == "refmod":
+            value, start, length = args
+            length = f"Some(&({self.expression(length)}))" if length is not None else "None"
+            return f"runtime::refmod(&({self.expression(value)}), &({self.expression(start)}), {length})"
         if op == "alpha_class":
             # cob_is_alpha/upper/lower: spaces and letters of the C library's
             # classification; bytes above 127 depend on the locale.
@@ -311,8 +320,12 @@ class Emitter:
 
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
-        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH"}
+        textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM",
+                           "HEX-OF", "HEX-TO-CHAR"}
         values = []
+        direction = "0"
+        if name == "TRIM" and len(args) == 2:
+            args, direction = args[:1], args[1].args[0]
         for a in args:
             if textual:
                 if a.op == "var":
@@ -332,7 +345,7 @@ class Emitter:
                 values.append(self.expression(a))
         rust = {"INTEGER": "integer", "INTEGER-PART": "integer_part", "FACTORIAL": "factorial",
                 "CHAR": "char_of", "ORD": "ord", "UPPER-CASE": "upper_case", "LOWER-CASE": "lower_case",
-                "REVERSE": "reverse", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
+                "REVERSE": "reverse", "HEX-OF": "hex_of", "HEX-TO-CHAR": "hex_to_char", "INTEGER-OF-DATE": "integer_of_date", "INTEGER-OF-DAY": "integer_of_day",
                 "DATE-OF-INTEGER": "date_of_integer", "DAY-OF-INTEGER": "day_of_integer",
                 "SQRT": "sqrt_of", "LOG": "log", "LOG10": "log10", "EXP": "exp_of", "SIN": "sin",
                 "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of"}
@@ -358,6 +371,8 @@ class Emitter:
             return f"runtime::intrinsic::numval(&{values[0]}, {str(name == 'NUMVAL-C').lower()}, {currency})"
         if name == "LENGTH":
             return f"runtime::intrinsic::length(&{values[0]})"
+        if name == "TRIM":
+            return f"runtime::intrinsic::trim(&{values[0]}, {direction})"
         raise CobolError(f"FUNCTION {name} non prise en charge")
 
     def occurs(self, table):
@@ -448,7 +463,7 @@ class Emitter:
                     return True
                 if usage in {"Binary", "Native", "Register"}:
                     return f.scale <= 0 and f.size <= 8
-                if usage == "Packed":
+                if usage in {"Packed", "PackedNoSign"}:
                     return f.scale <= 0 and f.digits < 19
                 return usage == "Display" and f.scale <= 0 and f.size < 19
             text = literal(e)
@@ -577,7 +592,9 @@ class Emitter:
                     # cb_build_move_high / cb_build_move_low: memset of the item.
                     conversions[-1] = ("bytes", expr.args[0].encode("latin-1") * field.size)
                     continue
-                if destination == "number" and expr.op != "var":
+                # A function result or its reference modification is an
+                # alphanumeric temporary: cob_move as from an item.
+                if destination == "number" and expr.op not in {"var", "refmod", "function"}:
                     usage = self.storage_usage(field)
                     if usage in {"Display", "SignLeading"} and field.scale == 0 and expr.op == "text":
                         # cb_build_move_literal: the literal's bytes, right
@@ -689,12 +706,16 @@ class Emitter:
                     self.write(f"{self.receiver(ref)}.move_edited(&{value});")
                 elif conversion is None and truncating and ref.start is None and field.kind == "number":
                     method = "move_number"
-                    if self.storage_usage(field) == "Packed":
+                    if self.storage_usage(field) in {"Packed", "PackedNoSign"}:
                         self.check_packed_literal_move(expr, field)
                         if (expr.op == "var" and
                                 self.storage_usage(self.program.fields[expr.args[0].name]) in {"Binary", "Native", "Register"}):
                             method = "move_binary_to_packed"
                     self.write(f"{self.receiver(ref)}.{method}(&{value});")
+                elif isinstance(rounded, str):
+                    # cob_decimal_do_round: PROHIBITED keeps the receiver.
+                    self.write(f"if let Some(rounded) = runtime::round_mode(&{value}, {field.scale}, "
+                               f"{ROUNDING_MODES[rounded]}) {{ {self.receiver(ref)}.assign(&rounded, false); }}")
                 else:
                     self.write(f"{self.receiver(ref)}.assign(&{value}, {str(rounded).lower()});")
             if ref in negative_zero:
@@ -728,7 +749,8 @@ class Emitter:
         if digits is None:
             return
         number = expr if expr.op == "number" else expr.args[0]
-        if "." in number.args[0] or len(digits) + field.scale > 9 or field.digits % 2:
+        # The pad nibble: even digits for COMP-3, odd digits for COMP-6.
+        if "." in number.args[0] or len(digits) + field.scale > 9 or field.digits % 2 == (field.usage != "COMP-6"):
             return
         if (int(digits) * 10 ** field.scale // 10 ** field.digits) % 10:
             raise CobolError("MOVE littéral vers COMP-3 à nombre pair de chiffres remplissant le quartet "
@@ -881,6 +903,19 @@ class Emitter:
             size = self.record_size(record)
             self.write(f"let status = {self.handle(name)}.rewrite(&self.{self.files[name]}_area, {size}, {key}{self.depending(name, False)});")
             self.file_status(name, "status")
+        elif op == "packed_add_guard":
+            ref, operand, negate = a
+            delta = self.expression(operand)
+            if negate:
+                delta = f"Value::number(\"0\").minus(&{delta})"
+            self.write(f"{self.reference(ref)}.packed_int_add_guard(&{delta});")
+        elif op == "delete_file":
+            for name in a[0]:
+                self.assign_name(name)
+                self.write(f"let status = {self.handle(name)}.delete_file();")
+                status = self.program.files[name].status
+                if status:
+                    self.write(f"file_runtime::file_status(status, Some(&mut self.{self.names[status]}), false, false, true, &|| Vec::new());")
         elif op == "delete":
             name = a[0]
             if self.program.files[name].organization == "INDEXED":
@@ -891,7 +926,8 @@ class Emitter:
         elif op == "start":
             name, index, condition, _, _ = a
             if index is not None:
-                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {index[0]}, {index[1]}, &self.{self.files[name]}_area);")
+                key = "file_runtime::NO_KEY" if index[0] < 0 else index[0]
+                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {key}, {index[1]}, &self.{self.files[name]}_area);")
             else:
                 key = self.names[self.program.files[name].relative_key]
                 self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, &self.{key});")
@@ -938,6 +974,19 @@ class Emitter:
                 if e.op == "report_counter":
                     values.append(f"self.{self.reports[e.args[0]]}.counter_display({quoted(e.args[1])})")
                     continue
+                if e.op in {"function", "refmod"} and self.kind(e) == "text":
+                    # cob_display of the alphanumeric result field, as stored.
+                    values.append(f"Value::Bytes(({self.expression(e)}).bytes())")
+                    continue
+                if e.op == "function":
+                    raise CobolError(f"DISPLAY de FUNCTION {e.args[0]} numérique non pris en charge")
+                if e.op in {"unary-", "unary+"} and e.args[0].op == "number":
+                    # A signed numeric literal is shown with its sign.
+                    literal = ("-" if e.op == "unary-" else "+") + e.args[0].args[0]
+                    if getattr(self.program, "decimal_comma", False):
+                        literal = literal.replace(".", ",")
+                    values.append(f"Value::text({quoted(literal)})")
+                    continue
                 if e.op not in {"text", "number", "var"}:
                     raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
                 # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
@@ -956,6 +1005,14 @@ class Emitter:
                     values.append(self.expression(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
             self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
+        elif op == "table_sort":
+            # cob_table_sort_init_key per key, then cob_table_sort of the
+            # active occurrences.
+            table, keys = a
+            entries = ", ".join(f"({offset}, {self.program.fields[name].size}, {self.storage_kind(self.program.fields[name])}, "
+                                f"{str(self.program.fields[name].kind == 'number').lower()}, {str(descending).lower()})"
+                                for descending, name, offset in keys)
+            self.write(f"storage_runtime::table_sort(&{self.reference(DataRef(table))}, &[{entries}]);")
         elif op in {"assign", "move"}:
             self.assignment(*a, move=op == "move")
         elif op == "compute":
@@ -1037,7 +1094,10 @@ class Emitter:
                 self.write(f"runtime::set_switch({number}, {str(a[1]).lower()});")
         elif op == "initiate":
             for name in a[0]:
-                self.write(f"self.{self.reports[name]}.initiate();")
+                rust = self.reports[name]
+                self.write(f"let mut report = std::mem::take(&mut self.{rust});")
+                self.write(f"report.initiate(&mut |event| self.{rust}_event(event));")
+                self.write(f"self.{rust} = report;")
         elif op in {"generate", "terminate"}:
             for name in ([a[0]] if op == "generate" else a[0]):
                 rust = self.reports[name]
@@ -1063,13 +1123,15 @@ class Emitter:
     def string_operand(self, e):
         if e.op == "var":
             return f"storage_runtime::Operand::of(&{self.reference(e.args[0])})"
+        if e.op in {"function", "refmod"}:
+            return f"storage_runtime::Operand::new(({self.expression(e)}).bytes(), false)"
         data = "vec![" + ", ".join(f"{ord(c)}u8" for c in e.args[0]) + "]"
         return f"storage_runtime::Operand::new({data}, {str(e.op == 'all').lower()})"
 
     def set_int(self, ref, value):
         """cob_set_int: a MOVE from a native int."""
         field = self.program.fields[ref.name]
-        method = "move_binary_to_packed" if self.storage_usage(field) == "Packed" else "move_number"
+        method = "move_binary_to_packed" if self.storage_usage(field) in {"Packed", "PackedNoSign"} else "move_number"
         self.write(f"{self.reference(ref)}.{method}(&Value::number(&{value}.to_string()));")
 
     def debug_item(self, label):
@@ -1170,20 +1232,26 @@ class Emitter:
     def inspect(self, target, clauses):
         """cb_emit_inspect: init, then per item cob_inspect_start, BEFORE/AFTER
         in source order and the operation; TALLYING and REPLACING each finish."""
-        field = self.program.fields[target.name]
-        if target.start is None and field.kind == "number" and field.usage != "DISPLAY":
-            raise CobolError("INSPECT d'un champ binaire, packé ou index non pris en charge")
+        if isinstance(target, Expr):
+            # A literal or a function: TALLYING over a temporary field.
+            subject = self.unique()
+            self.write(f"let {subject} = storage_runtime::temporary(&({self.expression(target)}));")
+        else:
+            field = self.program.fields[target.name]
+            if target.start is None and field.kind == "number" and field.usage != "DISPLAY":
+                raise CobolError("INSPECT d'un champ binaire, packé ou index non pris en charge")
+            subject = self.reference(target)
         modes = {"all": "All", "leading": "Leading", "first": "First", "trailing": "Trailing"}
         for clause in clauses:
             self.write("{")
             self.indent += 1
             if clause[0] == "converting":
                 _, source, to, region = clause
-                self.write(f"let mut inspect = storage_runtime::Inspect::init_converting(&{self.reference(target)});")
+                self.write(f"let mut inspect = storage_runtime::Inspect::init_converting(&{subject});")
                 items = [("convert", source, to, region)]
             else:
                 replacing = clause[0] == "replacing"
-                self.write(f"let mut inspect = storage_runtime::Inspect::init(&{self.reference(target)}, {str(replacing).lower()});")
+                self.write(f"let mut inspect = storage_runtime::Inspect::init(&{subject}, {str(replacing).lower()});")
                 items = clause[1]
             for item in items:
                 region = item[3]
@@ -1227,7 +1295,13 @@ class Emitter:
                 self.exit_code()
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "stop_run":
-            self.exit_code()
+            if a and a[0] is not None:
+                # cob_stop_run (cob_get_int (x)).
+                if self.kind(a[0]) != "number":
+                    raise CobolError("STOP RUN RETURNING alphanumérique non pris en charge")
+                self.write(f"unit.exit_code = runtime::stop_status(&({self.expression(a[0])}));")
+            else:
+                self.exit_code()
             self.write("return runtime::Outcome::Stop;")
         elif op == "use_return":
             self.write("return runtime::Outcome::Return;")
@@ -1249,6 +1323,16 @@ class Emitter:
             target, arguments, continuation, exception, success = a
             values = []
             for mode, ref in arguments:
+                if ref is None:
+                    values.append("storage_runtime::omitted()")
+                    continue
+                if isinstance(ref, Expr):
+                    # BY CONTENT: a fresh copy at each CALL; BY REFERENCE: the
+                    # program's constant itself.
+                    data = self.byte_vector(ref.args[0])
+                    values.append(f"storage_runtime::temporary(&Value::Bytes({data}))" if mode == "CONTENT" else
+                                  f"storage_runtime::literal_argument({quoted(self.struct + ':' + ref.args[0])}, &{data})")
+                    continue
                 # BY REFERENCE passes an address: a variable group's LINKAGE
                 # item may address its whole allocation, not only the active part.
                 view = self.reference(ref, active=mode == "CONTENT" or ref.start is not None) + ".clone()"
@@ -1536,7 +1620,8 @@ class Emitter:
             area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
             if spec.organization == "INDEXED":
                 if random:
-                    self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {random[0]}, {random[1]}, {depending});")
+                    key = "file_runtime::NO_KEY" if random[0] < 0 else random[0]
+                    self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {key}, {random[1]}, {depending});")
                 else:
                     self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {depending});")
             elif spec.organization != "RELATIVE":
@@ -1590,6 +1675,11 @@ class Emitter:
                 self.write(f"if (|| -> Result<(), runtime::SizeError> {{")
                 self.indent += 1
                 self.write(f"let value: Value = {self.checked_expression(expr)}?;")
+                if isinstance(rounded, str):
+                    # cob_decimal_do_round: PROHIBITED is EC-SIZE-TRUNCATION.
+                    scale = self.program.fields[ref.name].scale
+                    self.write(f"let value = runtime::round_mode(&value, {scale}, {ROUNDING_MODES[rounded]}).ok_or(runtime::SizeError)?;")
+                    rounded = False
                 self.write(f"{self.reference(ref)}.checked_assign(&value, {str(rounded).lower()})")
                 self.indent -= 1
                 self.write(f"}})().is_err() {{ {failed} = true; }}")
@@ -1607,6 +1697,8 @@ class Emitter:
             return f.usage.capitalize()
         if f.usage == "COMP-5":
             return "Register" if getattr(f, "register", False) else "Native"
+        if f.usage == "COMP-6":
+            return "PackedNoSign"
         return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
 
     def storage_kind(self, f):
@@ -1695,6 +1787,8 @@ class Emitter:
                 created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]).named({quoted(spec.select_text or name)})"
             else:
                 linage = ".with_linage()" if spec.linage else ""
+                if getattr(spec, "line_advancing", False):
+                    linage += ".line_advancing()"
                 if spec.organization == "LINE SEQUENTIAL":
                     # finalize_file: a LINE SEQUENTIAL record_min is 0.
                     limits = f"0, {spec.record_max}"
@@ -1725,44 +1819,10 @@ class Emitter:
             if field.linkage:
                 # No address until a CALL passes the item (NULL for cobc).
                 self.write(f"result.{self.names[name]} = storage_runtime::unbind(&result.{self.names[name]});")
-        for name, field in self.program.fields.items():
-            if not field.picture or field.file_record or field.linkage:
-                continue
-            if self.external_root(name) is not None:
-                # cob_external_addr storage is not initialized (cob_malloc);
-                # an inherited GLOBAL item is initialized by its program.
-                if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
-                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
-                continue
-            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
-                continue
-            cursor = field
-            while cursor and not cursor.redefines:
-                cursor = self.program.fields.get(cursor.parent)
-            if cursor:
-                continue
-            constructor = "text" if field.initial.string else "number"
-            initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
-            value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
-            self.write(f"result.{self.names[name]}.declare(&{value});")
-        # A group VALUE fills the whole group as alphanumeric data after its
-        # leaves, on every occurrence: GnuCOBOL gives it precedence.
-        for name, field in self.program.fields.items():
-            if field.group_value is None:
-                continue
-            if self.external_root(name) is not None:
-                if self.program.fields[self.external_root(name)].external:
-                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
-                continue
-            if any(other.depending for key, other in self.program.fields.items()
-                   if key == name or key.startswith(name + ".")):
-                raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
-            text, fill = field.group_value
-            if isinstance(fill, tuple):
-                text = (fill[1] * field.size)[:field.size]
-            elif fill in {"0", '"', "\xff", "\x00"}:
-                text = fill * field.size
-            self.write(f"result.{self.names[name]}.declare(&{text_value(text)});")
+        self.initialize("result", lambda field: True)
+        for number, key in enumerate(getattr(self.program, "chaining", []), 1):
+            # output_initialize_chaining: after the normal initialization.
+            self.write(f"storage_runtime::chain_setup(&result.{self.names[key]}, {number});")
         self.write("result")
         self.indent -= 1
         self.write("}")
@@ -1871,14 +1931,38 @@ class Emitter:
                 if f.source is not None:
                     source = f"Some({sources})"
                     sources += 1
-                fields.append(f"file_runtime::ReportField {{ column: {f.column}, literal: {literal}, source: {source} }}")
+                fields.append(f"file_runtime::ReportField {{ column: {f.column}, literal: {literal}, source: {source}, "
+                              f"indicate: {str(f.indicate).lower()}, indicated: false }}")
             option = lambda v: "None" if v is None else f"Some({v})"
             lines.append(f"file_runtime::ReportLine {{ flags: {line.flags}, line: {line.line}, fields: vec![{', '.join(fields)}], "
-                         f"child: {option(line.child)}, sister: {option(line.sister)} }}")
+                         f"child: {option(line.child)}, sister: {option(line.sister)}, next_group: {line.next_group} }}")
         limits = f"[{report.lines}, {report.heading}, {report.first_detail}, {report.last_detail}]"
         error = getattr(report, "initiate_error", None)
         checked = f".with_initiate_error({quoted(error)})" if error else ""
+        if report.controls or report.sums:
+            # output_report_control: each control's lines, last declared
+            # first, and its sequence in cobc's list.
+            ids = self.report_field_ids(report)
+            controls = []
+            for sequence, key in enumerate(report.controls, 1):
+                refs = [index for index, line in enumerate(report.report_lines) if line.control == key][::-1]
+                controls.append(f"file_runtime::ReportControl::new({ids.index(key)}, vec![{', '.join(map(str, refs))}], {sequence})")
+            sums = []
+            for counter, sources, control, final, subtotal in report.sums:
+                control_index = "None" if control is None or control not in report.controls else f"Some({report.controls.index(control)})"
+                sums.append(f"file_runtime::ReportSum {{ counter: {ids.index(counter)}, sources: vec![{', '.join(str(ids.index(k)) for k in sources)}], "
+                            f"control: {control_index}, control_final: {str(final).lower()}, subtotal: {str(subtotal).lower()} }}")
+            checked += f".with_controls(vec![{', '.join(controls)}], vec![{', '.join(sums)}])"
         return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}]){checked}"
+
+    @staticmethod
+    def report_field_ids(report):
+        """The numbered fields of ReportEvent Get/Put/Differs/Add/Zero."""
+        ids = []
+        for key in [*report.controls, *(k for counter, sources, *_ in report.sums for k in (counter, *sources))]:
+            if key not in ids:
+                ids.append(key)
+        return ids
 
     def report_events(self, report):
         """The program's answer to the report routines: cob_move of each
@@ -1907,6 +1991,54 @@ class Emitter:
         self.write('_ => unreachable!("report SOURCE"),')
         self.indent -= 1
         self.write("},")
+        if report.controls or report.sums:
+            ids = self.report_field_ids(report)
+            refs = [self.reference(DataRef(key)) for key in ids]
+            data = lambda r: f"storage_runtime::Operand::of(&{r}).data"
+            self.write("file_runtime::ReportEvent::Get(field) => match field {")
+            for number, r in enumerate(refs):
+                self.write(f"    {number} => {data(r)},")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("},")
+            # cob_move of a copy with the same attributes: its bytes.
+            self.write("file_runtime::ReportEvent::Put(field, bytes) => { match field {")
+            for number, r in enumerate(refs):
+                self.write(f"    {number} => {r}.assign_text_move(&Value::Bytes(bytes.to_vec()), true),")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("} Vec::new() }")
+            # cob_cmp of the control item and its saved copy (cob_field_dup).
+            self.write("file_runtime::ReportEvent::Differs(field, bytes) => { let differs = match field {")
+            for number, r in enumerate(refs):
+                f = self.program.fields[ids[number]]
+                # cob_numeric_cmp of two items of one description: as
+                # integers below 19 digits (invalid data read as libcob does).
+                read = (".operand_integer()" if f.digits < 19 else ".operand()") if f.kind == "number" else ""
+                self.write(f"    {number} => {r}{read}.compare(&storage_runtime::copy_of(&{r}, bytes){read}) != std::cmp::Ordering::Equal,")
+            self.write('    _ => unreachable!("report field"),')
+            self.write("}; vec![differs as u8] }")
+            # cob_add_fields: counter = counter + operand, truncated (cob_add, opt 0).
+            self.write("file_runtime::ReportEvent::Add(counter, operand) => {")
+            self.write("    let value = match operand {")
+            for number, r in enumerate(refs):
+                self.write(f"        {number} => {r}.operand(),")
+            self.write('        _ => unreachable!("report field"),')
+            self.write("    };")
+            self.write("    match counter {")
+            for number, r in enumerate(refs):
+                if ids[number] in {c for c, *_ in report.sums}:
+                    self.write(f"        {number} => {{ let sum = {r}.operand().plus(&value); {r}.store_truncated(&sum); }}")
+            self.write('        _ => unreachable!("report counter"),')
+            self.write("    }")
+            self.write("    Vec::new()")
+            self.write("}")
+            # cob_field_init: MOVE ZERO to the counter.
+            self.write("file_runtime::ReportEvent::Zero(counter) => { match counter {")
+            for number, r in enumerate(refs):
+                if ids[number] in {c for c, *_ in report.sums}:
+                    self.write(f"    {number} => {r}.assign(&Value::number(\"0\"), false),")
+            self.write('    _ => unreachable!("report counter"),')
+            self.write("} Vec::new() }")
+
         self.write("file_runtime::ReportEvent::Write(bytes, lines) => {")
         self.indent += 1
         file = self.files[report.file]
@@ -1918,10 +2050,60 @@ class Emitter:
         self.write("Vec::new()")
         self.indent -= 1
         self.write("}")
+        if not (report.controls or report.sums):
+            self.write('_ => unreachable!("report event"),')
         self.indent -= 1
         self.write("}")
         self.indent -= 1
         self.write("}")
+
+    def initialize(self, receiver, selected):
+        """The VALUE or PICTURE initialization of the selected items."""
+        for name, field in self.program.fields.items():
+            if not field.picture or field.file_record or field.linkage or not selected(field):
+                continue
+            if self.external_root(name) is not None:
+                # cob_external_addr storage is not initialized (cob_malloc);
+                # an inherited GLOBAL item is initialized by its program.
+                if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
+                continue
+            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
+                continue
+            cursor = field
+            while cursor and not cursor.redefines:
+                cursor = self.program.fields.get(cursor.parent)
+            if cursor:
+                continue
+            constructor = "text" if field.initial.string else "number"
+            initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
+            value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
+            self.write(f"{receiver}.{self.names[name]}.declare(&{value});")
+            if (constructor == "number" and initial.startswith("-") and not initial.replace(".", "").strip("-0")
+                    and field.kind == "number" and field.signed and field.usage == "DISPLAY"):
+                # cob_move of the literal at initialization keeps its sign:
+                # a signed DISPLAY item starts as a negative zero.
+                if field.dimensions:
+                    raise CobolError(f"VALUE -0 d'un article de table non pris en charge: {field.label}")
+                self.write(f"{receiver}.{self.names[name]}.negative_zero();")
+        # A group VALUE fills the whole group as alphanumeric data after its
+        # leaves, on every occurrence: GnuCOBOL gives it precedence.
+        for name, field in self.program.fields.items():
+            if field.group_value is None or not selected(field):
+                continue
+            if self.external_root(name) is not None:
+                if self.program.fields[self.external_root(name)].external:
+                    raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
+                continue
+            if any(other.depending for key, other in self.program.fields.items()
+                   if key == name or key.startswith(name + ".")):
+                raise CobolError(f"VALUE de groupe contenant OCCURS DEPENDING non pris en charge: {field.label}")
+            text, fill = field.group_value
+            if isinstance(fill, tuple):
+                text = (fill[1] * field.size)[:field.size]
+            elif fill in {"0", '"', "\xff", "\x00"}:
+                text = fill * field.size
+            self.write(f"{receiver}.{self.names[name]}.declare(&{text_value(text)});")
 
     def call_method(self, graph):
         """Bind each USING item of the entry and its subordinates to the CALL
@@ -1955,6 +2137,13 @@ class Emitter:
                            f"{field.offset - root.offset}, &self.{rust}) }} else {{ storage_runtime::unbind(&self.{rust}) }};")
             self.indent -= 1
             self.write("}")
+        local = [name for name, field in fields.items() if getattr(field, "local", False) and field.parent is None]
+        for name in local:
+            # LOCAL-STORAGE: fresh storage (zeroed) initialized at each entry.
+            size = fields[name].size
+            self.write(f"self.{self.names[name]}.assign_text_move(&Value::Bytes(vec![0; {size}]), true);")
+        if local:
+            self.initialize("self", lambda field: getattr(field, "local", False))
         # RETURN-CODE keeps its value between CALLs: codegen.c clears it with
         # the program's first initialization only (VALUE ZERO here).
         if len(entries) > 1:
@@ -2003,7 +2192,8 @@ def generate_unit(emitters):
     subprograms = emitters[1:]
     global_uses = any(getattr(emitter.program, "global_uses", None) for emitter in emitters)
     shared = any(emitter.file_registry(name) for emitter in emitters for name in emitter.files)
-    unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status"]
+    unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status",
+            "    callers: Vec<&'static str>, // module names of the active programs, innermost last"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
         if getattr(emitter.program, "entries", None):
@@ -2012,7 +2202,9 @@ def generate_unit(emitters):
     if global_uses:
         # The active programs with USE GLOBAL, innermost last.
         unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
-    unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {", "            returned: None, exit_code: 0,"]
+    main_name = quoted(emitters[0].program.entry_name)
+    unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {",
+             f"            returned: None, exit_code: 0, callers: vec![{main_name}],"]
     for index, emitter in enumerate(subprograms, 1):
         loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
         unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
@@ -2033,27 +2225,47 @@ def generate_unit(emitters):
         entries = getattr(emitter.program, "entries", [])
         for number, name in enumerate([emitter.program.entry_name, *(entry for entry, _ in entries)]):
             guard = f" if self.p{index}_loaded" if number else ""
+            if getattr(emitter.program, "chaining", None):
+                # cob_fatal_error (COB_FERROR_CHAINING): a CHAINING program
+                # is a main program only.
+                unit.append(f"            {quoted(name)}{guard} => runtime::fatal_error(b\"CALL of program with CHAINING clause\"),")
+                continue
             unit += [f"            {quoted(name)}{guard} => {{",
-                     f"                if self.p{index}_active {{ runtime::fail(\"CALL of an active program (recursion) not modelled\"); }}",
+                     f"                if self.p{index}_active {{ self.recursive({quoted(emitter.program.entry_name)}); }}",
                      f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
                      f"                self.p{index}_active = true;",
+                     f"                self.callers.push({quoted(emitter.program.entry_name)});",
                      *([f"                self.p{index}_loaded = true;"] if entries else []),
                      f"                let outcome = program.call_entry(self, arguments, {number});",
                      "                self.returned = program.return_code();",
                      f"                self.p{index}_active = false;",
+                     "                self.callers.pop();",
                      f"                {kept}",
                      "                Some(outcome)",
                      "            }"]
+    # The main program is active for the whole run: calling it is recursive.
+    if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
+        unit.append(f"            {main_name} => self.recursive({main_name}),")
     for name, _ in getattr(emitters[0].program, "entries", []):
-        unit.append(f"            {quoted(name)} => runtime::fail(\"CALL of an active program (recursion) not modelled\"),")
+        unit.append(f"            {quoted(name)} => self.recursive({main_name}),")
     unit += ["            _ => None,", "        }", "    }",
+             "    /// cob_fatal_error (COB_FERROR_RECURSIVE): a program without RECURSIVE called while active.",
+             "    fn recursive(&self, callee: &str) -> ! {",
+             "        let caller = self.callers.last().copied().unwrap_or(\"\");",
+             "        runtime::fatal_error(format!(\"recursive CALL from '{caller}' to '{callee}' which is NOT RECURSIVE\").as_bytes())",
+             "    }",
              "    /// CANCEL: the next CALL finds the program in its initial state.",
              "    fn cancel(&mut self, name: &str) {",
              "        match name {"]
+    # P_cancel of codegen.c: cob_fatal_error (COB_FERROR_CANCEL) for an
+    # active module, the main program included.
+    active = 'runtime::fatal_error(b"attempt to CANCEL active program")'
+    if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
+        unit.append(f"            {quoted(emitters[0].program.entry_name)} => {active},")
     for index, emitter in enumerate(subprograms, 1):
         cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_files(); }}" \
             if cancels_files(emitter) else f"self.p{index} = None;"
-        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ runtime::fail(\"CANCEL of an active program\"); }} {cancel} }},")
+        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ {active}; }} {cancel} }},")
     unit += ["            _ => {}", "        }", "    }"]
     if global_uses:
         unit += ["    /// <owner>_ (section label): a GLOBAL USE procedure of an active program.",

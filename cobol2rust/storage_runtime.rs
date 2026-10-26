@@ -34,6 +34,8 @@ pub fn external(name: &str, size: usize) -> Memory {
 #[derive(Clone, Copy, Debug)]
 pub enum Usage {
     Display, Packed, Binary, Index,
+    /// COMP-6: packed decimal without sign nibble (COB_FLAG_NO_SIGN_NIBBLE).
+    PackedNoSign,
     /// COMP-5 (and BINARY-CHAR/SHORT/LONG/DOUBLE): COB_FLAG_REAL_BINARY,
     /// native little-endian storage bounded by its size, not its PICTURE.
     /// Register is an internal register (RETURN-CODE): same storage,
@@ -345,6 +347,7 @@ impl View {
         memory
     }
     fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
+        check_writable(&self.memory);
         let memory = self.memory.borrow_mut();
         if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
         memory
@@ -412,6 +415,15 @@ impl View {
                 let ascii: Vec<u8> = nibbles.into_iter().map(|n| b'0' + n).collect();
                 let n = BigInt::parse_bytes(&ascii, 10).ok_or("invalid packed decimal")?;
                 if sign == 13 { -n } else { n }
+            },
+            Usage::PackedNoSign => {
+                let nibbles: Vec<u8> = bytes.iter().flat_map(|b| [b >> 4, b & 15]).collect();
+                let padding = nibbles.len() - digits as usize;
+                if nibbles[..padding].iter().any(|n| *n != 0) || nibbles.iter().any(|n| *n > 9) {
+                    return Err("invalid packed decimal digits");
+                }
+                let ascii: Vec<u8> = nibbles.into_iter().map(|n| b'0' + n).collect();
+                BigInt::parse_bytes(&ascii, 10).ok_or("invalid packed decimal")?
             },
             // An index is a native int: little endian on x86-64.
             Usage::Index => BigInt::from_signed_bytes_le(&bytes),
@@ -508,6 +520,19 @@ impl View {
     pub fn is_numeric(&self) -> bool {
         match self.kind {
             Kind::Text | Kind::Justified | Kind::Edited { .. } | Kind::AlnumEdited { .. } => self.raw().iter().all(u8::is_ascii_digit),
+            Kind::Numeric { signed, usage: usage @ (Usage::Packed | Usage::PackedNoSign), .. } => {
+                // cob_is_numeric: the sign (or last digit) nibble, then every
+                // other nibble a digit; the pad nibble is not checked apart.
+                let bytes = self.raw();
+                let last = bytes[bytes.len() - 1];
+                let sign = last & 0x0f;
+                let sign_ok = match usage {
+                    Usage::PackedNoSign => sign <= 9,
+                    _ if signed => sign == 0x0c || sign == 0x0d,
+                    _ => sign == 0x0f,
+                };
+                sign_ok && last >> 4 <= 9 && bytes[..bytes.len() - 1].iter().all(|b| b >> 4 <= 9 && b & 0x0f <= 9)
+            },
             _ => self.number().is_ok(),
         }
     }
@@ -568,7 +593,7 @@ impl View {
                 if !comparison { bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize)); }
                 bytes
             },
-            Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
+            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
                 let number = self.number().unwrap_or_else(|error| fail(error));
                 let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
                 format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
@@ -669,20 +694,37 @@ impl View {
     /// Native reads of such a field disagree with each other: stop instead.
     pub fn move_binary_to_packed(&mut self, source: &Value) {
         self.resolved();
-        if let Kind::Numeric { digits, scale, usage: Usage::Packed, .. } = self.kind {
+        if let Kind::Numeric { digits, scale, usage: usage @ (Usage::Packed | Usage::PackedNoSign), .. } = self.kind {
             let units = source.num().units(scale, false);
             let fits = units >= BigInt::from(i32::MIN) && units <= BigInt::from(i32::MAX);
-            if fits && digits % 2 == 0 && (absolute(&units) / power(digits)) % BigInt::from(10) != BigInt::from(0) {
+            let pad = if matches!(usage, Usage::Packed) { digits % 2 == 0 } else { digits % 2 == 1 };
+            if fits && pad && (absolute(&units) / power(digits)) % BigInt::from(10) != BigInt::from(0) {
                 fail("binary MOVE would fill the packed pad nibble; native semantics not modelled");
             }
         }
         self.move_number(source)
     }
+    /// cob_add_packed_int (ADD/SUBTRACT of an int to a COMP-3 item of less
+    /// than 19 digits, same sign): the carry of an even-digit item lands in
+    /// its pad nibble instead of being dropped.
+    pub fn packed_int_add_guard(&self, operand: &Value) {
+        if let Kind::Numeric { digits, scale, usage: Usage::Packed, .. } = self.kind {
+            if digits % 2 != 0 { return; }
+            let Ok(current) = self.number() else { return };
+            let current = current.num().units(scale, false);
+            let delta = operand.num().units(scale, false);
+            let negative = self.raw().last().map_or(false, |b| b & 0x0f == 0x0d);
+            if delta.sign() == Sign::NoSign || (delta.sign() == Sign::Minus) != negative { return; }
+            if absolute(&(current + delta)) >= power(digits) {
+                fail("cob_add_packed_int would carry into the pad nibble; native semantics not modelled");
+            }
+        }
+    }
     pub(crate) fn mark_negative_zero(&mut self) {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
-            Usage::Binary | Usage::Index | Usage::Native | Usage::Register => return,
+            Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::PackedNoSign => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
@@ -739,7 +781,12 @@ impl View {
                     // low-order digits and the sign of the whole result.
                     // Binary and packed receivers reach native or BCD add
                     // routines in cobc with other overflow rules.
-                    if !usage.is_display() { fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled"); }
+                    // cob_decimal_get_packed does the same (cob_set_packed_u64
+                    // of the remainder, sign nibble kept); binary receivers
+                    // follow other rules.
+                    if !usage.is_display() && !matches!(usage, Usage::Packed | Usage::PackedNoSign) {
+                        fail("destination PICTURE overflow without SIZE ERROR; native truncation not modelled");
+                    }
                     let negative = units.sign() == Sign::Minus;
                     let kept = absolute(&units) % power(digits);
                     truncated_negative_zero = negative && signed && kept == BigInt::from(0);
@@ -752,6 +799,11 @@ impl View {
                     Usage::Packed => {
                         let mut nibbles: Vec<u8> = ascii.iter().map(|b| b - b'0').collect();
                         nibbles.push(if !signed { 15 } else if negative { 13 } else { 12 });
+                        if nibbles.len() % 2 != 0 { nibbles.insert(0, 0); }
+                        nibbles.chunks_exact(2).map(|n| (n[0] << 4) | n[1]).collect()
+                    },
+                    Usage::PackedNoSign => {
+                        let mut nibbles: Vec<u8> = ascii.iter().map(|b| b - b'0').collect();
                         if nibbles.len() % 2 != 0 { nibbles.insert(0, 0); }
                         nibbles.chunks_exact(2).map(|n| (n[0] << 4) | n[1]).collect()
                     },
@@ -905,6 +957,85 @@ impl View {
 
 /// Bind a LINKAGE item to a CALL argument: the item keeps its description and
 /// addresses the argument's storage `delta` bytes after the argument start.
+/// cob_table_sort: glibc's qsort (a merge sort, stable) of the active
+/// occurrences; each key (offset in the element, size, kind, numeric,
+/// descending) by cob_numeric_cmp, or by memcmp or the program collating
+/// sequence (sort_compare, sort_compare_collate).
+pub fn table_sort(table: &Value, keys: &[(usize, usize, Kind, bool, bool)]) {
+    let view = match table { Value::View(view) => view, _ => fail("SORT requires a table") };
+    let (stride, count) = match view.dimensions.as_slice() {
+        [(stride, count)] => (*stride, *count),
+        _ => fail("SORT of a table with several dimensions not modelled"),
+    };
+    let size = view.size;
+    if stride != size { fail("SORT of a table with a stride unlike its element size not modelled"); }
+    let mut elements: Vec<Vec<u8>> = {
+        let memory = view.mem();
+        (0..count).map(|i| memory[view.offset + i * stride..view.offset + i * stride + size].to_vec()).collect()
+    };
+    let key = |element: &[u8], offset: usize, length: usize, kind: Kind| View {
+        memory: Rc::new(RefCell::new(element[offset..offset + length].to_vec())), offset: 0, size: length, kind,
+        dimensions: vec![], initializers: vec![] };
+    elements.sort_by(|a, b| {
+        for &(offset, length, kind, numeric, descending) in keys {
+            let order = if numeric {
+                let integer = matches!(kind, Kind::Numeric { digits, .. } if digits < 19);
+                key(a, offset, length, kind).operand_value(integer).compare(&key(b, offset, length, kind).operand_value(integer))
+            } else {
+                crate::runtime::collated_cmp(&a[offset..offset + length], &b[offset..offset + length])
+            };
+            if order != std::cmp::Ordering::Equal { return if descending { order.reverse() } else { order }; }
+        }
+        std::cmp::Ordering::Equal
+    });
+    let mut memory = view.mem_mut();
+    for (i, element) in elements.iter().enumerate() {
+        memory[view.offset + i * stride..view.offset + i * stride + size].copy_from_slice(element);
+    }
+}
+
+/// cob_field_dup holding `bytes`: an item of the same description.
+pub fn copy_of(item: &Value, bytes: &[u8]) -> Value {
+    match item {
+        Value::View(view) => Value::View(View { memory: Rc::new(RefCell::new(bytes.to_vec())), offset: 0, size: bytes.len(),
+            kind: view.kind, dimensions: vec![], initializers: vec![] }),
+        _ => fail("report control requires storage"),
+    }
+}
+
+thread_local! {
+    static LITERAL_ARGUMENTS: RefCell<Vec<(String, Memory)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A literal or figurative constant passed BY REFERENCE (output_call): the
+/// address of the program's constant, the same at each CALL, in read-only
+/// storage for a literal.
+pub fn literal_argument(key: &str, bytes: &[u8]) -> Value {
+    let memory = LITERAL_ARGUMENTS.with(|literals| {
+        let mut literals = literals.borrow_mut();
+        if let Some((_, memory)) = literals.iter().find(|(name, _)| name == key) { return memory.clone(); }
+        let memory: Memory = Rc::new(RefCell::new(bytes.to_vec()));
+        literals.push((key.to_string(), memory.clone()));
+        memory
+    });
+    Value::View(View { memory, offset: 0, size: bytes.len(), kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+}
+
+fn check_writable(memory: &Memory) {
+    LITERAL_ARGUMENTS.with(|literals| {
+        if literals.borrow().iter().any(|(_, constant)| Rc::ptr_eq(constant, memory)) {
+            fail("write into a literal passed BY REFERENCE (SIGSEGV in GnuCOBOL); not modelled");
+        }
+    })
+}
+
+/// The temporary alphanumeric field of a literal or a function result.
+pub fn temporary(value: &Value) -> Value {
+    let bytes = value.bytes();
+    let size = bytes.len();
+    Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size, kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+}
+
 /// A LINKAGE item that the CALL (or ENTRY) did not pass: no storage.
 pub fn unbind(item: &Value) -> Value {
     match item {
@@ -914,11 +1045,36 @@ pub fn unbind(item: &Value) -> Value {
     }
 }
 
+/// cob_chain_setup: a CHAINING item takes the command-line argument of its
+/// rank, space filled or truncated, when it is given.
+pub fn chain_setup(item: &Value, parameter: usize) {
+    use std::os::unix::ffi::OsStringExt;
+    let Some(argument) = std::env::args_os().nth(parameter) else { return };
+    match item {
+        Value::View(view) => {
+            let mut bytes = argument.into_vec();
+            bytes.resize(view.size, b' ');
+            check_writable(&view.memory);
+            view.memory.borrow_mut()[view.offset..view.offset + view.size].copy_from_slice(&bytes);
+        },
+        _ => crate::runtime::fail("CHAINING requires a data item"),
+    }
+}
+
+/// CALL ... USING OMITTED: a NULL address.
+pub fn omitted() -> Value {
+    Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
+                       dimensions: vec![], initializers: vec![] })
+}
+
 pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
     let (source, template) = match (argument, item) {
         (Value::View(source), Value::View(template)) => (source, template),
         _ => crate::runtime::fail("CALL argument and LINKAGE item require storage"),
     };
+    if source.size == 0 && source.memory.borrow().is_empty() {
+        return unbind(item);
+    }
     let offset = source.offset + delta;
     let extent = template.dimensions.iter().map(|(stride, count)| stride * count.saturating_sub(1)).sum::<usize>() + template.size;
     // GnuCOBOL passes only an address: a LINKAGE item longer than its
@@ -1037,7 +1193,7 @@ impl Inspect {
                 Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
                 _ => fail("INSPECT of a binary or packed item not modelled"),
             }
-        } else if let Kind::Numeric { usage: Usage::Packed | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
             fail("INSPECT of a binary or packed item not modelled");
         }
         // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.
@@ -1233,7 +1389,7 @@ impl Inspect {
         })
     }
     fn put_sign(&self) {
-        if let Some((position, -1)) = self.sign { self.memory.borrow_mut()[position] |= 0x40; }
+        if let Some((position, -1)) = self.sign { check_writable(&self.memory); self.memory.borrow_mut()[position] |= 0x40; }
     }
     /// cob_inspect_converting; it restores the sign itself, unless it returns early.
     pub fn convert(&mut self, from: &Operand, to: &Operand) {
@@ -1246,6 +1402,7 @@ impl Inspect {
         let mut table = [None; 256];
         for (&a, &b) in from.data.iter().zip(&f2) { if table[a as usize].is_none() { table[a as usize] = Some(b); } }
         {
+            check_writable(&self.memory);
             let mut memory = self.memory.borrow_mut();
             for byte in &mut memory[self.offset + self.start..self.offset + self.end] {
                 if let Some(b) = table[*byte as usize] { *byte = b; }
@@ -1258,6 +1415,7 @@ impl Inspect {
             INSPECT.with(|buffers| {
                 let b = buffers.borrow();
                 if b.repdata_size != 0 && b.mark_at(b.mark_min) != 0 {
+                    check_writable(&self.memory);
                     let mut memory = self.memory.borrow_mut();
                     let mut i = b.mark_min;
                     while i <= b.mark_max {
@@ -1302,6 +1460,7 @@ impl StringInto {
             if let Some(i) = (0..limit.max(0) as usize).find(|&i| data[i..i + d.len()] == d[..]) { size = i; }
         }
         let room = self.size as i64 - self.position;
+        check_writable(&self.memory);
         let mut memory = self.memory.borrow_mut();
         let start = self.offset + self.position as usize;
         if size as i64 <= room {

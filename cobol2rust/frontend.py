@@ -23,6 +23,12 @@ class Token:
         return self.text if self.string else self.text.upper()
 
 
+@dataclass(frozen=True)
+class ConstantToken(Token):
+    """The value of a level 78 constant where its name was used (scanner.l)."""
+    constant: str = field(default="", compare=False)
+
+
 def fixed_fragment(area: str, quotation=None):
     """Read columns 8..72, retaining GnuCOBOL's column-72 quote state."""
     consecutive = False
@@ -65,6 +71,159 @@ RUNTIME_CHECKS = False
 STANDARDS = ("default", "cobol85")
 
 
+class Directives:
+    """Conditional compilation of pplex.l/ppparse.y: >>DEFINE, >>IF, >>ELIF,
+    >>ELSE, >>END-IF; >>DISPLAY only writes at compile time. While a branch
+    is skipped, only the conditional directives are read."""
+    WORD = r"[A-Za-z0-9][A-Za-z0-9_-]*"
+    LITERAL = r"\"[^\"]*\"|'[^']*'|[+-]?\d*\.?\d+|\(\s*[+-]?\d*\.?\d+\s*\)"
+    CONDITIONS = [(r"GREATER\s+(?:THAN\s+)?OR\s+EQUAL(?:\s+TO)?|>=", ">="), (r"GREATER(?:\s+THAN)?|>", ">"),
+                  (r"LESS\s+(?:THAN\s+)?OR\s+EQUAL(?:\s+TO)?|<=", "<="), (r"LESS(?:\s+THAN)?|<", "<"),
+                  (r"EQUAL(?:\s+TO)?|=", "="), (r"<>", "<>")]
+
+    def __init__(self, defines):
+        self.defines = defines
+        self.stack = []   # (skip, taken) of each open >>IF
+
+    @property
+    def skipping(self):
+        return bool(self.stack) and self.stack[-1][0]
+
+    @staticmethod
+    def value(text):
+        """ppp_set_value: ('L', text) for an alphanumeric literal, ('N', number)."""
+        if text[0] in "\"'":
+            return ("L", text[1:-1])
+        from decimal import Decimal
+        return ("N", Decimal(text.strip("() ")))
+
+    def compare(self, left, right, condition):
+        if left is None or right is None:
+            return False
+        if left[0] != right[0]:
+            return False   # "directive comparison on different types"
+        a, b = left[1], right[1]
+        return {"=": a == b, "<>": a != b, "<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b}[condition]
+
+    def condition(self, text, number):
+        m = re.fullmatch(rf"({self.WORD})\s+(?:IS\s+)?(NOT\s+)?DEFINED", text, re.I)
+        if m:
+            found = m[1].upper() in self.defines
+            return found ^ bool(m[2])
+        m = re.fullmatch(rf"({self.WORD}|{self.LITERAL})\s+(?:IS\s+)?(NOT\s+)?(.+?)\s*({self.WORD}|{self.LITERAL})", text, re.I)
+        if m:
+            for pattern, condition in self.CONDITIONS:
+                if re.fullmatch(pattern, m[3], re.I):
+                    def operand(t):
+                        if re.fullmatch(self.LITERAL, t):
+                            return self.value(t)
+                        return self.defines.get(t.upper())
+                    return self.compare(operand(m[1]), operand(m[4]), condition) ^ bool(m[2])
+        raise CobolError(f"ligne {number}: invalid IF directive")
+
+    # $SET options without effect here: checks already off by default,
+    # SPZERO (a TODO of cobc) and the names ppparse.y passes on as #OPTION.
+    SET_KNOWN = {"ADD-RSV", "ADD-SYN", "ADDRSV", "ADDSYN", "AREA-CHECK", "AREACHECK", "ASSIGN", "BOUND", "CALLFH",
+                 "CHECK-NUM", "CHECKNUM", "COMP-1", "COMP1", "CONSTANT", "DPC-IN-DATA", "DPCINDATA",
+                 "FOLD-COPY-NAME", "FOLDCOPYNAME", "MAKE-SYN", "MAKESYN", "NO-AREA-CHECK", "NO-AREACHECK",
+                 "NO-BOUND", "NO-CHECK-NUM", "NO-CHECKNUM", "NO-DPC-IN-DATA", "NO-DPCINDATA", "NO-FOLD-COPY-NAME",
+                 "NO-ODOSLIDE", "NO-SPZERO", "NO-SSRANGE", "NOAREACHECK", "NOBOUND", "NOCHECKNUM", "NODPC-IN-DATA",
+                 "NODPCINDATA", "NOFOLD-COPY-NAME", "NOFOLDCOPYNAME", "NOODOSLIDE", "NOSPZERO", "NOSSRANGE",
+                 "ODOSLIDE", "OVERRIDE", "REMOVE", "SOURCE-FORMAT", "SOURCEFORMAT", "SPZERO", "SSRANGE"}
+    SET_NO_EFFECT = {"NO-AREA-CHECK", "NO-AREACHECK", "NOAREACHECK", "NO-BOUND", "NOBOUND", "NO-CHECK-NUM",
+                     "NO-CHECKNUM", "NOCHECKNUM", "NO-DPC-IN-DATA", "NO-DPCINDATA", "NODPC-IN-DATA", "NODPCINDATA",
+                     "NO-ODOSLIDE", "NOODOSLIDE", "NO-SPZERO", "NOSPZERO", "SPZERO", "NO-SSRANGE", "NOSSRANGE"}
+
+    def set_directive(self, rest, number):
+        """set_directive: each set_choice in turn."""
+        options = re.findall(r"""([A-Za-z0-9][A-Za-z0-9_-]*)((?:\s*\([^)]*\))?(?:\s*(?:AS\s+)?(?:"[^"]*"|'[^']*'))?)""", rest)
+        for name, argument in options:
+            key = name.upper()
+            if key == "CONSTANT":
+                raise CobolError(f"ligne {number}: $SET CONSTANT non pris en charge")
+            if key in self.SET_KNOWN and key not in self.SET_NO_EFFECT:
+                raise CobolError(f"ligne {number}: option $SET {key} non prise en charge")
+            # Any other name is an #OPTION line that cobc's scanner ignores.
+
+    def line(self, text, number):
+        """True when the line is a directive or is skipped."""
+        m = re.match(r"\s*>>\s*([A-Za-z-]+)(.*)", text)
+        dollar = None if m else re.match(r"\s*\$([A-Za-z-]+)(.*)", text)
+        if dollar:
+            # MF style: $SET, $IF, $ELSE, $END, $DISPLAY.
+            verb = dollar[1].upper()
+            m = dollar
+            verb = {"END": "END-IF"}.get(verb, verb)
+            if verb not in {"SET", "IF", "ELIF", "ELSE", "END-IF", "DISPLAY"}:
+                raise CobolError(f"ligne {number}: directive ${dollar[1]} non prise en charge")
+            rest = re.sub(r"\s*\*>.*$", "", m[2]).strip()
+            if verb == "SET":
+                if not self.skipping:
+                    self.set_directive(rest, number)
+                return True
+        if not m:
+            return self.skipping
+        verb, rest = (verb if dollar else m[1].upper()), re.sub(r"\s*\*>.*$", "", m[2]).strip()
+        if verb in {"IF", "ELIF"}:
+            if verb == "IF":
+                outer = self.skipping
+                result = False if outer else self.condition(rest, number)
+                self.stack.append([outer or not result, result, outer])
+            else:
+                if not self.stack:
+                    raise CobolError(f"ligne {number}: ELIF directive without matching IF/ELIF")
+                entry = self.stack[-1]
+                result = False if entry[2] or entry[1] else self.condition(rest, number)
+                entry[1] = entry[1] or result
+                entry[0] = entry[2] or not result
+            return True
+        if verb == "ELSE":
+            if not self.stack:
+                raise CobolError(f"ligne {number}: ELSE directive without matching IF/ELIF")
+            entry = self.stack[-1]
+            entry[0] = entry[2] or entry[1]
+            entry[1] = True
+            return True
+        if verb == "END-IF":
+            if not self.stack:
+                raise CobolError(f"ligne {number}: END-IF directive without matching IF/ELIF")
+            self.stack.pop()
+            return True
+        if self.skipping:
+            return True
+        if verb == "DEFINE":
+            d = re.fullmatch(rf"(CONSTANT\s+)?({self.WORD})\s+(?:AS\s+)?(OFF|PARAMETER|{self.LITERAL})(\s+OVERRIDE)?", rest, re.I)
+            if not d:
+                raise CobolError(f"ligne {number}: invalid DEFINE/SET directive")
+            if d[1]:
+                raise CobolError(f"ligne {number}: >>DEFINE CONSTANT non pris en charge")
+            name, value = d[2].upper(), d[3]
+            if value.upper() == "OFF":
+                self.defines.pop(name, None)
+                return True
+            if value.upper() == "PARAMETER":
+                raise CobolError(f"ligne {number}: >>DEFINE ... PARAMETER non pris en charge")
+            if name in self.defines and not d[4]:
+                raise CobolError(f"ligne {number}: duplicate DEFINE directive '{d[2]}'")
+            self.defines[name] = self.value(value)
+            return True
+        if verb == "DISPLAY" and re.search(r"[=<>]", re.sub(r"\"[^\"]*\"|'[^']*'", "", rest)):
+            # display_directive takes words and literals only.
+            raise CobolError(f"ligne {number}: syntax error in DISPLAY directive")
+        if verb in {"DISPLAY", "LISTING", "PAGE"}:
+            # Compile-time output or listing control: nothing at run time.
+            return True
+        if verb == "SOURCE":
+            return False
+        raise CobolError(f"ligne {number}: directive >>{verb} non prise en charge")
+
+
+# ppparse_clear_vars: the standard DEFINEs of cobc on Linux x86-64.
+STANDARD_DEFINES = {"PERFORM-TYPE": ("L", "MF"), "SIGN": ("L", "ASCII"), "ENDIAN": ("L", "LITTLE"),
+                    "CHARSET": ("L", "ASCII")}
+DEFINES = dict(STANDARD_DEFINES)
+
+
 def normalize(source: str, fmt: str = "auto") -> str:
     from .documentary import DocumentaryFilter
 
@@ -79,6 +238,7 @@ def normalize(source: str, fmt: str = "auto") -> str:
     # after it, as -fdebugging-line does for the whole source.
     debugging_lines = DEBUGGING_LINES
     recent = []
+    directives = Directives(DEFINES)
     for number, line in enumerate(lines, 1):
         directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
         if directive:
@@ -101,6 +261,13 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 result.append("")
                 continue
             indicator = line[6]
+            if indicator == "$":
+                # pplex: a '$' indicator starts an MF directive line.
+                if quotation is not None and not consecutive:
+                    raise CobolError(f"ligne {number}: directive au milieu d'un littéral fixe continué")
+                directives.line(line[6:72], number)
+                result.append("")
+                continue
             if indicator in "*/":
                 result.append("")
                 continue
@@ -113,6 +280,9 @@ def normalize(source: str, fmt: str = "auto") -> str:
             if indicator not in " -":
                 raise CobolError(f"ligne {number}: indicateur fixe {indicator!r} non pris en charge")
             line = line[7:72]
+            if indicator != "-" and quotation is None and directives.line(line, number):
+                result.append("")
+                continue
             directive = re.fullmatch(r"\s*>>SOURCE\s+FORMAT\s+(?:IS\s+)?(FREE|FIXED)\s*", line, re.I)
             if directive:
                 if quotation is not None and not consecutive:
@@ -126,6 +296,9 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 continue
             if indicator != "-" and quotation is not None and not consecutive and line.strip():
                 raise CobolError(f"ligne {number}: littéral fixe non terminé; indicateur '-' attendu")
+            if indicator != "-" and COMPILER_OPTIONS.match(line):
+                result.append("")
+                continue
             # Documentary prose may contain arbitrary quotes and COPY words.
             # Filter it before literal continuation and token processing, while
             # keeping genuine literal continuations outside the filter.
@@ -164,7 +337,12 @@ def normalize(source: str, fmt: str = "auto") -> str:
                 if not debugging_lines and re.search(r"(?<![\w-])DEBUGGING[\s,;]+MODE(?![\w-])", "\n".join(recent), re.I):
                     debugging_lines = True
             continue
-        result.append("" if documentary.is_comment(line, fmt, line=number) else line)
+        if directives.line(line, number):
+            result.append("")
+            continue
+        result.append("" if COMPILER_OPTIONS.match(line) or documentary.is_comment(line, fmt, line=number) else line)
+    if directives.stack:
+        raise CobolError("directive >>IF sans >>END-IF")
     return "\n".join(result)
 
 
@@ -233,7 +411,21 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 raise CobolError(f"ligne {start}: littéral non terminé")
             # One character per source byte (decode_source): a non-ASCII
             # literal holds the bytes of its source text, as for cobc.
+            limit = 160 if STD == "cobol85" else 8191   # literal-length
+            if len(value) > limit:
+                raise CobolError(f"ligne {start}: invalid literal: literal length exceeds {limit} characters")
             tokens.append(Token(value, start, True, token_start, i))
+        elif c in "zZ" and i + 1 < len(source) and source[i + 1] in "\"'":
+            # Z"text": the text and a terminating NUL (scan_z).
+            quote, start = source[i + 1], line
+            end = source.find(quote, i + 2)
+            newline = source.find("\n", i + 2)
+            if end < 0 or (0 <= newline < end):
+                raise CobolError(f"ligne {start}: littéral Z non terminé")
+            if end == i + 2:
+                raise CobolError(f"ligne {start}: Z literals must contain at least one character")
+            i = end + 1
+            tokens.append(Token(source[token_start + 2:end] + "\x00", start, True, token_start, i))
         elif c in "xX" and i + 1 < len(source) and source[i + 1] in "\"'":
             # X"hex": two hexadecimal digits per byte (scanner.l).
             quote, start = source[i + 1], line
@@ -260,6 +452,9 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                       and (source[i + 1].isdigit() or source[i + 1] == "." and source[i + 2:i + 3].isdigit())
                       and (tokens[-1].string or tokens[-1].text == ")"
                            or re.fullmatch(r"[+-]?[A-Za-z0-9_.][A-Za-z0-9_.-]*", tokens[-1].text)))
+            if c == "_":
+                # scanner.l: a word cannot begin with an underscore.
+                raise CobolError(f"ligne {line}: invalid symbol '_' - skipping word")
             match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
@@ -299,6 +494,9 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     if path in stack:
         raise CobolError(f"COPY cyclique: {path}")
     source = decode_source(path.read_bytes())
+    if not stack:
+        DEFINES.clear()
+        DEFINES.update(STANDARD_DEFINES)
     # The format detected on the main source also applies to its copybooks.
     fmt = source_format(source, fmt)
     text = normalize(source, fmt)
@@ -543,6 +741,11 @@ INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "
 BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
+# pplex.l: an IBM CBL/PROCESS statement of compiler options is ignored to
+# the end of its line (with only separators, or a space after the word).
+COMPILER_OPTIONS = re.compile(r"[ ]*(?:PROCESS|CBL)(?:[ ,;]*$|[ ])", re.I)
+
+
 def decode_source(data: bytes) -> str:
     """cobc reads sources as bytes (columns are byte columns) and skips a
     UTF-8 BOM (ppopen_get_file): one latin-1 character per byte."""
@@ -580,6 +783,36 @@ def source_format(source: str, fmt="auto"):
     return "fixed" if last in " -dD*/\\$" else "free"
 
 
+# reserved.c function_list: every intrinsic function name of cobc 3.2.
+INTRINSIC_NAMES = set("""ABS ABSOLUTE-VALUE ACOS ANNUITY ASIN ATAN BASECONVERT BIT-OF BIT-TO-CHAR BOOLEAN-OF-INTEGER
+BYTE-LENGTH CHAR CHAR-NATIONAL COMBINED-DATETIME CONCAT CONCATENATE CONTENT-LENGTH CONTENT-OF CONVERT COS
+CURRENCY-SYMBOL CURRENT-DATE DATE-OF-INTEGER DATE-TO-YYYYMMDD DAY-OF-INTEGER DAY-TO-YYYYDDD DISPLAY-OF E
+EXCEPTION-FILE EXCEPTION-FILE-N EXCEPTION-LOCATION EXCEPTION-LOCATION-N EXCEPTION-STATEMENT EXCEPTION-STATUS EXP
+EXP10 FACTORIAL FIND-STRING FORMATTED-CURRENT-DATE FORMATTED-DATE FORMATTED-DATETIME FORMATTED-TIME FRACTION-PART
+HEX-OF HEX-TO-CHAR HIGHEST-ALGEBRAIC INTEGER INTEGER-OF-BOOLEAN INTEGER-OF-DATE INTEGER-OF-DAY
+INTEGER-OF-FORMATTED-DATE INTEGER-PART LENGTH LENGTH-AN LOCALE-COMPARE LOCALE-DATE LOCALE-TIME
+LOCALE-TIME-FROM-SECONDS LOG LOG10 LOWER-CASE LOWEST-ALGEBRAIC MAX MEAN MEDIAN MIDRANGE MIN MOD MODULE-CALLER-ID
+MODULE-DATE MODULE-FORMATTED-DATE MODULE-ID MODULE-NAME MODULE-PATH MODULE-SOURCE MODULE-TIME
+MONETARY-DECIMAL-POINT MONETARY-THOUSANDS-SEPARATOR NATIONAL-OF NUMERIC-DECIMAL-POINT NUMERIC-THOUSANDS-SEPARATOR
+NUMVAL NUMVAL-C NUMVAL-F ORD ORD-MAX ORD-MIN PI PRESENT-VALUE RANDOM RANGE REM REVERSE SECONDS-FROM-FORMATTED-TIME
+SECONDS-PAST-MIDNIGHT SIGN SIN SQRT STANDARD-COMPARE STANDARD-DEVIATION STORED-CHAR-LENGTH SUBSTITUTE
+SUBSTITUTE-CASE SUM TAN TEST-DATE-YYYYMMDD TEST-DAY-YYYYDDD TEST-FORMATTED-DATETIME TEST-NUMVAL TEST-NUMVAL-C
+TEST-NUMVAL-F TRIM UPPER-CASE VARIANCE WHEN-COMPILED YEAR-TO-YYYY""".split())
+
+RESERVED_ALIASES = {"BINARY-INT": "BINARY-LONG", "BINARY-LONG-LONG": "BINARY-DOUBLE", "INITIALISE": "INITIALIZE",
+                    "INITIALISED": "INITIALIZED", "ORGANISATION": "ORGANIZATION", "SYNCHRONISED": "SYNCHRONIZED",
+                    "TIMEOUT": "TIME-OUT"}
+
+# Figurative constants as CALL arguments: a field of one character.
+CALL_FIGURATIVES = {
+    **dict.fromkeys(("ZERO", "ZEROS", "ZEROES"), lambda p: "0"),
+    **dict.fromkeys(("SPACE", "SPACES"), lambda p: " "),
+    **dict.fromkeys(("QUOTE", "QUOTES"), lambda p: '"'),
+    **dict.fromkeys(("HIGH-VALUE", "HIGH-VALUES"), lambda p: p.high_value),
+    **dict.fromkeys(("LOW-VALUE", "LOW-VALUES"), lambda p: p.low_value),
+}
+
+
 class Parser:
     def __init__(self, source: str):
         self.tokens = lex(source)
@@ -589,9 +822,14 @@ class Parser:
                                  for k in range(len(keys)))
         if self.decimal_comma:
             self.tokens = lex(source, True)
+        if STD != "cobol85":
+            # default.conf "reserved: ALIAS=WORD" entries outside the screen ones.
+            self.tokens = [Token(RESERVED_ALIASES[t.key], t.line, False, t.start, t.end)
+                           if not t.string and t.key in RESERVED_ALIASES else t for t in self.tokens]
         self.currency = "$"
         self.i = 0
         self.fields = {}
+        self.constants = {}
         self.files = {}
         self.conditions = {}
         self.data_stack = []
@@ -850,10 +1088,18 @@ class Parser:
                     length = None if self.at(")") else self.expr()
                     self.expect(")")
         descriptor = self.fields[self.conditions[key].parent] if conditions else self.fields[key]
-        if len(indices) != len(descriptor.dimensions):
+        deferred = getattr(self, "deferred_subscripts", None)
+        if deferred is not None and not conditions:
+            # REPORT SECTION: dimensions are known after the storage layout.
+            deferred.append((label, key, len(indices), self.t.line))
+        elif len(indices) != len(descriptor.dimensions):
             self.error(f"{label} requiert {len(descriptor.dimensions)} sous-script(s), reçu {len(indices)}")
-        if start is not None and (conditions or (descriptor.kind == "number" and descriptor.usage != "DISPLAY")):
-            self.error("modification de référence limitée aux groupes, PIC X et numériques DISPLAY")
+        if start is not None and conditions:
+            # cb_build_identifier: a reference modification of any item reads
+            # its storage bytes as alphanumeric data.
+            self.error("modification de référence d'une condition")
+        if deferred is None and descriptor.size > 0 and getattr(descriptor, "parse_size", None) is None:
+            self.check_constant_positions(label, descriptor, indices, start, length)
         bound = getattr(descriptor, "parse_size", None)
         if bound is not None and start is not None:
             # cb_build_identifier's check of constant positions.
@@ -865,6 +1111,62 @@ class Parser:
         if self.debug_frames and not conditions and not self.debug_frames[-1]["suspended"]:
             self.debug_frames[-1]["refs"].append((key, tuple(qualifiers), ref, False))
         return ref
+
+    # cobc.c cob_csyns: C keywords and libcob symbols a PROGRAM-ID cannot be.
+    C_KEYWORDS = set("""NULL P_cancel P_initialize P_ret_initialize P_switch _Bool _Complex _Imaginary _float128
+        alignof asm auto bool break case catch char class const const_cast continue default delete do double
+        dynamic_cast else enum exit_function exit_program explicit extern false float for frame_pointer frame_stack
+        friend goto if inline int long mutable namespace new offsetof operator private protected public register
+        reinterpret_cast restrict return short signed sizeof static static_cast struct switch template this throw
+        true try typedef typeid typename typeof union unsigned using virtual void volatile wchar_t""".split())
+
+    def check_valid_name(self, name):
+        """cobc_check_valid_name of a PROGRAM-ID (PROGRAM_ID_NAME)."""
+        reason = (" - name contains a directory separator" if "/" in name or "\\" in name
+                  else " - name cannot be empty" if not name
+                  else " - length exceeds maximum" if len(name) > 31
+                  else " - name cannot begin with space or hyphen" if name[0] in "- "
+                  else " - name cannot begin with 'cob_' or 'COB_'" if len(name) > 3 and name[:4] in {"cob_", "COB_"}
+                  else " - name duplicates a 'C' keyword" if name in self.C_KEYWORDS else None)
+        if reason:
+            self.error(f"invalid PROGRAM-ID '{name}'{reason}")
+
+    @staticmethod
+    def literal_integer(expr):
+        """cb_get_int of a numeric literal, or None for another operand."""
+        sign = -1 if expr.op == "unary-" else 1
+        if expr.op in {"unary+", "unary-"}:
+            expr = expr.args[0]
+        if expr.op != "number" or getattr(expr, "figurative_zero", False) or "." in expr.args[0]:
+            return None
+        return sign * int(expr.args[0])
+
+    def check_constant_positions(self, label, descriptor, indices, start, length):
+        """cb_build_identifier: literal subscripts within 1..OCCURS of each
+        dimension, literal reference modification within the item."""
+        for index, (_, count) in zip(indices, descriptor.dimensions):
+            n = self.literal_integer(index)
+            if n is not None and (n < 1 or n > count):
+                self.error(f"subscript of '{label}' out of bounds: {n}")
+        if start is None:
+            return
+        size = descriptor.size
+        length_value = None if length is None else self.literal_integer(length)
+        if length_value is not None and (length_value < 1 or length_value > size):
+            self.error(f"length of '{label}' out of bounds: {length_value}")
+        offset = self.literal_integer(start)
+        if offset is None:
+            return
+        if offset < 1 or (not (length is None and offset == size) and offset > size):
+            self.error(f"offset of '{label}' out of bounds: {offset}")
+        if length_value is not None and length_value > size - offset + 1:
+            self.error(f"length of '{label}' out of bounds: {length_value}")
+
+    def program_start(self):
+        """_identification_header is optional: IDENTIFICATION DIVISION or
+        PROGRAM-ID starts the next program."""
+        return ((self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION") \
+            or (self.at("PROGRAM-ID") and self.tokens[self.i + 1].key == ".")
 
     def program_end(self):
         """_procedure_division may be empty: the program ends here."""
@@ -880,7 +1182,16 @@ class Parser:
         self.expect("PROGRAM-ID")
         self.expect(".")
         entry_name = self.program_name = self.t.text
-        name = self.name()
+        self.check_valid_name(entry_name)
+        # program_id_name: a word or an alphanumeric literal.
+        name = self.take().text if self.t.string else self.name()
+        internal = entry_name
+        if self.accept("AS"):
+            # program_id_name AS literal: the external name of the module.
+            if not self.t.string:
+                self.error("littéral attendu après AS")
+            entry_name = self.program_name = self.take().text
+            self.check_valid_name(entry_name)
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
         # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
         common = initial = False
@@ -932,8 +1243,11 @@ class Parser:
                         while self.t.key.isdigit() and self.t.key not in {"01", "1", "77"}:
                             self.declaration(file_record=True)
                         descriptor = self.fields[key]
-                        if record.key not in {"01", "1"} or descriptor.kind != "text" or descriptor.table or descriptor.redefines:
-                            self.error("FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine")
+                        # The record area holds the bytes; a numeric or edited
+                        # record is a view of them like any other.
+                        if record.key not in {"01", "1"} or descriptor.table or descriptor.redefines or (
+                                descriptor.kind == "number" and descriptor.usage == "INDEX"):
+                            self.error("FD requiert un enregistrement 01 sans OCCURS ni REDEFINES explicite à la racine")
                         if spec.records:
                             # LINE SEQUENTIAL records must also share one size (validate_files).
                             if spec.organization not in {"SEQUENTIAL", "LINE SEQUENTIAL", "RELATIVE", "INDEXED", "SORT"}:
@@ -948,8 +1262,22 @@ class Parser:
                 self.expect(".")
                 self.data_stack = []
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
+                        and not self.at("COMMUNICATION") and not self.at("LOCAL-STORAGE") and not self.program_end():
+                    self.declaration()
+            if self.accept("LOCAL-STORAGE"):
+                # Allocated and initialized at each entry of the program
+                # (codegen.c: cob_cache_malloc and initialization of LOCAL).
+                self.expect("SECTION")
+                self.expect(".")
+                self.data_stack = []
+                before = set(self.fields)
+                while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
                         and not self.at("COMMUNICATION") and not self.program_end():
                     self.declaration()
+                for key in set(self.fields) - before:
+                    if self.fields[key].external:
+                        self.error("EXTERNAL invalide en LOCAL-STORAGE")
+                    self.fields[key].local = True
             if self.accept("LINKAGE"):
                 self.expect("SECTION")
                 self.expect(".")
@@ -986,6 +1314,9 @@ class Parser:
                 self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        for label, key, count, line in getattr(self, "report_subscripts", []):
+            if count != len(self.fields[key].dimensions):
+                raise CobolError(f"ligne {line}: {label} requiert {len(self.fields[key].dimensions)} sous-script(s), reçu {count}")
         for key, index, text in self.group_fills:
             condition = self.conditions[key]
             size = self.fields[condition.parent].size
@@ -1008,8 +1339,35 @@ class Parser:
         if procedure:
             self.expect("PROCEDURE")
             self.expect("DIVISION")
-        if procedure and self.accept("USING"):
-            using = self.using_list(lambda: self.at("."))
+        returning_omitted = lambda: self.at("RETURNING") and self.tokens[self.i + 1].key == "OMITTED"
+        self.chaining = []
+        if procedure and self.accept("CHAINING"):
+            # procedure_using_chaining: WORKING-STORAGE 01/77 items set from
+            # the command-line arguments at initialization (cob_chain_setup).
+            while not self.at(".") and not returning_omitted():
+                self.accept("BY")
+                self.accept("REFERENCE")
+                if self.at("VALUE"):
+                    self.error("BY VALUE not allowed in CHAINED programs")
+                key = self.resolve(self.name())
+                field = self.fields[key]
+                if field.linkage or getattr(field, "local", False) or field.file_record:
+                    self.error(f"'{field.label}' is not in WORKING-STORAGE SECTION")
+                if field.parent is not None:
+                    self.error(f"'{field.label}' not level 01 or 77")
+                if field.redefines:
+                    self.error(f"'{field.label}' REDEFINES field not allowed here")
+                self.chaining.append(key)
+            if not self.chaining:
+                self.error("CHAINING requiert au moins un paramètre")
+        elif procedure and self.accept("USING"):
+            using = self.using_list(lambda: self.at(".") or returning_omitted())
+        if procedure and returning_omitted():
+            # procedure_returning: RETURNING OMITTED declares no return item;
+            # cobc refuses it for a main program (-x): the program is a module.
+            self.take()
+            self.take()
+            self.returning_omitted = True
         if procedure:
             self.expect(".")
         self.entries = []
@@ -1049,18 +1407,18 @@ class Parser:
                 main_block = len(blocks)
                 blocks.append(ProcedureBlock(None, None, current_body))
                 continue
-            if (self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION":
+            if self.program_start():
                 # Contained programs end the PROCEDURE DIVISION.
                 nested_start = True
                 break
             if self.accept("END"):
                 self.expect("PROGRAM")
                 # cobc compares the names as written, case included.
-                if self.t.text != entry_name or self.name() != name:
+                if self.t.text != internal or self.name() != name:
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
                 ended = True
-                if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
+                if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
                     self.expect("<EOF>")
                 break
             if self.t.key not in VERBS and self.tokens[self.i + 1].key == "SECTION":
@@ -1127,6 +1485,8 @@ class Parser:
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
+        program.returning_omitted = getattr(self, "returning_omitted", False)
+        program.chaining = self.chaining
         program.entries = self.entries
         program.segments = segments
         program.collating = self.collating
@@ -1152,7 +1512,7 @@ class Parser:
                 self.error("REPORT SECTION avec programmes contenus non pris en charge")
             inherited = self.global_items(entry_name)
             inherited_files = self.global_files(entry_name)
-            while self.at("IDENTIFICATION") or self.at("ID"):
+            while self.program_start():
                 child_parser = Parser.__new__(Parser)
                 child_parser.__init__("")
                 child_parser.tokens, child_parser.i = self.tokens, self.i
@@ -1168,12 +1528,12 @@ class Parser:
                 child.siblings = []
             self.expect("END")
             self.expect("PROGRAM")
-            if self.t.text != entry_name or self.name() != name:
+            if self.t.text != internal or self.name() != name:
                 self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
             self.expect(".")
-            if not self.at("<EOF>") and not (self.at("IDENTIFICATION") or self.at("ID") or self.at("END")):
+            if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
                 self.expect("<EOF>")
-        if self.at("IDENTIFICATION") or self.at("ID"):
+        if self.program_start():
             # A sibling program after END PROGRAM: same source, separate names.
             sibling = Parser.__new__(Parser)
             sibling.__init__("")
@@ -1707,6 +2067,48 @@ class Parser:
                 or name in self.indexes):
             self.error(f"nom de procédure homonyme d'une donnée non pris en charge: {name}")
 
+    def repository(self):
+        """repository_paragraph: FUNCTION ALL INTRINSIC or FUNCTION name...
+        INTRINSIC make the scanner return those names as functions, without
+        the word FUNCTION, in the rest of the program and its contained
+        programs (functions_are_all, cb_repository_list)."""
+        names = set()
+        while not self.t.string and self.t.key in {"FUNCTION", "PROGRAM", "CLASS", "INTERFACE", "PROPERTY"}:
+            if not self.accept("FUNCTION"):
+                self.error(f"REPOSITORY {self.t.key} non pris en charge")
+            if self.accept("ALL"):
+                self.expect("INTRINSIC")
+                names |= INTRINSIC_NAMES
+                continue
+            listed = []
+            while not self.t.string and self.t.key not in {"INTRINSIC", ".", "AS", "FUNCTION", "<EOF>"}:
+                listed.append(self.take().key)
+            if not listed or not self.accept("INTRINSIC"):
+                self.error("FUNCTION utilisateur (FUNCTION-ID) non prise en charge")
+            for name in listed:
+                if name not in INTRINSIC_NAMES:
+                    self.error(f"FUNCTION '{name}' is not a known intrinsic function")
+            names |= set(listed)
+        if names or self.at("."):
+            self.expect(".")
+        end, depth = self.i, 0
+        while end < len(self.tokens) and self.tokens[end].key != "<EOF>":
+            t = self.tokens[end]
+            if not t.string and t.key == "PROGRAM-ID":
+                depth += 1
+            if not t.string and t.key == "END" and self.tokens[end + 1].key == "PROGRAM":
+                if depth == 0:
+                    break
+                depth -= 1
+            end += 1
+        replaced = []
+        for t in self.tokens[self.i:end]:
+            if not t.string and t.key in names and not (replaced and not replaced[-1].string
+                                                         and replaced[-1].key == "FUNCTION"):
+                replaced.append(Token("FUNCTION", t.line, False, t.start, t.start))
+            replaced.append(t)
+        self.tokens[self.i:end] = replaced
+
     def environment_division(self):
         self.expect("DIVISION")
         self.expect(".")
@@ -1715,12 +2117,26 @@ class Parser:
             self.expect(".")
             computers = set()
             collating = None
-            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER"):
+            # configuration_paragraphs: in any order, each once; an empty
+            # paragraph keeps only its header.
+            ends = {"SOURCE-COMPUTER", "OBJECT-COMPUTER", "SPECIAL-NAMES", "REPOSITORY", "INPUT-OUTPUT", "DATA",
+                    "PROCEDURE"}
+            while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES") \
+                    or self.at("REPOSITORY"):
                 paragraph = self.take().key
                 if paragraph in computers:
                     self.error(f"paragraphe {paragraph} dupliqué")
                 computers.add(paragraph)
                 self.expect(".")
+                if paragraph == "REPOSITORY":
+                    self.repository()
+                    continue
+                if paragraph == "SPECIAL-NAMES":
+                    if not (self.t.key in ends and not self.t.string) and not self.program_end():
+                        self.special_names()
+                    continue
+                if not self.t.string and self.t.key in ends or self.program_end():
+                    continue
                 if not (paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING"))):
                     self.name()
                 if paragraph == "SOURCE-COMPUTER" and (self.at("WITH") or self.at("DEBUGGING")):
@@ -1749,9 +2165,6 @@ class Parser:
                         break
                 if not self.accept("."):
                     self.error(f"clause {paragraph} non prise en charge; seul le nom de machine est accepté")
-            if self.accept("SPECIAL-NAMES"):
-                self.expect(".")
-                self.special_names()
             if collating:
                 token, alphabet = collating
                 if isinstance(self.alphabets.get(alphabet), tuple):
@@ -1970,7 +2383,7 @@ class Parser:
                     self.expect("ALPHANUMERIC")
                 self.accept("IS")
                 members = set()
-                while self.t.string or self.t.key[:1].isdigit():
+                while self.t.string or self.t.key[:1].isdigit() or self.t.key in INSPECT_FIGURATIVES:
                     low = ordinal_or_text()
                     if self.accept("THRU") or self.accept("THROUGH"):
                         high = ordinal_or_text()
@@ -2068,7 +2481,7 @@ class Parser:
         select_text = self.tokens[self.i - 1].text
         if name in self.files or name in VERBS:
             self.error(f"nom de fichier réservé ou dupliqué: {name}")
-        path, assign_field = None, None
+        path, assign_field, line_advancing = None, None, False
         organization, organization_seen, status, access = "SEQUENTIAL", False, None, None
         relative_key, record_key, alternate_keys = None, None, []
 
@@ -2095,11 +2508,13 @@ class Parser:
 
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
-        while not self.at("."):
+        ends = ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE") if STD != "cobol85" else ()
+        while not self.at(".") and not any(self.at(word) for word in ends):
             if self.at("ASSIGN") and path is None and assign_field is None:
                 # SELECT clauses come in any order (file_control_entry).
                 self.take()
                 path, assign_field, assign_organization = self.assign_clause(name, select_text)
+                line_advancing = self.line_advancing
                 if assign_organization and not organization_seen:
                     organization = assign_organization
             elif self.accept("PADDING"):
@@ -2182,7 +2597,12 @@ class Parser:
                 self.error("clause SELECT non prise en charge")
         if path is None and assign_field is None:
             self.error("ASSIGN attendu")
-        self.expect(".")
+        # dot_or_else_end_of_file_control: missing-period is a warning in
+        # the default dialect, an error in cobol85.
+        if STD == "cobol85" or not any(self.at(word) for word in ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE")):
+            self.expect(".")
+        if line_advancing:
+            organization = "LINE SEQUENTIAL"
         if organization != "RELATIVE" and relative_key:
             self.error("RELATIVE KEY requiert ORGANIZATION RELATIVE")
         if organization not in {"RELATIVE", "INDEXED"} and access not in {None, "SEQUENTIAL"}:
@@ -2195,6 +2615,7 @@ class Parser:
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
                                     record_key=record_key, alternate_keys=alternate_keys,
                                     assign_field=assign_field, select_text=select_text)
+        self.files[name].line_advancing = line_advancing
 
     # assign_device of parser.y: general devices keep the SELECT name as file
     # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.
@@ -2214,8 +2635,13 @@ class Parser:
         kind = kind or ("external" if STD == "cobol85" else "default")
         if explicit and STD == "cobol85":
             self.error("ASSIGN EXTERNAL/DYNAMIC non conforme à -std=cobol85")
+        self.line_advancing = False
         if self.at("LINE") and self.tokens[self.i + 1].key == "ADVANCING":
-            self.error("ASSIGN LINE ADVANCING FILE non pris en charge")
+            # line_adv_file: flag_line_adv (LINE SEQUENTIAL in cb_validate_one).
+            self.take()
+            self.take()
+            self.accept("FILE")
+            self.line_advancing = True
         organization, device = None, None
         if not self.t.string and self.t.key in {"DISPLAY", "KEYBOARD", "PRINTER", "PRINTER-1", "PRINT"}:
             self.error(f"ASSIGN TO {self.t.key} (périphérique spécial) non pris en charge")
@@ -2460,7 +2886,12 @@ class Parser:
             if report.entries:
                 self.error(f"RD dupliqué: {name}")
             self.current_report = name
-            report_description(self, report)
+            self.deferred_subscripts = []
+            try:
+                report_description(self, report)
+            finally:
+                self.report_subscripts = getattr(self, "report_subscripts", []) + self.deferred_subscripts
+                self.deferred_subscripts = None
         self.current_report = None
         if not self.at("PROCEDURE"):
             self.error("PROCEDURE DIVISION attendue après la REPORT SECTION")
@@ -2490,6 +2921,12 @@ class Parser:
         """The storage of a report item (CB_STORAGE_REPORT): its PICTURE."""
         key = f"^report^{report.name}^{sum(1 for k in self.fields if k.startswith(f'^report^{report.name}^'))}"
         return self.hidden_item(list(picture), key)
+
+    def sum_counter(self, report, picture):
+        """build_sum_counter: a WORKING-STORAGE DISPLAY counter, VALUE ZERO."""
+        key = f"^sum^{report.name}^{sum(1 for k in self.fields if k.startswith(f'^sum^{report.name}^'))}"
+        line = self.t.line
+        return self.hidden_item([Token("PIC", line), Token(picture, line), Token("VALUE", line), Token("0", line)], key)
 
     def report_records(self):
         """finalize_report: the report file's record has the report's line
@@ -2534,29 +2971,50 @@ class Parser:
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
         "PI": (0, "number"), "E": (0, "number"), "CURRENT-DATE": (0, "text"), "WHEN-COMPILED": (0, "text"),
-        "RANDOM": (0, "number"),
+        "RANDOM": (0, "number"), "TRIM": (1, "text"), "HEX-OF": (1, "text"), "HEX-TO-CHAR": (1, "text"),
     }
 
     def function_call(self):
+        """FUNCTION name [(exp_list)] [(start:[length])]: a reference
+        modification of an alphanumeric result (func_args _func_refmod)."""
+        result = self.function_value()
+        if not self.at("("):
+            return result
+        self.take()
+        start = self.expr()
+        self.expect(":")
+        length = None if self.at(")") else self.expr()
+        self.expect(")")
+        if not (result.op == "text" or (result.op == "function" and self.FUNCTIONS[result.args[0]][1] == "text")):
+            self.error("modification de référence d'une FUNCTION numérique non prise en charge")
+        return Expr("refmod", (result, start, length))
+
+    def function_value(self):
         """FUNCTION name [(exp_list)]: arguments separated by spaces or commas."""
         name = self.take()
         if name.string or name.key not in self.FUNCTIONS:
             self.error(f"FUNCTION {name.text} non prise en charge")
         count, _ = self.FUNCTIONS[name.key]
         args = []
-        if self.accept("("):
+        # A function without arguments: "(" starts a reference modification.
+        if self.at("(") and (count != 0 or name.key == "RANDOM" or self.tokens[self.i + 1].key == ")") and self.accept("("):
             while not self.accept(")"):
                 self.accept(",")
                 if self.at(")"):
                     continue
                 args.append(self.expr())
+                ahead = self.tokens[self.i + self.at(",")]
+                if name.key == "TRIM" and len(args) == 1 and not ahead.string and ahead.key in {"LEADING", "TRAILING"}:
+                    # parser.y trim_args: the direction is a second argument.
+                    self.accept(",")
+                    direction = {"LEADING": "1", "TRAILING": "2"}[self.take().key]
+                    self.expect(")")
+                    return Expr("function", (name.key, tuple(args) + (Expr("number", (direction,)),)))
         if name.key == "RANDOM":
             count = len(args) if len(args) <= 1 else 0
         if (count >= 0 and len(args) != count) or (count < 0 and len(args) < -count) \
                 or (name.key == "NUMVAL-C" and len(args) > 2):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
-        if self.at("("):
-            self.error("modification de référence d'une FUNCTION non prise en charge")
         if name.key == "WHEN-COMPILED":
             # cb_set_intr_when_compiled: a literal of the compilation time,
             # hundredths and local UTC offset included.
@@ -2656,6 +3114,28 @@ class Parser:
                 size = Expr("*", (size, Expr("number", (str(c.occurs),))))
             total = size if total is None else Expr("+", (total, size))
         return total
+
+    ROUNDING_MODES = {"AWAY-FROM-ZERO", "NEAREST-AWAY-FROM-ZERO", "NEAREST-EVEN", "NEAREST-TOWARD-ZERO",
+                      "PROHIBITED", "TOWARD-GREATER", "TOWARD-LESSER", "TRUNCATION"}
+
+    def rounded_phrase(self):
+        """flag_rounded: False, True (the default rounding), or the name of
+        the round_choice of ROUNDED MODE [IS]."""
+        if not self.accept("ROUNDED"):
+            return False
+        if not self.accept("MODE"):
+            return True
+        self.accept("IS")
+        if self.t.string or self.t.key not in self.ROUNDING_MODES:
+            self.error("mode d'arrondi attendu")
+        mode = self.take().key
+        return True if mode == "NEAREST-AWAY-FROM-ZERO" else mode
+
+    def no_advancing(self) -> bool:
+        # scanner.l: ("WITH"[ ,;\n]+)?"NO"[ ,;\n]+"ADVANCING" is one token.
+        i = self.i + (not self.t.string and self.t.key == "WITH")
+        return all(not self.tokens[i + k].string and self.tokens[i + k].key == word
+                   for k, word in enumerate(("NO", "ADVANCING")))
 
     def operand_start(self):
         """An 'x' of parser.y expr_tokens: identifier, literal or figurative."""
@@ -3065,6 +3545,22 @@ class Parser:
             invalid, valid = self.key_handlers(files[0], "END-REWRITE")
             return Stmt("rewrite", (files[0], record.name, value, invalid, valid), line)
         if verb == "DELETE":
+            if self.at("FILE") and not self.tokens[self.i + 1].string and self.tokens[self.i + 1].key in self.files \
+                    and "FILE" not in self.files:
+                # TOK_FILE delete_file_list (cb_emit_delete_file): no
+                # declaratives, the status only reaches FILE STATUS.
+                self.take()
+                names = []
+                while not self.t.string and self.t.key in self.files:
+                    name = self.take().key
+                    if self.files[name].sort:
+                        self.error("DELETE FILE not allowed on SORT files")
+                    names.append(name)
+                    self.accept(",")
+                if self.at("ON") or self.at("EXCEPTION") or self.at("NOT"):
+                    self.error("DELETE FILE ... ON EXCEPTION non pris en charge")
+                self.accept("END-DELETE")
+                return Stmt("delete_file", (names,), line)
             name = self.file_name()
             if self.files[name].organization not in {"RELATIVE", "INDEXED"}:
                 self.error("DELETE limité aux fichiers RELATIVE et INDEXED")
@@ -3101,6 +3597,9 @@ class Parser:
                 key = self.variable()
                 if spec.organization == "INDEXED":
                     index = self.index_key(spec, key)
+                    if index[0] < 0:
+                        # check_valid_key: a record item at a key's offset.
+                        self.error("invalid key item")
                 elif key.name != spec.relative_key or key.indices or key.start is not None:
                     self.error("START KEY doit désigner la RELATIVE KEY du fichier")
             elif spec.organization == "INDEXED":
@@ -3154,28 +3653,51 @@ class Parser:
                 invalid, valid = self.key_handlers(files[0], "END-WRITE")
             return Stmt("write", (files[0], record.name, value, advancing, invalid, valid), line)
         if verb == "DISPLAY":
-            values = []
-            while self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}:
-                if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
-                    break  # scanner.l folds NO DATA (RECEIVE) into one token
-                values.append(self.expr())
-            if not values:
-                self.error("DISPLAY sans opérande")
-            device = "stdout"
-            if self.accept("UPON"):
-                # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
-                target = self.take().key
-                device = self.mnemonics.get(target, self.DEVICES.get(target))
-                device = {"console": "stdout"}.get(device, device)
-                if device not in {"stdout", "stderr"}:
-                    self.error(f"DISPLAY UPON {target} non pris en charge")
-            newline = True
-            if self.accept("WITH"):
-                self.expect("NO")
-                self.expect("ADVANCING")
-                newline = False
+            # parser.y display_list _x_list: each display_atom is a list of
+            # values followed by its display_clauses, emitted on its own.
+            atoms = []
+            while True:
+                values = []
+                while (self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}) and not self.no_advancing():
+                    if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
+                        break  # scanner.l folds NO DATA (RECEIVE) into one token
+                    # x_list: identifiers and literals, a sign touching digits
+                    # making a signed literal (scanner.l).
+                    values.append(self.expr(primary=True))
+                device, newline, seen = "stdout", True, set()
+                while True:
+                    if self.at("UPON"):
+                        clause = "UPON"
+                        self.take()
+                        # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
+                        target = self.take().key
+                        device = self.mnemonics.get(target, self.DEVICES.get(target))
+                        device = {"console": "stdout"}.get(device, device)
+                        if device not in {"stdout", "stderr"}:
+                            self.error(f"DISPLAY UPON {target} non pris en charge")
+                    elif self.no_advancing():
+                        clause = "NO ADVANCING"
+                        self.accept("WITH")
+                        self.take()
+                        self.take()
+                        newline = False
+                    elif self.at("WITH"):
+                        self.error(f"DISPLAY WITH {self.tokens[self.i + 1].text} (écran) non pris en charge")
+                    else:
+                        break
+                    if clause in seen:
+                        # check_repeated: emit_duplicate_clause_message.
+                        self.error(f"duplicate {clause} clause")
+                    seen.add(clause)
+                if not values:
+                    if atoms and not seen:
+                        break
+                    self.error("DISPLAY sans opérande")
+                atoms.append(Stmt("display", (values, newline, device), line))
+                if not seen:
+                    break
             self.accept("END-DISPLAY")
-            return Stmt("display", (values, newline, device), line)
+            return atoms[0] if len(atoms) == 1 else Stmt("sequence", (atoms,), line)
         if verb == "ACCEPT":
             if not self.t.string and self.t.key in self.cds:
                 # ACCEPT cd-name [MESSAGE] COUNT: CB_PENDING, nothing generated.
@@ -3227,7 +3749,7 @@ class Parser:
             source = self.corresponding_group()
             self.expect("TO" if verb == "ADD" else "FROM")
             target = self.corresponding_group()
-            rounded = self.accept("ROUNDED")
+            rounded = self.rounded_phrase()
             op = "+" if verb == "ADD" else "-"
             pairs = self.corresponding_pairs(target, source, True)
             items = [(t, Expr(op, (Expr("var", (t,)), Expr("var", (u,)))), rounded) for t, u in pairs]
@@ -3235,8 +3757,8 @@ class Parser:
             if stmt.op == "compute":
                 # cb_build_optim_add for int operands without ROUNDED/SIZE ERROR.
                 stmt = Stmt("compute", (None, [
-                    (t, Expr("p_int_add", (t, Expr("var", (u,)), -self.fields[t.name].scale, verb == "SUBTRACT")), r)
-                    if not r and self.fields[t.name].scale < 0 and self.fits_int(Expr("var", (u,)))
+                    (t, Expr("p_int_add", (t, Expr("var", (u,)), max(0, -self.fields[t.name].scale), verb == "SUBTRACT")), r)
+                    if not r and self.cob_add_int(self.fields[t.name]) and self.fits_int(Expr("var", (u,)))
                     else (t, e, r) for (t, e, r), (_, u) in zip(items, pairs)]), line)
             return stmt
         if verb == "MOVE":
@@ -3305,9 +3827,14 @@ class Parser:
                 # operand goes through cob_add_int, which first truncates it
                 # to the receiver's trailing P positions (15 TO 99P adds 10).
                 stmt = Stmt("compute", (None, [
-                    (ref, Expr("p_int_add", (ref, operand, -self.fields[ref.name].scale, verb == "SUBTRACT")), rounded)
-                    if not rounded and self.fields[ref.name].kind == "number" and self.fields[ref.name].scale < 0
+                    (ref, Expr("p_int_add", (ref, operand, max(0, -self.fields[ref.name].scale), verb == "SUBTRACT")), rounded)
+                    if not rounded and self.fields[ref.name].kind == "number" and self.cob_add_int(self.fields[ref.name])
                     else (ref, expr, rounded) for ref, expr, rounded in items]), line)
+                guards = [Stmt("packed_add_guard", (ref, operand, verb == "SUBTRACT"), line) for ref, _, rounded in items
+                          if not rounded and self.fields[ref.name].usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}
+                          and not self.cob_add_int(self.fields[ref.name])]
+                if guards:
+                    stmt = Stmt("sequence", (guards + [stmt],), line)
             return stmt
         if verb == "IF":
             cond = self.condition()
@@ -3322,7 +3849,11 @@ class Parser:
             no = self.block({"END-IF", "ELSE"}) if otherwise else []
             if otherwise and not no:
                 self.error("ELSE without imperative statement")
-            if not self.accept("END-IF") and not self.at(".") and not self.at("ELSE"):
+            # Without END-IF, the IF also ends where its branch does: at the
+            # scope terminator or WHEN of an enclosing statement (block).
+            ended = self.at(".") or self.at("ELSE") or self.at("WHEN") or (
+                not self.t.string and self.t.key.startswith("END-") and self.t.key in BOUNDARIES)
+            if not self.accept("END-IF") and not ended:
                 self.error("END-IF ou point attendu")
             return Stmt("if", (cond, yes, no), line)
         if verb == "ALTER":
@@ -3454,11 +3985,15 @@ class Parser:
                     for test in tests[1:]:
                         line_test = Expr("and", (line_test, test))
                     condition = line_test if condition is None else Expr("or", (condition, line_test))
-                    if self.at("WHEN") and not self.tokens[self.i + 1].string and self.tokens[self.i + 1].key != "OTHER":
+                    if self.at("WHEN") and (self.tokens[self.i + 1].string or self.tokens[self.i + 1].key != "OTHER"):
                         self.take()
                         continue
                     break
-                branches.append((condition, self.block(stops)))
+                body = self.block(stops)
+                if not body and self.at("WHEN"):
+                    # WHEN OTHER cannot join the WHEN list of a group (parser.y).
+                    self.error("WHEN without imperative statement")
+                branches.append((condition, body))
             if not branches and not otherwise:
                 self.error("EVALUATE requiert au moins un WHEN")
             self.accept("END-EVALUATE")
@@ -3496,7 +4031,25 @@ class Parser:
                 return Stmt("sequence", ([Stmt("display", ([value], True, "stdout"), line),
                                           Stmt("accept_omitted", (), line)],), line)
             self.expect("RUN")
-            return Stmt("stop", (), line)
+            # stop_returning: cob_stop_run of RETURNING/GIVING x, x, WITH
+            # ERROR/NORMAL STATUS [x] (1 and 0), else RETURN-CODE.
+            status = None
+            if self.accept("RETURNING") or self.accept("GIVING"):
+                status = self.expr()
+            elif self.at("WITH") or self.at("ERROR") or self.at("NORMAL"):
+                self.accept("WITH")
+                error = self.take().key == "ERROR"
+                if not error and self.tokens[self.i - 1].key != "NORMAL":
+                    self.error("ERROR ou NORMAL attendu")
+                self.accept("STATUS")
+                status = self.expr() if self.operand_start() else Expr("number", ("1" if error else "0",))
+            elif self.t.string or (not self.at(".") and self.operand_start()):
+                status = self.expr()
+            elif not self.t.string and self.t.key not in BOUNDARIES and re.fullmatch(r"[A-Z0-9][A-Z0-9_-]*", self.t.key):
+                # stop_returning x (RM extension): any word is taken as the
+                # status operand, an undefined one is an error.
+                self.error(f"'{self.t.text}' is not defined")
+            return Stmt("stop", (status,), line)
         if verb == "GOBACK":
             return Stmt("goback", (), line)
         if verb == "CALL":
@@ -3517,9 +4070,25 @@ class Parser:
                         mode = "REFERENCE"
                     elif self.accept("CONTENT"):
                         mode = "CONTENT"
-                    if self.at("OMITTED") or self.at("VALUE") or self.t.string or (not self.t.string and self.t.text[:1].isdigit()):
+                    if self.at("OMITTED") and mode == "REFERENCE":
+                        # A NULL address: the callee's item is not passed.
+                        self.take()
+                        arguments.append((mode, None))
+                        continue
+                    if self.at("OMITTED") or self.at("VALUE"):
                         self.error("CALL USING limité aux identifiants BY REFERENCE/CONTENT")
-                    if self.t.string or not self.candidates(self.t.key):
+                    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", self.t.text) and not self.t.string:
+                        # output_call: an 8-byte union whose int holds the
+                        # literal's digits, the rest left uninitialized.
+                        self.error("CALL USING d'un littéral numérique non pris en charge (entier C de cobc)")
+                    if self.t.string or (self.t.key in CALL_FIGURATIVES and not self.candidates(self.t.key)):
+                        # output_call: a literal (or a figurative, one
+                        # character) passed as a field of its own size.
+                        t = self.take()
+                        value = t.text if t.string else CALL_FIGURATIVES[t.key](self)
+                        arguments.append((mode, Expr("text", (value,))))
+                        continue
+                    if not self.candidates(self.t.key):
                         break
                     arguments.append((mode, self.variable()))
                 if not arguments:
@@ -3654,18 +4223,22 @@ class Parser:
 
     def index_key(self, spec, ref):
         """cob_findkey_attr: the key whose field starts where the KEY item
-        starts; the item's size is the compared (partial) length."""
+        starts; the item's size is the compared (partial) length. Without
+        such a key the READ or START gives status 23 (index -1)."""
         f = self.fields[ref.name]
         root = ref.name.split(".")[0]
-        if ref.indices or ref.start is not None or f.dimensions or root not in spec.records:
-            self.error(f"KEY {f.label} doit être un champ de l'enregistrement de {spec.name}")
+        if ref.indices or ref.start is not None or f.dimensions:
+            self.error(f"KEY {f.label} indicé ou modifié non pris en charge")
+        if root not in spec.records:
+            # Not in the record area: no key starts there, status 23.
+            return -1, f.size
         offset = f.offset - self.fields[root].offset
         for index, (_, key_offset, size, _) in enumerate([spec.record_key, *spec.alternate_keys]):
             if key_offset == offset:
                 if f.size > size:
                     self.error(f"KEY {f.label} plus longue que la clé du fichier")
                 return index, f.size
-        self.error(f"KEY {f.label} ne désigne pas une clé de {spec.name}")
+        return -1, f.size
 
     def key_handlers(self, file_name, ending):
         """[INVALID KEY ...] [NOT INVALID KEY ...] [END-x], RELATIVE files only."""
@@ -3709,9 +4282,9 @@ class Parser:
         return pairs
 
     def rounded_receivers(self):
-        receivers = [(self.target_variable(), self.accept("ROUNDED"))]
+        receivers = [(self.target_variable(), self.rounded_phrase())]
         while not self.t.string and self.candidates(self.t.key):
-            receivers.append((self.target_variable(), self.accept("ROUNDED")))
+            receivers.append((self.target_variable(), self.rounded_phrase()))
         return receivers
 
     def target_variable(self):
@@ -3719,9 +4292,16 @@ class Parser:
         self.debug_target()
         return ref
 
-    def string_operand(self, delimiter=False):
-        """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative."""
+    def string_operand(self, delimiter=False, function=False):
+        """An x of STRING / UNSTRING: identifier, alphanumeric or unsigned integer literal, figurative;
+        an alphanumeric FUNCTION in STRING."""
         t = self.t
+        if function and not t.string and t.key == "FUNCTION":
+            self.take()
+            value = self.function_call()
+            if value.op == "function" and self.FUNCTIONS[value.args[0]][1] != "text":
+                self.error(f"STRING de FUNCTION {value.args[0]} numérique non pris en charge")
+            return value
         if not t.string and t.key in INSPECT_FIGURATIVES:
             self.take()
             return Expr("all", (self.figurative_value(t.key),))
@@ -3770,10 +4350,10 @@ class Parser:
     def string_statement(self, line):
         groups, items = [], []
         while not self.at("INTO"):
-            items.append(self.string_operand())
+            items.append(self.string_operand(function=True))
             if self.accept("DELIMITED"):
                 self.accept("BY")
-                delimiter = None if self.accept("SIZE") else self.string_operand()
+                delimiter = None if self.accept("SIZE") else self.string_operand(function=True)
                 groups.append((tuple(items), delimiter))
                 items = []
         if items:
@@ -3914,9 +4494,18 @@ class Parser:
     def inspect_statement(self, line):
         if self.at("BACKWARD"):
             self.error("INSPECT BACKWARD non pris en charge (cobc: PENDING)")
-        if self.t.string or not self.candidates(self.t.key):
+        if self.t.string or (self.at("FUNCTION") and not self.candidates("FUNCTION")):
+            # send_identifier: a literal or an alphanumeric function, for
+            # TALLYING only (cb_emit_inspect).
+            target = self.expr(primary=True)
+            if target.op == "function" and self.FUNCTIONS[target.args[0]][1] != "text":
+                self.error("cible INSPECT fonction numérique invalide")
+            if target.op not in {"text", "function"}:
+                self.error("cible INSPECT littérale ou fonction non prise en charge")
+        elif not self.candidates(self.t.key):
             self.error("cible INSPECT littérale ou fonction non prise en charge")
-        target = self.variable()
+        else:
+            target = self.variable()
         clauses = []
         if self.accept("TALLYING"):
             items, counter, previous = [], None, None
@@ -3956,6 +4545,8 @@ class Parser:
             if previous not in {"characters", "value"}:
                 self.error("TALLYING clause is incomplete")
             clauses.append(("tallying", tuple(items)))
+        if isinstance(target, Expr) and (self.at("REPLACING") or self.at("CONVERTING")):
+            self.error(f"invalid target for {self.t.key}")
         if self.accept("REPLACING"):
             items, mode = [], None
             while True:
@@ -4078,6 +4669,64 @@ class Parser:
                 keys.append((value, key) if descending else (key, value))
         return Stmt("search_all", (table.name, index, at_end, keys, whens[0][1]), line)
 
+    def table_sort_statement(self, line):
+        """SORT table [ON ASCENDING|DESCENDING KEY [names]]... (sort_merge_body,
+        cb_emit_sort_init): without KEY the first OCCURS KEY, with KEY and no
+        names the element itself; each key read at its offset in its parent."""
+        def qualified_name():  # qualified_word
+            label, qualifiers = self.name(), []
+            while self.accept("OF") or self.accept("IN"):
+                qualifiers.append(self.name())
+            return DataRef(self.resolve(label, tuple(qualifiers)))
+        ref = qualified_name()
+        table = self.fields[ref.name]
+        if self.at("(") or len(table.dimensions) != 1 or not table.table:
+            self.error("SORT limité à une table à une dimension, sans indice")
+        keys, phrase = [], False
+        while self.accept("ON") or self.at("ASCENDING") or self.at("DESCENDING"):
+            if not (self.at("ASCENDING") or self.at("DESCENDING")):
+                self.error("ASCENDING ou DESCENDING attendu")
+            phrase = True
+            descending = self.take().key == "DESCENDING"
+            self.accept("KEY")
+            self.accept("IS")
+            named = False
+            while not self.t.string and self.candidates(self.t.key) and not self.at("ON"):
+                key = qualified_name()
+                if not (key.name == ref.name or key.name.startswith(ref.name + ".")):
+                    self.error("clé de SORT de table requise dans l'élément, sans indice")
+                keys.append((descending, key.name))
+                named = True
+            if not named:
+                keys.append((descending, ref.name))
+        if not phrase:
+            if not table.search_keys:
+                self.error("table SORT requires KEY phrase")
+            descending, label = table.search_keys[0]
+            keys.append((descending, self.key_field(ref.name, label)))
+        if self.accept("WITH") or self.at("DUPLICATES"):
+            # glibc's qsort is a merge sort: equal keys keep their order.
+            self.expect("DUPLICATES")
+            self.accept("IN")
+            self.accept("ORDER")
+        if self.accept("COLLATING") or self.at("SEQUENCE"):
+            self.expect("SEQUENCE")
+            self.accept("IS")
+            self.check_identity_alphabet(self.t, self.name(), "SORT COLLATING SEQUENCE")
+        if self.at("INPUT") or self.at("USING") or self.at("OUTPUT") or self.at("GIVING"):
+            self.error("USING invalid with table SORT")
+        sort_keys = []
+        for descending, name in keys:
+            f = self.fields[name]
+            # cb_emit_sort_init: the key's offset in its parent, not in the element.
+            offset = f.offset - (self.fields[f.parent].offset if f.parent else 0)
+            if f.kind == "number" and f.usage == "INDEX":
+                self.error("clé de SORT de table USAGE INDEX non prise en charge")
+            if offset + f.size > table.size:
+                self.error("clé de SORT de table lue hors de l'élément non prise en charge")
+            sort_keys.append((descending, name, offset))
+        return Stmt("table_sort", (ref.name, sort_keys), line)
+
     def key_field(self, table, label):
         names = [name for name, f in self.fields.items()
                  if f.label == label and (name == table or name.startswith(table + "."))]
@@ -4089,6 +4738,8 @@ class Parser:
         """SORT/MERGE sd ON ASCENDING/DESCENDING KEY ... as cobc emits it:
         cob_file_sort_init and keys, USING files or a PERFORM of the input
         procedure, GIVING files or a PERFORM of the output procedure, close."""
+        if verb == "SORT" and not self.t.string and self.t.key not in self.files and self.candidates(self.t.key):
+            return self.table_sort_statement(line)
         name = self.file_name()
         spec = self.files[name]
         if not spec.sort:
@@ -4213,9 +4864,17 @@ class Parser:
             return False
         if field.usage == "DISPLAY":
             return field.digits + field.sign_separate < 10
-        if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
+        if field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-6"}:
             return field.digits < 10
         return field.digits <= 9
+
+    @staticmethod
+    def cob_add_int(field):
+        """cb_build_optim_add/sub: receivers that reach cob_add_int (scaled,
+        DISPLAY, COMP-6, packed of 19 digits or more), which leaves the
+        receiver untouched when the operand is zero."""
+        return (field.scale != 0 or field.usage in {"DISPLAY", "COMP-6"}
+                or (field.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} and field.digits >= 19))
 
     def arithmetic(self, verb, shared, items, line):
         ending = "END-" + verb
@@ -4252,6 +4911,8 @@ class Parser:
         return names
 
     def validate_calls(self, program):
+        in_declaratives = False
+
         def walk(stmts, section=None):
             for s in stmts:
                 if s.op == "sort":
@@ -4273,8 +4934,14 @@ class Parser:
                         ranges = [program.procedure_range(name) for name in targets]
                     except CobolError as error:
                         raise CobolError(f"ligne {s.line}: {error}") from None
-                elif s.op == "exit_section" and section is None:
-                    raise CobolError(f"ligne {s.line}: EXIT SECTION requiert une section de procédure")
+                    # cb_resolve_procedures: references into and out of DECLARATIVES.
+                    for name, (start, _) in zip(targets, ranges):
+                        target_in_declaratives = start < program.main_block
+                        label = program.blocks[start].label or name if program.blocks else name
+                        if s.op == "goto" and target_in_declaratives and not in_declaratives:
+                            raise CobolError(f"ligne {s.line}: invalid reference to '{label}' (in DECLARATIVES)")
+                        if in_declaratives and not target_in_declaratives and STD == "cobol85":
+                            raise CobolError(f"ligne {s.line}: '{label}' is not in DECLARATIVES")
                 elif s.op == "loop":
                     walk(s.args[2], section)
                 elif s.op == "if":
@@ -4300,7 +4967,8 @@ class Parser:
                 elif s.op == "search_all":
                     walk(s.args[2] or [], section); walk(s.args[4], section)
         if program.blocks:
-            for block in program.blocks:
+            for index, block in enumerate(program.blocks):
+                in_declaratives = index < program.main_block
                 walk(block.body, block.section)
         else:
             walk(program.entry)

@@ -14,7 +14,7 @@ _HEADER = re.compile(
     re.IGNORECASE,
 )
 _DIVISION = re.compile(
-    r"\b(?:(ID|IDENTIFICATION)\s+DIVISION|"
+    r"\b(?:(ID|IDENTIFICATION)\s+DIVISION|(PROGRAM-ID)\b|"
     r"(?:ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION|END\s+PROGRAM)\b",
     re.IGNORECASE,
 )
@@ -75,5 +75,7 @@ class DocumentaryFilter:
             return True
 
         for match in _DIVISION.finditer(_code_text(area)):
-            self._identification = bool(match[1])
+            # PROGRAM-ID opens the IDENTIFICATION DIVISION when its header is
+            # omitted, as cobc allows.
+            self._identification = bool(match[1] or match[2])
         return False

@@ -602,7 +602,8 @@ conformes**, 6156 PASS, 0 FAIL (`build/nist-verify-copy-replacing.json`).
 
 Port de libcob/intrinsic.c pour INTEGER, INTEGER-PART, MOD, REM, FACTORIAL,
 SUM, MEAN, MEDIAN, MIDRANGE, RANGE, VARIANCE, ORD-MAX, ORD-MIN, MAX, MIN,
-ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE,
+ANNUITY, PRESENT-VALUE, CHAR, ORD, UPPER-CASE, LOWER-CASE (ASCII), REVERSE, TRIM
+[LEADING|TRAILING] (`cob_intr_trim`, résultat vide pour un argument tout en espaces), HEX-OF, HEX-TO-CHAR,
 INTEGER-OF-DATE/DAY, DATE-OF-INTEGER, DAY-OF-INTEGER, NUMVAL, NUMVAL-C et
 LENGTH (littéral à la compilation pour un item fixe, comme cb_build_intrinsic).
 Restent refusées : RANDOM et la modification de référence d'un résultat
@@ -793,3 +794,28 @@ corpus réels : 685 → 693/2458 ; CardDemo 14/44 et zopeneditor 5/5, autant
 que cobc. Les modules acceptés ne sont pas exécutés par la mesure (ils
 attendent un appelant) ; un accès à un paramètre non transmis est un arrêt
 nommé, là où GnuCOBOL lit une adresse indéterminée.
+
+## Progression : SORT de table et formes du livre
+
+Port de `cob_table_sort` (tri fusion stable de `qsort` en glibc 2.39, clés
+numériques par `cob_numeric_cmp`, autres par `memcmp` ou la séquence de
+classement du programme, offset de clé relatif à son parent comme
+`cb_emit_sort_init`, clé OCCURS par défaut, élément entier pour KEY sans nom),
+INSPECT TALLYING d'un littéral ou d'une fonction (`cb_emit_inspect`),
+sous-chaîne d'un résultat de fonction, IF terminé par le terminateur d'une
+instruction englobante, entrées documentaires sans IDENTIFICATION DIVISION,
+CLASS avec figuratives, FD à enregistrement numérique. Fixtures
+`table_sort`, `scope_and_function_forms`, `numeric_record` identiques à cobc.
+Corpus réels : 703/2458 acceptées (cobc 738) ; cours 12/12, livre 62/113.
+
+## Progression : Report Writer avec ruptures de contrôle
+
+Port de `cob_report_generate`, `cob_report_terminate`, `report_line_and`,
+`report_line_type` (arrêt des pieds de séquence supérieure),
+`zero_all_counters`, `sum_all_detail`, `sum_this_counter`, `set_next_info` et
+`clear_group_indicate` de reportio.c, de `build_sum_counter` (tree.c) et de
+l'ordre des listes de codegen.c (`output_report_control`,
+`output_report_sum_counters`). Fixture `report_controls` (deux contrôles et
+FINAL, cumuls de SUM, NEXT GROUP PLUS et NEXT PAGE, débordement de page,
+GROUP INDICATE) identique à cobc ; NIST RW101A-RW104A, RW301M, RW302M
+conformes. Corpus réels : 715/2458 acceptées (cobc 738), livre 64/65.

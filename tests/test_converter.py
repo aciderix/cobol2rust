@@ -33,15 +33,15 @@ class FrontendTests(unittest.TestCase):
     def test_reject_unsupported_instead_of_skipping(self):
         cases = [
             program("call 'external'."), program("alter finish to proceed to other."),
-            program("open input file-a."), program("display function current-date."),
+            program("open input file-a."),
             program("exec sql select 1 end-exec."), program("alter p to proceed to q."),
             program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
             program("stop run.", "01 n usage comp-1."),
-            program("stop run.", "01 n pic 9(19)."),
+            program("stop run.", "01 n pic 9(39)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
-            program("stop run.", "01 n pic 9. 01 n pic 9."),
+            program("display n.", "01 n pic 9. 01 n pic 9."),   # ambiguous reference
             program("stop run.", "01 x pic x(0)."),
             program("accept n from microsecond-time.", "01 n pic 9(8)."),
         ]
@@ -102,9 +102,10 @@ class FrontendTests(unittest.TestCase):
                     f"    {select}.\ndata division.\nfile section.\nfd f.\n01 r.\n 02 k pic x(3).\n 02 a pic x(2).\n"
                     "working-storage section.\n01 w pic x(3).\nprocedure division.\n" + procedure)
         Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
+        # READ KEY of an item no key starts at: status 23 (cob_findkey_attr).
+        Emitter(Parser(source("record key is k", "read f key is a. stop run.")).parse()).generate()
         for case in (source("record key is w"), source("alternate record key is a"),
                      source("record key is k alternate record key is a suppress when space"),
-                     source("record key is k", "read f key is a. stop run."),
                      source("record key is k", "start f key is = w. stop run.")):
             with self.subTest(case=case), self.assertRaises(CobolError):
                 Emitter(Parser(case).parse()).generate()

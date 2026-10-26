@@ -56,10 +56,9 @@ décide de la prochaine.
    COVERAGE.md), pas seulement les accepter : `tools/real_corpora.py
    --execute` (stdin vide, fichiers du dossier du programme). Étendre ensuite
    avec de vrais jeux d'entrée (stdin, fichiers, variables DD).
-3. **Limites du modèle** : 38 chiffres comme cobc (aujourd'hui 18), champs
-   texte au-delà de 256 caractères, OCCURS et mémoire plus grands,
-   niveau 78, Report Writer avec ruptures de contrôle, ENTRY, comparaisons à
-   `ALL littéral`.
+3. **Limites du modèle** : OCCURS et mémoire plus grands, comparaisons à
+   `ALL littéral`, PICTURE P au-delà de 18 chiffres
+   (38 chiffres, niveau 78, Report Writer avec ruptures et ENTRY sont faits).
 4. **Profil des contrôles d'exécution** : sans `-debug`, cobc calcule avec
    les données numériques invalides (COMP-3 ou DISPLAY corrompus) au lieu de
    s'arrêter ; le runtime s'arrête aujourd'hui toujours (arrêt nommé). Porter
@@ -73,8 +72,10 @@ décide de la prochaine.
    représentation des données explicites.
 7. **Services de plateforme** : adaptateurs EXEC SQL (DB2), EXEC CICS,
    EXEC DLI (IMS), MQ, VSAM, avec un contrat documenté par adaptateur.
-8. **Corpus élargis** : testsuite GnuCOBOL (1346 cas `.at`), corpus métier
-   de l'utilisateur dès qu'il en fournit, avec données et dialecte épinglés.
+8. **Corpus élargis** : testsuite GnuCOBOL mesurée depuis le 25 octobre
+   2026 (`tools/extract_testsuite.py` : 1135 sources de 954 tests compilés
+   sans option, sur 1344 tests `AT_SETUP`) ; corpus métier de l'utilisateur
+   dès qu'il en fournit, avec données et dialecte épinglés.
 9. **Parcours sans sources** : binaire GnuCOBOL vers Rust, cible étroite
    d'abord.
 
@@ -85,39 +86,40 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-25T15:01:36+00:00 (commit `1c167ab0f8`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-26T11:31:07+00:00 (commit `0ab0aec9da`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | application réelle IBM (CICS/VSAM/DB2/IMS/MQ) | 44 | 14 | 14 | 0 | 0 |
 | zopeneditor-sample | application exemple IBM | 5 | 5 | 5 | 0 | 0 |
-| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 11 | 12 | 1 | 0 |
-| beg-cobol-for-programmers | livre, programmes complets | 113 | 55 | 65 | 10 | 0 |
-| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 291 | 311 | 20 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 317 | 331 | 14 | 0 |
-| **Total** | | **2458** | **693** | **738** | **45** | **0** |
+| cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
+| beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
+| proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 418 | 879 | 461 | 0 |
+| **Total** | | **3593** | **1142** | **1617** | **475** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-25T15:01:36+00:00, commit `1c167ab0f8`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T11:31:07+00:00, commit `0ab0aec9da`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
 | zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
-| cobol-programming-course | 11 | 9 | 0 | 0 | 2 |
-| beg-cobol-for-programmers | 52 | 45 | 1 | 0 | 6 |
+| cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
+| beg-cobol-for-programmers | 61 | 52 | 3 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 6 × IDENTIFICATION DIVISION attendue
-2. 4 × PROCEDURE attendu
-3. 4 × instruction non prise en charge: XML
-4. 3 × EXIT SECTION requiert une section de procédure
-5. 2 × fichier non déclaré: COUNTYDETAILS
-6. 2 × cible INSPECT littérale ou fonction non prise en charge
-7. 2 × clause RD CONTROL non prise en charge
-8. 2 × COMMUNICATION SECTION non conforme hors -std=cobol85
-9. 2 × expression non prise en charge: :
-10. 2 × entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT
+1. 37 × niveau de donnée attendu
+2. 14 × USAGE/clause non pris en charge: POINTER
+3. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
+4. 12 × clause SELECT non prise en charge
+5. 9 × expression non prise en charge: LINE
+6. 8 × . attendu
+7. 8 × PROGRAM-ID attendu
+8. 7 × USAGE/clause non pris en charge: ANY
+9. 7 × USAGE/clause non pris en charge: DEPENDING
+10. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -179,3 +181,145 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   liste des blocages limitée à l'écart. Prochains : SORT de table
   (`cob_table_sort`), en-tête IDENTIFICATION absent suivi d'AUTHOR, INSPECT
   d'une fonction, Report Writer avec CONTROLS.
+- 2026-10-25 — SORT de table (`cob_table_sort` : tri fusion stable de la
+  glibc, clé lue à son offset dans son parent comme `cb_emit_sort_init`),
+  INSPECT d'un littéral ou d'une fonction (TALLYING), sous-chaîne d'un
+  résultat de fonction, IF clos par le terminateur englobant, entrées
+  documentaires après PROGRAM-ID sans en-tête, CLASS avec figuratives, FD à
+  enregistrement numérique : **693 → 703** acceptées, écart 45 → 35 ; cours
+  **12/12** et livre 55 → 62/113 (cobc 65). Exécution identique à cobc : cours
+  10/12, livre 45 → **52/59** (Listing13-6 : indice hors bornes ; 6 délais de
+  programmes interactifs). Émission NIST 451/458. Restent dans le livre :
+  Report Writer avec CONTROLS (18-1, 18-2), CALL d'un nom en casse mixte
+  (16-2, qui pourrait désigner un symbole C du processus).
+- 2026-10-25 — Lignes IBM `CBL`/`PROCESS` ignorées comme pplex.l, EXIT
+  SECTION de la section implicite « MAIN SECTION » de cobc (sortie avant la
+  première SECTION), LOCAL-STORAGE SECTION (initialisée à chaque CALL) :
+  **703 → 713** acceptées, écart 35 → 25 ; exécution inchangée (CardDemo 8/8,
+  zopeneditor 3/3, cours 10/12, livre 52/59). Émission NIST 451/458.
+  Prochain chantier de code réel : Report Writer avec CONTROLS (livre
+  18-1/18-2, port de reportio.c) ; le reste de l'écart est fait de
+  fragments de tests de parseur (XML, SCREEN, COMMUNICATION, dialectes).
+- 2026-10-25 — Report Writer avec ruptures de contrôle (port de
+  `cob_report_generate`/`cob_report_terminate` : CONTROLS [FINAL], CH/CF,
+  pieds imprimés avec la valeur précédente du contrôle, SUM et
+  `build_sum_counter`, report des compteurs, NEXT GROUP, GROUP INDICATE,
+  VALUE ALL) : **713 → 715** acceptées, livre **64/65** (cobc 65 ; reste
+  16-2). Fixture `report_controls` identique à cobc ; NIST RW 6/6 conformes
+  (40 PASS), émission 451/458. Exécution du livre : 52/61 identiques ; 18-1 et
+  18-2 sont identiques sur plus de 1200 lignes puis s'arrêtent, comme 13-6,
+  sur un indice hors bornes que GnuCOBOL lit sans contrôle (la dernière ligne
+  sans fin de ligne est relue par libcob, d'où StateName(70)).
+- 2026-10-25 — READ KEY d'un article où ne commence aucune clé (statut 23 de
+  `cob_findkey_attr`, la variante CardDemo CBTRN01C de che4z), 01 homonymes
+  (simple avertissement de cobc), paragraphes de CONFIGURATION dans tout
+  ordre ou vides, point facultatif avant le SELECT suivant (`missing-period`),
+  `STOP RUN RETURNING/GIVING/WITH STATUS`, littéraux `Z"…"` : **715 → 724**
+  acceptées, écart 23 → 14 (restent : XML, SCREEN, COMMUNICATION hors
+  cobol85, `$SET`, CALL d'un nom en casse mixte ou d'un numérique). Exécution
+  inchangée. Émission NIST 451/458.
+- 2026-10-25 — Nouveau corpus `gnucobol-testsuite` : les programmes des tests
+  de cobc 3.2 compilés sans option (`tools/extract_testsuite.py`, dérivé de
+  l'archive GnuCOBOL épinglée). Mesure initiale 256/1135, cobc 879, et 13
+  sources acceptées que cobc refuse, toutes corrigées : bornes constantes de
+  référence et d'indice, VALUE signé sur non signé, REDEFINES d'une
+  redéfinition, INDEXED avant ASCENDING, WHEN vide avant WHEN OTHER, GO TO
+  vers/depuis DECLARATIVES (cobol85), noms de programme invalides
+  (`cobc_check_valid_name`), mot commençant par `_`, littéral de plus de 8191
+  caractères (160 en cobol85), mot quelconque après `STOP RUN` pris comme
+  statut. La règle du WHEN vide a révélé un bogue ancien : `WHEN 'A' WHEN 'B'
+  instr` donnait une branche vide au premier WHEN quand le second commençait
+  par un littéral (corrigé, fixture `evaluate_literal_when` comparée à cobc).
+  Résultat : **970/3593** acceptées, cobc 1617, à examiner 13 → 0 ; six
+  corpus d'origine inchangés à 724/2458 (écart 14) ; écart de la testsuite
+  633. Exécution inchangée. Émission NIST 451/458.
+- 2026-10-26 — Premiers blocages de la testsuite : clauses DISPLAY dans tout
+  ordre et `NO ADVANCING` sans `WITH` (plusieurs listes par instruction,
+  `display_atom` ; opérandes `x` sans arithmétique, littéral signé affiché
+  avec son signe), DISPLAY et STRING de fonctions alphanumériques, FUNCTION
+  TRIM [LEADING|TRAILING] (`cob_intr_trim`), constantes `78` et `01
+  CONSTANT` (substitution du scanner `cb_add_78`, `cb_evaluate_expr`, `PIC
+  X(nom)`), CANCEL d'un programme actif (`P_cancel` : erreur libcob,
+  code 1). Testsuite **246 → 306** acceptées, total **970 → 1030**/3593
+  (cobc 1617, à examiner 0) ; six corpus d'origine inchangés (724). Des 60
+  sources débloquées, exécutées face à cobc hors mesure : 49 identiques, 11
+  arrêts nommés (sous-chaîne hors bornes lue par cobc au-delà du champ,
+  troncature native, CALL non converti), aucune sortie divergente après
+  correction de CANCEL. Exécution des corpus inchangée ; NIST 451/458,
+  échantillon de 8 programmes (EVALUATE, CANCEL) conforme 173/173 PASS.
+- 2026-10-26 — Paramètre de mesure changé (mesures précédentes non
+  strictement comparables) : la mesure statique cherche désormais les
+  programmes appelés dans le dossier de l'appelant, comme l'exécution le
+  faisait déjà ; un CALL par identifiant d'un appelé est pris en charge et
+  une source trouvée par balayage qui ne se convertit pas seule est écartée
+  au lieu de faire refuser l'unité. Arguments CALL littéraux et figuratives
+  (BY CONTENT copie, BY REFERENCE constante en lecture seule), `OMITTED`,
+  erreurs libcob de CALL récursif et de CANCEL actif. Résultat : **1030 →
+  1045**/3593 (testsuite 306 → 322, proleap 306 → 305 : IC114A appelle
+  IC115A, que cobc refuse aussi, et n'est plus accepté seul). Des 12
+  sources débloquées exécutées face à cobc : 9 identiques, 3 de mêmes
+  sortie et code d'erreur (pile d'appels de libcob sur stderr non
+  reproduite). Exécution des corpus inchangée ; NIST 451/458, les 24
+  programmes IC (CALL/CANCEL) conformes, 245 PASS, 0 FAIL.
+- 2026-10-26 — Limites et formes de la testsuite : champs DISPLAY et COMP-3
+  jusqu'à 38 chiffres (`COB_MAX_DIGITS`, BINARY/COMP-5 refusés au-delà de 18
+  avec l'erreur de cobc), `ROUNDED MODE` (huit modes de
+  `cob_decimal_do_round`), `DELETE FILE` (`cob_delete_file`, sans
+  DECLARATIVES), types C `[UN]SIGNED-SHORT/INT/LONG` et `BINARY-C-LONG`,
+  alias réservés de default.conf (`BINARY-INT`, `ORGANISATION`,
+  `INITIALISE`…), `REPOSITORY` des fonctions intrinsèques. Testsuite **322 →
+  363**, total **1045 → 1086**/3593 (cobc 1617, à examiner 0). Des 41
+  sources débloquées, exécutées face à cobc : 39 identiques, 2 arrêts
+  nommés (indice et sous-chaîne hors bornes lus par cobc sans contrôle).
+  Exécution des corpus inchangée ; NIST 451/458.
+- 2026-10-26 — `COMP-6` (packed sans demi-octet de signe,
+  `COB_FLAG_NO_SIGN_NIBBLE` ; signé, il devient COMP-3 comme pour cobc) et
+  test de classe NUMERIC d'un packed comme `cob_is_numeric` (le demi-octet de
+  remplissage n'est pas contrôlé à part, COMP-3 compris). Testsuite **363 →
+  370**, total **1086 → 1093**/3593. Des 7 sources débloquées, exécutées
+  face à cobc : 5 identiques, 2 arrêts nommés (MOVE binaire remplissant le
+  demi-octet de remplissage). Exécution des corpus inchangée ; NIST 451/458.
+- 2026-10-26 — Compilation conditionnelle de pplex (`>>DEFINE`, `>>IF`/`>>ELIF`
+  avec `DEFINED` ou comparaison, `>>ELSE`, `>>END-IF`, DEFINE standard
+  `CHARSET`/`ENDIAN`/`SIGN`/`PERFORM-TYPE`, `>>DISPLAY` sans effet à
+  l'exécution). Testsuite **370 → 384**, total **1093 → 1107**/3593. Les 14
+  sources débloquées, exécutées face à cobc, ont d'abord révélé deux écarts
+  sémantiques, corrigés : `VALUE -0` d'un DISPLAY signé stocke un zéro
+  négatif (`p`), et ADD/SUBTRACT d'un opérande entier passe par
+  `cob_add_int` pour tout receveur DISPLAY, mis à l'échelle ou COMP-6 (un
+  opérande nul laisse le receveur intact) ; ensuite 14/14 identiques.
+  Exécution des corpus inchangée ; NIST 451/458 et 30 programmes NC
+  d'ADD/SUBTRACT conformes (1755 PASS, 0 FAIL).
+- 2026-10-26 — PICTURE P (mise à l'échelle) en BINARY, COMP-3 et COMP-5, plus
+  seulement en DISPLAY (fixture `picture_p_usages` identique à cobc).
+  Testsuite **384 → 394**, total **1107 → 1117**/3593. Des 10 sources
+  débloquées, exécutées face à cobc : 9 identiques, 1 arrêt nommé (MOVE
+  binaire remplissant le demi-octet de remplissage). NIST 451/458.
+- 2026-10-26 — Directives MF (`$` en zone d'indicateur ou en tête de ligne) :
+  `$SET` (options sans effet ignorées comme les `#OPTION` de cobc, options
+  actives refusées), `$IF`/`$ELSE`/`$END`, `$DISPLAY` (mots et littéraux
+  seulement, sinon l'erreur de syntaxe de cobc). Total **1117 → 1122**/3593
+  (proleap 305 → 306, testsuite 394 → 398), à examiner 0. Des 5 sources
+  débloquées, exécutées face à cobc : 3 identiques, 2 arrêts nommés (indice
+  hors bornes lu par cobc sans contrôle). NIST 451/458.
+- 2026-10-26 — En-têtes de programme : `PROCEDURE DIVISION CHAINING`
+  (`cob_chain_setup`, vérifié à la main avec arguments : octets identiques ;
+  CALL d'un programme CHAINING = erreur libcob du test officiel),
+  `PROGRAM-ID nom AS "externe"`, `RETURNING OMITTED` (principal en module),
+  programme suivant sans IDENTIFICATION DIVISION ; `ASSIGN LINE ADVANCING
+  FILE` (`flag_line_adv` : LINE SEQUENTIAL sans validation, WRITE sans
+  ADVANCING = AFTER 1). Testsuite **398 → 410**, total **1122 → 1134**/3593.
+  Des 12 sources débloquées, exécutées face à cobc : 9 identiques, 2 mêmes
+  erreur et code (fichier d'entrée absent), 1 où cobc meurt de SIGSEGV hors
+  de son test (le test officiel attend l'erreur CHAINING reproduite). NIST
+  451/458.
+- 2026-10-26 — Troncature d'un receveur packed sans SIZE ERROR
+  (`cob_decimal_get_packed` : chiffres de poids fort perdus, signe conservé,
+  zéro négatif ; la retenue de `cob_add_packed_int` dans le demi-octet de
+  remplissage reste un arrêt nommé), modification de référence de tout
+  article (octets bruts, COMP-3/COMP/COMP-5/INDEX compris), affichage d'un
+  binaire au-delà de sa PICTURE (chiffres de poids faible comme
+  `pretty_display_numeric`), `88 ... FALSE [IS]`, FUNCTION HEX-OF et
+  HEX-TO-CHAR. Testsuite **410 → 418**, total **1134 → 1142**/3593. Des 8
+  sources débloquées (dont 6 tests de 500 champs packed), exécutées face à
+  cobc : 7 identiques, 1 arrêt nommé. NIST 451/458.

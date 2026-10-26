@@ -58,7 +58,6 @@ class LayoutTests(unittest.TestCase):
             program("set active-a to false.", '01 n pic x. 88 active-a value "Y".'),
             program("set active-a to true.", '01 n pic 9. 88 active-a value "Y".'),
             program("stop run.", "01 a. 88 active-a value 1."),
-            program('move "x" to n(1:1).', "01 n pic 99 comp-3."),
             program('move "x" to n(1)(1:1).', "01 n pic xx."),
             program('move "x" to n(1:"A").', "01 n pic xx."),
         ]

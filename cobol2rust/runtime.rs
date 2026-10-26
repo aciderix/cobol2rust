@@ -86,6 +86,26 @@ pub fn surely_absent(name: &str, present: &[&str]) -> bool {
         && name != "SYSTEM" && name != "EXTFH" && !present.contains(&name)
 }
 
+/// Reference modification of a function result (cb_build_intrinsic): its
+/// bytes from start, for length or to the end; beyond the result GnuCOBOL
+/// would read other storage (a named stop here).
+pub fn refmod(value: &Value, start: &Value, length: Option<&Value>) -> Value {
+    let bytes = value.bytes();
+    let size = bytes.len() as i128;
+    let start = start.integer("reference modification");
+    let length = match length { Some(length) => length.integer("reference modification"), None => size - start + 1 };
+    if start < 1 || length < 1 || start - 1 + length > size {
+        fail("reference modification beyond the function result not modelled");
+    }
+    Value::Bytes(bytes[(start - 1) as usize..(start - 1 + length) as usize].to_vec())
+}
+
+/// STOP RUN RETURNING x: cob_get_int of x, the integer part.
+pub fn stop_status(value: &Value) -> i32 {
+    let units = value.num().units(0, false);
+    units.to_string().parse::<i32>().unwrap_or_else(|_| fail("STOP RUN status outside the C int range not modelled"))
+}
+
 pub fn fail(message: &str) -> ! {
     eprintln!("cobol2rust: COBOL line {}: {}", COBOL_LINE.load(Ordering::Relaxed), message);
     std::process::exit(70)
@@ -172,6 +192,10 @@ impl Number {
     /// The value at a PICTURE scale, as libcob's scale: negative for
     /// trailing P positions (units of 10^-scale), above the digit count for
     /// leading P positions. Excess digits are truncated or ROUNDED.
+    /// A value of a possibly negative decimal scale.
+    fn at(n: BigInt, scale: i32) -> Self {
+        if scale < 0 { Self::new(n * power((-scale) as u32), 0) } else { Self::new(n, scale as u32) }
+    }
     pub(crate) fn units(&self, scale: i32, rounded: bool) -> BigInt {
         let own = self.scale as i32;
         if scale >= own { return &self.n * power((scale - own) as u32); }
@@ -182,6 +206,52 @@ impl Number {
             q + if self.n.sign() == Sign::Minus { -1 } else { 1 }
         } else { q }
     }
+}
+
+/// cob_decimal_do_round for ROUNDED MODE: 1 TRUNCATION, 2 PROHIBITED (None
+/// when digits would be lost), 3 AWAY-FROM-ZERO, 4 NEAREST-TOWARD-ZERO,
+/// 5 TOWARD-GREATER, 6 TOWARD-LESSER, 7 NEAREST-EVEN; the store then
+/// truncates to the receiver's scale.
+pub fn round_mode(value: &Value, scale: i32, mode: u8) -> Option<Value> {
+    let number = value.num();
+    let (mut n, mut own) = (number.n.clone(), number.scale as i32);
+    let negative = n.sign() == Sign::Minus;
+    if n.sign() == Sign::NoSign || scale >= own { return Some(Value::Num(number, None)); }
+    let shift = |n: &mut BigInt, own: &mut i32, by: i32| {
+        if by > 0 { *n *= power(by as u32); } else if by < 0 { *n /= power((-by) as u32); }
+        *own += by;
+    };
+    let step = |n: &mut BigInt| { *n += if negative { -5 } else { 5 }; };
+    match mode {
+        1 => {}
+        2 => return None,
+        3 | 5 | 6 => {
+            let unit = power((own - scale) as u32);
+            let remainder: BigInt = &n % &unit;
+            if remainder.sign() != Sign::NoSign && (mode == 3 || (mode == 5) != negative) {
+                if negative { n -= unit; } else { n += unit; }
+            }
+        }
+        4 | 7 => {
+            let half = power((own - scale - 1) as u32) * 5;
+            let remainder: BigInt = &n % &half;
+            let by = scale - own + 1;
+            shift(&mut n, &mut own, by);
+            if remainder.sign() == Sign::NoSign {
+                if mode == 4 { return Some(Value::Num(Number::at(n, own), None)); }
+                let last: BigInt = absolute(&n) % 100u32;
+                let last = last.to_string();
+                if ["5", "25", "45", "65", "85"].contains(&last.as_str()) { return Some(Value::Num(Number::at(n, own), None)); }
+            }
+            step(&mut n);
+        }
+        _ => {
+            let by = scale - own + 1;
+            shift(&mut n, &mut own, by);
+            step(&mut n);
+        }
+    }
+    Some(Value::Num(Number::at(n, own), None))
 }
 
 #[derive(Clone, Debug)]
@@ -195,6 +265,9 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn packed_int_add_guard(&self, operand: &Value) {
+        if let Self::View(view) = self { view.packed_int_add_guard(operand); }
+    }
     pub fn is_text(&self) -> bool {
         match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Justified | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
@@ -422,6 +495,9 @@ impl Value {
                 let (units, width) = if *scale < 0 { (n.units(0, false), (*digits as i32 - *scale) as usize) }
                                      else { (n.units(*scale, false), (*digits).max(*scale as u32) as usize) };
                 let mut s = format!("{:0>width$}", absolute(&units).to_string(), width = width);
+                // The move to a DISPLAY field of the PICTURE's size keeps the
+                // low-order digits of a binary value beyond its PICTURE.
+                if s.len() > width { s = s[s.len() - width..].to_string(); }
                 if *scale > 0 { s.insert(s.len() - *scale as usize, module_symbols().0 as char); }
                 if *signed {
                     let sign = if units.sign() == Sign::Minus { '-' } else { '+' };
@@ -1117,6 +1193,26 @@ pub mod intrinsic {
     pub fn upper_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "UPPER-CASE"); Value::Bytes(b.to_ascii_uppercase()) }
     pub fn lower_case(v: &Value) -> Value { let b = v.bytes(); ascii_only(&b, "LOWER-CASE"); Value::Bytes(b.to_ascii_lowercase()) }
     pub fn reverse(v: &Value) -> Value { let mut b = v.bytes(); b.reverse(); Value::Bytes(b) }
+    /// cob_intr_hex_of: two upper-case hexadecimal digits per byte.
+    pub fn hex_of(v: &Value) -> Value {
+        Value::Bytes(v.bytes().iter().flat_map(|b| { let h = b"0123456789ABCDEF"; [h[(b >> 4) as usize], h[(b & 15) as usize]] }).collect())
+    }
+    /// cob_intr_hex_to_char: each pair of digits gives a byte; an invalid
+    /// digit counts as 0 (EC-ARGUMENT-FUNCTION, not modelled), an odd last
+    /// digit is ignored.
+    pub fn hex_to_char(v: &Value) -> Value {
+        let digit = |c: u8| match c { b'0'..=b'9' => c - b'0', b'A'..=b'F' => c - b'A' + 10, b'a'..=b'f' => c - b'a' + 10, _ => 0 };
+        Value::Bytes(v.bytes().chunks_exact(2).map(|pair| digit(pair[0]).wrapping_mul(16).wrapping_add(digit(pair[1]))).collect())
+    }
+    /// cob_intr_trim: direction 1 LEADING, 2 TRAILING; all spaces give an empty field.
+    pub fn trim(v: &Value, direction: u8) -> Value {
+        let b = v.bytes();
+        let Some(first) = b.iter().position(|c| *c != b' ') else { return Value::Bytes(Vec::new()) };
+        let last = b.iter().rposition(|c| *c != b' ').unwrap();
+        let begin = if direction != 2 { first } else { 0 };
+        let end = if direction != 1 { last } else { b.len() - 1 };
+        Value::Bytes(b[begin..=end].to_vec())
+    }
 
     const NORMAL_DAYS: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
     const LEAP_DAYS: [i64; 13] = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];

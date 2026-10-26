@@ -24,8 +24,10 @@ CM que cobc ne compile pas non plus ([VALIDATION.md](VALIDATION.md)).
 
 **Ce résultat ne mesure pas la couverture du COBOL réel.** Sur six corpus
 publics épinglés (2458 sources, dont l'application mainframe CardDemo), le
-convertisseur accepte 230 sources là où cobc en accepte 738 ; CardDemo reste à
-0/44. Le cap du projet et sa mesure sont dans [CAP.md](CAP.md).
+convertisseur accepte 724 sources là où cobc en accepte 738 (CardDemo 14/14
+des sources que cobc accepte) ; sur la testsuite de GnuCOBOL 3.2 (1135
+sources), 246 contre 879. Accepter n'est pas exécuter à l'identique : le cap
+du projet et sa mesure, exécution comprise, sont dans [CAP.md](CAP.md).
 
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
 ou explicites, avec octets bruts, descriptions FD de même taille partageant leur
@@ -74,7 +76,11 @@ python -m cobol2rust convert principal.cob --call-path sousprogrammes -o build/u
 `--call-path` désigne les dossiers des programmes appelés par CALL : comme le
 CALL dynamique de GnuCOBOL, un nom littéral `X` se résout en `X.cbl`/`X.cob`
 dont le PROGRAM-ID est `X`. Le programme principal et tous ses appelés
-(transitivement) forment une seule unité d'exécution Rust.
+(transitivement) forment une seule unité d'exécution Rust. Un CALL par
+identifiant, dans le principal ou dans un appelé, y ajoute chaque source du
+chemin d'appel qui se convertit seule sous son nom ; une telle source dont un
+CALL littéral vise un programme du chemin qui ne se convertit pas en est
+retirée.
 
 Le projet produit contient :
 
@@ -101,38 +107,45 @@ Ces résultats portent sur les entrées testées.
 | --- | --- |
 | Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"` ; concaténation `&`, `Z"…"`, `N"…"` refusés |
 | Sources | Lecture en octets comme cobc (colonnes d'octets, BOM UTF-8 ignoré), en-tête IDENTIFICATION et PROCEDURE DIVISION facultatifs, INPUT-OUTPUT SECTION sans FILE-CONTROL si aucun SELECT ; détection du format comme cobc (colonne 7 de la première ligne, format fixe avec `-std=cobol85`), format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
+| Options IBM | Lignes `CBL …` / `PROCESS …` d'options du compilateur ignorées jusqu'à la fin de ligne, comme pplex.l |
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
 | Configuration | `ENVIRONMENT DIVISION`, `CONFIGURATION SECTION`, `SOURCE-COMPUTER` et `OBJECT-COMPUTER` avec nom machine seul |
 | Copybooks | `COPY nom.` ou `COPY "nom.cpy".` seuls sur une ligne, recherche locale et `-I`, détection des cycles |
-| Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` |
+| Données | Groupes et champs de niveaux `01` à `49`, `77`, `PIC X`, `PIC 9`, `S`, `V`, `VALUE`, `FILLER` ; `LOCAL-STORAGE SECTION` réinitialisée à chaque CALL ; constantes `78 nom VALUE` et `01 nom CONSTANT [AS]` (littéral, figurative, `ALL` littéral ou expression entière de `cb_evaluate_expr`, toutes opérations de même priorité au niveau 78), substituées à chaque emploi comme le scanner de cobc, y compris `PIC X(nom)` ; `START OF`, `NEXT`, `LENGTH OF` et `FROM` refusés |
 | Édition numérique | Signe fixe `+`/`-`, `9` et point décimal explicite ; `Z` initiaux suivis de `9` obligatoires ; rendu depuis une source numérique, copie brute vers texte |
 | Tables et vues | `OCCURS n TIMES`, `OCCURS min TO max DEPENDING ON` (objet qualifié `OF`/`IN` compris), `INDEXED BY`, `SET index TO / UP BY / DOWN BY`, sous-scripts, noms qualifiés `OF`/`IN`, `REDEFINES`, sous-chaînes `champ(début:longueur)` |
 | Conditions | Niveau `88`, y compris de groupe avec figurative ou `ALL` (répétée sur la taille du groupe), listes et plages `THRU`, `SET TO TRUE/FALSE`, tests `IS [NOT] NUMERIC`, `EVALUATE TRUE` |
-| Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, alias `COMPUTATIONAL` ; `COMP-5` / `COMPUTATIONAL-5` et `BINARY-CHAR/SHORT/LONG/DOUBLE [SIGNED/UNSIGNED]` en binaire réel petit-boutiste : valeur bornée par la taille et non la PICTURE (repli modulo 2^(8×taille) sans SIZE ERROR, SIZE ERROR sur la capacité en bits), affichage `cob_print_realbin` ; `NOT ON SIZE ERROR` seul vers COMP-5 refusé |
-| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
+| Usages | `DISPLAY`, `COMP` / `BINARY` / `COMP-4`, `COMP-3` / `PACKED-DECIMAL`, `COMP-6` (packed sans demi-octet de signe ; signé, il devient COMP-3 comme pour cobc), alias `COMPUTATIONAL` ; `COMP-5` / `COMPUTATIONAL-5` et `BINARY-CHAR/SHORT/LONG/DOUBLE [SIGNED/UNSIGNED]`, `BINARY-C-LONG`, types C `[UN]SIGNED-SHORT/INT/LONG` et alias `BINARY-INT`/`BINARY-LONG-LONG` de default.conf en binaire réel petit-boutiste : valeur bornée par la taille et non la PICTURE (repli modulo 2^(8×taille) sans SIZE ERROR, SIZE ERROR sur la capacité en bits), affichage `cob_print_realbin` ; `NOT ON SIZE ERROR` seul vers COMP-5 refusé |
+| Calcul | `MOVE`, `COMPUTE`, `ADD ... TO`, `SUBTRACT ... FROM`, `MULTIPLY ... BY`, `DIVIDE ... INTO`, receveurs multiples et `GIVING` multiples avec `ROUNDED` par receveur, `ROUNDED MODE [IS]` et ses huit modes (`cob_decimal_do_round`, PROHIBITED en EC-SIZE-TRUNCATION ; `DEFAULT ROUNDED` du paragraphe OPTIONS refusé), `ON SIZE ERROR` / `NOT ON SIZE ERROR` |
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
 | MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ou numérique DISPLAY ; groupe source copié brut vers numérique/édité |
 | Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un champ numérique (`cob_cmp_alnum` des chiffres stockés, sauf repli de `compare_field_literal`) |
 | Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03 lu par un ACCEPT tue le programme par SIGINT comme `cob_raise`, arrêt nommé si un fichier est encore ouvert, libcob perdant alors ses tampons) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER`, `UNTIL EXIT` et `FOREVER`, `EXIT PERFORM [CYCLE]` dans un PERFORM en ligne (étiquettes de sortie et de cycle de codegen.c) |
-| Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` dans une section explicite, `EXIT` nu sans effet |
-| Console | `DISPLAY`, `WITH NO ADVANCING`, `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
-| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
+| Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` (hors section : fin de la « MAIN SECTION » implicite de cobc, avant la première SECTION), `EXIT` nu sans effet |
+| Console | `DISPLAY` de champs, littéraux (signés compris) et fonctions alphanumériques, clauses `UPON` et `[WITH] NO ADVANCING` dans tout ordre, plusieurs listes avec leurs clauses dans une instruction (`display_atom`), `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
+| Fichiers | LINE SEQUENTIAL texte DISPLAY ; SEQUENTIAL fixe brut, FD multiples de même taille, `OPEN INPUT/OUTPUT/EXTEND`, `OPEN I-O` et `REWRITE` en SEQUENTIAL ; RELATIVE en accès SEQUENTIAL/RANDOM/DYNAMIC avec `RELATIVE KEY`, `READ [NEXT]`, `WRITE`, `REWRITE`, `DELETE`, `START`, `INVALID KEY`, `READ`, `READ INTO`, `AT END`, `NOT AT END`, `WRITE`, `WRITE FROM`, `WRITE BEFORE/AFTER ADVANCING` (entier, identifiant, PAGE, mnémonique FORMFEED/Cnn) en SEQUENTIAL et LINE SEQUENTIAL, FD `LINAGE` avec `LINAGE-COUNTER` et `AT END-OF-PAGE`, Report Writer (RD, `INITIATE`/`GENERATE`/`TERMINATE`, sous-ensemble décrit plus bas), `CLOSE [WITH LOCK]`, `DELETE FILE` (`cob_delete_file` : statuts 35, 38, 41, sans DECLARATIVES comme cobc), `ASSIGN [TO] LINE ADVANCING [FILE]` (LINE SEQUENTIAL sans validation des données, WRITE sans ADVANCING = AFTER 1 LINE), `FILE STATUS`, `SELECT OPTIONAL`, DECLARATIVES `USE AFTER ERROR/EXCEPTION` par fichier ou mode |
 | Registres | `LENGTH [OF]` d'un article, d'un littéral ou d'une fonction (`cb_build_length` : littéral pour une taille fixe, somme sur l'OCCURS DEPENDING actif sinon, FUNCTION LENGTH pour une sous-chaîne) ; `RETURN-CODE` (BINARY-LONG par programme, partagé par les programmes contenus, recopié de l'appelé après CALL, conservé entre les CALL, code de sortie de STOP RUN et du GOBACK principal) |
-| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` |
+| Tri de table | `SORT table [ON ASCENDING/DESCENDING KEY [clés]]… [WITH DUPLICATES]` comme `cob_table_sort` (stable, offset de clé relatif à son parent, clé OCCURS par défaut, ODO actif) |
+| Directives | `>>SOURCE FORMAT`, compilation conditionnelle de pplex (`>>DEFINE nom [AS] littéral|OFF [OVERRIDE]`, `>>IF`/`>>ELIF` avec `[NOT] DEFINED` ou une comparaison, `>>ELSE`, `>>END-IF`, DEFINE standard `CHARSET`, `ENDIAN`, `SIGN`, `PERFORM-TYPE`), `>>DISPLAY` sans effet à l'exécution ; directives MF `$SET` (options sans effet ignorées comme les `#OPTION` de cobc, options actives refusées), `$IF`/`$ELSE`/`$END`, `$DISPLAY` ; `>>TURN`, `>>SET`, `>>DEFINE CONSTANT`/`PARAMETER` refusés |
+| Fonctions | `REPOSITORY` : `FUNCTION ALL INTRINSIC` et `FUNCTION nom... INTRINSIC` (noms appelés sans le mot FUNCTION dans le programme et ses programmes contenus) ; fonctions utilisateur (FUNCTION-ID) refusées |
+| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` ; hors `-std=cobol85`, alias de mots réservés de default.conf (`INITIALISE`, `ORGANISATION`, `SYNCHRONISED`, `TIMEOUT`…) |
 
-Les champs numériques sont limités à **18 chiffres**, les champs texte à
-**256 caractères ASCII par champ élémentaire**. Un groupe peut être plus grand.
+Les champs numériques DISPLAY et COMP-3 vont jusqu'à **38 chiffres** comme
+cobc (`COB_MAX_DIGITS`), les BINARY/COMP/COMP-5 jusqu'à 18 (au-delà, l'erreur
+de cobc `binary field cannot be larger than 18 digits`), les PICTURE avec P
+jusqu'à 18 chiffres, en DISPLAY, BINARY, COMP-3 ou COMP-5 ; les champs PIC X/A jusqu'à 65535 caractères, les champs édités
+jusqu'à 38 chiffres et 256 caractères. Un groupe peut être plus grand.
 La mémoire totale est limitée à **16 Mio**, les tableaux à **7 dimensions** et
 chaque clause OCCURS à **1..10000 occurrences** (minimum variable autorisé : 0).
 Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-niveau 78, REDEFINES indirects, USAGE hors liste (POINTER, COMP-1/2, COMP-X…), images
+REDEFINES indirects, USAGE hors liste (POINTER, COMP-1/2, COMP-X…), images
 éditées hors du sous-ensemble décrit ci-dessous, fonctions intrinsèques hors
 liste ci-dessous, CALL d'un programme ni converti ni sûrement absent,
-`EXIT SECTION` hors section explicite, STOP identifiant,
+STOP identifiant,
 SCREEN SECTION, SQL embarqué et CICS. Les formats de fichier autres que ceux
 décrits plus bas (LINE SEQUENTIAL, SEQUENTIAL fixe ou variable, RELATIVE,
 INDEXED au format propre de cobol2rust) ne sont pas modélisés.
@@ -216,12 +229,22 @@ nécessairement la ligne d'origine avant expansion des copybooks.
 
 ## Programmes appelés (CALL)
 
-CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT, ON EXCEPTION/
+CALL littéral ou par identifiant, USING BY REFERENCE/BY CONTENT/OMITTED, ON EXCEPTION/
 OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
 (`output_call` de codegen.c, `cob_call_field`/`cob_cancel` de call.c) :
 
 - un appelé conserve sa WORKING-STORAGE entre deux CALL ; CANCEL la réinitialise
-  et ferme ses fichiers ouverts ; CALL ou CANCEL d'un programme actif s'arrête ;
+  et ferme ses fichiers ouverts ; CANCEL d'un programme actif (le principal
+  compris) est l'erreur libcob `attempt to CANCEL active program` (`P_cancel`,
+  code 1) ; un CALL d'un programme actif est `recursive CALL from 'A' to 'B'
+  which is NOT RECURSIVE` (`COB_FERROR_RECURSIVE`, code 1 ; RECURSIVE n'est
+  pas pris en charge) ;
+- un littéral alphanumérique ou une figurative en argument (`output_call`)
+  : BY CONTENT, une copie neuve de ses octets (une figurative vaut un
+  caractère) ; BY REFERENCE, la constante du programme elle-même, en lecture
+  seule (une écriture de l'appelé est un arrêt nommé, cobc mourant de
+  SIGSEGV) ; `OMITTED` passe une adresse nulle. Un littéral numérique (entier C
+  dans 8 octets en partie non initialisés) et BY VALUE restent refusés ;
 - les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
   de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
   son argument s'arrête au lieu de lire la mémoire voisine ; un article que
@@ -242,6 +265,11 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   compile avec `cobc -m` et le lance par `cobcrun`. cobcrun ne lui passe
   aucune adresse (le C lit un paramètre indéterminé) : le Rust s'arrête au
   premier accès à un paramètre ;
+- `PROCEDURE DIVISION CHAINING` (`cob_chain_setup`) : chaque article 01/77 de
+  WORKING-STORAGE reçoit, après son initialisation, l'argument de ligne de
+  commande de son rang, complété d'espaces ou tronqué ; `PROGRAM-ID nom AS
+  "externe"` donne le nom d'appel du module ; `RETURNING OMITTED` est accepté
+  (un programme principal ainsi déclaré est un module, cobc refusant `-x`) ;
 - EXIT PROGRAM est sans effet dans le programme principal, GOBACK y vaut STOP RUN ;
   STOP RUN dans un appelé termine toute l'unité ;
 - un nom introuvable prend ON EXCEPTION seulement s'il est sûrement absent : mot
@@ -792,28 +820,42 @@ PROCEDURE DIVISION est analysée avec la taille par défaut de 30 octets, `FUNCT
 LENGTH` de DEBUG-CONTENTS ou DEBUG-ITEM et les positions constantes d'une
 modification de référence utilisent cette taille, comme dans cobc.
 
-Le Report Writer suit `reportio.c` (sans ruptures de contrôle) : un FD
+Le Report Writer suit `reportio.c` : un FD
 `REPORT [IS] r` (un seul rapport par fichier, sans enregistrement décrit) rend le
 fichier LINE SEQUENTIAL ; la REPORT SECTION décrit `RD r PAGE [LIMIT IS|LIMITS
 ARE] n [LINES] [HEADING h] [FIRST DETAIL f] [LAST DETAIL l] [FOOTING g]`
 (entiers littéraux, valeurs par défaut et contrôles de `page_limit_clause`,
+précédés de `CONTROL[S] [IS|ARE] [FINAL] identifiants`,
 `finalize_report` et `cob_report_initiate` ; sans clause PAGE les limites
 valent 0 avec FIRST DETAIL 1, comme dans le `cob_report` émis par cobc, si bien
 que chaque ligne dépasse LAST DETAIL 0 et change de page ; un LINE au-delà de la
 limite fait échouer INITIATE comme `limitCheckOneLine`, le GENERATE suivant est un
 arrêt nommé), puis des groupes 01 `TYPE` REPORT
-HEADING/RH, PAGE HEADING/PH, DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
-`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles, et des articles
-élémentaires `PICTURE`, `COLUMN [NUMBER] [IS] n` et soit `SOURCE` (identifiant,
-LINE-COUNTER ou PAGE-COUNTER), soit `VALUE` alphanumérique. Les lignes et champs
+HEADING/RH, PAGE HEADING/PH, CONTROL HEADING/CH et CONTROL FOOTING/CF
+[identifiant | FINAL], DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
+`LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles et `NEXT GROUP
+[IS] [PLUS] n | NEXT PAGE` au niveau 01, et des articles élémentaires
+`PICTURE`, `COLUMN [NUMBER] [IS] n`, `GROUP [INDICATE]` et soit `SOURCE`
+(identifiant, indicé compris, LINE-COUNTER ou PAGE-COUNTER), soit `SUM`
+d'identifiants numériques DISPLAY ou d'autres articles SUM (`RESET ON` analysé
+et sans effet, comme dans codegen.c), soit `VALUE [ALL]` alphanumérique. Les
+ruptures suivent `cob_report_generate` et `cob_report_terminate` : la liste
+CONTROLS de cobc va du contrôle le plus mineur au plus majeur (chaque
+identifiant est préfixé), un changement rompt aussi les contrôles de séquence
+inférieure, les pieds de contrôle s'impriment avec la valeur précédente du
+contrôle, les compteurs SUM (`build_sum_counter` : `S9(n+2)V9(s)` en
+WORKING-STORAGE) s'additionnent à chaque GENERATE, se reportent dans les
+compteurs qui les somment et se remettent à zéro au pied de leur groupe, dans
+l'ordre de la liste `sum_prv` de codegen.c ; CONTROL HEADING FINAL n'est jamais
+imprimé par libcob 3.2. Les lignes et champs
 reprennent `output_report_define_lines` ; la taille d'enregistrement est le
 `rcsz` de cobc. `INITIATE`, `GENERATE` groupe DETAIL ou nom de rapport et
 `TERMINATE` reproduisent `do_page_heading`, `do_page_footing`, `report_line` et
 `report_line_type` (écritures BEFORE n LINES, lignes vides, sauts de page).
 `LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
-affichés sur 10 chiffres. Restent refusés : CONTROL, SUM, NEXT GROUP, GROUP
-INDICATE, PRESENT/ABSENT WHEN, OCCURS, COLUMN PLUS/LEFT/RIGHT/CENTER, LINE NEXT
-PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
+affichés sur 10 chiffres. Restent refusés : PRESENT/ABSENT WHEN, SUPPRESS,
+SUM UPON, SUM d'opérandes non DISPLAY, CF ALL et OR PAGE, OCCURS, COLUMN
+PLUS/LEFT/RIGHT/CENTER, LINE NEXT PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
 BEFORE REPORTING, plusieurs rapports par FD, READ/WRITE d'un fichier de
 rapport ; un INITIATE d'un rapport actif ou un GENERATE/TERMINATE sans
 INITIATE est un arrêt nommé.

@@ -1,0 +1,9 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. OMSUB.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01 A PIC X(2).
+       01 B PIC X(2).
+       PROCEDURE DIVISION USING A B.
+           DISPLAY "OMSUB [" B "]"
+           GOBACK.

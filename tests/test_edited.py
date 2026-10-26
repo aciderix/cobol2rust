@@ -51,7 +51,7 @@ class EditedPictureTests(unittest.TestCase):
         # Order errors follow cobc's precedence table; S, capacities and
         # non-DISPLAY usages stay outside the edited subset.
         for picture in ("ZZ9.9Z", "+9+", "9.Z9", "$9$", "+99CR", "PPZZ", "-.--", "9-9",
-                        "S9.99", "+9(19)", "-.9(19)", "Z(0)9", "Z9 comp", "**9 blank when zero",
+                        "S9.99", "+9(39)", "-.9(39)", "Z(0)9", "Z9 comp", "**9 blank when zero",
                         "s99 blank when zero", "9v9 blank when zero"):
             with self.subTest(picture=picture), self.assertRaises(CobolError):
                 Emitter(Parser(program(f"01 edited-a pic {picture}.")).parse()).generate()

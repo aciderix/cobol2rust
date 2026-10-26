@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-25T15:01:36+00:00",
- "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
- "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
+ "measured_at": "2026-10-26T11:31:07+00:00",
+ "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
+ "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
-  "sources": 2458,
-  "accepted": 693,
-  "cobc_accepted": 738,
-  "gap": 45,
+  "sources": 3593,
+  "accepted": 1142,
+  "cobc_accepted": 1617,
+  "gap": 475,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -62,7 +62,7 @@
      1
     ],
     [
-     "USAGE/clause non pris en charge",
+     "USAGE/clause non pris en charge: 05",
      1
     ]
    ],
@@ -101,7 +101,7 @@
     "kind": "cours IBM Enterprise COBOL"
    },
    "sources": 32,
-   "accepted": 11,
+   "accepted": 12,
    "internal_errors": 0,
    "blockers": [
     [
@@ -113,10 +113,6 @@
      3
     ],
     [
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
-     1
-    ],
-    [
      "conversion implicite numérique/texte non prise en charge: GROSS-PAY",
      1
     ]
@@ -124,19 +120,9 @@
    "cobc_accepted": 12,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 1,
-   "gap_sources": [
-    [
-     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/COBOL.cobol",
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine"
-    ]
-   ],
-   "gap_blockers": [
-    [
-     "FD requiert un enregistrement 01 texte ou groupe sans OCCURS ni REDEFINES explicite à la racine",
-     1
-    ]
-   ]
+   "gap": 0,
+   "gap_sources": [],
+   "gap_blockers": []
   },
   "beg-cobol-for-programmers": {
    "kind": "livre, programmes complets",
@@ -147,20 +133,16 @@
     "kind": "livre, programmes complets"
    },
    "sources": 113,
-   "accepted": 55,
+   "accepted": 64,
    "internal_errors": 0,
    "blockers": [
     [
      "PROCEDURE attendu",
-     24
+     23
     ],
     [
      "instruction non prise en charge: *",
      4
-    ],
-    [
-     "clause RD CONTROL non prise en charge",
-     3
     ],
     [
      "caractère non pris en charge '?'",
@@ -175,14 +157,6 @@
      2
     ],
     [
-     "fichier non déclaré: COUNTYDETAILS",
-     2
-    ],
-    [
-     "cible INSPECT littérale ou fonction non prise en charge",
-     2
-    ],
-    [
      "END PROGRAM ne correspond pas au PROGRAM-ID",
      2
     ],
@@ -191,85 +165,37 @@
      2
     ],
     [
-     "indicateur fixe '$' non pris en charge",
+     "option $SET SOURCEFORMAT non prise en charge",
      2
     ],
     [
-     "entrée SPECIAL-NAMES non prise en charge: SPACE",
+     "instruction non prise en charge: LISTING",
+     1
+    ],
+    [
+     "expression non prise en charge: INSPECT",
+     1
+    ],
+    [
+     "littéral multiligne non pris en charge",
+     1
+    ],
+    [
+     "USAGE/clause non pris en charge: 01",
      1
     ]
    ],
    "cobc_accepted": 65,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 10,
+   "gap": 1,
    "gap_sources": [
-    [
-     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-1.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: SPACE"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-9.cbl",
-     "PROCEDURE attendu"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-7.cbl",
-     "fichier non déclaré: COUNTYDETAILS"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-8.cbl",
-     "fichier non déclaré: COUNTYDETAILS"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-2.cbl",
-     "cible INSPECT littérale ou fonction non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-3.cbl",
-     "cible INSPECT littérale ou fonction non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-4.cbl",
-     "END-IF ou point attendu"
-    ],
     [
      "978-1-4302-6253-4_Coughlan_Ch16/Listing16-2.cbl",
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-1.cbl",
-     "clause RD CONTROL non prise en charge"
-    ],
-    [
-     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-2.cbl",
-     "clause RD CONTROL non prise en charge"
     ]
    ],
    "gap_blockers": [
-    [
-     "fichier non déclaré: COUNTYDETAILS",
-     2
-    ],
-    [
-     "cible INSPECT littérale ou fonction non prise en charge",
-     2
-    ],
-    [
-     "clause RD CONTROL non prise en charge",
-     2
-    ],
-    [
-     "entrée SPECIAL-NAMES non prise en charge: SPACE",
-     1
-    ],
-    [
-     "PROCEDURE attendu",
-     1
-    ],
-    [
-     "END-IF ou point attendu",
-     1
-    ],
     [
      "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
      1
@@ -285,7 +211,7 @@
     "kind": "tests de parseur (fragments, dialectes)"
    },
    "sources": 759,
-   "accepted": 291,
+   "accepted": 306,
    "internal_errors": 0,
    "blockers": [
     [
@@ -297,7 +223,7 @@
      24
     ],
     [
-     "PROCEDURE attendu",
+     "niveau de donnée attendu",
      14
     ],
     [
@@ -305,20 +231,16 @@
      14
     ],
     [
-     "niveau de donnée attendu",
-     13
+     "expression non prise en charge: ALL",
+     12
     ],
     [
-     "expression non prise en charge: ALL",
+     "PROCEDURE attendu",
      12
     ],
     [
      "instruction non prise en charge: EXEC",
      12
-    ],
-    [
-     "IDENTIFICATION DIVISION attendue",
-     10
     ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
@@ -335,12 +257,16 @@
     [
      "indicateur fixe 'A' non pris en charge",
      5
+    ],
+    [
+     "IF without imperative statement",
+     5
     ]
    ],
    "cobc_accepted": 311,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 20,
+   "gap": 5,
    "gap_sources": [
     [
      "src/test/resources/gov/nist/CM303M.CBL",
@@ -351,20 +277,8 @@
      "COMMUNICATION SECTION non conforme hors -std=cobol85"
     ],
     [
-     "src/test/resources/gov/nist/EXEC85.CBL",
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/call/FunctionCall.cbl",
-     "expression non prise en charge: :"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/call/RecordCall.cbl",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/data/localstorage/DataDescription02.cbl",
-     "PROCEDURE attendu"
+     "src/test/resources/gov/nist/IC114A.CBL",
+     "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge"
     ],
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
@@ -373,99 +287,19 @@
     [
      "src/test/resources/io/proleap/cobol/asg/data/screen/ScreenFiller.cbl",
      "PROCEDURE attendu"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/environment/configuration/ConfigurationSectionWrongOrder.cbl",
-     "paragraphe CONFIGURATION non pris en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/environment/configuration/EmptyConfigurationSectionParagraphs.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: <EOF>"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/asg/procedure/stop/StopStatementGiving.cbl",
-     "instruction non prise en charge: GIVING"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/FunctionCall.cbl",
-     "expression non prise en charge: :"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/Literal.cbl",
-     "expression non prise en charge: Z"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/XoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/ast/variable/XoptsSpApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/fixed/CompilerDirective.cbl",
-     "indicateur fixe '$' non pris en charge"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblOpts.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CblXoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/CompilerOptions.cbl",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "src/test/resources/io/proleap/cobol/preprocessor/variable/ProcessXoptsApost.cbl",
-     "IDENTIFICATION DIVISION attendue"
     ]
    ],
    "gap_blockers": [
-    [
-     "IDENTIFICATION DIVISION attendue",
-     6
-    ],
-    [
-     "PROCEDURE attendu",
-     3
-    ],
     [
      "COMMUNICATION SECTION non conforme hors -std=cobol85",
      2
     ],
     [
-     "expression non prise en charge: :",
+     "PROCEDURE attendu",
      2
     ],
     [
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
-     1
-    ],
-    [
-     "clause SELECT non prise en charge",
-     1
-    ],
-    [
-     "paragraphe CONFIGURATION non pris en charge",
-     1
-    ],
-    [
-     "entrée SPECIAL-NAMES non prise en charge: <EOF>",
-     1
-    ],
-    [
-     "instruction non prise en charge: GIVING",
-     1
-    ],
-    [
-     "expression non prise en charge: Z",
-     1
-    ],
-    [
-     "indicateur fixe '$' non pris en charge",
+     "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge",
      1
     ]
    ]
@@ -479,7 +313,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 317,
+   "accepted": 323,
    "internal_errors": 0,
    "blockers": [
     [
@@ -488,7 +322,7 @@
     ],
     [
      "IDENTIFICATION DIVISION attendue",
-     246
+     239
     ],
     [
      "caractère non pris en charge '|'",
@@ -534,39 +368,15 @@
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 14,
+   "gap": 8,
    "gap_sources": [
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case43.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case44.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case45.cbl",
-     "EXIT SECTION requiert une section de procédure"
-    ],
     [
      "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
      "instruction non prise en charge: OF"
     ],
     [
-     "tests/test_files/Cobol85PositiveTestsSuite/positive/EXEC84.2.cbl",
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT"
-    ],
-    [
-     "tests/test_files/aws-mainframe-modernization-carddemo/positive/CBTRN01C.cbl",
-     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE"
-    ],
-    [
      "tests/test_files/project/HELLO-WORLD.cbl",
      "CALL identifiant requiert un champ alphanumérique"
-    ],
-    [
-     "tests/test_files/project/HOVER.CBL",
-     "nom de donnée réservé ou dupliqué: TERMS-RECORD"
     ],
     [
      "tests/test_files/project/TEST10.CBL",
@@ -586,7 +396,7 @@
     ],
     [
      "tests/test_files/project/xmls1.cbl",
-     "USAGE/clause non pris en charge"
+     "USAGE/clause non pris en charge: NATIONAL"
     ],
     [
      "tests/test_files/project/xmlup.cbl",
@@ -599,19 +409,7 @@
      4
     ],
     [
-     "EXIT SECTION requiert une section de procédure",
-     3
-    ],
-    [
      "instruction non prise en charge: OF",
-     1
-    ],
-    [
-     "entrée SPECIAL-NAMES non prise en charge: INPUT-OUTPUT",
-     1
-    ],
-    [
-     "KEY XREF-CARD-NUM doit être un champ de l'enregistrement de XREF-FILE",
      1
     ],
     [
@@ -619,11 +417,7 @@
      1
     ],
     [
-     "nom de donnée réservé ou dupliqué: TERMS-RECORD",
-     1
-    ],
-    [
-     "USAGE/clause non pris en charge",
+     "USAGE/clause non pris en charge: NATIONAL",
      1
     ],
     [
@@ -631,12 +425,1974 @@
      1
     ]
    ]
+  },
+  "gnucobol-testsuite": {
+   "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)",
+   "commit": "gnucobol-3.2.tar.xz sha256 3bb48af46ced4779",
+   "settings": {
+    "format": "auto",
+    "std": "default",
+    "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
+   },
+   "sources": 1135,
+   "accepted": 418,
+   "internal_errors": 0,
+   "blockers": [
+    [
+     "niveau de donnée attendu",
+     43
+    ],
+    [
+     "PROGRAM-ID attendu",
+     20
+    ],
+    [
+     "USAGE/clause non pris en charge: POINTER",
+     14
+    ],
+    [
+     "clause SELECT non prise en charge",
+     14
+    ],
+    [
+     "CALL USING limité à BY REFERENCE et BY CONTENT",
+     13
+    ],
+    [
+     ". attendu",
+     12
+    ],
+    [
+     "USAGE/clause non pris en charge: ANY",
+     11
+    ],
+    [
+     "PROCEDURE attendu",
+     10
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     10
+    ],
+    [
+     "USAGE/clause non pris en charge: IS",
+     10
+    ],
+    [
+     "expression non prise en charge: LINE",
+     10
+    ],
+    [
+     "USAGE/clause non pris en charge: BASED",
+     9
+    ]
+   ],
+   "cobc_accepted": 879,
+   "accepted_where_cobc_refuses": 0,
+   "accepted_where_cobc_refuses_sources": [],
+   "gap": 461,
+   "gap_sources": [
+    [
+     "data_pointer-001/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_accept-001/prog.cob",
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_accept-003/prog.cob",
+     "ACCEPT FROM MICROSECOND-TIME non pris en charge"
+    ],
+    [
+     "run_accept-004/prog.cob",
+     "DISPLAY de FUNCTION INTEGER-OF-DATE numérique non pris en charge"
+    ],
+    [
+     "run_accept-005/prog.cob",
+     "DISPLAY de FUNCTION INTEGER-OF-DATE numérique non pris en charge"
+    ],
+    [
+     "run_accept-006/prog.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "run_extensions-001/prog.cob",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    [
+     "run_extensions-002/prog.cob",
+     "littéral attendu"
+    ],
+    [
+     "run_extensions-005/prog.cob",
+     "littéral attendu"
+    ],
+    [
+     "run_extensions-007/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-010/prog.cob",
+     "expression non prise en charge: WHEN-COMPILED"
+    ],
+    [
+     "run_extensions-017/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-019/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-023/prog.cob",
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
+    ],
+    [
+     "run_extensions-025/prog.cob",
+     "CALL USING requiert au moins un argument"
+    ],
+    [
+     "run_extensions-028/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-034/callee.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_extensions-034/caller.cob",
+     "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_extensions-037/callee.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE"
+    ],
+    [
+     "run_extensions-037/caller.cob",
+     "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE"
+    ],
+    [
+     "run_extensions-038/init.cob",
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
+    ],
+    [
+     "run_extensions-042/prog.cob",
+     "ASSIGN TO KEYBOARD (périphérique spécial) non pris en charge"
+    ],
+    [
+     "run_extensions-044/prog.cob",
+     "DISPLAY UPON ENVIRONMENT-NAME non pris en charge"
+    ],
+    [
+     "run_extensions-052/prog.cob",
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-053/callee.cob",
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-053/caller.cob",
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-053/prog.cob",
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-054/callee.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_extensions-054/caller.cob",
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_extensions-055/callee.cob",
+     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-055/caller.cob",
+     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-056/prog.cob",
+     "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-057/prog.cob",
+     "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-058/prog.cob",
+     "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-059/prog.cob",
+     "CALL C$GETPID: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_extensions-060/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-061/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-062/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-063/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-064/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-065/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-066/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-067/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-068/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-069/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_extensions-070/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-070/prog2.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-070/prog3.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-070/prog4.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-070/prog5.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-071/prog.cob",
+     "CALL RETURNING/GIVING non pris en charge"
+    ],
+    [
+     "run_extensions-072/prog.cob",
+     "CALL RETURNING/GIVING non pris en charge"
+    ],
+    [
+     "run_extensions-073/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_extensions-074/prog.cob",
+     "CALL USING requiert au moins un argument"
+    ],
+    [
+     "run_extensions-075/prog.cob",
+     ". attendu"
+    ],
+    [
+     "run_extensions-076/prog.cob",
+     ". attendu"
+    ],
+    [
+     "run_extensions-086/prog.cob",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "run_extensions-087/prog.cob",
+     "indicateur fixe 'I' non pris en charge"
+    ],
+    [
+     "run_extensions-097/prog.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_extensions-098/over.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_extensions-098/under.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_extensions-099/corr.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_extensions-100/nested.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_extensions-101/redefines.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "run_file-020/prog.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_file-020/prog2.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_file-021/prog.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_file-021/prog2.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_file-024/prog.cob",
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    [
+     "run_file-025/prog.cob",
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    [
+     "run_file-026/prog.cob",
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    [
+     "run_file-028/prog.cob",
+     "instruction non prise en charge: UNLOCK"
+    ],
+    [
+     "run_file-029/prog.cob",
+     "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_file-030/prog.cob",
+     "START KEY limité à =, > ou NOT <"
+    ],
+    [
+     "run_file-031/prog.cob",
+     "START KEY limité à =, > ou NOT <"
+    ],
+    [
+     "run_file-032/prog.cob",
+     "START KEY limité à =, > ou NOT <"
+    ],
+    [
+     "run_file-038/prog.cob",
+     "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_file-039/prog.cob",
+     "PIC X/A limité à 65535 caractères DISPLAY"
+    ],
+    [
+     "run_file-040/prog.cob",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    [
+     "run_file-040/prog2.cob",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    [
+     "run_file-041/prog.cob",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    [
+     "run_file-042/prog2.cob",
+     "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_file-043/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "run_file-055/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-056/prog1.cob",
+     "NO attendu"
+    ],
+    [
+     "run_file-057/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-058/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-059/prog1.cob",
+     "ACCEPT FROM ENVIRONMENT non pris en charge"
+    ],
+    [
+     "run_file-059/prog2.cob",
+     "NO attendu"
+    ],
+    [
+     "run_file-064/prog.cob",
+     "READ direct requiert INVALID KEY, pas AT END"
+    ],
+    [
+     "run_file-065/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-066/prog1.cob",
+     "NO attendu"
+    ],
+    [
+     "run_file-067/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-068/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-069/prog1.cob",
+     "ACCEPT FROM ENVIRONMENT non pris en charge"
+    ],
+    [
+     "run_file-069/prog2.cob",
+     "NO attendu"
+    ],
+    [
+     "run_file-070/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-070/prog2.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-071/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-072/prog1.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "run_file-073/prog.cob",
+     "START KEY limité à =, > ou NOT <"
+    ],
+    [
+     "run_file-074/prog.cob",
+     "START KEY limité à =, > ou NOT <"
+    ],
+    [
+     "run_file-078/prog.cob",
+     "copybook introuvable: xfhfcd.cpy"
+    ],
+    [
+     "run_file-087/prog.cob",
+     "copybook introuvable: xfhfcd3.cpy"
+    ],
+    [
+     "run_file-090/prog.cob",
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    [
+     "run_file-092/prog.cob",
+     "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée"
+    ],
+    [
+     "run_file-093/prog.cob",
+     "LINE SEQUENTIAL requiert des colonnes DISPLAY"
+    ],
+    [
+     "run_file-094/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_file-096/prog.cob",
+     "USING limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING"
+    ],
+    [
+     "run_file-105/prog.cob",
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    [
+     "run_file-105/prog2.cob",
+     "USE GLOBAL sur un fichier non pris en charge"
+    ],
+    [
+     "run_functions-001/prog.cob",
+     "FUNCTION ABS non prise en charge"
+    ],
+    [
+     "run_functions-006/prog.cob",
+     "PICTURE non prise en charge: N(4)"
+    ],
+    [
+     "run_functions-008/prog.cob",
+     "FUNCTION COMBINED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-009/prog.cob",
+     "FUNCTION CONCATENATE non prise en charge"
+    ],
+    [
+     "run_functions-010/prog.cob",
+     "FUNCTION CONCATENATE non prise en charge"
+    ],
+    [
+     "run_functions-011/prog.cob",
+     "FUNCTION BIT-OF non prise en charge"
+    ],
+    [
+     "run_functions-013/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_functions-014/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_functions-015/prog.cob",
+     "CALL USING requiert au moins un argument"
+    ],
+    [
+     "run_functions-017/prog.cob",
+     "FUNCTION CURRENCY-SYMBOL non prise en charge"
+    ],
+    [
+     "run_functions-020/prog.cob",
+     "FUNCTION DATE-TO-YYYYMMDD non prise en charge"
+    ],
+    [
+     "run_functions-022/prog.cob",
+     "FUNCTION DAY-TO-YYYYDDD non prise en charge"
+    ],
+    [
+     "run_functions-024/prog.cob",
+     "FUNCTION EXCEPTION-FILE non prise en charge"
+    ],
+    [
+     "run_functions-025/caller.cob",
+     "FUNCTION EXCEPTION-LOCATION non prise en charge"
+    ],
+    [
+     "run_functions-025/prog.cob",
+     "FUNCTION EXCEPTION-LOCATION non prise en charge"
+    ],
+    [
+     "run_functions-026/prog.cob",
+     "FUNCTION EXCEPTION-STATEMENT non prise en charge"
+    ],
+    [
+     "run_functions-027/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_functions-029/prog.cob",
+     "FUNCTION EXP10 non prise en charge"
+    ],
+    [
+     "run_functions-031/prog.cob",
+     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
+    ],
+    [
+     "run_functions-032/prog.cob",
+     "FUNCTION FORMATTED-DATE non prise en charge"
+    ],
+    [
+     "run_functions-033/prog.cob",
+     "FUNCTION FORMATTED-DATE non prise en charge"
+    ],
+    [
+     "run_functions-034/prog.cob",
+     "FUNCTION FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-035/prog.cob",
+     "FUNCTION FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-036/prog.cob",
+     "FUNCTION FORMATTED-TIME non prise en charge"
+    ],
+    [
+     "run_functions-037/prog.cob",
+     "FUNCTION FORMATTED-TIME non prise en charge"
+    ],
+    [
+     "run_functions-038/prog.cob",
+     "FUNCTION FORMATTED-TIME non prise en charge"
+    ],
+    [
+     "run_functions-039/prog.cob",
+     "FUNCTION FRACTION-PART non prise en charge"
+    ],
+    [
+     "run_functions-040/prog.cob",
+     "FUNCTION HIGHEST-ALGEBRAIC non prise en charge"
+    ],
+    [
+     "run_functions-044/prog.cob",
+     "FUNCTION INTEGER-OF-FORMATTED-DATE non prise en charge"
+    ],
+    [
+     "run_functions-047/prog.cob",
+     "FUNCTION LOCALE-COMPARE non prise en charge"
+    ],
+    [
+     "run_functions-048/prog.cob",
+     "FUNCTION LOCALE-DATE non prise en charge"
+    ],
+    [
+     "run_functions-049/prog.cob",
+     "FUNCTION LOCALE-TIME non prise en charge"
+    ],
+    [
+     "run_functions-050/prog.cob",
+     "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
+    ],
+    [
+     "run_functions-055/prog.cob",
+     "FUNCTION LOWEST-ALGEBRAIC non prise en charge"
+    ],
+    [
+     "run_functions-056/prog.cob",
+     "DISPLAY de FUNCTION MAX numérique non pris en charge"
+    ],
+    [
+     "run_functions-057/prog.cob",
+     "DISPLAY de FUNCTION MEAN numérique non pris en charge"
+    ],
+    [
+     "run_functions-058/prog.cob",
+     "DISPLAY de FUNCTION MEDIAN numérique non pris en charge"
+    ],
+    [
+     "run_functions-059/prog.cob",
+     "DISPLAY de FUNCTION MIDRANGE numérique non pris en charge"
+    ],
+    [
+     "run_functions-060/prog.cob",
+     "DISPLAY de FUNCTION MIN numérique non pris en charge"
+    ],
+    [
+     "run_functions-062/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_functions-063/prog.cob",
+     "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge"
+    ],
+    [
+     "run_functions-063/prog2.cob",
+     "FUNCTION MODULE-CALLER-ID non prise en charge"
+    ],
+    [
+     "run_functions-064/prog.cob",
+     "FUNCTION MODULE-DATE non prise en charge"
+    ],
+    [
+     "run_functions-065/prog.cob",
+     "FUNCTION MODULE-FORMATTED-DATE non prise en charge"
+    ],
+    [
+     "run_functions-066/prog.cob",
+     "FUNCTION MODULE-ID non prise en charge"
+    ],
+    [
+     "run_functions-067/prog.cob",
+     "FUNCTION MODULE-PATH non prise en charge"
+    ],
+    [
+     "run_functions-068/prog.cob",
+     "FUNCTION MODULE-SOURCE non prise en charge"
+    ],
+    [
+     "run_functions-069/prog.cob",
+     "FUNCTION MODULE-TIME non prise en charge"
+    ],
+    [
+     "run_functions-070/prog.cob",
+     "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
+    ],
+    [
+     "run_functions-071/prog.cob",
+     "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge"
+    ],
+    [
+     "run_functions-072/prog.cob",
+     "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge"
+    ],
+    [
+     "run_functions-073/prog.cob",
+     "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
+    ],
+    [
+     "run_functions-077/prog.cob",
+     "FUNCTION NUMVAL-F non prise en charge"
+    ],
+    [
+     "run_functions-078/prog.cob",
+     "DISPLAY de FUNCTION ORD numérique non pris en charge"
+    ],
+    [
+     "run_functions-079/prog.cob",
+     "DISPLAY de FUNCTION ORD-MAX numérique non pris en charge"
+    ],
+    [
+     "run_functions-080/prog.cob",
+     "DISPLAY de FUNCTION ORD-MIN numérique non pris en charge"
+    ],
+    [
+     "run_functions-082/prog.cob",
+     "DISPLAY de FUNCTION PRESENT-VALUE numérique non pris en charge"
+    ],
+    [
+     "run_functions-086/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_functions-089/prog.cob",
+     "FUNCTION SECONDS-FROM-FORMATTED-TIME non prise en charge"
+    ],
+    [
+     "run_functions-090/prog.cob",
+     "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
+    ],
+    [
+     "run_functions-091/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-LONG"
+    ],
+    [
+     "run_functions-095/prog.cob",
+     "FUNCTION STORED-CHAR-LENGTH non prise en charge"
+    ],
+    [
+     "run_functions-096/prog.cob",
+     "FUNCTION SUBSTITUTE non prise en charge"
+    ],
+    [
+     "run_functions-097/prog.cob",
+     "FUNCTION SUBSTITUTE non prise en charge"
+    ],
+    [
+     "run_functions-098/prog.cob",
+     "FUNCTION SUBSTITUTE-CASE non prise en charge"
+    ],
+    [
+     "run_functions-099/prog.cob",
+     "FUNCTION SUBSTITUTE-CASE non prise en charge"
+    ],
+    [
+     "run_functions-102/prog.cob",
+     "FUNCTION TEST-DATE-YYYYMMDD non prise en charge"
+    ],
+    [
+     "run_functions-103/prog.cob",
+     "FUNCTION TEST-DAY-YYYYDDD non prise en charge"
+    ],
+    [
+     "run_functions-104/prog.cob",
+     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-105/prog.cob",
+     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-106/prog.cob",
+     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-107/prog.cob",
+     "FUNCTION TEST-FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-108/prog.cob",
+     "FUNCTION TEST-NUMVAL non prise en charge"
+    ],
+    [
+     "run_functions-109/prog.cob",
+     "FUNCTION TEST-NUMVAL-C non prise en charge"
+    ],
+    [
+     "run_functions-110/prog.cob",
+     "FUNCTION TEST-NUMVAL-F non prise en charge"
+    ],
+    [
+     "run_functions-118/prog.cob",
+     "FUNCTION YEAR-TO-YYYY non prise en charge"
+    ],
+    [
+     "run_functions-119/prog.cob",
+     "FUNCTION FORMATTED-CURRENT-DATE non prise en charge"
+    ],
+    [
+     "run_functions-120/prog.cob",
+     "FUNCTION FORMATTED-DATETIME non prise en charge"
+    ],
+    [
+     "run_functions-123/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "run_functions-124/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "run_functions-126/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "run_fundamental-001/prog.cob",
+     "expression non prise en charge: E0"
+    ],
+    [
+     "run_fundamental-002/prog.cob",
+     "expression non prise en charge: E0"
+    ],
+    [
+     "run_fundamental-003/prog.cob",
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_fundamental-012/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-LONG"
+    ],
+    [
+     "run_fundamental-013/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-LONG"
+    ],
+    [
+     "run_fundamental-021/prog.cob",
+     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_fundamental-022/prog.cob",
+     "expression attendue"
+    ],
+    [
+     "run_fundamental-023/prog.cob",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "run_fundamental-025/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "run_fundamental-027/prog.cob",
+     "CALL module: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_fundamental-028/prog.cob",
+     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_fundamental-029/prog.cob",
+     "CALL prog3 depuis prog2: programme contenu non visible (non modélisé)"
+    ],
+    [
+     "run_fundamental-031/prog.cob",
+     "CALL prog2 depuis prog: programme contenu non visible (non modélisé)"
+    ],
+    [
+     "run_fundamental-033/prog.cob",
+     "USAGE/clause non pris en charge: PROGRAM-POINTER"
+    ],
+    [
+     "run_fundamental-035/prog.cob",
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    [
+     "run_fundamental-037/prog.cob",
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    [
+     "run_fundamental-044/prog.cob",
+     "78 VALUE LENGTH OF non pris en charge"
+    ],
+    [
+     "run_fundamental-048/prog.cob",
+     ". attendu"
+    ],
+    [
+     "run_fundamental-064/prog.cob",
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_fundamental-067/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    [
+     "run_fundamental-068/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    [
+     "run_fundamental-069/prog.cob",
+     "invalid IF directive"
+    ],
+    [
+     "run_fundamental-075/prog.cob",
+     "REMAINDER avec un quotient recouvrant un opérande non pris en charge"
+    ],
+    [
+     "run_fundamental-079/prog.cob",
+     "DISPLAY UPON STDOUT non pris en charge"
+    ],
+    [
+     "run_fundamental-086/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_fundamental-096/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    [
+     "run_fundamental-097/callee.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "run_fundamental-097/caller.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "run_fundamental-112/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
+    ],
+    [
+     "run_fundamental-114/prog.cob",
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    [
+     "run_initialize-007/prog.cob",
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
+    ],
+    [
+     "run_initialize-010/prog.cob",
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
+    ],
+    [
+     "run_initialize-013/prog.cob",
+     "zone de données trop grande: T01-ALL.T01-REC"
+    ],
+    [
+     "run_manual_screen-001/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-002/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-003/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-004/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-005/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-006/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-007/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-008/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-009/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-014/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-015/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-016/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-017/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-018/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-019/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-020/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-021/prog.cob",
+     "instruction non prise en charge: AT"
+    ],
+    [
+     "run_manual_screen-022/prog.cob",
+     "instruction non prise en charge: AT"
+    ],
+    [
+     "run_manual_screen-023/prog.cob",
+     "instruction non prise en charge: AT"
+    ],
+    [
+     "run_manual_screen-024/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-025/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-026/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-027/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-028/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-029/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-030/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-031/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-032/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-033/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-034/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-035/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-036/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-037/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-038/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-039/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-040/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-041/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-043/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "run_manual_screen-044/prog.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    [
+     "run_manual_screen-045/prog.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    [
+     "run_manual_screen-046/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_manual_screen-047/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_manual_screen-048/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_manual_screen-049/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_manual_screen-050/prog.cob",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_manual_screen-051/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-052/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-053/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-054/prog.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    [
+     "run_manual_screen-055/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-056/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-057/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-058/prog.cob",
+     "expression non prise en charge: LINE"
+    ],
+    [
+     "run_manual_screen-059/prog1.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    [
+     "run_manual_screen-059/prog2.cob",
+     "USAGE/clause non pris en charge: is"
+    ],
+    [
+     "run_manual_screen-060/prog1.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CRT"
+    ],
+    [
+     "run_manual_screen-060/prog2.cob",
+     "USAGE/clause non pris en charge: is"
+    ],
+    [
+     "run_manual_screen-061/prog.cob",
+     "USAGE/clause non pris en charge: is"
+    ],
+    [
+     "run_manual_screen-062/prog.cob",
+     "USAGE/clause non pris en charge: is"
+    ],
+    [
+     "run_misc-013/callee.cob",
+     "EXTERNAL AS non pris en charge"
+    ],
+    [
+     "run_misc-013/caller.cob",
+     "EXTERNAL AS non pris en charge"
+    ],
+    [
+     "run_misc-014/bigger.cob",
+     "EXTERNAL AS non pris en charge"
+    ],
+    [
+     "run_misc-014/callee.cob",
+     "EXTERNAL AS non pris en charge"
+    ],
+    [
+     "run_misc-014/smaller.cob",
+     "EXTERNAL AS non pris en charge"
+    ],
+    [
+     "run_misc-020/prog.cob",
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-022/prog.cob",
+     "DISPLAY accepte uniquement champs et littéraux simples"
+    ],
+    [
+     "run_misc-025/prog.cob",
+     "indicateur fixe 'A' non pris en charge"
+    ],
+    [
+     "run_misc-026/prog.cob",
+     "directive >>TURN non prise en charge"
+    ],
+    [
+     "run_misc-027/prog.cob",
+     "nom inconnu: ADDRESS; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_misc-027/prog2.cob",
+     "OCCURS DEPENDING ON limité à une table subordonnée"
+    ],
+    [
+     "run_misc-027/prog3.cob",
+     "OCCURS DEPENDING ON limité à une table subordonnée"
+    ],
+    [
+     "run_misc-034/caller.cob",
+     "CALL callee1: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-037/callee.cob",
+     ". attendu"
+    ],
+    [
+     "run_misc-037/callee2.cob",
+     ". attendu"
+    ],
+    [
+     "run_misc-037/caller.cob",
+     ". attendu"
+    ],
+    [
+     "run_misc-040/callee.cob",
+     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-040/callee2.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-040/caller.cob",
+     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-041/callee.cob",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    [
+     "run_misc-041/caller.cob",
+     "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    [
+     "run_misc-042/prog.cob",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    [
+     "run_misc-045/prog.cob",
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    [
+     "run_misc-046/prog.cob",
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    [
+     "run_misc-048/prog.cob",
+     "opérande INSPECT attendu"
+    ],
+    [
+     "run_misc-049/prog.cob",
+     "opérande INSPECT attendu"
+    ],
+    [
+     "run_misc-060/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-LONG"
+    ],
+    [
+     "run_misc-074/prog.cob",
+     "UNSTRING d'un littéral non pris en charge"
+    ],
+    [
+     "run_misc-080/prog.cob",
+     "UNSTRING d'un littéral non pris en charge"
+    ],
+    [
+     "run_misc-085/prog.cob",
+     "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge"
+    ],
+    [
+     "run_misc-085/prog2.cob",
+     "PROGRAM COLLATING SEQUENCE avec alphabet non natif non pris en charge"
+    ],
+    [
+     "run_misc-093/caller.cob",
+     "CALL callee2: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-094/main-prog.cob",
+     "CALL ent3: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-095/prog.cob",
+     "USAGE/clause non pris en charge: PROGRAM-POINTER"
+    ],
+    [
+     "run_misc-096/caller.cob",
+     "CALL callee: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-097/prog.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_misc-098/prog.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_misc-099/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_misc-101/callee.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_misc-101/caller.cob",
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_misc-110/callee.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-110/caller.cob",
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-111/callee.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-111/caller.cob",
+     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-112/prog.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-113/prog.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "run_misc-115/prog.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_misc-115/prog2.cob",
+     "USAGE/clause non pris en charge: BASED"
+    ],
+    [
+     "run_misc-116/callee.cob",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_misc-116/caller.cob",
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    [
+     "run_misc-120/prog.cob",
+     "SYMBOLIC CHARACTERS IN avec alphabet non natif non pris en charge"
+    ],
+    [
+     "run_misc-122/prog.cob",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    [
+     "run_misc-123/prog.cob",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    [
+     "run_misc-127/prog.cob",
+     "USAGE/clause non pris en charge: POINTER"
+    ],
+    [
+     "run_misc-129/prog.cob",
+     "instruction non prise en charge: AT"
+    ],
+    [
+     "run_misc-130/prog.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "run_misc-132/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-133/caller.cob",
+     "CALL RETURNING/GIVING non pris en charge"
+    ],
+    [
+     "run_misc-142/caller.cob",
+     "programme appelé prog.cob: ligne 34: REPOSITORY PROGRAM non pris en charge"
+    ],
+    [
+     "run_misc-142/prog.cob",
+     "REPOSITORY PROGRAM non pris en charge"
+    ],
+    [
+     "run_misc-143/prog.cob",
+     "INITIALIZE VALUE/DEFAULT non pris en charge"
+    ],
+    [
+     "run_misc-146/prog.cob",
+     "expression non prise en charge: >="
+    ],
+    [
+     "run_misc-148/prog.cob",
+     "END PROGRAM ne correspond pas au PROGRAM-ID"
+    ],
+    [
+     "run_misc-149/prog.cob",
+     "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-150/prog.cob",
+     "CALL DIR/SUB: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "run_misc-163/prog.cob",
+     "78 VALUE LENGTH OF non pris en charge"
+    ],
+    [
+     "run_misc-164/prog.cob",
+     "littéral attendu"
+    ],
+    [
+     "run_misc-166/prog.cob",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
+    ],
+    [
+     "run_misc-167/prog.cob",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    [
+     "run_misc-168/prog.cob",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    [
+     "run_misc-169/prog.cob",
+     "USAGE/clause non pris en charge: COMP-2"
+    ],
+    [
+     "run_misc-170/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-171/prog.cob",
+     "FUNCTION EXCEPTION-STATUS non prise en charge"
+    ],
+    [
+     "run_misc-176/prog.cob",
+     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "run_ml-002/prog.cob",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "run_ml-003/prog.cob",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "run_ml-004/prog.cob",
+     "instruction non prise en charge: XML"
+    ],
+    [
+     "run_ml-005/prog.cob",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    [
+     "run_ml-006/prog.cob",
+     "option $SET DPC-IN-DATA non prise en charge"
+    ],
+    [
+     "run_ml-008/prog.cob",
+     "instruction non prise en charge: JSON"
+    ],
+    [
+     "run_ml-009/prog.cob",
+     "instruction non prise en charge: JSON"
+    ],
+    [
+     "run_ml-010/prog.cob",
+     "instruction non prise en charge: JSON"
+    ],
+    [
+     "run_ml-011/prog.cob",
+     "instruction non prise en charge: JSON"
+    ],
+    [
+     "run_ml-012/prog.cob",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    [
+     "run_ml-013/prog.cob",
+     "option $SET DPC-IN-DATA non prise en charge"
+    ],
+    [
+     "run_reportwriter-001/prog.cob",
+     "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
+    ],
+    [
+     "run_reportwriter-002/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-004/prog.cob",
+     "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
+    ],
+    [
+     "run_reportwriter-005/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-006/prog.cob",
+     "article de rapport sans COLUMN non pris en charge"
+    ],
+    [
+     "run_reportwriter-008/prog.cob",
+     "expression non prise en charge: DISCOUNT-IX"
+    ],
+    [
+     "run_reportwriter-009/prog.cob",
+     "expression non prise en charge: DISCOUNT-IX"
+    ],
+    [
+     "run_reportwriter-010/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-011/prog.cob",
+     "AFTER attendu"
+    ],
+    [
+     "run_reportwriter-012/prog.cob",
+     "NEXT GROUP entier attendu"
+    ],
+    [
+     "run_reportwriter-014/prog.cob",
+     "plusieurs rapports dans un FD non pris en charge"
+    ],
+    [
+     "run_reportwriter-016/prog.cob",
+     "clause de groupe de rapport non prise en charge"
+    ],
+    [
+     "run_reportwriter-017/prog.cob",
+     "options multiples de LINE non prises en charge"
+    ],
+    [
+     "run_reportwriter-019/prog.cob",
+     "groupe de rapport 01 sans TYPE non pris en charge"
+    ],
+    [
+     "run_reportwriter-022/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-023/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-024/prog.cob",
+     "COLUMN PLUS non pris en charge"
+    ],
+    [
+     "run_reportwriter-026/prog.cob",
+     "enregistrement dans un FD avec REPORT non pris en charge"
+    ],
+    [
+     "run_reportwriter-028/prog.cob",
+     "clause RD non prise en charge"
+    ],
+    [
+     "run_subscripts-011/prog.cob",
+     "option $SET BOUND non prise en charge"
+    ],
+    [
+     "syn_copy-010/prog.cob",
+     "COPY REPLACING LEADING/TRAILING non pris en charge"
+    ],
+    [
+     "syn_copy-011/prog.cob",
+     "COPY REPLACING LEADING/TRAILING non pris en charge"
+    ],
+    [
+     "syn_copy-013/prog.cob",
+     "COPY REPLACING d'un copybook contenant COPY non pris en charge"
+    ],
+    [
+     "syn_copy-017/prog.cob",
+     "COPY REPLACING LEADING/TRAILING non pris en charge"
+    ],
+    [
+     "syn_copy-019/prog.cob",
+     "COPY REPLACING LEADING/TRAILING non pris en charge"
+    ],
+    [
+     "syn_copy-020/prog.cob",
+     "COPY REPLACING LEADING/TRAILING non pris en charge"
+    ],
+    [
+     "syn_definition-005/containing-prog.cob",
+     ". attendu"
+    ],
+    [
+     "syn_definition-019/prog.cob",
+     "condition dupliquée ou réservée"
+    ],
+    [
+     "syn_definition-025/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "syn_definition-026/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "syn_definition-039/prog.cob",
+     "CALL USING limité à BY REFERENCE et BY CONTENT"
+    ],
+    [
+     "syn_definition-040/prog.cob",
+     "PICTURE non prise en charge: N(4)"
+    ],
+    [
+     "syn_definition-047/prog.cob",
+     "END PROGRAM ne correspond pas au PROGRAM-ID"
+    ],
+    [
+     "syn_definition-049/prog.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "syn_definition-056/prog3.cob",
+     "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté"
+    ],
+    [
+     "syn_definition-059/prog.cob",
+     "USAGE/clause non pris en charge: SAME"
+    ],
+    [
+     "syn_definition-060/prog.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "syn_definition-060/progstd.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "syn_file-011/prog.cob",
+     "NO attendu"
+    ],
+    [
+     "syn_file-012/prog.cob",
+     "NO attendu"
+    ],
+    [
+     "syn_file-013/prog.cob",
+     "RECORD attendu"
+    ],
+    [
+     "syn_file-040/prog.cob",
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    [
+     "syn_file-043/prog.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "syn_functions-002/prog.cob",
+     "DISPLAY de FUNCTION E numérique non pris en charge"
+    ],
+    [
+     "syn_functions-003/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "syn_functions-005/prog.cob",
+     "PROGRAM-ID attendu"
+    ],
+    [
+     "syn_functions-008/prog.cob",
+     "FUNCTION ABS non prise en charge"
+    ],
+    [
+     "syn_literals-006/prog.cob",
+     "expression non prise en charge: N"
+    ],
+    [
+     "syn_misc-023/prog2.cob",
+     "entrée SPECIAL-NAMES non prise en charge: CRT"
+    ],
+    [
+     "syn_misc-024/prog3.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "syn_misc-024/prog4.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "syn_misc-024/prog6.cob",
+     "USAGE/clause non pris en charge: IS"
+    ],
+    [
+     "syn_misc-025/prog3.cob",
+     "CURRENCY ... PICTURE SYMBOL non pris en charge"
+    ],
+    [
+     "syn_misc-030/prog.cob",
+     "ACCEPT FROM COMMAND-LINE non pris en charge"
+    ],
+    [
+     "syn_misc-033/prog.cob",
+     "instruction non prise en charge: WITH"
+    ],
+    [
+     "syn_misc-034/prog.cob",
+     "instruction non prise en charge: WITH"
+    ],
+    [
+     "syn_misc-035/prog.cob",
+     "instruction non prise en charge: AT"
+    ],
+    [
+     "syn_misc-043/prog.cob",
+     "ACCEPT FROM ESCAPE non pris en charge"
+    ],
+    [
+     "syn_misc-049/prog.cob",
+     "expression non prise en charge: OMITTED"
+    ],
+    [
+     "syn_misc-055/prog.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "syn_misc-059/prog.cob",
+     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+    ],
+    [
+     "syn_misc-059/prog2.cob",
+     "CALL stuff: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "syn_misc-059/prog3.cob",
+     "directive >>CALL-CONVENTION non prise en charge"
+    ],
+    [
+     "syn_misc-062/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "syn_misc-080/prog.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "syn_misc-080/prog2.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "syn_misc-084/prog.cob",
+     "CALL prog3: programme non converti ou routine système non pris en charge"
+    ],
+    [
+     "syn_misc-093/prog.cob",
+     "RUN attendu"
+    ],
+    [
+     "syn_misc-097/prog.cob",
+     "ordinal requiert un entier littéral non signé"
+    ],
+    [
+     "syn_misc-105/prog.cob",
+     "USAGE/clause non pris en charge: pointer"
+    ],
+    [
+     "syn_misc-112/valid.cob",
+     "caractère non pris en charge '@'"
+    ],
+    [
+     "syn_misc-114/valid.cob",
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    [
+     "syn_misc-122/prog.cob",
+     "clause SELECT non prise en charge"
+    ],
+    [
+     "syn_misc-147/prog.cob",
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    [
+     "syn_misc-150/prog.cob",
+     ". attendu"
+    ],
+    [
+     "syn_occurs-005/prog3.cob",
+     "option $SET ODOSLIDE non prise en charge"
+    ],
+    [
+     "syn_occurs-006/prog.cob",
+     "nombre OCCURS attendu"
+    ],
+    [
+     "syn_occurs-006/prog2.cob",
+     "nombre OCCURS attendu"
+    ],
+    [
+     "syn_redefines-013/prog.cob",
+     "VALUE sur FD/REDEFINES non pris en charge"
+    ],
+    [
+     "syn_refmod-005/prog.cob",
+     "USAGE/clause non pris en charge: ANY"
+    ],
+    [
+     "syn_reportwriter-005/prog.cob",
+     "LINE PLUS 0 non pris en charge par cobc"
+    ],
+    [
+     "syn_reportwriter-010/prog.cob",
+     "enregistrement dans un FD avec REPORT non pris en charge"
+    ],
+    [
+     "syn_screen-005/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "syn_screen-008/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "syn_screen-009/prog.cob",
+     "instruction non prise en charge: ON"
+    ],
+    [
+     "syn_screen-013/prog3.cob",
+     "PROCEDURE attendu"
+    ],
+    [
+     "syn_screen-015/prog.cob",
+     "niveau de donnée attendu"
+    ],
+    [
+     "syn_screen-019/prog.cob",
+     "DISPLAY WITH CONVERSION (écran) non pris en charge"
+    ],
+    [
+     "syn_value-008/prog.cob",
+     "VALUE incompatible avec la PICTURE"
+    ],
+    [
+     "syn_value-009/prog.cob",
+     "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE"
+    ],
+    [
+     "syn_value-012/prog.cob",
+     "VALUE incompatible avec la PICTURE"
+    ],
+    [
+     "syn_value-013/prog.cob",
+     "groupe vide: IMPHEAD.IMPPIC"
+    ]
+   ],
+   "gap_blockers": [
+    [
+     "niveau de donnée attendu",
+     37
+    ],
+    [
+     "USAGE/clause non pris en charge: POINTER",
+     14
+    ],
+    [
+     "CALL USING limité à BY REFERENCE et BY CONTENT",
+     13
+    ],
+    [
+     "clause SELECT non prise en charge",
+     12
+    ],
+    [
+     "expression non prise en charge: LINE",
+     9
+    ],
+    [
+     ". attendu",
+     8
+    ],
+    [
+     "PROGRAM-ID attendu",
+     8
+    ],
+    [
+     "USAGE/clause non pris en charge: ANY",
+     7
+    ],
+    [
+     "USAGE/clause non pris en charge: DEPENDING",
+     7
+    ],
+    [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     7
+    ],
+    [
+     "FUNCTION EXCEPTION-STATUS non prise en charge",
+     7
+    ],
+    [
+     "USAGE/clause non pris en charge: IS",
+     7
+    ]
+   ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-25T15:01:36+00:00",
-  "git_head": "1c167ab0f82ca00b74f4659a0626f640968bc2c8",
-  "implementation_sha256": "09f6826eab3b3bcb3fe76d9db2d7f2395b0b69582e8cebb41b32f91141e836ec",
+  "measured_at": "2026-10-26T11:31:07+00:00",
+  "git_head": "0ab0aec9da1bb257794365015554acebfa32f9bf",
+  "implementation_sha256": "c6e66cb77e32234549b0999c0a50e9569677813d3fa8047159e459b8a7428e2a",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -704,8 +2460,8 @@
     }
    },
    "cobol-programming-course": {
-    "programs": 11,
-    "identical": 9,
+    "programs": 12,
+    "identical": 10,
     "different": 0,
     "refused": 0,
     "timeout": 2,
@@ -726,6 +2482,10 @@
       "status": "timeout"
      },
      "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/CBLC2.cobol": {
+      "status": "identical",
+      "exit": 0
+     },
+     "COBOL Programming Course #2 - Learning COBOL/Labs/cbl/COBOL.cobol": {
       "status": "identical",
       "exit": 0
      },
@@ -756,9 +2516,9 @@
     }
    },
    "beg-cobol-for-programmers": {
-    "programs": 52,
-    "identical": 45,
-    "different": 1,
+    "programs": 61,
+    "identical": 52,
+    "different": 3,
     "refused": 0,
     "timeout": 6,
     "error": 0,
@@ -780,6 +2540,10 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch04/Listing4-2 Add two numbers.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-1.cbl": {
       "status": "identical",
       "exit": 0
      },
@@ -816,6 +2580,10 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch05/Listing5-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch05/Listing5-9.cbl": {
       "status": "identical",
       "exit": 0
      },
@@ -942,6 +2710,14 @@
       "status": "identical",
       "exit": 1
      },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-7.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch14/Listing14-8.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
      "978-1-4302-6253-4_Coughlan_Ch14/Listing14-9.cbl": {
       "status": "identical",
       "exit": 0
@@ -952,6 +2728,18 @@
      },
      "978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl": {
       "status": "timeout"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-2.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-3.cbl": {
+      "status": "identical",
+      "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch15/Listing15-4.cbl": {
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch15/Listing15-6.cbl": {
       "status": "identical",
@@ -968,6 +2756,22 @@
      "978-1-4302-6253-4_Coughlan_Ch16/Listing16-1.cbl": {
       "status": "identical",
       "exit": 0
+     },
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-1.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing18-1.Rpt",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 159: COBOL subscript out of bounds\n"
+     },
+     "978-1-4302-6253-4_Coughlan_Ch18/Listing18-2.cbl": {
+      "status": "different",
+      "reasons": [
+       "fichiers Listing18-2.Rpt",
+       "sortie 0/70"
+      ],
+      "rust_stderr": "cobol2rust: COBOL line 180: COBOL subscript out of bounds\n"
      }
     }
    }

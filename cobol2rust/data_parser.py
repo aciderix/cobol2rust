@@ -1,19 +1,26 @@
 """Data division parsing, with explicit storage hierarchy and condition names."""
 import re
 
-from .frontend import Condition, Field, Token, VERBS
+from .frontend import Condition, ConstantToken, Field, Token, VERBS
 
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
-          "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE"}
+          "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
+          "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
+          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6"}
 # field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
 # digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
-FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18}
+FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18,
+                       "BINARY-C-LONG": 18}
+# validate_field_1: C type usages are COMP-5 with the picture of a fixed binary.
+C_TYPE_USAGES = {"SIGNED-SHORT": (4, True), "UNSIGNED-SHORT": (4, False), "SIGNED-INT": (9, True),
+                 "UNSIGNED-INT": (9, False), "SIGNED-LONG": (18, True), "UNSIGNED-LONG": (18, False)}
 
 
 def literal(p):
     negative = p.accept("-")
-    if not negative:
-        p.accept("+")
+    positive = not negative and p.accept("+")
+    # validate_move: an explicit sign needs a signed receiver.
+    p.literal_signed = bool(negative or positive)
     token = p.take()
     if token.string:
         if negative:
@@ -31,6 +38,10 @@ def literal(p):
         token = Token(getattr(p, "high_value", "\xff"), token.line, True)
     elif token.key in {"LOW-VALUE", "LOW-VALUES"}:
         token = Token(getattr(p, "low_value", "\x00"), token.line, True)
+    elif re.fullmatch(r"[+-](?:\d+(?:\.\d+)?|\.\d+)", token.text) and not (negative or positive):
+        # A signed literal token: a level 78 value, or a sign touching digits.
+        p.literal_signed = True
+        token = Token(token.text.lstrip("+"), token.line)
     elif not re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", token.text):
         p.error("littéral attendu")
     if negative:
@@ -198,10 +209,229 @@ def edited_picture(p, picture):
     return symbols, size, digits, scale, s_edit > 0
 
 
+FIGURATIVES = {"ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES", "QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES",
+               "LOW-VALUE", "LOW-VALUES", "NULL", "NULLS"}
+CONSTANT_OPERATORS = {"(": "(", ")": ")", "+": "+", "-": "-", "*": "*", "/": "/", "AND": "&", "OR": "|", "**": "^"}
+
+
+def evaluate_constant(p, items, line, normal_prec):
+    """cb_evaluate_expr: without normal_prec (78 VALUE) every operator has the
+    same precedence; values are integers with a decimal scale and the result
+    is truncated to an integer literal."""
+    precedence = {"*": 6, "/": 6, "^": 7, "&": 8, "|": 8} if normal_prec else {}
+    ops, vals = [], []   # ops: (type, prec); vals: (value, scale)
+
+    def reduce_zeros(value, scale):
+        while scale > 0 and value % 10 == 0:
+            scale, value = scale - 1, int(value / 10)
+        return value, scale
+
+    def eval_op():
+        if not ops or len(vals) < 2:
+            return
+        (rval, rscale), (lval, lscale) = vals.pop(), vals.pop()
+        op = ops[-1][0]
+        if op in "+-":
+            while lscale > rscale:
+                rval, rscale = rval * 10, rscale + 1
+            while lscale < rscale:
+                lval, lscale = lval * 10, lscale + 1
+            value, scale = (lval + rval if op == "+" else lval - rval), lscale
+        elif op == "*":
+            value, scale = lval * rval, lscale + rscale
+        elif op == "/":
+            while rscale > 0:
+                lval, rscale = lval * 10, rscale - 1
+            if rval == 0:
+                p.error("constant expression has Divide by ZERO")
+            value, scale = int(lval / rval), lscale
+        elif op == "^":
+            while rscale > 0:
+                rval, rscale = int(rval / 10), rscale - 1
+            if rval == 0 or lval == 1:
+                value, scale = 1, 0
+            else:
+                value, scale = lval, lscale
+                for _ in range(rval - 1):
+                    scale, value = scale + lscale, value * lval
+        elif op == "&":
+            value, scale = int(bool(lval and rval)), 0
+        elif op == "|":
+            value, scale = int(bool(lval or rval)), 0
+        else:
+            p.error("missing right parenthesis")
+        ops.pop()
+        vals.append(reduce_zeros(value, scale))
+
+    def push_op(op, prec):
+        while ops and len(vals) > 1 and prec > 0 and ops[-1][0] != "(" and prec <= ops[-1][1]:
+            eval_op()
+        ops.append((op, prec))
+
+    unop = True
+    for kind, value in items:
+        if kind == "number":
+            sign = -1 if value.startswith("-") else (1 if value.startswith("+") else 0)
+            digits = value.lstrip("+-")
+            scale = len(digits.split(".")[1]) if "." in digits else 0
+            number = int(digits.replace(".", "") or "0")
+            if unop:
+                number = -number if sign < 0 else number
+            elif sign:
+                push_op("-" if sign < 0 else "+", 4)
+            vals.append(reduce_zeros(number, scale))
+            unop = False
+        elif value == "(":
+            push_op("(", 0)
+            unop = True
+        elif value == ")":
+            unop = False
+            if not any(op == "(" for op, _ in ops):
+                p.error("missing left parenthesis")
+            while ops and len(vals) > 0 and ops[-1][0] != "(":
+                eval_op()
+            if ops and ops[-1][0] == "(":
+                ops.pop()
+        else:
+            push_op(value, precedence.get(value, 4))
+            unop = True
+    while ops and vals:
+        if ops[-1][0] == "(":
+            p.error("missing right parenthesis")
+        eval_op()
+    if ops:
+        p.error(f"'{ops[-1][0]}' operator misplaced")
+    value, scale = vals[0] if vals else (0, 0)
+    while scale > 0:
+        scale, value = scale - 1, int(value / 10)
+    return [Token(str(value), line)]
+
+
+def constant_entry(p, level):
+    """SEVENTY_EIGHT user_entry_name _global_clause VALUE _is constant_78_source,
+    or level_number user_entry_name CONSTANT _const_global constant_source:
+    cb_add_78 makes the scanner return the value for each later use of the
+    name in the program (and its contained programs when GLOBAL)."""
+    line = p.t.line
+    if p.t.string:
+        p.error("identifiant attendu")
+    name = p.name()
+    p.user_word(name)
+    if level != 78:
+        p.expect("CONSTANT")
+        if level != 1:
+            p.error("CONSTANT item not at 01 level")
+    if p.accept("IS"):
+        p.expect("GLOBAL")
+        is_global = True
+    else:
+        is_global = bool(p.accept("GLOBAL"))
+    if level != 78:
+        if p.at("FROM"):
+            p.error("01 CONSTANT FROM non pris en charge")
+        p.accept("AS")
+    elif not p.accept("VALUE"):
+        p.error("VALUE is required for level 78 item")
+    else:
+        p.accept("IS")
+    if p.at("START") or p.at("NEXT"):
+        p.error("78 VALUE START OF / NEXT non pris en charge")
+    items, tokens = [], []
+    while not p.at(".") and not p.at("<EOF>"):
+        t = p.t
+        if not t.string and t.key in {"LENGTH", "BYTE-LENGTH"}:
+            p.error("78 VALUE LENGTH OF non pris en charge")
+        if not t.string and t.key in CONSTANT_OPERATORS:
+            p.take()
+            if t.key in "+-" and p.t.text[:1].isdigit() and (not items or items[-1][0] == "operator"
+                                                              and items[-1][1] != ")"):
+                number = p.take()
+                items.append(("number", t.key + number.text))
+                tokens = [Token(t.key + number.text, t.line)]
+                continue
+            items.append(("operator", CONSTANT_OPERATORS[t.key]))
+            continue
+        if not t.string and t.key == "ALL":
+            p.take()
+            if not p.t.string and p.t.key not in FIGURATIVES:
+                p.error("littéral attendu")
+            tokens = [Token("ALL", t.line), p.take()]
+            items.append(("literal", tokens[1].text))
+            continue
+        if t.string or t.key in FIGURATIVES:
+            p.take()
+            tokens = [t]
+            items.append(("literal", t.text))
+            continue
+        if re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", t.text):
+            p.take()
+            tokens = [t]
+            items.append(("number", t.text))
+            continue
+        p.error("littéral attendu")
+    p.expect(".")
+    if not items:
+        p.error("VALUE is required for level 78 item")
+    if len(items) > 1:
+        # cb_is_expr: more than one element, an expression of numeric literals.
+        for kind, value in items:
+            if kind == "literal":
+                p.error(f"invalid operator '{value}' in expression")
+        tokens = evaluate_constant(p, items, line, level != 78)
+    elif items[0][0] == "operator":
+        p.error("littéral attendu")
+    key = name.upper()
+    if key in p.constants:
+        p.error(f"'{name}' constant redefined")   # cb_build_constant: redefinition
+    p.constants[key] = tokens
+    # Scanner substitution up to the end of the program (cb_reset_78), or of
+    # the program and its contained programs for a GLOBAL constant.
+    end, depth = p.i, 0
+    while end < len(p.tokens) and p.tokens[end].key != "<EOF>":
+        t = p.tokens[end]
+        if not t.string and t.key == "PROGRAM-ID":
+            if not is_global:
+                break
+            depth += 1
+        if not t.string and t.key == "END" and p.tokens[end + 1].key == "PROGRAM":
+            if depth == 0:
+                break
+            depth -= 1
+        end += 1
+    replaced = []
+    for t in p.tokens[p.i:end]:
+        if not t.string and t.key == key:
+            replaced.extend(ConstantToken(r.text, t.line, r.string, t.start, t.end, constant=name) for r in tokens)
+        else:
+            replaced.append(t)
+    p.tokens[p.i:end] = replaced
+    return None
+
+
+def picture_constants(p, picture):
+    """get_number_in_parentheses: a constant-name between parentheses."""
+    def count(match):
+        inner = match[1]
+        if all(c.isdigit() or c in ".+-" for c in inner):
+            return match[0]
+        tokens = p.constants.get(inner.upper())
+        if tokens is None:
+            p.error(f"'{inner}' is not a constant-name" if p.candidates(inner.upper()) else f"'{inner}' is not defined")
+        if len(tokens) != 1 or tokens[0].string or not tokens[0].text.isdigit():
+            p.error(f"'{inner}' is not an unsigned positive integer")
+        return f"({tokens[0].text})"
+    return re.sub(r"\(([^()]*)\)", count, picture)
+
+
 def declaration(p, file_record=False):
     if p.t.string or not p.t.key.isdigit():
         p.error("niveau de donnée attendu")
     level = int(p.take().key)
+    if isinstance(p.t, ConstantToken):
+        # not_const_word: a level number is followed by a defined name.
+        p.error(f"a constant may not be used here - '{p.t.constant}'")
+    if level == 78 or (not p.t.string and p.tokens[p.i + 1].key == "CONSTANT" and not p.tokens[p.i + 1].string):
+        return constant_entry(p, level)
     # A description without a name is an implicit FILLER.
     implicit_filler = level != 88 and not p.t.string and p.t.key in {
         "PIC", "PICTURE", "VALUE", "VALUES", "USAGE", "OCCURS", "REDEFINES", "SIGN", "BLANK", "JUSTIFIED",
@@ -223,7 +453,7 @@ def declaration(p, file_record=False):
             p.error("VALUE attendu au niveau 88")
         p.accept("IS") or p.accept("ARE")
         values = []
-        while not p.at(".") and not p.at("WHEN"):
+        while not p.at(".") and not p.at("WHEN") and not p.at("FALSE"):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
@@ -262,6 +492,10 @@ def declaration(p, file_record=False):
         false_value = None
         if p.accept("WHEN"):
             p.expect("SET"); p.expect("TO"); p.expect("FALSE")
+            p.accept("IS")
+            false_value = literal(p)
+        elif p.accept("FALSE"):
+            # _false_is: FALSE [IS] literal, without WHEN SET TO.
             p.accept("IS")
             false_value = literal(p)
         p.expect(".")
@@ -316,9 +550,10 @@ def declaration(p, file_record=False):
     else:
         component = label
     key = (parent + "." if parent else "") + component
-    if parent and key in p.fields and label not in VERBS:
-        # Homonymous siblings are valid; a reference to them is ambiguous
-        # (cb_ref), which resolve() reports. Keep their keys distinct.
+    if key in p.fields and label not in VERBS and not getattr(p, "building_register", False):
+        # Homonymous siblings, and 01/77 items (only a redefinition warning
+        # for cobc), are valid; a reference to them is ambiguous (cb_ref),
+        # which resolve() reports. Keep their keys distinct.
         duplicate = 2
         while f"{key}${duplicate}" in p.fields:
             duplicate += 1
@@ -326,6 +561,7 @@ def declaration(p, file_record=False):
     if key in p.fields or label in VERBS or label in {"ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES"}:
         p.error(f"nom de donnée réservé ou dupliqué: {label}")
     picture, usage, initial = "", "DISPLAY", None
+    value_signed = indexed_seen = False
     fixed_binary = None
     has_usage, table, count, redefines = False, False, 1, None
     minimum, depending = 1, None
@@ -341,6 +577,9 @@ def declaration(p, file_record=False):
         matches = [f for f in siblings if f.label == target]
         if not matches or matches[-1].level != level:
             p.error("REDEFINES requiert un champ précédent au même niveau")
+        if matches[-1].redefines:
+            # indirect-redefines: no (default.conf).
+            p.error(f"'{target}' is not the original definition")
         # Restrict to a contiguous redefine family; indirect redefines are dialect-dependent.
         last = siblings[-1]
         if last.name != matches[-1].name and last.redefines != matches[-1].name:
@@ -353,7 +592,7 @@ def declaration(p, file_record=False):
             p.accept("IS")
             if p.t.string or p.t.key in {".", "<EOF>", "VALUE", "USAGE", "OCCURS", "INDEXED"} | USAGES:
                 p.error("mot PICTURE contigu attendu")
-            picture = p.picture_symbols(p.take().key)
+            picture = p.picture_symbols(picture_constants(p, p.take().key))
         elif p.accept("OCCURS"):
             if table or not p.t.key.isdigit():
                 p.error("nombre OCCURS attendu")
@@ -377,6 +616,8 @@ def declaration(p, file_record=False):
             # ASCENDING/DESCENDING KEY: the keys of SEARCH ALL, in order.
             if not table:
                 p.error("KEY requiert OCCURS")
+            if indexed_seen:
+                p.error("INDEXED should follow ASCENDING/DESCENDING")
             descending = p.take().key == "DESCENDING"
             p.accept("KEY"); p.accept("IS")
             search_keys.append((descending, p.name()))
@@ -386,6 +627,7 @@ def declaration(p, file_record=False):
         elif p.accept("INDEXED"):
             if not table:
                 p.error("INDEXED BY requiert OCCURS")
+            indexed_seen = True
             p.accept("BY")
             names = [p.name()]
             while p.t.key not in {"PIC", "PICTURE", "VALUE", "USAGE", "ASCENDING", "DESCENDING", ".", "<EOF>"} | USAGES:
@@ -409,6 +651,7 @@ def declaration(p, file_record=False):
                 else chr(p.symbolic[p.t.key]) if p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key)
                 else None)
             initial = literal(p)
+            value_signed = p.literal_signed
             if repeated:
                 # VALUE ALL literal repeats the literal over the item.
                 if figurative == "0":
@@ -465,7 +708,7 @@ def declaration(p, file_record=False):
             if p.accept("USAGE"):
                 p.accept("IS")
             if p.t.string or p.t.key not in USAGES:
-                p.error("USAGE/clause non pris en charge")
+                p.error(f"USAGE/clause non pris en charge: {p.t.text}")
             usage = p.take().key
             if usage in FIXED_BINARY_DIGITS:
                 signed_binary = not p.accept("UNSIGNED")
@@ -473,12 +716,18 @@ def declaration(p, file_record=False):
                     p.accept("SIGNED")
                 fixed_binary = ("S" if signed_binary else "") + f"9({FIXED_BINARY_DIGITS[usage]})"
                 usage = "COMP-5"
+            elif usage in C_TYPE_USAGES:
+                digits, signed_binary = C_TYPE_USAGES[usage]
+                fixed_binary = ("S" if signed_binary else "") + f"9({digits})"
+                usage = "COMP-5"
             elif usage == "COMPUTATIONAL-5":
                 usage = "COMP-5"
+            elif usage == "COMPUTATIONAL-6":
+                usage = "COMP-6"
     p.expect(".")
     if fixed_binary:
         if picture:
-            p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE")
+            p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE et les types C")
         picture = fixed_binary
     # USAGE INDEX without PICTURE is an elementary index data item, unless
     # subordinate entries follow (a group whose USAGE they inherit).
@@ -545,8 +794,9 @@ def declaration(p, file_record=False):
     elif re.fullmatch(r"S?(?:9+(?:V9*)?|V9+)", expanded):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         scale = len(expanded.split("V")[1]) if "V" in expanded else 0
-        if digits > 18:
-            p.error("PIC numérique limité à 18 chiffres")
+        if digits > 38:
+            # cb_build_picture: COB_MAX_DIGITS.
+            p.error("numeric field cannot be larger than 38 digits")
     elif re.fullmatch(r"S?9+P+V?|S?V?P+9+", expanded):
         # Scaling positions, as cobc's picture analysis: trailing P give a
         # negative scale (units of 10^n), leading P an implicit V before them.
@@ -554,16 +804,23 @@ def declaration(p, file_record=False):
         kind, digits, signed = "number", expanded.count("9"), expanded.startswith("S")
         positions = expanded.count("P")
         scale = -positions if expanded.lstrip("S").startswith("9") else positions + digits
-        if digits > 18 or usage != "DISPLAY":
-            p.error("PICTURE P limitée à 18 chiffres USAGE DISPLAY")
+        if digits > 18:
+            p.error("PICTURE P limitée à 18 chiffres")
     elif (re.fullmatch(r"[9Z*+\-$.,VPB0/()0-9]*(?:CR|DB)?", picture.upper())
           and set(re.sub(r"\(\d+\)", "", picture.upper())) - set("9VP")):
         kind = "edited"
         symbols, edit_size, digits, scale, signed = edited_picture(p, picture)
-        if digits > 18 or edit_size > 256 or usage != "DISPLAY":
-            p.error("PIC éditée limitée à 18 chiffres, 256 caractères DISPLAY")
+        if digits > 38 or edit_size > 256 or usage != "DISPLAY":
+            p.error("PIC éditée limitée à 38 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
+    if kind == "number" and digits > 18 and usage in {"COMP", "COMPUTATIONAL", "BINARY", "COMP-4", "COMPUTATIONAL-4",
+                                                       "COMP-5", "COMPUTATIONAL-5"}:
+        # compute_size: BINARY and COMP-5 items hold at most 18 digits.
+        p.error(f"'{label}' binary field cannot be larger than 18 digits")
+    if usage == "COMP-6" and kind == "number" and signed:
+        # validate_field_1: "COMP-6 with sign - changing to COMP-3".
+        usage = "COMP-3"
     if blank_zero:
         # field.c: a numeric DISPLAY item with BLANK WHEN ZERO becomes
         # numeric-edited with a reconstructed 9(n) picture.
@@ -607,6 +864,8 @@ def declaration(p, file_record=False):
             p.error("VALUE sur FD/REDEFINES non pris en charge")
         if kind != "edited" and (kind == "text") != initial.string:
             p.error("VALUE incompatible avec la PICTURE")
+        if kind == "number" and value_signed and not signed:
+            p.error("data item not signed")
     else:
         initial = Token("" if kind == "text" else "0", p.t.line, kind == "text")
     linkage = getattr(p, "in_linkage", False)

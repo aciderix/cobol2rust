@@ -112,6 +112,12 @@ def fetch(output: Path, names: list[str], with_gnucobol: bool, gnucobol_archive:
     if with_gnucobol:
         print("Téléchargement vérifié : gnucobol-3.2.tar.xz", flush=True)
         entries.append(fetch_gnucobol_testsuite(output, gnucobol_archive))
+        # The testsuite's programs as a corpus (tools/extract_testsuite.py).
+        from extract_testsuite import extract
+        extracted = extract(output / "gnucobol-3.2" / "tests" / "testsuite.src", output / "gnucobol-testsuite")
+        entries.append({"name": "gnucobol-testsuite", "derived_from": "gnucobol-3.2", "license": "GPL-3.0-or-later",
+                        "description": "Programmes des tests AT_SETUP compilés sans option",
+                        "tests": extracted["kept"], "excluded": extracted["excluded"]})
     manifest = {
         "corpora": entries, "programs_executed": False, "conformance_claimed": False,
         "notices": "Dépôts conservés avec leurs licences d'origine, hors des sources du projet ; "
