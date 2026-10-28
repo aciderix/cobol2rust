@@ -648,6 +648,7 @@ class Expr:
     # HIGH-VALUE / LOW-VALUE of the native collating sequence (cb_norm_high,
     # cb_norm_low): a MOVE to any numeric item is a memset.
     memset: bool = False
+    signed_literal: bool = False
 
 
 @dataclass
@@ -2811,10 +2812,12 @@ class Parser:
             return self.expr(minimum, primary)
         elif t.key in {"+", "-"}:
             # exp_unary applies to an atom; ** binds the signed atom (parser.y).
-            left = Expr("unary" + t.key, (self.expr(50),))
+            signed_literal = (t.end > t.start and t.end == self.t.start and not self.t.string
+                              and re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", self.t.text) is not None)
+            left = Expr("unary" + t.key, (self.expr(50),), signed_literal=signed_literal)
         elif re.fullmatch(r"[+-](?:\d+(?:\.\d+)?|\.\d+)", t.text):
             # A signed literal token (see lex): the same as a unary sign.
-            left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],)),))
+            left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],)),), signed_literal=True)
         elif t.key == "(":
             left = self.expr()
             self.expect(")")
@@ -2972,6 +2975,8 @@ class Parser:
         "REVERSE": (1, "text"), "INTEGER-OF-DATE": (1, "number"), "INTEGER-OF-DAY": (1, "number"),
         "DATE-OF-INTEGER": (1, "number"), "DAY-OF-INTEGER": (1, "number"),
         "NUMVAL": (1, "number"), "NUMVAL-C": (-1, "number"), "LENGTH": (1, "number"),
+        "NUMVAL-F": (1, "number"), "TEST-NUMVAL": (1, "number"),
+        "TEST-NUMVAL-C": (-1, "number"), "TEST-NUMVAL-F": (1, "number"),
         "SQRT": (1, "number"), "LOG": (1, "number"), "LOG10": (1, "number"), "EXP": (1, "number"),
         "SIN": (1, "number"), "COS": (1, "number"), "TAN": (1, "number"), "ASIN": (1, "number"),
         "ACOS": (1, "number"), "ATAN": (1, "number"), "STANDARD-DEVIATION": (-1, "number"),
@@ -2987,7 +2992,7 @@ class Parser:
         "FORMATTED-CURRENT-DATE": (1, "text"), "TEST-FORMATTED-DATETIME": (2, "number"),
         "INTEGER-OF-FORMATTED-DATE": (2, "number"), "SECONDS-FROM-FORMATTED-TIME": (2, "number"),
     }
-    MAX_ARGUMENTS = {"NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
+    MAX_ARGUMENTS = {"NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
                      "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
     # valid_format (tree.c): the formats a literal first argument may have.
     DATE_TIME_FORMATS = {"FORMATTED-CURRENT-DATE": ("datetime",), "FORMATTED-DATE": ("date",),

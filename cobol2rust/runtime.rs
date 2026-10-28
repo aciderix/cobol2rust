@@ -1825,6 +1825,185 @@ pub mod intrinsic {
         let date = get_int(&args[0]);
         int_of(windowed(date / 1000, args, 999999).map_or(0, |y| y * 1000 + date % 1000) as i128)
     }
+    /// cob_check_numval: positions are one-based, including the position
+    /// beyond the input for a missing digit or incomplete CR/DB suffix.
+    fn check_numval(data: &[u8], currency_sign: bool, currency: Option<&[u8]>) -> usize {
+        if data.is_empty() { return 1; }
+        let (point, _, sign) = super::module_symbols();
+        let default_currency = [sign];
+        let symbol = if let Some(currency) = currency {
+            let (mut start, mut end) = (None, None);
+            for (i, &byte) in currency.iter().enumerate() {
+                match byte {
+                    b'0'..=b'9' | b'+' | b'-' | b'.' | b',' | b'*' => return 1,
+                    b' ' => {},
+                    _ => {
+                        if currency[i..].starts_with(b"CR") || currency[i..].starts_with(b"DB") { return 1; }
+                        start.get_or_insert(i);
+                        end = Some(i + 1);
+                    }
+                }
+            }
+            match (start, end) {
+                (Some(start), Some(end)) if end - start < data.len() => Some(&currency[start..end]),
+                (Some(_), Some(_)) => None,
+                _ => return 1,
+            }
+        } else if currency_sign { Some(&default_currency[..]) } else { None };
+        let (mut n, mut signed) = (0, false);
+        while n < data.len() {
+            match data[n] {
+                b'0'..=b'9' => break,
+                b' ' => {},
+                b'+' | b'-' => { if signed { return n + 1; } signed = true; },
+                b'.' | b',' => { if data[n] != point { return n + 1; } break; },
+                _ => {
+                    // Native advances one byte, even for a multi-byte currency.
+                    if !symbol.is_some_and(|symbol| n < data.len() - symbol.len() && data[n..].starts_with(symbol)) {
+                        return n + 1;
+                    }
+                }
+            }
+            n += 1;
+        }
+        if n == data.len() { return data.len() + 1; }
+        let (mut digits, mut decimal, mut space) = (0, false, false);
+        while n < data.len() {
+            match data[n] {
+                b'0'..=b'9' => {
+                    digits += 1;
+                    if digits > 38 || space { return n + 1; }
+                },
+                b'.' | b',' => {
+                    if decimal || space { return n + 1; }
+                    if data[n] == point { decimal = true; }
+                    else if !currency_sign { return n + 1; }
+                    if digits != 0 {
+                        if !data[n - 1].is_ascii_digit() { return n + 1; }
+                    } else if n + 1 < data.len() && !data[n + 1].is_ascii_digit() { return n + 2; }
+                },
+                b' ' => space = true,
+                b'+' | b'-' => { if signed { return n + 1; } n += 1; break; },
+                b'C' | b'D' => {
+                    if signed { return n + 1; }
+                    if data[n..].starts_with(b"CR") || data[n..].starts_with(b"DB") { n += 2; break; }
+                    return n + 2;
+                },
+                _ => return n + 1,
+            }
+            n += 1;
+        }
+        if digits == 0 { return data.len() + 1; }
+        while n < data.len() {
+            if data[n] != b' ' { return n + 1; }
+            n += 1;
+        }
+        0
+    }
+    pub fn test_numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
+        int_of(check_numval(&v.bytes(), currency_sign, currency.as_deref()) as i128)
+    }
+    /// cob_check_numval_f: the exponent needs an explicit sign and at
+    /// most four digits; spaces are checked differently on each side of E.
+    fn check_numval_f(data: &[u8]) -> usize {
+        if data.is_empty() { return 1; }
+        let point = super::module_symbols().0;
+        let (mut n, mut signed) = (0, false);
+        while n < data.len() {
+            match data[n] {
+                b'0'..=b'9' => break,
+                b' ' => {},
+                b'+' | b'-' => { if signed { return n + 1; } signed = true; },
+                b'.' | b',' => { if data[n] != point { return n + 1; } break; },
+                _ => return n + 1,
+            }
+            n += 1;
+        }
+        if n == data.len() { return n + 1; }
+        let (mut digits, mut exponent) = (0, 0);
+        let (mut decimal, mut space, mut e_seen, mut e_signed) = (false, false, false, false);
+        while n < data.len() {
+            match data[n] {
+                b'0'..=b'9' => {
+                    if e_seen {
+                        exponent += 1;
+                        if exponent > 4 || !e_signed { return n + 1; }
+                    } else {
+                        digits += 1;
+                        if digits > 38 || space { return n + 1; }
+                    }
+                },
+                b'.' | b',' => {
+                    if decimal || space || e_seen || data[n] != point { return n + 1; }
+                    decimal = true;
+                },
+                b' ' => space = true,
+                b'e' | b'E' => { if e_seen { return n + 1; } e_seen = true; },
+                b'+' | b'-' => {
+                    if e_seen { if e_signed { return n + 1; } e_signed = true; }
+                    else { if signed { return n + 1; } signed = true; }
+                },
+                _ => return n + 1,
+            }
+            n += 1;
+        }
+        if digits == 0 || e_seen && exponent == 0 { data.len() + 1 } else { 0 }
+    }
+    pub fn test_numval_f(v: &Value) -> Value { int_of(check_numval_f(&v.bytes()) as i128) }
+    /// calculate_start_end_for_numval: trim trailing SPACE/NUL and
+    /// leading SPACE/zero, retaining at least one byte.
+    fn numval_bounds(data: &[u8]) -> Option<(usize, usize)> {
+        if data.is_empty() { return None; }
+        let (mut start, mut end) = (0, data.len() - 1);
+        while start != end && matches!(data[end], b' ' | 0) { end -= 1; }
+        while start != end && matches!(data[start], b' ' | b'0') { start += 1; }
+        Some((start, end))
+    }
+    pub fn numval_f(v: &Value) -> Value {
+        // cob_intr_numval_f: keep the partial value even when TEST-NUMVAL-F
+        // would reject it; exponent overflow wraps size_t then clamps to 9999.
+        let data = v.bytes();
+        let Some((mut p, end)) = numval_bounds(&data) else { return int_of(0) };
+        let point = super::module_symbols().0;
+        let (mut digits, mut decimals, mut exponent) = (Vec::new(), 0u32, 0usize);
+        let (mut decimal, mut e_seen, mut sign, mut e_sign) = (false, false, 0i32, 0i32);
+        while p <= end {
+            match data[p] {
+                b'0' if digits.is_empty() && !decimal && exponent == 0 => {},
+                b'0'..=b'9' => {
+                    if e_seen { exponent = exponent.wrapping_mul(10).wrapping_add((data[p] - b'0') as usize); }
+                    else {
+                        if decimal { decimals += 1; }
+                        digits.push(data[p]);
+                        if digits.len() > 38 { break; }
+                    }
+                },
+                b'+' | b'-' => {
+                    let number = if data[p] == b'-' { -1 } else { 1 };
+                    if e_seen { if e_sign == 0 { e_sign = number; } }
+                    else if sign == 0 { sign = number; }
+                },
+                b'e' | b'E' => {
+                    if !e_seen {
+                        if digits.is_empty() && decimals == 0 { break; }
+                        e_seen = true;
+                    }
+                },
+                b' ' => {},
+                byte if byte == point => decimal = true,
+                _ => {},
+            }
+            p += 1;
+        }
+        let mut n = BigInt::parse_bytes(&digits, 10).unwrap_or_else(|| BigInt::from(0));
+        if n == BigInt::from(0) { return int_of(0); }
+        if sign == -1 { n = -n; }
+        let exponent = exponent.min(9999) as u32;
+        let scale = if e_sign == -1 { decimals + exponent }
+            else if decimals >= exponent { decimals - exponent }
+            else { n *= power(exponent - decimals); 0 };
+        value(Number::new(n, scale))
+    }
     pub fn numval(v: &Value, currency_sign: bool, currency: Option<Vec<u8>>) -> Value {
         // cob_intr_numval: the module's decimal point and currency sign.
         let data = crate::runtime::internal_symbols(&v.bytes(), currency_sign && currency.is_none());

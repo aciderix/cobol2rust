@@ -337,8 +337,29 @@ class Emitter:
             raise CobolError(f"FUNCTION {name}: argument numérique attendu")
         return self.expression(a)
 
+    def numval_argument(self, name, a):
+        # cb_build_numeric_literal: the digits as written, without a decimal
+        # point; a signed literal has a separate leading sign in its storage.
+        literal, sign = a, ""
+        if a.op in {"unary+", "unary-"}:
+            if not a.signed_literal:
+                raise CobolError(f"FUNCTION {name}: stockage d'un résultat numérique calculé non pris en charge")
+            literal, sign = a.args[0], a.op[-1]
+        if literal.op == "number":
+            return text_value(sign + literal.args[0].replace(".", ""))
+        if a.op in {"var", "text"} or (a.op == "function" and self.kind(a) == "text"):
+            return self.text_argument(name, a)
+        raise CobolError(f"FUNCTION {name}: stockage d'un résultat numérique calculé non pris en charge")
+
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
+        if name in {"NUMVAL-F", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F"}:
+            values = [self.numval_argument(name, a) for a in args]
+            if name in {"NUMVAL-F", "TEST-NUMVAL-F"}:
+                routine = "numval_f" if name == "NUMVAL-F" else "test_numval_f"
+                return f"runtime::intrinsic::{routine}(&{values[0]})"
+            currency = f"Some({values[1]}.bytes())" if len(values) > 1 else "None"
+            return f"runtime::intrinsic::test_numval(&{values[0]}, {str(name == 'TEST-NUMVAL-C').lower()}, {currency})"
         textual = name in {"UPPER-CASE", "LOWER-CASE", "REVERSE", "ORD", "NUMVAL", "NUMVAL-C", "LENGTH", "TRIM",
                            "HEX-OF", "HEX-TO-CHAR", "CONCATENATE", "CONCAT", "SUBSTITUTE", "SUBSTITUTE-CASE",
                            "STORED-CHAR-LENGTH"}
@@ -486,12 +507,13 @@ class Emitter:
             return f"runtime::intrinsic::abs_field({self.reference(arg.args[0])}.snapshot())"
         if name in {"ORD", "ORD-MAX", "ORD-MIN", "LENGTH", "INTEGER-OF-DATE", "INTEGER-OF-DAY",
                     "STORED-CHAR-LENGTH", "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD",
+                    "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F",
                     "TEST-FORMATTED-DATETIME", "INTEGER-OF-FORMATTED-DATE"}:
             return f"runtime::intrinsic::uint_field({self.expression(e)})"
         if name in {"DATE-OF-INTEGER", "DAY-OF-INTEGER"}:
             return f"runtime::intrinsic::display_field({self.expression(e)}, {8 if name == 'DATE-OF-INTEGER' else 7})"
         if name in {"SUM", "MEAN", "MIDRANGE", "RANGE", "MOD", "REM", "INTEGER", "INTEGER-PART", "FACTORIAL",
-                    "NUMVAL", "NUMVAL-C", "PRESENT-VALUE", "ANNUITY", "VARIANCE", "STANDARD-DEVIATION", "SQRT",
+                    "NUMVAL", "NUMVAL-C", "NUMVAL-F", "PRESENT-VALUE", "ANNUITY", "VARIANCE", "STANDARD-DEVIATION", "SQRT",
                     "LOG", "LOG10", "EXP", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "E", "PI",
                     "FRACTION-PART", "EXP10", "HIGHEST-ALGEBRAIC", "LOWEST-ALGEBRAIC",
                     "YEAR-TO-YYYY", "DATE-TO-YYYYMMDD", "DAY-TO-YYYYDDD", "SECONDS-FROM-FORMATTED-TIME"}:

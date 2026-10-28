@@ -238,6 +238,14 @@ résolue et le cas uniforme texte vérifié restent disponibles.
 
 ## Preuves et limites
 
+Les validateurs NUMVAL portent `cob_check_numval` et `cob_check_numval_f` :
+ils travaillent sur des octets, avec les symboles du module, et renvoient la
+position native de l'erreur. `numval_f` porte la conversion permissive de
+GnuCOBOL 3.2 sans appeler ces validateurs. L'émetteur préserve les chiffres
+lexicaux des littéraux numériques et `Expr.signed_literal` distingue un signe
+du littéral d'une opération unaire. Les temporaires numériques calculés sont
+refusés plutôt que reconstruits à partir de leur affichage.
+
 `Kind::Edited` conserve les octets formatés et leur image dans les vues de
 stockage. Une affectation numérique ajuste l'échelle et l'arrondi, calcule le
 signe puis tronque à la capacité et applique l'édition. VALUE texte reste une

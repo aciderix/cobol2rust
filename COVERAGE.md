@@ -832,3 +832,27 @@ l'ordre des listes de codegen.c (`output_report_control`,
 FINAL, cumuls de SUM, NEXT GROUP PLUS et NEXT PAGE, débordement de page,
 GROUP INDICATE) identique à cobc ; NIST RW101A-RW104A, RW301M, RW302M
 conformes. Corpus réels : 715/2458 acceptées (cobc 738), livre 64/65.
+
+## Progression : NUMVAL-F et validateurs — 28 octobre 2026
+
+Après reprise des branches Claude intégrées à `main`, la mesure est refaite
+sur les sept corpus : **1191 → 1195 émissions sur 3593 sources**, cobc 1617,
+**écart 426 → 422**, aucune acceptation refusée par cobc dans ces corpus.
+Testsuite : **467 → 471/1135**, six corpus d'origine inchangés à 724/2458.
+
+NUMVAL-F porte `cob_intr_numval_f` ; TEST-NUMVAL/TEST-NUMVAL-C/TEST-NUMVAL-F
+portent les validateurs natifs, positions d'erreur et symboles du module.
+Les noms nouveaux ne partagent pas un parseur décimal simplifié : la
+conversion permissive reste distincte des tests. Les champs et littéraux
+sont lus en stockage, avec provenance lexicale du signe ; les temporaires
+numériques calculés et capacités hors limites restent des refus nommés.
+
+Dix tests ciblés passent. Les quatre programmes débloqués s'exécutent à
+l'identique de cobc, comme les deux profils indépendants point/virgule
+(412 résultats) : `build/numval-real-source-verification-20261028.json`.
+NIST statique reste à **451/458**, sans erreur interne ; aucun nouveau
+passage complet du runner NIST ni exécution globale des autres corpus n'est
+revendiqué ici. Les détails et limites sont dans [VALIDATION.md](VALIDATION.md).
+La suite découvre 431 tests : 430 validés, un PE Windows ignoré, avec
+réexécution réussie des deux contrôles initialement bloqués par la dépendance
+de développement Berkeley DB absente du cloud.

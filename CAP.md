@@ -7,7 +7,8 @@ au comportement identique.** Tout le COBOL réel, pas un corpus de test.
 **Boussole : l'indicateur de progrès est l'acceptation des corpus réels**
 (tableau « Mesure » de CAP.md, `measurements/real-corpora.json`), puis leur
 compilation, exécution et comparaison. NIST CCVS85 n'est plus un objectif :
-c'est un test de non-régression (451/458 émissions, 427/427 conformes).
+c'est un test de non-régression (451/458 émissions, 413 programmes exécutés
+et comparés et 14 autres seulement compilés).
 
 Règles à chaque étape :
 1. Choisir le chantier dans le tableau : d'abord l'écart « cobc accepte,
@@ -86,7 +87,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-26T17:18:41+00:00 (commit `2bf5f0fbcf`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-28T18:19:26+00:00 (commit `ab7c864182`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -96,10 +97,10 @@ Dernière mesure : 2026-10-26T17:18:41+00:00 (commit `2bf5f0fbcf`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 467 | 879 | 412 | 0 |
-| **Total** | | **3593** | **1191** | **1617** | **426** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 471 | 879 | 408 | 0 |
+| **Total** | | **3593** | **1195** | **1617** | **422** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T17:18:41+00:00, commit `2bf5f0fbcf`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T17:18:41+00:00, commit `2bf5f0fbcf` — **antérieure au convertisseur actuel, à refaire avec `--execute`**. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -347,3 +348,19 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   **1177 → 1191**/3593, à examiner 0. Des 14 sources débloquées, exécutées
   face à cobc : 14 identiques (2 autres tests ISO 8601 restent bloqués par
   EXCEPTION-STATUS). Exécution des corpus inchangée. NIST 451/458.
+- 2026-10-28 — Reprise sur les deux branches Claude déjà intégrées à main
+  (`ab7c864`), sans réappliquer l'ancien chantier DATA RECORD. Choix d'un
+  écart intrinsèque mesuré et isolable, avant les chantiers plus volumineux
+  SCREEN/POINTER/CALL BY VALUE : NUMVAL-F et TEST-NUMVAL/TEST-NUMVAL-C/
+  TEST-NUMVAL-F, port de `cob_intr_numval_f` et `cob_check_numval*`.
+  Testsuite **467 → 471**, total **1191 → 1195**/3593, écart **426 → 422**,
+  à examiner 0. Les quatre sources débloquées s'exécutent à l'identique de
+  cobc ; deux profils indépendants ajoutent 412 résultats comparés.
+  Conversion permissive et validation stricte restent distinctes ; provenance
+  lexicale du signe conservée pour ne pas confondre `-1` et `-(1)`.
+  Le stockage des résultats numériques calculés reste un refus nommé ; les
+  limites générales du runtime restent 1024 décimales/4096 chiffres et les
+  registres EXCEPTION-* non modélisés. NIST statique inchangé : 451/458.
+  Suite Python : 431 découverts, 430 validés, un ignoré ; les deux contrôles
+  BDB initialement bloqués par les dépendances cloud passent après préparation
+  de leurs en-têtes et réexécution, sans changement du convertisseur.

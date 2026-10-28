@@ -96,8 +96,12 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également validé sous Linux 304 tests Python, avec un test d'inspection du PE
-Windows ignoré (305 découverts), et les 96 comparaisons COBOL/Rust du corpus actuel.
+également vérifié sous Linux **431 tests Python** : **430 validés**, un test
+d'inspection du PE Windows ignoré. Deux contrôles de fichiers indexés ont été
+rejoués après installation de la dépendance Berkeley DB manquante. La reprise
+du 28 octobre compare aussi les quatre nouvelles sources NUMVAL et deux
+profils natifs, soit 6/6 exécutions identiques ; les validations historiques
+du corpus local sont détaillées dans le journal de validation.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -375,7 +379,8 @@ STANDARD-DEVIATION, ORD-MAX, ORD-MIN, MAX, MIN, ANNUITY, PRESENT-VALUE,
 SQRT, LOG, LOG10, EXP, SIN, COS, TAN, ASIN, ACOS, ATAN, PI, E, RANDOM, CHAR,
 ORD, UPPER-CASE, LOWER-CASE, REVERSE, TRIM, CONCATENATE (et CONCAT),
 SUBSTITUTE, SUBSTITUTE-CASE, STORED-CHAR-LENGTH, HEX-OF, HEX-TO-CHAR, NUMVAL,
-NUMVAL-C, LENGTH, HIGHEST-ALGEBRAIC et LOWEST-ALGEBRAIC (selon l'usage de
+NUMVAL-C, NUMVAL-F, TEST-NUMVAL, TEST-NUMVAL-C, TEST-NUMVAL-F, LENGTH,
+HIGHEST-ALGEBRAIC et LOWEST-ALGEBRAIC (selon l'usage de
 l'argument, à la compilation), INTEGER-OF-DATE/DAY, DATE-OF-INTEGER,
 DAY-OF-INTEGER, TEST-DATE-YYYYMMDD, TEST-DAY-YYYYDDD, YEAR-TO-YYYY,
 DATE-TO-YYYYMMDD, DAY-TO-YYYYDDD (année courante de `localtime`, non de
@@ -389,6 +394,19 @@ semaine ISO, passage à UTC de `Z`, signe d'offset de `add_offset_time`
 invalide. SECONDS-FROM-FORMATTED-TIME d'une date-heure contenue dans une
 donnée (lue en chaîne C au-delà de la donnée par libcob) est un arrêt nommé.
 
+`TEST-NUMVAL`, `TEST-NUMVAL-C` et `TEST-NUMVAL-F` renvoient zéro pour une
+entrée valide, sinon la position native de l'octet en erreur (parfois après
+le dernier octet). La monnaie, CR/DB, le point/virgule du module, les 38
+chiffres et les règles d'exposant viennent de `cob_check_numval*`.
+`NUMVAL-F` garde la conversion partielle de GnuCOBOL 3.2 : `"1E2"` donne
+100, bien que TEST-NUMVAL-F renvoie 3. Les arguments sont lus en stockage
+brut : champs, groupes, sous-chaînes, littéraux et fonctions alphanumériques ;
+un littéral numérique `-12.30` fournit les octets `-1230`. Le stockage des
+résultats numériques calculés, qui dépend notamment du pliage de constantes
+de cobc, reste refusé dans ces quatre fonctions. Les limites générales du
+runtime restent 1024 décimales et 4096 chiffres ; au-delà, arrêt nommé.
+Les fonctions de lecture du registre d'exception ne sont pas modélisées.
+
 `DISPLAY` d'un résultat numérique montre le champ temporaire de libcob :
 copie de l'argument retenu pour MAX, MIN, MEDIAN (tri stable de glibc) et
 MEAN d'un seul argument, l'argument d'ABS avec sa valeur absolue,
@@ -399,7 +417,7 @@ le DISPLAY de RANDOM (double imprimé par `%G`), d'un argument PICTURE P
 (échelle négative) et d'une expression en argument de MAX/MIN/MEDIAN. Un
 littéral alphanumérique vide vaut une espace, comme le scanner de cobc, et
 est refusé sous `-std=cobol85`. Les fonctions LOCALE-*,
-MODULE-*, EXCEPTION-*, NUMVAL-F, TEST-NUMVAL*, BIT-OF, COMBINED-DATETIME,
+MODULE-*, EXCEPTION-*, BIT-OF, COMBINED-DATETIME,
 SECONDS-PAST-MIDNIGHT et les fonctions utilisateur restent refusées.
 
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON

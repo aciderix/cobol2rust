@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-26T17:18:41+00:00",
- "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
- "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
+ "measured_at": "2026-10-28T18:19:26+00:00",
+ "git_head": "ab7c864182be7b48be44c251ac030ad46452065a",
+ "implementation_sha256": "ed7297506181274dd15994d3bed32920e1afbfef50d3f59c3a23e2660719c5ba",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1191,
+  "accepted": 1195,
   "cobc_accepted": 1617,
-  "gap": 426,
+  "gap": 422,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 467,
+   "accepted": 471,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 412,
+   "gap": 408,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -1049,10 +1049,6 @@
      "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
     ],
     [
-     "run_functions-077/prog.cob",
-     "FUNCTION NUMVAL-F non prise en charge"
-    ],
-    [
      "run_functions-086/prog.cob",
      "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
@@ -1063,18 +1059,6 @@
     [
      "run_functions-091/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
-     "run_functions-108/prog.cob",
-     "FUNCTION TEST-NUMVAL non prise en charge"
-    ],
-    [
-     "run_functions-109/prog.cob",
-     "FUNCTION TEST-NUMVAL-C non prise en charge"
-    ],
-    [
-     "run_functions-110/prog.cob",
-     "FUNCTION TEST-NUMVAL-F non prise en charge"
     ],
     [
      "run_functions-119/prog.cob",

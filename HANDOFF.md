@@ -5,13 +5,21 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
-## État courant — 26 octobre 2026 (à tenir à jour à chaque commit)
+## État courant — 28 octobre 2026 (à tenir à jour à chaque commit)
 
-Branche de travail `claude/hopeful-allen-q389mo`. Mesure des corpus réels :
-**1191/3593 sources acceptées** (cobc 1617, écart 426, à examiner 0) ;
-testsuite GnuCOBOL 467/1135, six corpus d'origine 724/2458. Exécution
-comparée inchangée : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
-52/61. NIST CCVS85 (non-régression) : 451/458 émissions, 427/427 conformes.
+Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4),
+sans branche distante plus avancée au contrôle du 28 octobre. Reprise locale
+sur cette base ; les anciens changements DATA RECORD sont préservés dans le
+stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
+Claude », sans réapplication de leur production déjà remplacée.
+
+Mesure des corpus réels : **1195/3593 sources acceptées** (cobc 1617,
+écart 422, à examiner 0) ; testsuite GnuCOBOL 471/1135, six corpus d'origine
+724/2458. Dernière exécution globale enregistrée (26 octobre, non relancée
+par cet incrément) : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre 52/61.
+NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
+exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
+est statique ; elle ne relance pas les 413 programmes.
 
 Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
 blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
@@ -26,11 +34,32 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernières étapes (26 octobre) : COPY REPLACING LEADING/TRAILING ; DISPLAY du
-champ résultat des fonctions numériques et quinze fonctions de plus ;
-fonctions ISO 8601 (FORMATTED-*, TEST-FORMATTED-DATETIME,
-INTEGER-OF-FORMATTED-DATE, SECONDS-FROM-FORMATTED-TIME). Rien n'est en cours :
-l'arbre de travail est propre et la mesure à jour.
+Dernière étape (28 octobre) : NUMVAL-F et TEST-NUMVAL/TEST-NUMVAL-C/
+TEST-NUMVAL-F. Validateurs exacts `cob_check_numval*`, conversion F permissive
+de GnuCOBOL 3.2 sans prévalidation, symboles du module et octets bruts.
+`Expr.signed_literal` distingue les chiffres d'un littéral signé du stockage
+d'une opération unaire. Les résultats numériques calculés restent refusés,
+ainsi que les capacités hors limites générales et les registres EXCEPTION-*.
+`tests/test_numval_validation.py` : dix tests ciblés réussis. Quatre sources
+débloquées et deux profils point/virgule (412 résultats) comparés à cobc :
+6/6 identiques (`build/numval-real-source-verification-20261028.json`).
+Mesure NIST : `build/coverage-nist-numval-reviewed-20261028.json`.
+
+Suite Python : 431 tests découverts, 430 validés et un PE Windows ignoré.
+L'exécution complète a rencontré deux erreurs de dépendance BDB ; les deux
+méthodes concernées ont été rejouées avec succès après préparation des
+en-têtes et de `build/bdb_dump`, sans changement du convertisseur. Bilan et
+empreintes des logs : `build/numval-unit-validation-20261028.json`.
+
+Sources natives locales : `.tools/corpora/gnucobol-3.2/libcob/intrinsic.c`.
+Environnement Codex : `. /workspace/tooling/activate.sh`. La bibliothèque
+XML du sysroot a été alignée sur le compilateur natif avec libxml2 2.12.10
+construite en local ; provenance `/workspace/tooling/xml212/manifest.json`.
+Les avertissements de version XML ont disparu ; ne pas les filtrer dans les
+comparaisons stderr. Les corpus/outils natifs restent hors du dépôt.
+Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
+`LIBRARY_PATH` sont ajoutés par l'activation. Provenance :
+`/workspace/tooling/bdb-dev-20261028/manifest.json`.
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
 SCREEN SECTION (37, « niveau de donnée attendu »), USAGE POINTER (14), CALL
@@ -38,7 +67,7 @@ BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8), ANY LENGTH (7),
 EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
 modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
-(7), NUMVAL-F et TEST-NUMVAL* (4, `cob_check_numval`), fonctions LOCALE-*
+(7), fonctions LOCALE-*
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
 COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. Exécution : 3 programmes
 divergents et 6 délais du livre, 2 délais du cours restent à examiner.

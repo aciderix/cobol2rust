@@ -1,4 +1,45 @@
-# Validation — 22 octobre 2026
+# Validation — 28 octobre 2026
+
+## Reprise main et famille NUMVAL — 28 octobre 2026
+
+- Reprise sur `ab7c864`, intégrant les deux branches Claude. Baseline des
+  sept corpus refaite : 1191/3593 émissions, cobc 1617, écart 426,
+  aucune source acceptée que cobc refuse.
+- Après NUMVAL-F et TEST-NUMVAL/TEST-NUMVAL-C/TEST-NUMVAL-F : **1195/3593**
+  émissions acceptées, cobc 1617, **écart 422**, toujours zéro fausse
+  acceptation dans les corpus. Testsuite 471/1135, autres corpus inchangés.
+  Les fichiers `measurements/` et le tableau de CAP.md sont régénérés.
+- **Dix tests ciblés réussis**, dont cinq différentiels : positions d'octets,
+  38 chiffres, signes/CR/DB, monnaie multioctet, exposants, point/virgule,
+  données binaires, groupes, sous-chaînes, REPOSITORY et affichage du résultat.
+  Le signe lexical d'un nombre est distingué d'une opération comme `-(1)`.
+- Les quatre programmes débloqués (`run_functions-077`, `108`, `109`, `110`)
+  sont exécutés face à cobc, avec stdout, fichiers et codes identiques.
+  Deux profils indépendants, **412 résultats**, correspondent également.
+  Rapport : `build/numval-real-source-verification-20261028.json` (6/6).
+- NIST statique inchangé : **451/458 émissions**, zéro erreur interne,
+  `--std cobol85` (`build/coverage-nist-numval-reviewed-20261028.json`).
+  Le runner complet n'est pas relancé pour cet incrément ; son historique
+  distingue 413 exécutions comparées et 14 cas seulement compilés.
+- Le compilateur natif utilisait une bibliothèque XML incompatible avec sa
+  compilation. libxml2 2.12.10, construite depuis une archive GNOME vérifiée,
+  corrige l'environnement du sysroot. Les tests de stderr et du module lancé
+  par cobcrun repassent sans masquer d'avertissement.
+- **431 tests Python découverts : 430 validés, un PE Windows ignoré.**
+  L'exécution complète a rencontré deux erreurs de dépendance BDB (en-tête
+  `db.h` absent). Après préparation du paquet de développement Berkeley DB
+  5.3.28 vérifié et compilation de `build/bdb_dump`, les deux méthodes
+  concernées sont rejouées avec succès, sans modifier le convertisseur :
+  `EvaluateNativeTests.test_renames_larger_redefines_and_exponentiation` et
+  `RealFormsNativeTests.test_fixtures_match_cobc`. Aucun échec restant.
+  Bilan et empreintes des logs : `build/numval-unit-validation-20261028.json`.
+
+Les résultats numériques calculés comme arguments de ces quatre fonctions
+restent refusés : leur stockage peut être binaire, ou un littéral issu du
+pliage de constantes natif. Les limites de 1024 décimales/4096 chiffres et le
+refus des fonctions EXCEPTION-* sont conservés. La dernière mesure globale
+d'exécution des corpus réels reste datée du 26 octobre, avec sa propre
+empreinte ; les six comparaisons ci-dessus portent sur le nouvel incrément.
 
 ## Données invalides, ENTRY et modules — 25 octobre 2026
 
