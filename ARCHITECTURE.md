@@ -149,6 +149,39 @@ exécute la section par `run_from` depuis l'entrée préparée par
 l'entrée 2 de la fonction C de cobc). Un programme INITIAL est abandonné
 (avec `cancel_files`) à chaque retour.
 
+## Sources du Report Writer
+
+`report_parser.prepare_sources` porte `finalize_report` et `cb_field_dup`
+après le calcul des tailles physiques. Chaque SOURCE indicée, modifiée par
+référence ou locale reçoit son propre champ en WORKING-STORAGE ; une seconde
+disposition mémoire inclut ces champs. Ce sont des temporaires typés, avec
+des MOVE ordinaires : DISPLAY signé pour les sources numériques ou éditées,
+PIC X pour les autres, et PIC X de la longueur de sous-chaîne lorsque celle-ci
+est littérale. ZERO ou SPACE initialise le temporaire selon la catégorie de
+la source. La référence de la ligne de rapport désigne ensuite ce champ.
+
+`prepare_moves` porte les deux parcours de `cb_emit_report_moves`. Leur
+construction intervient à la première instruction INITIATE, GENERATE ou
+TERMINATE concernant le rapport. L'état de pied de rapport persiste entre
+les passes et les rapports de la même unité de compilation, programmes
+contenus et suivants compris. Son bogue natif avec un pied élémentaire sans
+enfants est conservé ; les listes ne sont donc pas une simple classification
+des champs par TYPE. L'émetteur exécute les deux listes avant GENERATE et
+seulement la seconde avant TERMINATE, comme les étiquettes `rwmove`/`rwfoot`
+de cobc. Les préparations précèdent la restauration des anciens contrôles.
+
+Les références simples hors LOCAL-STORAGE continuent d'être lues par le
+callback d'impression, ainsi que LINE-COUNTER, PAGE-COUNTER et les compteurs
+SUM. Les positions des sous-chaînes SOURCE reproduisent le repli constant,
+le coefficient littéral lu par `cb_get_int` et les étapes de calcul en entier
+C ; les dépassements du repli constant, puissances non repliées et divisions
+par une constante zéro sont refusés. Les limites générales de lecture des
+champs numériques restent applicables. Ce chemin reste propre aux références
+SOURCE des rapports. Les groupes et USAGE INDEX
+nécessitant une copie, les copies à P initial invalides dans cobc et les
+contrôles locaux dont le descripteur natif n'est pas constant sont des refus
+nommés. Le profil cobol85 refuse aussi LOCAL-STORAGE.
+
 ## Runtime Rust
 
 Chaque programme possède un espace mémoire `Rc<RefCell<Vec<u8>>>` partagé par

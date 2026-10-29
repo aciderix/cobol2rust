@@ -1,5 +1,68 @@
 # Validation — 29 octobre 2026
 
+## Capture des SOURCE de rapports — 29 octobre 2026
+
+Le chantier corrige un écart d'exécution valide identifié pendant l'audit
+des rapports du livre, avant les extensions de syntaxe les plus nombreuses.
+Il porte `finalize_report`, `cb_field_dup`, `cb_emit_report_moves` et les
+étiquettes `rwmove`/`rwfoot` de GnuCOBOL 3.2. Aucun nom de programme ni
+valeur du corpus ne sélectionne le comportement du convertisseur.
+
+- Une SOURCE indicée, modifiée par référence ou locale reçoit un champ
+  temporaire distinct en WORKING-STORAGE. Son type DISPLAY signé ou PIC X,
+  sa largeur et sa valeur initiale reprennent la description native ; il
+  ne s'agit pas d'un cache du texte imprimé.
+- GENERATE prépare les deux listes de MOVE avant la restauration des anciens
+  contrôles ; TERMINATE prépare seulement la seconde. L'état persistant de
+  parcours natif et l'ordre de première utilisation des rapports sont
+  conservés, y compris les copies omises ou répétées avec un pied élémentaire.
+  Les SOURCE simples et les compteurs restent lus à l'impression.
+- Les positions des sous-chaînes SOURCE reproduisent le repli des constantes
+  de `cb_build_binary_op`, le coefficient brut lu par `cb_get_int` et la
+  troncature entière à chaque étape des calculs non repliés. Les dépassements
+  constants, puissances non repliées et divisions par une constante zéro
+  sont refusés ; la lecture générale des champs numériques et des indices
+  conserve ses limites documentées.
+- Le contre-exemple initial passe de fichiers différents à une comparaison
+  identique : **38 octets**, SHA256
+  `b9fd0e001f2a1289bc0818effd277d32a59cd5083898f01359e6d5b27b16bccd`,
+  stdout/stderr vides et codes zéro. Rapports avant/après :
+  `build/report-source-before-20261029.json` et
+  `build/report-source-after-20261029.json`.
+- **17 nouveaux tests** couvrent copies typées distinctes, sous-chaînes,
+  LOCAL-STORAGE, contrôles directs, TERMINATE, état persistant entre rapports,
+  profils par défaut/contrôlé et refus nommés. Le test des positions compare
+  23 expressions dans chacun des deux profils. La fixture intégrée produit
+  **218 octets** identiques (SHA256
+  `6e7208ecb9a9636a1c07a76c66bc608ff9d840b04072dc16bf724889166b4aa2`).
+  Avec les tests Report Writer existants : **26/26 réussis**.
+
+Les copies de groupes et USAGE INDEX complexes, les PICTURE P initiales dont
+la copie native est invalide et les contrôles locaux dont le C natif ne
+compile pas restent refusés. LOCAL-STORAGE est aussi refusé dans le profil
+cobol85, conformément à sa configuration native. USE BEFORE REPORTING
+reste hors périmètre ; il faudrait reprendre les préparations à chaque
+continuation native avant de l'accepter.
+
+La mesure complète est renouvelée sur l'empreinte
+`aa33eb3af3fe6cac36ae680e4ecd10a5fcc02dbb3c85913da9e51c2ff09340f9` :
+**1203/3593 émissions acceptées**, écart à cobc 414, zéro acceptation
+refusée par cobc et aucun changement de statut des sources. Exécution à
+stdin vide : **71/84 identiques**, cinq divergentes et huit délais ; les
+mêmes programmes restent dans chaque catégorie, sans erreur nouvelle.
+NIST statique : **451/458**, zéro erreur interne, rapport
+`build/coverage-nist-report-source-20261029.json`. Les 413 exécutions NIST
+et 14 compilations seules restent une preuve historique, non renouvelée
+par cette mesure statique.
+
+Les onze scénarios d'entrée restent **11/11 identiques**, dans leur
+dénominateur distinct : `build/real-input-cases-report-source-20261029.json`.
+Suite Python complète : **477 tests découverts, 476 validés et un test PE
+Windows ignoré**, sans échec ni erreur (315 secondes). Journal :
+`/workspace/tooling/report-source-all-tests-20261029.log`. Bilan avec
+empreintes et comparaison des sources inchangées :
+`build/report-source-validation-20261029.json`.
+
 ## Capacité ODO et scénarios d'entrée — 29 octobre 2026
 
 Le travail porte sur la fidélité d'exécution, en réponse aux écarts de la

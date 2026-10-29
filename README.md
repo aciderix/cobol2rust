@@ -26,7 +26,7 @@ CM que cobc ne compile pas non plus ([VALIDATION.md](VALIDATION.md)).
 publics épinglés (2458 sources, dont l'application mainframe CardDemo), le
 convertisseur accepte 724 sources là où cobc en accepte 738 (CardDemo 14/14
 des sources que cobc accepte) ; sur la testsuite de GnuCOBOL 3.2 (1135
-sources), 246 contre 879. Accepter n'est pas exécuter à l'identique : le cap
+sources), 479 contre 879. Accepter n'est pas exécuter à l'identique : le cap
 du projet et sa mesure, exécution comprise, sont dans [CAP.md](CAP.md).
 
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
@@ -937,6 +937,36 @@ reprennent `output_report_define_lines` ; la taille d'enregistrement est le
 `rcsz` de cobc. `INITIATE`, `GENERATE` groupe DETAIL ou nom de rapport et
 `TERMINATE` reproduisent `do_page_heading`, `do_page_footing`, `report_line` et
 `report_line_type` (écritures BEFORE n LINES, lignes vides, sauts de page).
+
+Une SOURCE indicée, modifiée par référence ou issue de LOCAL-STORAGE possède
+un temporaire distinct en WORKING-STORAGE, comme `cb_field_dup`. Ce temporaire
+est typé : DISPLAY signé pour une source numérique ou éditée, PIC X pour les
+autres sources ; une longueur littérale de sous-chaîne impose PIC X de cette
+longueur. Son initialisation reprend ZERO ou SPACE selon la catégorie de la
+source. Les MOVE de préparation précèdent les ruptures de contrôle : un pied
+peut donc afficher l'ancienne valeur du contrôle avec la nouvelle valeur d'une
+SOURCE indicée. GENERATE exécute successivement les deux passes natives ;
+TERMINATE exécute seulement la passe des pieds de rapport et de contrôle.
+Les références simples, sans indice ni sous-chaîne et hors LOCAL-STORAGE,
+restent lues à l'impression ; LINE-COUNTER, PAGE-COUNTER et les compteurs SUM
+restent également lus à ce moment. L'état persistant de parcours de
+`cb_emit_report_moves`, y compris son bogue avec un pied élémentaire sans
+enfants, est conservé : l'ordre de première utilisation des rapports dans
+INITIATE/GENERATE/TERMINATE peut changer les préparations émises.
+
+Les positions constantes des sous-chaînes SOURCE suivent le repli de cobc et
+la lecture des chiffres du littéral par `cb_get_int` : le point décimal ne
+réduit pas leur coefficient. Les expressions entières exécutées suivent les
+étapes de calcul en entier C. Les dépassements lors du repli constant et les
+puissances non repliées ou divisions par une constante zéro restent des refus
+nommés. Ce traitement concerne les références SOURCE des rapports ; les limites
+générales de lecture des indices
+et des champs numériques restent applicables.
+Restent refusées les SOURCE complexes de groupes ou USAGE INDEX, les PICTURE
+à P initial dont la copie native est invalide et les contrôles en
+LOCAL-STORAGE dont le descripteur natif n'est pas constant. LOCAL-STORAGE
+reste refusé sous `--std cobol85`, comme par GnuCOBOL 3.2.
+
 `LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
 affichés sur 10 chiffres. Restent refusés : PRESENT/ABSENT WHEN, SUPPRESS,
 SUM UPON, SUM d'opérandes non DISPLAY, CF ALL et OR PAGE, OCCURS, COLUMN

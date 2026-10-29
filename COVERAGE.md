@@ -904,3 +904,32 @@ et limites sont dans [VALIDATION.md](VALIDATION.md).
 Suite Python complète : **459/460 validés**, un PE Windows ignoré, aucun
 échec ni erreur. Les douze nouveaux tests couvrent ODO, calendrier et moteur
 de scénarios ; les deux tests calendaires comparent 119 résultats natifs.
+
+## Progression : capture des SOURCE de rapports — 29 octobre 2026
+
+Les SOURCE indicées, modifiées par référence ou locales sont préparées dans
+des temporaires typés distincts, comme `finalize_report` et `cb_field_dup`.
+Les deux listes de `cb_emit_report_moves` précèdent GENERATE ; seule la
+seconde précède TERMINATE. L'état natif persistant du parcours et l'ordre de
+première utilisation des rapports sont conservés. Les sources simples et
+compteurs restent lus à l'impression. Un contre-exemple valide auparavant
+divergent produit désormais les mêmes 38 octets que GnuCOBOL.
+
+Les positions de sous-chaînes SOURCE suivent le repli constant natif et ses
+conversions entières. Les dépassements constants, puissances non repliées,
+divisions par une constante zéro et descriptions de copies non reproduites
+sont des refus nommés. Les limites générales de lecture des indices et des
+champs numériques restent applicables ; USE BEFORE REPORTING reste refusé.
+
+Dix-sept nouveaux tests couvrent capture, typage, initialisation, contrôles,
+LOCAL-STORAGE, TERMINATE, ordre des rapports et 23 positions dans les deux
+profils. Avec les tests Report Writer existants : **26/26 réussis**.
+Acceptation statique inchangée : **1203/3593**, aucun changement de statut
+des sources des sept corpus ; NIST statique **451/458**, sans erreur interne.
+Les sources et données des corpus n'ont pas été modifiées.
+L'exécution de référence est aussi renouvelée : **71/84 identiques**, cinq
+divergentes et huit délais, avec les mêmes programmes dans chaque catégorie.
+Les scénarios avec entrées déclarées restent **11/11 identiques**, avec leur
+propre dénominateur. Suite Python complète : **476/477 validés**, un PE
+Windows ignoré, aucun échec ni erreur. Bilan des preuves :
+`build/report-source-validation-20261029.json`.

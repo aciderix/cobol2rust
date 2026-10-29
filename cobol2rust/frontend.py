@@ -866,6 +866,7 @@ class Parser:
         self.in_debugging = False
         # REPORT SECTION: RD name -> ReportSpec, in FD REPORT clause order.
         self.reports = {}
+        self.report_move_state = [False]
         # COMMUNICATION SECTION: CD name -> its record keys.
         self.cds = {}
         self.debugged_cds = set()
@@ -1274,6 +1275,8 @@ class Parser:
                         and not self.at("COMMUNICATION") and not self.at("LOCAL-STORAGE") and not self.program_end():
                     self.declaration()
             if self.accept("LOCAL-STORAGE"):
+                if STD == "cobol85":
+                    self.error("LOCAL-STORAGE non reconnu dans le profil cobol85 de GnuCOBOL 3.2")
                 # Allocated and initialized at each entry of the program
                 # (codegen.c: cob_cache_malloc and initialization of LOCAL).
                 self.expect("SECTION")
@@ -1323,6 +1326,9 @@ class Parser:
                 self.fields[spec.record].redefines = specs[0].record
         from .layout import layout_fields
         memory_size = layout_fields(self.fields)
+        from .report_parser import prepare_sources
+        if prepare_sources(self):
+            memory_size = layout_fields(self.fields)
         for label, key, count, line in getattr(self, "report_subscripts", []):
             if count != len(self.fields[key].dimensions):
                 raise CobolError(f"ligne {line}: {label} requiert {len(self.fields[key].dimensions)} sous-script(s), reçu {count}")
@@ -1532,6 +1538,7 @@ class Parser:
                 child_parser.inherited, child_parser.inherited_files = inherited, inherited_files
                 child_parser.level, child_parser.chain = self.level + 1, self.chain
                 child_parser.containers = [*self.containers, entry_name]
+                child_parser.report_move_state = self.report_move_state
                 child = child_parser.parse()
                 self.i = child_parser.i
                 for item in [child, *child.siblings]:
@@ -1555,6 +1562,7 @@ class Parser:
             sibling.inherited_files = getattr(self, "inherited_files", {})
             sibling.level, sibling.chain, sibling.containers = self.level, self.chain, self.containers
             sibling.decimal_comma = self.decimal_comma
+            sibling.report_move_state = self.report_move_state
             following = sibling.parse()
             self.i = sibling.i
             program.siblings = [following, *following.siblings]
@@ -4185,11 +4193,16 @@ class Parser:
             if not names:
                 self.error(f"{verb} requiert un nom de rapport" + (" ou de groupe DETAIL" if verb == "GENERATE" else ""))
             if verb != "GENERATE":
+                from .report_parser import prepare_moves
+                for name in names:
+                    prepare_moves(self.reports[name], self.report_move_state)
                 return Stmt(verb.lower(), (names,), line)
             name = names[0]
             if self.accept("IN") or self.accept("OF"):
                 self.error("GENERATE de groupe qualifié non pris en charge")
             if name in self.reports:
+                from .report_parser import prepare_moves
+                prepare_moves(self.reports[name], self.report_move_state)
                 return Stmt("generate", (name, None), line)
             owners = [report for report in self.reports.values() if name in report.groups]
             if len(owners) != 1:
@@ -4198,6 +4211,8 @@ class Parser:
             from .report_parser import DETAIL
             if not owners[0].report_lines[index].flags & DETAIL:
                 self.error(f"GENERATE {name}: groupe de rapport qui n'est pas DETAIL")
+            from .report_parser import prepare_moves
+            prepare_moves(owners[0], self.report_move_state)
             return Stmt("generate", (owners[0].name, index), line)
         if verb == "CANCEL":
             targets = []

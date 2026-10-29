@@ -59,6 +59,7 @@ class ReportEntry:
     # SUM operands: (data item key or None, report item label or None).
     sum: list = field(default_factory=list)
     counter: str | None = None
+    prepare_move: tuple | None = None
 
 
 @dataclass
@@ -105,6 +106,87 @@ class ReportSpec:
     control_final: bool = False
     # cob_report_sum_ctr list: (counter, operands, control, control_final, subtotal).
     sums: list = field(default_factory=list)
+    move_passes: tuple | None = None
+
+
+def prepare_sources(p):
+    """finalize_report / cb_field_dup: typed WORKING-STORAGE copies for
+    references whose address cannot remain in cob_report_field.source."""
+    from .frontend import DataRef, Expr, Token
+    from .report_positions import normalize
+    created = False
+    for report in p.reports.values():
+        replacements = {}
+
+        def walk(entries):
+            nonlocal created
+            for entry in entries:
+                source = entry.source
+                if source is not None and source.op == "var":
+                    ref = source.args[0]
+                    original = p.fields[ref.name]
+                    literal_length = None
+                    if ref.start is not None:
+                        start, _ = normalize(p, ref.start)
+                        length, literal_length = normalize(p, ref.length) if ref.length is not None else (None, None)
+                        ref = DataRef(ref.name, ref.indices, start, length)
+                        source = Expr("var", (ref,))
+                    p.check_constant_positions(original.label, original, ref.indices, ref.start, ref.length)
+                    if ref.indices or ref.start is not None or getattr(original, "local", False):
+                        if not original.picture or original.usage == "INDEX":
+                            p.error("SOURCE de rapport complexe d'un groupe ou USAGE INDEX non pris en charge")
+                        if literal_length is not None:
+                            picture = f"X({literal_length})"
+                        elif original.kind in {"number", "edited"}:
+                            digits = original.digits + (max(0, -original.scale) if original.kind == "number" else 0)
+                            if original.scale > digits:
+                                p.error("SOURCE de rapport complexe à PICTURE P initiale invalide pour cobc 3.2")
+                            if original.scale > 0:
+                                integer_digits = digits - original.scale
+                                picture = (f"S9({integer_digits})V9({original.scale})" if integer_digits else
+                                           f"SV9({original.scale})")
+                            else:
+                                picture = f"S9({digits})"
+                        else:
+                            picture = f"X({original.size})"
+                        key = f"^source^{report.name}^{len(replacements)}"
+                        line = p.t.line
+                        value = Token("ZERO" if original.kind in {"number", "edited"} else "SPACE", line)
+                        p.hidden_item([Token("PIC", line), Token(picture, line), Token("VALUE", line), value], key)
+                        entry.prepare_move = (source, key)
+                        entry.source = Expr("var", (DataRef(key),))
+                        replacements[entry.item] = entry.source
+                        created = True
+                walk(entry.children)
+        walk(report.entries)
+        for line in report.report_lines:
+            for item in line.fields:
+                if item.item in replacements:
+                    item.source = replacements[item.item]
+    return created
+
+
+def prepare_moves(report, state):
+    """cb_emit_report_moves: two passes, preserving its sticky footing flag.
+    Routine generation happens at the first INITIATE/GENERATE/TERMINATE."""
+    if report.move_passes is not None:
+        return
+    footing = FOOTING | CONTROL_FOOTING | CONTROL_FOOTING_FINAL
+
+    def walk(entries, phase, result):
+        for entry in entries:
+            if entry.flags & footing:
+                state[0] = True
+            if entry.prepare_move is not None and state[0] == phase:
+                result.append(entry.prepare_move)
+            if entry.children:
+                walk(entry.children, phase, result)
+                if entry.flags & footing:
+                    state[0] = False
+    first, last = [], []
+    walk(report.entries, False, first)
+    walk(report.entries, True, last)
+    report.move_passes = (first, last)
 
 
 def integer(p, clause):
@@ -390,6 +472,8 @@ def report_description(p, report):
                 ref = p.variable()
                 if ref.indices or ref.start is not None:
                     p.error("CONTROL sans indice ni sous-chaîne requis")
+                if getattr(p.fields[ref.name], "local", False):
+                    p.error("CONTROL de rapport en LOCAL-STORAGE non pris en charge (descripteur natif non constant)")
                 report.controls.insert(0, ref.name)
             if not report.controls and not report.control_final:
                 p.error("CONTROL requiert FINAL ou des identifiants")

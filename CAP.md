@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-29T13:24:14+00:00 (commit `e7778d99e7`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-29T18:36:55+00:00 (commit `a0226811a0`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -104,7 +104,7 @@ Dernière mesure : 2026-10-29T13:24:14+00:00 (commit `e7778d99e7`, cobc (GnuCOBO
 | gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 479 | 879 | 400 | 0 |
 | **Total** | | **3593** | **1203** | **1617** | **414** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T13:24:14+00:00, commit `e7778d99e7`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T18:36:55+00:00, commit `a0226811a0`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -403,3 +403,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   de scénarios complètent la couverture ciblée.
   Suite Python complète : **460 découverts, 459 validés, un PE Windows ignoré**,
   sans échec ni erreur.
+- 2026-10-29 — Capture des SOURCE de rapports : chantier de fidélité
+  d'exécution choisi après l'audit des écarts du livre, avant les extensions
+  SCREEN/POINTER plus volumineuses. Un contre-exemple valide déjà accepté
+  divergeait à une rupture de contrôle ; il produit maintenant les mêmes
+  38 octets que le natif. Temporaires typés de `cb_field_dup`, ordre des deux
+  passes de préparation et état persistant de `cb_emit_report_moves` portés,
+  avec repli constant des positions SOURCE. Les sources simples restent
+  lues à l'impression ; les formes non reproduites sont refusées par nom.
+  Aucun traitement par nom de programme. Acceptation **1203 → 1203/3593**,
+  écart 414, à examiner 0 ; NIST statique **451/458**, zéro erreur interne.
+  Exécution globale renouvelée : **71/84 identiques**, cinq divergences et
+  huit délais inchangés ; ni les sources du corpus ni les gardes d'accès
+  hors capacité physique ne sont modifiées. Dix-sept nouveaux tests,
+  dont 23 positions dans les deux profils ; avec les tests Report Writer
+  existants, **26/26 réussis**.
+  Suite complète : **477 découverts, 476 validés, un PE Windows ignoré**,
+  aucun échec ni erreur ; scénarios d'entrée **11/11 identiques**, avec
+  leur dénominateur distinct. Les limites restantes sont documentées dans
+  VALIDATION.md et HANDOFF.md.

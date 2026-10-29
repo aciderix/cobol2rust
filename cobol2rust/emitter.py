@@ -296,6 +296,9 @@ class Emitter:
             return text_value(args[0])
         if op == "number":
             return f"Value::number({quoted(numeric_text(args[0]))})"
+        if op == "report_integer":
+            # output_integer: integer arithmetic at each reference-position node.
+            return f"runtime::intrinsic::integer_part(&({self.expression(args[0])}))"
         if op in {"unary+", "unary-"}:
             if self.kind(args[0]) != "number":
                 raise CobolError("opérateur numérique sur un champ texte")
@@ -1239,6 +1242,9 @@ class Emitter:
         elif op in {"generate", "terminate"}:
             for name in ([a[0]] if op == "generate" else a[0]):
                 rust = self.reports[name]
+                first, last = self.program.reports[name].move_passes or ([], [])
+                for source, target in ([*first, *last] if op == "generate" else last):
+                    self.assignment(source, [DataRef(target)], False, move=True)
                 # The report leaves the program while libcob's routine runs:
                 # its events reach the program's SOURCE items and file.
                 self.write(f"let mut report = std::mem::take(&mut self.{rust});")

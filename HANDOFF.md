@@ -40,7 +40,40 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (29 octobre) : distinguer capacité ODO et longueur logique.
+Dernière étape (29 octobre) : capture des SOURCE de rapports avant les
+ruptures de contrôle. `prepare_sources` crée des temporaires typés distincts
+comme `cb_field_dup`, après une première disposition mémoire ; les lignes
+pointent sur ces champs. `prepare_moves` construit les deux passes au premier
+INITIATE/GENERATE/TERMINATE et conserve l'état natif persistant entre passes,
+rapports et programmes de l'unité. GENERATE exécute les deux listes,
+TERMINATE la seconde ; les sources directes et les compteurs restent lus à
+l'impression. Le contre-exemple valide `report-indexed-source.cob` est
+désormais identique, stdout, stderr, fichier et codes zéro compris.
+
+`report_positions.py` porte le repli constant des positions de sous-chaînes
+SOURCE, le coefficient brut de `cb_get_int` et les troncatures entières par
+nœud. Les dépassements constants, puissances non repliées et divisions par
+une constante zéro sont des refus nommés. Cela ne porte pas encore tous les
+chemins de lecture de champs numériques de `output_integer`/`output_index`.
+Les copies complexes de groupes/INDEX, les copies à P initial invalides et
+les contrôles locaux non compilables par le natif restent refusés ; le
+profil cobol85 refuse LOCAL-STORAGE. USE BEFORE REPORTING reste refusé.
+Dix-sept nouveaux tests incluent la fixture de capture (218 octets), deux
+ordres d'INITIATE de rapports et 23 positions dans chacun des deux profils.
+Avec les tests Report Writer existants : 26/26 réussis, journal
+`/workspace/tooling/report-source-targeted-final-20261029.log`.
+Mesures finales : acceptation **1203/3593**, exécution **71/84** et NIST
+statique **451/458**, sans changement de catégorie des programmes ni
+modification des sources des corpus. Les scénarios d'entrée passent **11/11**
+dans `build/real-input-cases-report-source-20261029.json`.
+Suite complète : **477 découverts, 476 validés et un PE Windows ignoré**,
+sans échec ni erreur, journal
+`/workspace/tooling/report-source-all-tests-20261029.log`.
+NIST : `build/coverage-nist-report-source-20261029.json` ; bilan des preuves :
+`build/report-source-validation-20261029.json`. Empreinte du convertisseur :
+`aa33eb3af3fe6cac36ae680e4ecd10a5fcc02dbb3c85913da9e51c2ff09340f9`.
+
+Étape précédente (29 octobre) : distinguer capacité ODO et longueur logique.
 `Emitter.reference` choisit `Value.subscript_count` pour une référence
 indexée : le profil par défaut ne lit pas le contrôleur et garde la borne
 physique ; le profil contrôlé valide compteur et borne courante. Les
@@ -61,7 +94,8 @@ dossiers épinglés, profils et oracles natifs. Les onze cas couvrent les
 cinq programmes interactifs parmi les huit délais du protocole à stdin
 vide. Ils gardent leur dénominateur distinct ; trois exercices ont des
 boucles infinies même au natif (CBL0015 et Listing12-3/4).
-Les onze comparaisons réussissent : `build/real-input-cases-final-20261029.json`.
+Preuves de l'étape précédente : les onze comparaisons réussissent dans
+`build/real-input-cases-final-20261029.json`.
 NIST statique : `build/coverage-nist-odo-calendar-final-20261029.json`.
 Suite complète : **460 tests découverts, 459 validés et un test PE Windows
 ignoré**, sans échec ni erreur. Journal :
@@ -83,7 +117,7 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 `/workspace/tooling/bdb-dev-20261028/manifest.json`.
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
-SCREEN SECTION (37, « niveau de donnée attendu »), USAGE POINTER (14), CALL
+SCREEN SECTION (36 des 37 « niveau de donnée attendu »), USAGE POINTER (14), CALL
 BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
 EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
@@ -95,15 +129,24 @@ descripteurs GLOBAL sont des extensions distinctes à mesurer.
 Exécution : cinq divergences (trois plantages natifs zopeneditor, deux
 indices hors bornes dans le livre), six délais du livre et deux du cours.
 
+L'audit des 37 premiers blocages distingue 33 programmes SCREEN manuels,
+trois tests syntaxiques SCREEN et un cas de séparateurs autour de COPY/
+REPLACE (`syn_misc-062`). Les 33 programmes manuels exigent aussi
+COB-CRT-STATUS et GOBACK RETURNING ; analyser SCREEN seul ne les débloque
+pas entièrement. Le rendu demande un harnais de terminal pseudo-TTY avec
+dimensions, TERM, locale et saisies épinglés, puis comparaison des cellules,
+attributs et curseur. Ce sont des candidats, pas des sources annoncées
+prises en charge. Audit sans modification du convertisseur :
+`/workspace/tooling/report-next-gap-20261029/summary.json`.
+
 Autres points issus de l'audit, à traiter par règles générales : la lecture
 des indices suit `output_index`/`output_integer`, pas simplement la valeur
 décimale (DISPLAY court, entier C int32, COMP-3 et PICTURE P ont des chemins
 différents). Matrices natives : `/workspace/tooling/report-bounds-20261029`.
-Un contre-exemple Report Writer valide dans ce dossier
-(`report-indexed-source.cob`) suggère aussi une différence entre le
-précalcul natif des SOURCE indexés et notre callback différé lors d'une
-rupture de contrôle. À comparer en Rust avant de choisir une correction ;
-ne pas relâcher les gardes pour faire passer les deux rapports du livre.
+Le contre-exemple Report Writer valide dans ce dossier
+(`report-indexed-source.cob`) est corrigé par les temporaires décrits plus
+haut. Cela ne justifie pas de relâcher les gardes pour les deux rapports du
+livre qui dépassent leur capacité physique.
 
 ## Historique
 
