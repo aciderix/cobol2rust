@@ -87,7 +87,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-28T18:19:26+00:00 (commit `ab7c864182`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-29T08:03:26+00:00 (commit `d707c80f33`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -97,15 +97,15 @@ Dernière mesure : 2026-10-28T18:19:26+00:00 (commit `ab7c864182`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 471 | 879 | 408 | 0 |
-| **Total** | | **3593** | **1195** | **1617** | **422** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 479 | 879 | 400 | 0 |
+| **Total** | | **3593** | **1203** | **1617** | **414** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-26T17:18:41+00:00, commit `2bf5f0fbcf` — **antérieure au convertisseur actuel, à refaire avec `--execute`**. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T08:03:26+00:00, commit `d707c80f33`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
-| zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
+| zopeneditor-sample | 3 | 0 | 3 | 0 | 0 |
 | cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
 | beg-cobol-for-programmers | 61 | 52 | 3 | 0 | 6 |
 
@@ -117,9 +117,9 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 4. 12 × clause SELECT non prise en charge
 5. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
 6. 9 × expression non prise en charge: LINE
-7. 8 × . attendu
-8. 8 × PROGRAM-ID attendu
-9. 7 × USAGE/clause non pris en charge: ANY
+7. 8 × PROCEDURE attendu
+8. 8 × . attendu
+9. 8 × PROGRAM-ID attendu
 10. 7 × USAGE/clause non pris en charge: DEPENDING
 <!-- mesure:fin -->
 
@@ -364,3 +364,20 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Suite Python : 431 découverts, 430 validés, un ignoré ; les deux contrôles
   BDB initialement bloqués par les dépendances cloud passent après préparation
   de leurs en-têtes et réexécution, sans changement du convertisseur.
+- 2026-10-29 — Paramètres `PIC X ANY LENGTH` : choix d'une extension
+  générale et isolable du descripteur LINKAGE avant les plus grands
+  chantiers SCREEN/POINTER/CALL BY VALUE. Taille reçue, refmod, MOVE,
+  conditions 88, omission, CANCEL/INITIAL et ordre ENTRY (bogue natif #902)
+  portés de cobc ; limites mémoire contrôlées au premier accès. ANY NUMERIC,
+  GLOBAL et autres formats restent des refus nommés. Testsuite
+  **471 → 479**, total **1195 → 1203/3593**, écart **422 → 414**,
+  à examiner 0. NIST statique **451/458**, sans erreur interne. Exécution
+  globale renouvelée : **70/84 identiques**, six divergences et huit délais.
+  Les trois exemples zopeneditor plantent dans le natif à la fermeture
+  implicite après GOBACK (descripteur ASSIGN périmé) ; sorties et fichiers
+  identiques, codes -11/16 : ils restent comptés divergents.
+  Suite Python complète : **448 découverts, 447 validés, un PE Windows ignoré**,
+  aucun échec ni erreur ; 17 nouveaux tests ANY LENGTH réussis.
+  Des huit sources débloquées, quatre programmes s'exécutent à l'identique
+  de cobc, couvrant deux callees ; deux modules syntaxiques sont seulement
+  compilés des deux côtés.

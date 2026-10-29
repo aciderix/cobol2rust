@@ -135,6 +135,7 @@ pub struct View {
     pub kind: Kind,
     pub dimensions: Vec<(usize, usize)>,
     pub initializers: Vec<Initializer>,
+    pub limit: Option<usize>,
 }
 
 fn offsets(dimensions: &[(usize, usize)], base: usize, action: &mut impl FnMut(usize)) {
@@ -343,12 +344,18 @@ impl View {
     /// caller, a NULL address for GnuCOBOL) is a named stop.
     fn mem(&self) -> std::cell::Ref<'_, Vec<u8>> {
         let memory = self.memory.borrow();
+        if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
+            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
+        }
         if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
         memory
     }
     fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
         check_writable(&self.memory);
         let memory = self.memory.borrow_mut();
+        if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
+            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
+        }
         if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
         memory
     }
@@ -932,7 +939,7 @@ impl View {
             if initializer.filler && !with_filler { continue; }
             offsets(&initializer.dimensions, self.offset + initializer.offset, &mut |offset| {
                 let mut leaf = Self { memory: self.memory.clone(), offset, size: initializer.size,
-                                      kind: initializer.kind, dimensions: vec![], initializers: vec![] };
+                                      kind: initializer.kind, dimensions: vec![], initializers: vec![], limit: self.limit };
                 let value = match initializer.kind { Kind::Text | Kind::Justified | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };
                 leaf.assign(&value, false);
             });
@@ -975,7 +982,7 @@ pub fn table_sort(table: &Value, keys: &[(usize, usize, Kind, bool, bool)]) {
     };
     let key = |element: &[u8], offset: usize, length: usize, kind: Kind| View {
         memory: Rc::new(RefCell::new(element[offset..offset + length].to_vec())), offset: 0, size: length, kind,
-        dimensions: vec![], initializers: vec![] };
+        dimensions: vec![], initializers: vec![], limit: None };
     elements.sort_by(|a, b| {
         for &(offset, length, kind, numeric, descending) in keys {
             let order = if numeric {
@@ -998,7 +1005,7 @@ pub fn table_sort(table: &Value, keys: &[(usize, usize, Kind, bool, bool)]) {
 pub fn copy_of(item: &Value, bytes: &[u8]) -> Value {
     match item {
         Value::View(view) => Value::View(View { memory: Rc::new(RefCell::new(bytes.to_vec())), offset: 0, size: bytes.len(),
-            kind: view.kind, dimensions: vec![], initializers: vec![] }),
+            kind: view.kind, dimensions: vec![], initializers: vec![], limit: None }),
         _ => fail("report control requires storage"),
     }
 }
@@ -1018,7 +1025,7 @@ pub fn literal_argument(key: &str, bytes: &[u8]) -> Value {
         literals.push((key.to_string(), memory.clone()));
         memory
     });
-    Value::View(View { memory, offset: 0, size: bytes.len(), kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+    Value::View(View { memory, offset: 0, size: bytes.len(), kind: Kind::Text, dimensions: vec![], initializers: vec![], limit: None })
 }
 
 fn check_writable(memory: &Memory) {
@@ -1033,14 +1040,14 @@ fn check_writable(memory: &Memory) {
 pub fn temporary(value: &Value) -> Value {
     let bytes = value.bytes();
     let size = bytes.len();
-    Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size, kind: Kind::Text, dimensions: vec![], initializers: vec![] })
+    Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size, kind: Kind::Text, dimensions: vec![], initializers: vec![], limit: None })
 }
 
 /// A LINKAGE item that the CALL (or ENTRY) did not pass: no storage.
 pub fn unbind(item: &Value) -> Value {
     match item {
         Value::View(template) => Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: template.size,
-            kind: template.kind, dimensions: template.dimensions.clone(), initializers: template.initializers.clone() }),
+            kind: template.kind, dimensions: template.dimensions.clone(), initializers: template.initializers.clone(), limit: None }),
         _ => crate::runtime::fail("LINKAGE item requires storage"),
     }
 }
@@ -1064,10 +1071,43 @@ pub fn chain_setup(item: &Value, parameter: usize) {
 /// CALL ... USING OMITTED: a NULL address.
 pub fn omitted() -> Value {
     Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
-                       dimensions: vec![], initializers: vec![] })
+                       dimensions: vec![], initializers: vec![], limit: None })
+}
+
+/// The cached cob_field size is readable even when LINKAGE has no address.
+pub fn descriptor_size(item: &Value) -> usize {
+    match item {
+        Value::View(view) => view.size,
+        _ => fail("LINKAGE descriptor requires a data item"),
+    }
+}
+
+pub fn set_descriptor_size(item: &mut Value, size: usize) {
+    match item {
+        Value::View(view) => view.size = size,
+        _ => fail("LINKAGE descriptor requires a data item"),
+    }
+}
+
+/// codegen.c output_entry_function: ANY LENGTH copies only the caller's
+/// size, retaining its own attributes and nominal INITIALIZE description.
+pub fn update_any_length(item: &mut Value, argument: Option<&Value>) {
+    if let Some(Value::View(source)) = argument {
+        if source.size != 0 || !source.memory.borrow().is_empty() {
+            set_descriptor_size(item, source.size);
+        }
+    }
 }
 
 pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
+    bind(argument, delta, item, false)
+}
+
+pub fn rebind_any_length(argument: &Value, item: &Value) -> Value {
+    bind(argument, 0, item, true)
+}
+
+fn bind(argument: &Value, delta: usize, item: &Value, dynamic: bool) -> Value {
     let (source, template) = match (argument, item) {
         (Value::View(source), Value::View(template)) => (source, template),
         _ => crate::runtime::fail("CALL argument and LINKAGE item require storage"),
@@ -1079,11 +1119,12 @@ pub fn rebind(argument: &Value, delta: usize, item: &Value) -> Value {
     let extent = template.dimensions.iter().map(|(stride, count)| stride * count.saturating_sub(1)).sum::<usize>() + template.size;
     // GnuCOBOL passes only an address: a LINKAGE item longer than its
     // argument would address the caller's neighbouring storage.
-    if delta + extent > source.size {
+    if !dynamic && delta + extent > source.size {
         crate::runtime::fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
     }
     Value::View(View { memory: source.memory.clone(), offset, size: template.size, kind: template.kind,
-                       dimensions: template.dimensions.clone(), initializers: template.initializers.clone() })
+                       dimensions: template.dimensions.clone(), initializers: template.initializers.clone(),
+                       limit: Some(source.limit.unwrap_or(source.offset + source.size).min(source.offset + source.size)) })
 }
 
 /// BY CONTENT: the called program receives a copy of the argument's bytes.
@@ -1092,7 +1133,7 @@ pub fn content_copy(argument: &Value) -> Value {
         Value::View(source) => {
             let bytes = source.mem()[source.offset..source.offset + source.size].to_vec();
             Value::View(View { memory: Rc::new(RefCell::new(bytes)), offset: 0, size: source.size, kind: source.kind,
-                               dimensions: vec![], initializers: source.initializers.clone() })
+                               dimensions: vec![], initializers: source.initializers.clone(), limit: None })
         },
         _ => crate::runtime::fail("BY CONTENT requires a data item"),
     }

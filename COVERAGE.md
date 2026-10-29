@@ -856,3 +856,26 @@ revendiqué ici. Les détails et limites sont dans [VALIDATION.md](VALIDATION.md
 La suite découvre 431 tests : 430 validés, un PE Windows ignoré, avec
 réexécution réussie des deux contrôles initialement bloqués par la dépendance
 de développement Berkeley DB absente du cloud.
+
+## Progression : paramètres ANY LENGTH — 29 octobre 2026
+
+Les paramètres LINKAGE `01 arg [PIC X] ANY LENGTH` ont un descripteur de
+taille dynamique. Les opérations et les niveaux 88 l'utilisent, y compris
+les sous-chaînes, la retransmission et les appels de tailles successives.
+Le comportement natif d'ENTRY et la persistance après CANCEL/INITIAL sont
+portés ; les formats ANY NUMERIC et le partage GLOBAL restent refusés.
+
+La mesure passe de **1195 à 1203/3593 émissions acceptées** : testsuite
+**471 → 479/1135**, écart à cobc **422 → 414**, zéro acceptation refusée par
+cobc dans les corpus. NIST statique reste à **451/458**, sans erreur interne.
+Suite Python complète : **447/448 validés**, un PE Windows ignoré ;
+les 17 nouveaux tests ANY LENGTH réussissent.
+Les huit sources débloquées comprennent quatre programmes comparés au
+natif (**4/4 identiques**) et leurs deux callees, plus deux modules
+syntaxiques seulement compilés des deux côtés.
+
+La comparaison globale est renouvelée : **70/84 identiques**, six
+divergences et huit délais (stdin vide, données du dossier source). Les
+trois exemples zopeneditor présentent désormais un crash natif à la
+fermeture implicite, avec sorties et fichiers identiques ; ils sont donc
+comptés divergents. Les détails sont dans [VALIDATION.md](VALIDATION.md).

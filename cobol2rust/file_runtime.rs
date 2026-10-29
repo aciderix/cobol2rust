@@ -1375,7 +1375,7 @@ impl SortFile {
             // cob_numeric_cmp: as integers below 19 digits, else as decimals.
             crate::storage_runtime::Kind::Numeric { digits, .. } => crate::storage_runtime::View {
                 memory: std::rc::Rc::new(std::cell::RefCell::new(bytes)), offset: 0, size: key.size, kind: key.kind,
-                dimensions: vec![], initializers: vec![] }.operand_value(digits < 19),
+                dimensions: vec![], initializers: vec![], limit: None }.operand_value(digits < 19),
             _ => Value::Bytes(bytes),
         }
     }

@@ -118,6 +118,19 @@ appelé (`Option<Box<…>>` et un indicateur actif). `run` rend
 `runtime::Outcome::{Return, Stop}` ; un appelé lie ses articles LINKAGE aux
 arguments par `storage_runtime::rebind` dans sa méthode `call`.
 
+Pour `PIC X ANY LENGTH`, `update_any_length` porte l'initialisation de
+`output_entry_function` : seule la taille du descripteur est copiée depuis
+l'appelant. Le rang est celui de l'union des paramètres, même si ENTRY les
+réordonne (bogue natif #902). `rebind_any_length` lie ensuite l'adresse de
+l'entrée choisie ; `View.limit` diffère le contrôle des limites jusqu'à un
+accès au stockage. `descriptor_size` lit la taille sans exiger une adresse,
+y compris pour LENGTH d'une sous-chaîne. Les tailles restent dans RunUnit
+quand CANCEL ou INITIAL détruit l'instance. Les initializers gardent leur
+taille nominale : INITIALIZE simple efface un octet ; REPLACING fait un
+MOVE de taille dynamique. Les motifs de niveau 88 sont conservés jusqu'à
+l'exécution. ANY NUMERIC et le partage d'un descripteur ANY LENGTH GLOBAL
+sont des refus nommés.
+
 Un fichier vu par plusieurs programmes (FD EXTERNAL, FD GLOBAL d'un programme
 contenant, fichiers d'un programme à USE GLOBAL) est un
 `file_runtime::Shared<…>` (`Rc<RefCell<…>>`) ; `Emitter.handle` emprunte la

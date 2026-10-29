@@ -5,7 +5,7 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
-## État courant — 28 octobre 2026 (à tenir à jour à chaque commit)
+## État courant — 29 octobre 2026 (à tenir à jour à chaque commit)
 
 Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4),
 sans branche distante plus avancée au contrôle du 28 octobre. Reprise locale
@@ -13,10 +13,15 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1195/3593 sources acceptées** (cobc 1617,
-écart 422, à examiner 0) ; testsuite GnuCOBOL 471/1135, six corpus d'origine
-724/2458. Dernière exécution globale enregistrée (26 octobre, non relancée
-par cet incrément) : CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre 52/61.
+Mesure des corpus réels : **1203/3593 sources acceptées** (cobc 1617,
+écart 414, à examiner 0) ; testsuite GnuCOBOL 479/1135, six corpus d'origine
+724/2458. Exécution globale renouvelée le 29 octobre : CardDemo 8/8,
+zopeneditor 0/3, cours 10/12, livre 52/61, soit **70/84 identiques**,
+six divergences et huit délais. Les trois exemples zopeneditor ont stdout
+et fichiers identiques, mais plantent en natif à la fermeture implicite
+après GOBACK (descripteur ASSIGN périmé, codes -11/16). Les trois autres
+divergences sont les indices hors bornes de Listing13-6 et des deux rapports
+du chapitre 18. Voir VALIDATION.md et `measurements/real-corpora.json`.
 NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
 exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
 est statique ; elle ne relance pas les 413 programmes.
@@ -25,7 +30,7 @@ Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
 blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
 quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des
 formes, y compris les cas limites ; fixture native dans
-`tests/fixtures/` enregistrée dans `tests/test_real_forms.py` ; exécuter
+`tests/fixtures/` vérifiée dans la suite Python ; exécuter
 chaque source débloquée face à cobc (`cobol2rust.verification.verify` avec
 `includes`, `data_dir` et `call_paths` = dossier de la source) ; puis suite
 Python, `tools/real_corpora.py --cobc --execute --record`, couverture NIST,
@@ -34,24 +39,32 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (28 octobre) : NUMVAL-F et TEST-NUMVAL/TEST-NUMVAL-C/
-TEST-NUMVAL-F. Validateurs exacts `cob_check_numval*`, conversion F permissive
-de GnuCOBOL 3.2 sans prévalidation, symboles du module et octets bruts.
-`Expr.signed_literal` distingue les chiffres d'un littéral signé du stockage
-d'une opération unaire. Les résultats numériques calculés restent refusés,
-ainsi que les capacités hors limites générales et les registres EXCEPTION-*.
-`tests/test_numval_validation.py` : dix tests ciblés réussis. Quatre sources
-débloquées et deux profils point/virgule (412 résultats) comparés à cobc :
-6/6 identiques (`build/numval-real-source-verification-20261028.json`).
-Mesure NIST : `build/coverage-nist-numval-reviewed-20261028.json`.
+Dernière étape (29 octobre) : paramètres `01 arg [PIC X] ANY LENGTH`.
+Le descripteur garde ses attributs alphanumériques et reçoit la taille de
+l'appelant ; les tailles persistent après OMITTED, CANCEL et INITIAL.
+L'ordre ENTRY reproduit le bogue natif #902 (tailles au rang de l'union,
+adresses selon l'entrée). `View.limit` diffère le contrôle mémoire au
+premier accès, tandis que LENGTH peut lire la taille sans adresse. Les
+motifs ALL/figuratives des niveaux 88 sont dynamiques. INITIALIZE simple
+et la validation INSPECT gardent la taille nominale, comme cobc.
+ANY NUMERIC, ANY LENGTH GLOBAL et les formats autres que PIC X DISPLAY
+restent refusés explicitement. Les paramètres ANY doivent figurer dans le
+USING principal et ne peuvent être retransmis que BY REFERENCE.
+Trois fichiers `tests/test_any_length*.py`, 17 nouveaux tests.
+Mesure NIST : `build/coverage-nist-any-length-20261029.json`.
+Suite Python complète : **448 tests découverts, 447 validés et un PE Windows
+ignoré**, aucun échec ni erreur ; journal
+`/workspace/tooling/any-length-all-tests-20261029.log`.
+Les huit sources débloquées : quatre programmes d'exécution comparés à
+cobc (**4/4 identiques**), deux callees couverts par ces appels, deux
+modules syntaxiques seulement compilés des deux côtés. Rapport :
+`build/any-length-real-source-verification-20261029.json`.
+Bilan des preuves et empreintes : `build/any-length-validation-20261029.json`.
 
-Suite Python : 431 tests découverts, 430 validés et un PE Windows ignoré.
-L'exécution complète a rencontré deux erreurs de dépendance BDB ; les deux
-méthodes concernées ont été rejouées avec succès après préparation des
-en-têtes et de `build/bdb_dump`, sans changement du convertisseur. Bilan et
-empreintes des logs : `build/numval-unit-validation-20261028.json`.
-
-Sources natives locales : `.tools/corpora/gnucobol-3.2/libcob/intrinsic.c`.
+Sources natives locales : `.tools/corpora/gnucobol-3.2/cobc/field.c`
+(`validate_any_length_item`), `typeck.c` (`cb_validate_program_body`) et
+`codegen.c` (`output_entry_function`). L'étape NUMVAL précédente est
+détaillée dans VALIDATION.md (28 octobre).
 Environnement Codex : `. /workspace/tooling/activate.sh`. La bibliothèque
 XML du sysroot a été alignée sur le compilateur natif avec libxml2 2.12.10
 construite en local ; provenance `/workspace/tooling/xml212/manifest.json`.
@@ -64,13 +77,15 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
 SCREEN SECTION (37, « niveau de donnée attendu »), USAGE POINTER (14), CALL
 BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
-d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8), ANY LENGTH (7),
+d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
 EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
 modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
 (7), fonctions LOCALE-*
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
-COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. Exécution : 3 programmes
-divergents et 6 délais du livre, 2 délais du cours restent à examiner.
+COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. ANY NUMERIC et partage de
+descripteurs GLOBAL sont des extensions distinctes à mesurer.
+Exécution : six divergences (trois plantages natifs zopeneditor, trois
+indices hors bornes dans le livre), six délais du livre et deux du cours.
 
 ## Historique
 

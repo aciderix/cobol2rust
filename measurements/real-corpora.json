@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-28T18:19:26+00:00",
- "git_head": "ab7c864182be7b48be44c251ac030ad46452065a",
- "implementation_sha256": "ed7297506181274dd15994d3bed32920e1afbfef50d3f59c3a23e2660719c5ba",
+ "measured_at": "2026-10-29T08:03:26+00:00",
+ "git_head": "d707c80f339e89cdf4922d3f13bb38126ccc1ba1",
+ "implementation_sha256": "d4e2b683c22cf05a21c9dff3800c4349ddf95fd42814604d45cb8984d6ad0685",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1195,
+  "accepted": 1203,
   "cobc_accepted": 1617,
-  "gap": 422,
+  "gap": 414,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 471,
+   "accepted": 479,
    "internal_errors": 0,
    "blockers": [
     [
@@ -463,10 +463,6 @@
      12
     ],
     [
-     "USAGE/clause non pris en charge: ANY",
-     11
-    ],
-    [
      "PROCEDURE attendu",
      10
     ],
@@ -485,12 +481,16 @@
     [
      "USAGE/clause non pris en charge: BASED",
      9
+    ],
+    [
+     "FUNCTION EXCEPTION-STATUS non prise en charge",
+     9
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 408,
+   "gap": 400,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -594,11 +594,11 @@
     ],
     [
      "run_extensions-054/callee.cob",
-     "USAGE/clause non pris en charge: ANY"
+     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-054/caller.cob",
-     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
+     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-055/callee.cob",
@@ -1605,30 +1605,6 @@
      "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
-     "run_misc-110/callee.cob",
-     "USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "run_misc-110/caller.cob",
-     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "run_misc-111/callee.cob",
-     "USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "run_misc-111/caller.cob",
-     "programme appelé callee.cob: ligne 7: USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "run_misc-112/prog.cob",
-     "USAGE/clause non pris en charge: ANY"
-    ],
-    [
-     "run_misc-113/prog.cob",
-     "USAGE/clause non pris en charge: ANY"
-    ],
-    [
      "run_misc-115/prog.cob",
      "USAGE/clause non pris en charge: BASED"
     ],
@@ -1993,10 +1969,6 @@
      "expression non prise en charge: OMITTED"
     ],
     [
-     "syn_misc-055/prog.cob",
-     "USAGE/clause non pris en charge: ANY"
-    ],
-    [
      "syn_misc-059/prog.cob",
      "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
     ],
@@ -2071,10 +2043,6 @@
     [
      "syn_redefines-013/prog.cob",
      "VALUE sur FD/REDEFINES non pris en charge"
-    ],
-    [
-     "syn_refmod-005/prog.cob",
-     "USAGE/clause non pris en charge: ANY"
     ],
     [
      "syn_reportwriter-005/prog.cob",
@@ -2159,10 +2127,6 @@
      8
     ],
     [
-     "USAGE/clause non pris en charge: ANY",
-     7
-    ],
-    [
      "USAGE/clause non pris en charge: DEPENDING",
      7
     ],
@@ -2173,14 +2137,18 @@
     [
      "USAGE/clause non pris en charge: IS",
      7
+    ],
+    [
+     "PROCEDURE attendu",
+     6
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-26T17:18:41+00:00",
-  "git_head": "2bf5f0fbcf3a28b486699eb02884151ca0ea4df5",
-  "implementation_sha256": "2e67a89a9ff27e852f95b03a41e80ec34e3a0f041ea7a8c87c26744c8906ae70",
+  "measured_at": "2026-10-29T08:03:26+00:00",
+  "git_head": "d707c80f339e89cdf4922d3f13bb38126ccc1ba1",
+  "implementation_sha256": "d4e2b683c22cf05a21c9dff3800c4349ddf95fd42814604d45cb8984d6ad0685",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -2227,23 +2195,32 @@
    },
    "zopeneditor-sample": {
     "programs": 3,
-    "identical": 3,
-    "different": 0,
+    "identical": 0,
+    "different": 3,
     "refused": 0,
     "timeout": 0,
     "error": 0,
     "results": {
      "COBOL/SAM1.cbl": {
-      "status": "identical",
-      "exit": 16
+      "status": "different",
+      "reasons": [
+       "sortie -11/16"
+      ],
+      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
      },
      "COBOL/SAM1LIB.cbl": {
-      "status": "identical",
-      "exit": 16
+      "status": "different",
+      "reasons": [
+       "sortie -11/16"
+      ],
+      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
      },
      "multiroot/sam/SAM1.cbl": {
-      "status": "identical",
-      "exit": 16
+      "status": "different",
+      "reasons": [
+       "sortie -11/16"
+      ],
+      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
      }
     }
    },

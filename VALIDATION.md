@@ -1,4 +1,53 @@
-# Validation — 28 octobre 2026
+# Validation — 29 octobre 2026
+
+## Paramètres ANY LENGTH — 29 octobre 2026
+
+- `01 arg [PIC X] ANY LENGTH` transmet la taille réelle de l'argument,
+  en conservant ses attributs alphanumériques. Portage de
+  `validate_any_length_item`, `cb_validate_program_body` et
+  `output_entry_function` de GnuCOBOL 3.2. Aucun nom de programme du corpus
+  n'intervient dans le convertisseur.
+- Mesure complète : **1195 → 1203/3593 émissions acceptées**, cobc 1617,
+  **écart 422 → 414**, aucune acceptation refusée par cobc. Testsuite
+  **471 → 479/1135** ; six autres corpus inchangés à 724/2458.
+- Dix-sept nouveaux tests couvrent tailles de 1 à 1024 octets, champs,
+  groupes, littéraux, stockage numérique, BY CONTENT depuis l'appelant,
+  retransmission BY REFERENCE, refmod, MOVE, INSPECT, STRING/UNSTRING,
+  JUSTIFIED, niveaux 88 et INITIALIZE. Les longueurs ne lisent pas
+  l'adresse d'un paramètre omis. Le cache persiste après CANCEL/INITIAL et
+  l'ordre natif ENTRY, bogue #902 compris, est conservé. Un accès dépassant
+  l'argument s'arrête avec un diagnostic nommé.
+- Suite Python complète : **448 tests découverts, 447 validés et un test
+  PE Windows ignoré**, aucun échec ni erreur (290 secondes). Journal :
+  `/workspace/tooling/any-length-all-tests-20261029.log`.
+- Les quatre nouveaux programmes d'exécution (`run_misc-110/111` caller,
+  `112/113` prog) correspondent à cobc : **4/4**, stdout, fichiers,
+  stderr et codes zéro. Les deux callees sont couverts par ces appels.
+  `syn_misc-055` et `syn_refmod-005` sont compilés en Rust et comme modules
+  natifs, sans exécution. Les huit nouvelles sources sont inchangées ;
+  rapport : `build/any-length-real-source-verification-20261029.json`.
+- NIST statique : **451/458 émissions**, zéro erreur interne
+  (`build/coverage-nist-any-length-20261029.json`). Le runner complet
+  historique n'est pas relancé : 413 programmes exécutés/comparés et
+  14 autres seulement compilés.
+- Exécution globale des corpus renouvelée, avec stdin vide et fichiers du
+  dossier source : **70/84 identiques**, 6 divergents et 8 délais.
+  CardDemo 8/8, zopeneditor 0/3, cours 10/12, livre 52/61. Les trois
+  exemples zopeneditor ont stdout et fichiers identiques mais le natif
+  plante à la fermeture implicite (SIGSEGV, code -11), contre 16 en Rust.
+  Le C généré conserve une adresse de descripteur ASSIGN local après
+  GOBACK ; le crash est dans `cob_field_to_string` lors du CLOSE. Un essai
+  natif séparé remplaçant GOBACK par STOP RUN termine à 16. Les sources du
+  corpus restent intactes ; traces dans
+  `/workspace/tooling/sam1-audit-20261029`.
+  Les autres divergences sont Listing13-6 et les deux rapports du chapitre
+  18, arrêtés sur indices hors bornes. Les délais concernent les entrées
+  interactives ou boucles ; aucun de ces cas n'est compté identique.
+
+ANY NUMERIC, ANY LENGTH GLOBAL, les PICTURE autres que X et les USAGE
+autres que DISPLAY restent des refus nommés. INITIALIZE simple et la
+validation des opérandes INSPECT gardent leur taille nominale d'un octet,
+comme le C natif ; INITIALIZE REPLACING utilise la taille dynamique.
 
 ## Reprise main et famille NUMVAL — 28 octobre 2026
 

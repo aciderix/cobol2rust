@@ -619,6 +619,7 @@ class Field:
     # 01/77 EXTERNAL (run-unit storage by name) and GLOBAL items.
     external: bool = False
     is_global: bool = False
+    any_length: bool = False
 
 
 @dataclass(frozen=True)
@@ -636,6 +637,8 @@ class Condition:
     parent: str
     values: list[tuple[Token, Token]]
     false_value: Token | None = None
+    repeated_values: dict[int, str] = field(default_factory=dict)
+    false_repeated: str | None = None
 
 
 @dataclass
@@ -1156,16 +1159,16 @@ class Parser:
                 self.error(f"subscript of '{label}' out of bounds: {n}")
         if start is None:
             return
-        size = descriptor.size
+        size = None if descriptor.any_length else descriptor.size
         length_value = None if length is None else self.literal_integer(length)
-        if length_value is not None and (length_value < 1 or length_value > size):
+        if length_value is not None and (length_value < 1 or (size is not None and length_value > size)):
             self.error(f"length of '{label}' out of bounds: {length_value}")
         offset = self.literal_integer(start)
         if offset is None:
             return
-        if offset < 1 or (not (length is None and offset == size) and offset > size):
+        if offset < 1 or (size is not None and offset > size):
             self.error(f"offset of '{label}' out of bounds: {offset}")
-        if length_value is not None and length_value > size - offset + 1:
+        if size is not None and length_value is not None and length_value > size - offset + 1:
             self.error(f"length of '{label}' out of bounds: {length_value}")
 
     def program_start(self):
@@ -1488,6 +1491,9 @@ class Parser:
                     block.body[:] = []
             debug_sections = {}
         paragraphs = self.resolve_procedures(blocks, sections)
+        for item in self.fields.values():
+            if item.any_length and item.name not in using:
+                self.error(f"'{item.label}' ANY LENGTH doit être un paramètre PROCEDURE DIVISION USING")
         program = Program(name, self.fields, entry, paragraphs, self.files, self.conditions, memory_size,
                           blocks, sections, file_declaratives, mode_declaratives, main_block, using)
         program.entry_name = entry_name
@@ -3079,10 +3085,10 @@ class Parser:
                 return Expr("number", (str(len(arg.args[0])),))
             if arg.op == "var" and arg.args[0].start is None:
                 f = self.fields[arg.args[0].name]
-                if not f.depending and not any(self.fields[k].depending for k in self.fields
+                if not f.any_length and not f.depending and not any(self.fields[k].depending for k in self.fields
                                                 if k.startswith(arg.args[0].name + ".")):
                     return Expr("number", (str(getattr(f, "parse_size", f.size)),))
-            if arg.op != "function":
+            if arg.op != "function" and not (arg.op == "var" and self.fields[arg.args[0].name].any_length):
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"}:
             args.append(Expr("number", ("1" if system_offset else "0",)))
@@ -3144,6 +3150,8 @@ class Parser:
         """cb_build_length_1: the size of a fixed item; the sizes of the
         children of a variable one, an ODO table counted by its object."""
         f = self.fields[name]
+        if f.any_length:
+            return Expr("function", ("LENGTH", (Expr("var", (DataRef(name),)),)))
 
         def variable(item):  # cb_field_variable_size
             return any(self.fields[c].depending or variable(self.fields[c]) for c in item.children)
@@ -4135,7 +4143,10 @@ class Parser:
                         continue
                     if not self.candidates(self.t.key):
                         break
-                    arguments.append((mode, self.variable()))
+                    ref = self.variable()
+                    if self.fields[ref.name].any_length and mode != "REFERENCE":
+                        self.error("article ANY LENGTH requis BY REFERENCE dans CALL USING")
+                    arguments.append((mode, ref))
                 if not arguments:
                     self.error("CALL USING requiert au moins un argument")
             if self.at("RETURNING") or self.at("GIVING"):

@@ -96,11 +96,11 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également vérifié sous Linux **431 tests Python** : **430 validés**, un test
-d'inspection du PE Windows ignoré. Deux contrôles de fichiers indexés ont été
-rejoués après installation de la dépendance Berkeley DB manquante. La reprise
-du 28 octobre compare aussi les quatre nouvelles sources NUMVAL et deux
-profils natifs, soit 6/6 exécutions identiques ; les validations historiques
+également vérifié sous Linux **448 tests Python** : **447 validés**, un test
+d'inspection du PE Windows ignoré. La mesure du 29 octobre accepte
+**1203/3593 sources** pour émission Rust ; l'exécution comparée des corpus
+applicatifs donne **70/84 identiques**, six divergences et huit délais.
+Les 17 nouveaux tests ANY LENGTH passent ; les validations historiques
 du corpus local sont détaillées dans le journal de validation.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
@@ -256,6 +256,16 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   l'entrée, LINKAGE hors de tout USING) n'a pas d'adresse, comme le NULL de
   cobc, et son premier accès est un arrêt nommé (`LINKAGE item not passed by
   caller`) ;
+- `01 arg [PIC X] ANY LENGTH` en LINKAGE reçoit la taille réelle de
+  l'argument, sans changer ses attributs alphanumériques. Les longueurs,
+  sous-chaînes, MOVE et conditions de niveau 88 utilisent cette taille ;
+  l'INITIALIZE simple conserve la taille nominale d'un octet, comme cobc.
+  Le cache de taille survit à OMITTED, CANCEL et INITIAL. L'ordre de taille
+  des paramètres ENTRY reproduit aussi le bogue natif #902. Une lecture ou
+  écriture dépassant l'argument reste un arrêt nommé. ANY NUMERIC, les
+  formats national/booléen, USAGE autre que DISPLAY et ANY LENGTH GLOBAL
+  restent refusés explicitement ; un paramètre ANY ne peut être retransmis
+  que BY REFERENCE ;
 - `ENTRY 'nom' [USING …]` (`emit_entry`, `output_entry_function`) ajoute un
   point d'entrée : un CALL de ce nom commence à l'instruction ENTRY avec ses
   paramètres, que le programme traverse sinon comme une étiquette. Comme pour

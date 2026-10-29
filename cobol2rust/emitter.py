@@ -279,8 +279,11 @@ class Emitter:
             condition = self.program.conditions[ref.name]
             value = Expr("var", (DataRef(condition.parent, ref.indices),))
             terms = []
-            for low, high in condition.values:
-                left, right = self.literal(low), self.literal(high)
+            for index, (low, high) in enumerate(condition.values):
+                if index in condition.repeated_values:
+                    left = right = Expr("all", (condition.repeated_values[index],))
+                else:
+                    left, right = self.literal(low), self.literal(high)
                 if self.kind(value) != self.kind(left) or self.kind(value) != self.kind(right):
                     raise CobolError("valeurs de niveau 88 de catégorie différente du parent non prises en charge")
                 if low == high:
@@ -353,6 +356,9 @@ class Emitter:
 
     def function(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
+        if name == "LENGTH" and args[0].op == "var" \
+                and self.program.fields[args[0].args[0].name].any_length:
+            return f"Value::number(&storage_runtime::descriptor_size(&{self.reference(args[0].args[0])}).to_string())"
         if name in {"NUMVAL-F", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F"}:
             values = [self.numval_argument(name, a) for a in args]
             if name in {"NUMVAL-F", "TEST-NUMVAL-F"}:
@@ -883,7 +889,7 @@ class Emitter:
             return False
         src, dst = self.program.fields[expr.args[0].name], self.program.fields[ref.name]
         def variable(f):  # cb_field_variable_size
-            return bool(f.depending) or any(variable(self.program.fields[c]) for c in f.children)
+            return f.any_length or bool(f.depending) or any(variable(self.program.fields[c]) for c in f.children)
         if src.kind != "number" or src.size < dst.size or variable(src) or variable(dst):
             return False
         if dst.kind == "number":
@@ -1033,7 +1039,9 @@ class Emitter:
                 token = condition.values[0][0] if a[1] else condition.false_value
                 if token is None:
                     raise CobolError("SET TO FALSE requiert WHEN SET TO FALSE dans le niveau 88")
-                self.assignment(self.literal(token), [DataRef(condition.parent, ref.indices)], False)
+                repeated = condition.repeated_values.get(0) if a[1] else condition.false_repeated
+                value = Expr("all", (repeated,)) if repeated is not None else self.literal(token)
+                self.assignment(value, [DataRef(condition.parent, ref.indices)], False, move=repeated is not None)
         elif op == "open":
             for mode, name in a[0]:
                 self.linage_values(name)
@@ -1901,7 +1909,7 @@ class Emitter:
             if root is None and getattr(field, "register", False):
                 # A register is not in the program's storage.
                 memory = f"storage_runtime::memory({field.size})"
-            value = f"Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {field.size}, kind: {self.storage_kind(field)}, dimensions: {self.dimensions(field.dimensions)}, initializers: {self.initializers(field)} }})"
+            value = f"Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {field.size}, kind: {self.storage_kind(field)}, dimensions: {self.dimensions(field.dimensions)}, initializers: {self.initializers(field)}, limit: None }})"
             self.write(f"{self.names[name]}: {value},")
         for name, rust_name in self.files.items():
             spec = self.program.files[name]
@@ -1936,7 +1944,7 @@ class Emitter:
             self.write(f"{rust_name}: {created},")
             block = self.shared_block(spec.record)
             memory, offset = (externals[block[0]], 0) if block else ("memory", self.program.fields[spec.record].offset)
-            self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![] }}),")
+            self.write(f"{rust_name}_area: Value::View(storage_runtime::View {{ memory: {memory}.clone(), offset: {offset}, size: {spec.record_max}, kind: storage_runtime::Kind::Text, dimensions: vec![], initializers: vec![], limit: None }}),")
         for name, rust_name in self.reports.items():
             self.write(f"{rust_name}: {self.report_definition(self.program.reports[name])},")
         alters = len(self.program.alters)
@@ -2246,6 +2254,12 @@ class Emitter:
         entries = [(graph.entry, self.program.using)] + [(graph.entry_points[name], using)
                                                          for name, using in getattr(self.program, "entries", [])]
         fields = self.program.fields
+        parameters = list(dict.fromkeys(name for _, using in entries for name in using))
+        # output_entry_function uses the union's ordinal even for an ENTRY
+        # that swaps or omits parameters (GnuCOBOL bug #902).
+        for index, name in enumerate(parameters):
+            if fields[name].any_length:
+                self.write(f"storage_runtime::update_any_length(&mut self.{self.names[name]}, arguments.get({index}));")
         for number, (_, using) in enumerate(entries):
             self.write(f"if entry == {number} {{")
             self.indent += 1
@@ -2262,8 +2276,10 @@ class Emitter:
                     self.write(f"self.{rust} = storage_runtime::unbind(&self.{rust});")
                     continue
                 index = using.index(root.name)
-                self.write(f"self.{rust} = if arguments.len() > {index} {{ storage_runtime::rebind(&arguments[{index}], "
-                           f"{field.offset - root.offset}, &self.{rust}) }} else {{ storage_runtime::unbind(&self.{rust}) }};")
+                binding = (f"storage_runtime::rebind_any_length(&arguments[{index}], &self.{rust})" if field.any_length else
+                           f"storage_runtime::rebind(&arguments[{index}], {field.offset - root.offset}, &self.{rust})")
+                self.write(f"self.{rust} = if arguments.len() > {index} {{ {binding} }} "
+                           f"else {{ storage_runtime::unbind(&self.{rust}) }};")
             self.indent -= 1
             self.write("}")
         local = [name for name, field in fields.items() if getattr(field, "local", False) and field.parent is None]
@@ -2319,12 +2335,17 @@ def generate_unit(emitters):
         head.append("mod file_runtime;")
     head += ["use runtime::{Value, display};", "struct PerformFrame { through: usize, return_pc: usize }"]
     subprograms = emitters[1:]
+    def any_items(emitter):
+        return [emitter.names[name] for name, item in emitter.program.fields.items() if item.any_length]
     global_uses = any(getattr(emitter.program, "global_uses", None) for emitter in emitters)
     shared = any(emitter.file_registry(name) for emitter in emitters for name in emitter.files)
     unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status",
             "    callers: Vec<&'static str>, // module names of the active programs, innermost last"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
+        if any_items(emitter):
+            # cobc's cached field descriptors survive CANCEL and INITIAL.
+            unit.append(f"    p{index}_any_sizes: Option<[usize; {len(any_items(emitter))}]>,")
         if getattr(emitter.program, "entries", None):
             # Its ENTRY names resolve once its module is loaded (by a CALL).
             unit.append(f"    p{index}_loaded: bool,")
@@ -2337,6 +2358,8 @@ def generate_unit(emitters):
     for index, emitter in enumerate(subprograms, 1):
         loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
         unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
+        if any_items(emitter):
+            unit.append(f"            p{index}_any_sizes: None,")
     if global_uses:
         unit.append("            uses: Vec::new(),")
     unit += ["        }", "    }",
@@ -2362,10 +2385,16 @@ def generate_unit(emitters):
             unit += [f"            {quoted(name)}{guard} => {{",
                      f"                if self.p{index}_active {{ self.recursive({quoted(emitter.program.entry_name)}); }}",
                      f"                let mut program = self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new()));",
+                     *([f"                if let Some(sizes) = self.p{index}_any_sizes {{",
+                        *[f"                    storage_runtime::set_descriptor_size(&mut program.{name}, sizes[{n}]);"
+                          for n, name in enumerate(any_items(emitter))], "                }"] if any_items(emitter) else []),
                      f"                self.p{index}_active = true;",
                      f"                self.callers.push({quoted(emitter.program.entry_name)});",
                      *([f"                self.p{index}_loaded = true;"] if entries else []),
                      f"                let outcome = program.call_entry(self, arguments, {number});",
+                     *([f"                self.p{index}_any_sizes = Some([" + ", ".join(
+                        f"storage_runtime::descriptor_size(&program.{name})" for name in any_items(emitter)) + "]);"]
+                       if any_items(emitter) else []),
                      "                self.returned = program.return_code();",
                      f"                self.p{index}_active = false;",
                      "                self.callers.pop();",

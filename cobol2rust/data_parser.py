@@ -435,7 +435,7 @@ def declaration(p, file_record=False):
     # A description without a name is an implicit FILLER.
     implicit_filler = level != 88 and not p.t.string and p.t.key in {
         "PIC", "PICTURE", "VALUE", "VALUES", "USAGE", "OCCURS", "REDEFINES", "SIGN", "BLANK", "JUSTIFIED",
-        "JUST", "LEADING", "TRAILING", "SYNC", "SYNCHRONIZED", "."} | USAGES
+        "JUST", "LEADING", "TRAILING", "SYNC", "SYNCHRONIZED", "ANY", "."} | USAGES
     if implicit_filler and p.t.key in {"PIC", "PICTURE"} and p.tokens[p.i + 1].key in {"PIC", "PICTURE"}:
         p.error("nom réservé: " + p.t.key)
     label = "FILLER" if implicit_filler else p.name()
@@ -453,10 +453,14 @@ def declaration(p, file_record=False):
             p.error("VALUE attendu au niveau 88")
         p.accept("IS") or p.accept("ARE")
         values = []
+        repeated_values = {}
         while not p.at(".") and not p.at("WHEN") and not p.at("FALSE"):
             parent = p.fields[p.last_data]
             figurative = not p.t.string and p.t.key in {"QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES"} | (
                 {"ZERO", "ZEROS", "ZEROES"} if parent.kind == "text" else set())
+            if parent.any_length and not p.t.string:
+                figurative = figurative or p.t.key in {"SPACE", "SPACES"} or (
+                    p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key))
             if group_condition and not p.t.string and (p.at("ALL") or p.t.key in {
                     "QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES", "LOW-VALUE", "LOW-VALUES", "ZERO", "ZEROS", "ZEROES"}
                     or p.t.key in getattr(p, "symbolic", {})):
@@ -479,6 +483,8 @@ def declaration(p, file_record=False):
                     token = Token(token.text, token.line, True)
                 if not token.string or parent.kind != "text":
                     p.error("VALUE ALL de niveau 88 limité aux PIC X/A")
+                if parent.any_length:
+                    repeated_values[len(values)] = token.text
                 low = Token((token.text * parent.digits)[:parent.digits], token.line, True)
                 values.append((low, low))
                 p.accept(",")
@@ -489,17 +495,25 @@ def declaration(p, file_record=False):
             p.accept(",")
         if not values:
             p.error("VALUE de condition vide")
-        false_value = None
+        false_value = false_repeated = None
+
+        def false_literal():
+            repeated = parent.any_length and not p.t.string and (p.t.key in {
+                "ZERO", "ZEROS", "ZEROES", "SPACE", "SPACES", "QUOTE", "QUOTES", "HIGH-VALUE", "HIGH-VALUES",
+                "LOW-VALUE", "LOW-VALUES"} or p.t.key in getattr(p, "symbolic", {}) and not p.candidates(p.t.key))
+            token = literal(p)
+            return token, token.text if repeated else None
+
         if p.accept("WHEN"):
             p.expect("SET"); p.expect("TO"); p.expect("FALSE")
             p.accept("IS")
-            false_value = literal(p)
+            false_value, false_repeated = false_literal()
         elif p.accept("FALSE"):
             # _false_is: FALSE [IS] literal, without WHEN SET TO.
             p.accept("IS")
-            false_value = literal(p)
+            false_value, false_repeated = false_literal()
         p.expect(".")
-        p.conditions[key] = Condition(key, label, p.last_data, values, false_value)
+        p.conditions[key] = Condition(key, label, p.last_data, values, false_value, repeated_values, false_repeated)
         return key
     if level == 66:
         # renames_entry: the item follows its record and aliases storage
@@ -571,6 +585,7 @@ def declaration(p, file_record=False):
     synchronized = False
     search_keys = []
     external = is_global = False
+    any_length = False
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -585,6 +600,8 @@ def declaration(p, file_record=False):
         if last.name != matches[-1].name and last.redefines != matches[-1].name:
             p.error("REDEFINES indirect non pris en charge")
         redefines = matches[-1].name
+        if matches[-1].any_length:
+            p.error("REDEFINES d'un article ANY LENGTH invalide")
     while not p.at("."):
         if p.accept("PIC") or p.accept("PICTURE"):
             if picture:
@@ -593,6 +610,13 @@ def declaration(p, file_record=False):
             if p.t.string or p.t.key in {".", "<EOF>", "VALUE", "USAGE", "OCCURS", "INDEXED"} | USAGES:
                 p.error("mot PICTURE contigu attendu")
             picture = p.picture_symbols(picture_constants(p, p.take().key))
+        elif p.accept("ANY"):
+            if any_length:
+                p.error("ANY LENGTH dupliqué")
+            if p.accept("NUMERIC"):
+                p.error("ANY NUMERIC non pris en charge: descripteur numérique dynamique")
+            p.expect("LENGTH")
+            any_length = True
         elif p.accept("OCCURS"):
             if table or not p.t.key.isdigit():
                 p.error("nombre OCCURS attendu")
@@ -760,6 +784,20 @@ def declaration(p, file_record=False):
     elif usage == "INDEX" and picture:
         p.error("USAGE INDEX ne prend pas de PICTURE")
     expanded = re.sub(r"([9XZAP])\((\d+)\)", repeat, picture)
+    if any_length:
+        # field.c validate_any_length_item: an elementary 01 in LINKAGE.
+        if not getattr(p, "in_linkage", False) or level != 1:
+            p.error("ANY LENGTH réservé au niveau 01 de LINKAGE SECTION")
+        if table or depending or has_children or initial is not None or blank_zero or external:
+            p.error("définition ANY LENGTH invalide")
+        if is_global:
+            p.error("ANY LENGTH GLOBAL non pris en charge: partage du descripteur dynamique")
+        if usage != "DISPLAY":
+            p.error("ANY LENGTH avec USAGE autre que DISPLAY non pris en charge")
+        if picture and (expanded != "X" or usage != "DISPLAY"):
+            p.error("ANY LENGTH limité à PIC X DISPLAY; formats national et booléen non pris en charge")
+        if not picture:
+            picture = expanded = "X"
     group_value = group_usage = None
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
@@ -874,6 +912,7 @@ def declaration(p, file_record=False):
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.linkage = linkage
+    descriptor.any_length = any_length
     descriptor.explicit_value = explicit_value
     descriptor.occurs_min, descriptor.depending = minimum, depending
     descriptor.search_keys = search_keys
