@@ -96,12 +96,13 @@ Le projet produit contient :
 
 Le code Rust peut ensuite être compilé sur Windows ou sur Linux avec Cargo.
 Les tests de la livraison ont été exécutés sur Windows. La reprise cloud a
-également vérifié sous Linux **448 tests Python** : **447 validés**, un test
+également vérifié sous Linux **460 tests Python** : **459 validés**, un test
 d'inspection du PE Windows ignoré. La mesure du 29 octobre accepte
 **1203/3593 sources** pour émission Rust ; l'exécution comparée des corpus
-applicatifs donne **70/84 identiques**, six divergences et huit délais.
-Les 17 nouveaux tests ANY LENGTH passent ; les validations historiques
-du corpus local sont détaillées dans le journal de validation.
+applicatifs donne **71/84 identiques**, cinq divergences et huit délais.
+Une campagne distincte compare **11/11 scénarios d'entrée sur cinq programmes
+interactifs** ; les validations historiques du corpus local sont détaillées
+dans le journal de validation.
 Les détails sont dans [VALIDATION.md](VALIDATION.md).
 Ces résultats portent sur les entrées testées.
 
@@ -417,6 +418,12 @@ de cobc, reste refusé dans ces quatre fonctions. Les limites générales du
 runtime restent 1024 décimales et 4096 chiffres ; au-delà, arrêt nommé.
 Les fonctions de lecture du registre d'exception ne sont pas modélisées.
 
+INTEGER-OF-DATE, INTEGER-OF-DAY, DATE-OF-INTEGER et DAY-OF-INTEGER
+renvoient zéro pour les arguments hors domaine, comme GnuCOBOL. Les
+résultats s'affichent sur 9, 9, 8 et 7 chiffres. Le modèle d'arguments
+numériques et sa limite C int restent inchangés ; la lecture du registre
+EC-ARGUMENT-FUNCTION reste refusée.
+
 `DISPLAY` d'un résultat numérique montre le champ temporaire de libcob :
 copie de l'argument retenu pour MAX, MIN, MEDIAN (tri stable de glibc) et
 MEAN d'un seul argument, l'argument d'ABS avec sa valeur absolue,
@@ -659,12 +666,16 @@ manquante ou un nom ambigu est refusé pendant la conversion ; un indice ou une
 sous-chaîne hors limites provoque un arrêt nommé avec le code 70.
 
 Les tables `OCCURS min TO max DEPENDING ON compteur` réservent leur capacité
-maximale. La longueur active des groupes et les bornes de sous-script suivent
-le compteur. Celui-ci doit être un entier scalaire non ambigu, déclaré hors du
-groupe variable. La table doit terminer tous ses groupes parents, sans OCCURS
+maximale. La longueur active des groupes et le nombre d'éléments de SORT
+suivent le compteur. Un accès indexé sans `--runtime-checks` peut viser toute
+la capacité déclarée, comme GnuCOBOL sans `-debug`, sans lire le compteur.
+Avec les contrôles, le compteur puis la borne courante sont vérifiés.
+Celui-ci doit être un entier scalaire non ambigu. La table doit terminer
+tous ses groupes parents, sans OCCURS
 englobant, REDEFINES ni enregistrement FD variable. Ses éléments peuvent être
-des groupes avec tableaux fixes imbriqués. Un compteur hors bornes provoque
-un arrêt explicite.
+des groupes avec tableaux fixes imbriqués. Un compteur hors bornes lu pour
+calculer une étendue active provoque un arrêt explicite ; un indice hors de
+la capacité physique reste un arrêt nommé dans les deux profils.
 
 Les index `INDEXED BY` démarrent à 1 et peuvent servir de sous-scripts, de
 variables PERFORM VARYING ou être transférés par MOVE. Le sous-ensemble actuel
@@ -747,6 +758,7 @@ signifie qu'il faut ensuite compiler et vérifier le programme avec ses données
 ```powershell
 python -m unittest discover -v
 python tools/verify.py
+python tools/verify_cases.py --report build/real-input-cases.json
 python -m cobol2rust verify examples/invoice.cob -o build/controle-facture.json
 ```
 
@@ -758,6 +770,13 @@ deux programmes. Le rapport décrit uniquement les entrées testées.
 `tools/verify.py` et le sous-ordre `verify` compilent désormais le **source
 original** côté GnuCOBOL. Cela vérifie indépendamment les formats et les COPY,
 en plus de la traduction Rust. Voir [tools/README.md](tools/README.md).
+
+`tools/verify_cases.py` lit un manifeste de scénarios, par défaut
+`measurements/real-input-cases.json`. Chaque cas décrit le source, le stdin,
+les dossiers d'entrée et le profil d'exécution ; leurs empreintes sont
+contrôlées avant les comparaisons. Le même moteur traite tous les cas et
+conserve les écarts et délais dans le dénominateur. Cette campagne possède
+son propre rapport, séparé de la mesure des corpus à stdin vide.
 
 ## Fichiers texte séquentiels
 

@@ -879,3 +879,28 @@ divergences et huit délais (stdin vide, données du dossier source). Les
 trois exemples zopeneditor présentent désormais un crash natif à la
 fermeture implicite, avec sorties et fichiers identiques ; ils sont donc
 comptés divergents. Les détails sont dans [VALIDATION.md](VALIDATION.md).
+
+## Progression : capacité ODO et entrées réelles — 29 octobre 2026
+
+Une référence indexée ODO utilise la capacité déclarée sans contrôles
+d'exécution ; les contrôles valident la borne courante. Longueur des
+groupes et SORT restent fondés sur le compteur. Cette règle générale rend
+Listing13-6 identique au natif sans dépendre de son nom ni de ses valeurs.
+Les quatre conversions calendaires renvoient zéro hors domaine dans le
+modèle numérique existant, avec leurs largeurs natives à l'affichage.
+
+Acceptation inchangée : **1203/3593**, écart 414, zéro acceptation refusée
+par cobc dans les corpus. Exécution de référence : **71/84 identiques**,
+cinq divergences et huit délais ; livre **53/61**. NIST statique reste
+à **451/458**, sans erreur interne.
+
+Un moteur générique lit les scénarios versionnés de
+`measurements/real-input-cases.json` : **11/11 comparaisons identiques sur
+cinq programmes interactifs**, avec sources, stdin et dossiers épinglés.
+Ce résultat garde son dénominateur ; il ne remplace pas la mesure à stdin
+vide. Les deux rapports hors capacité physique et les trois plantages
+natifs zopeneditor restent des divergences de cette mesure. Les détails
+et limites sont dans [VALIDATION.md](VALIDATION.md).
+Suite Python complète : **459/460 validés**, un PE Windows ignoré, aucun
+échec ni erreur. Les douze nouveaux tests couvrent ODO, calendrier et moteur
+de scénarios ; les deux tests calendaires comparent 119 résultats natifs.

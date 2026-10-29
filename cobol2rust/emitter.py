@@ -123,7 +123,8 @@ class Emitter:
             result += f".active_size(&self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs}, {prefix}, {f.size})"
         if ref.name in self.variable_dimensions:
             f, dim = self.variable_dimensions[ref.name]
-            result += f".active_count({dim}, &self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs})"
+            method = "subscript_count" if ref.indices else "active_count"
+            result += f".{method}({dim}, &self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs})"
         if ref.indices:
             if any(self.kind(index) != "number" for index in ref.indices):
                 raise CobolError("sous-script numérique requis")

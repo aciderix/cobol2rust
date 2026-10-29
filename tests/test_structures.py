@@ -120,13 +120,13 @@ class StructureRuntimeTests(unittest.TestCase):
                     # cob_accept moves the line as text: refused for an index.
                     self.assertIn(b"index", result.stderr)
 
-    def test_variable_count_and_active_subscripts_are_checked(self):
+    def test_variable_count_and_active_subscripts_with_runtime_checks(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source.cob"
             source.write_text(program("accept n accept i display cell-a(i) stop run.",
                                       "01 n pic 9. 01 i pic 9. 01 table-a. 05 cell-a occurs 0 to 3 depending on n pic x value 'A'."), encoding="utf-8")
-            convert(source, root / "rust")
+            convert(source, root / "rust", runtime_checks=True)
             binary = build_rust(root / "rust")
             for stdin, message in [(b"4\n1\n", "count out of bounds"), (b"1\n2\n", "subscript out of bounds"), (b"0\n1\n", "subscript out of bounds")]:
                 with self.subTest(stdin=stdin):

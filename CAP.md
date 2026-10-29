@@ -24,6 +24,10 @@ Règles à chaque étape :
    chiffre avant/après.
 5. Ne jamais présenter un acquis comme universel ; toujours donner le
    dénominateur. Un programme seulement compilé n'est pas « conforme ».
+6. Aucun traitement spécial du convertisseur pour faire passer un programme
+   ou un corpus. Les règles viennent des déclarations, de l'état
+   d'exécution et du profil ; jeux d'entrée et oracles restent dans la
+   validation.
 <!-- cap:fin -->
 
 ## Pourquoi ce document existe
@@ -87,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-29T08:03:26+00:00 (commit `d707c80f33`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-29T13:24:14+00:00 (commit `e7778d99e7`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -100,14 +104,14 @@ Dernière mesure : 2026-10-29T08:03:26+00:00 (commit `d707c80f33`, cobc (GnuCOBO
 | gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 479 | 879 | 400 | 0 |
 | **Total** | | **3593** | **1203** | **1617** | **414** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T08:03:26+00:00, commit `d707c80f33`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T13:24:14+00:00, commit `e7778d99e7`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
 | zopeneditor-sample | 3 | 0 | 3 | 0 | 0 |
 | cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
-| beg-cobol-for-programmers | 61 | 52 | 3 | 0 | 6 |
+| beg-cobol-for-programmers | 61 | 53 | 2 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
@@ -381,3 +385,21 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Des huit sources débloquées, quatre programmes s'exécutent à l'identique
   de cobc, couvrant deux callees ; deux modules syntaxiques sont seulement
   compilés des deux côtés.
+- 2026-10-29 — Fidélité d'exécution : chantier choisi dans les écarts réels
+  et les entrées non couvertes (étape 2 de la feuille de route). Capacité
+  ODO distincte de la longueur logique selon EC-BOUND ; SORT garde son
+  nombre courant et les accès hors capacité restent nommés. Les quatre
+  conversions calendaires renvoient zéro hors domaine, avec les largeurs
+  natives et les limites numériques actuelles. Aucune règle par nom de
+  programme. Acceptation **1203 → 1203/3593**, écart 414, à examiner 0 ;
+  NIST statique **451/458**, zéro erreur interne. Exécution de référence
+  **70 → 71/84 identiques**, livre **52 → 53/61** : Listing13-6 devient
+  identique ; cinq divergences et huit délais restent comptés.
+  Nouveau moteur générique de scénarios déclarés : **11/11 comparaisons
+  identiques sur cinq programmes interactifs**, dans un rapport distinct
+  du protocole à stdin vide. Les sources, stdin, dossiers et oracles sont
+  épinglés ; une modification des entrées invalide la preuve. Deux tests
+  calendaires comparent 119 résultats ; quatre tests ODO et six du moteur
+  de scénarios complètent la couverture ciblée.
+  Suite Python complète : **460 découverts, 459 validés, un PE Windows ignoré**,
+  sans échec ni erreur.

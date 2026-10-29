@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "scope": "Campagne distincte du protocole corpus stdin vide : 11 jeux d’entrée sur cinq programmes interactifs. Les trois boucles infinies restent dans le bilan de référence.",
+  "native_reference": "Oracles mesurés avec GnuCOBOL 3.2.0 ; stdout/stderr dans la représentation textuelle du vérificateur.",
+  "input_directories_sha256": {
+    ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl": "b4d87219f4ecdfdade8e07fa9e15f18a5ebd61d287e09691eaed494279c3ddc3",
+    ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06": "e594f91aeaceb329e138f25962a7e312c41366ded11811061d4498e95b7bb4eb",
+    ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13": "4468ebb03a826ed2ab7fc5546bb8260d29f5f93e8c7db6f5921e3be1fd4f9967",
+    ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15": "12ae76df780999a41ec75676894d742c4fe0bcb9940ea1211add02eb35c69889"
+  },
+  "cases": [
+    {
+      "id": "ADDAMT-one-customer-lowercase-stop",
+      "source": ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl/ADDAMT.cobol",
+      "source_sha256": "4780cd35bb05fb30f4d40427741575c80b2e2a58617ea9349918fafcfd7eb9b9",
+      "stdin": "ACME\n00123\n00456\n00021\nno\n",
+      "stdin_sha256": "b26c46506f71324397c8070167554564fc7668dcd47d0e2639c6fd47159f3663",
+      "data_dir": ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl",
+      "includes": [
+        ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl"
+      ],
+      "call_paths": [
+        ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "ENTER NAME       (15 CHARACTERS)\nEnter amount of first purchase (5 digits)\nEnter amount of second purchase (5 digits)\nEnter amount of third purchase (5 digits)\nACME           Total Amount = 000600\nMORE INPUT DATA (YES/NO)?\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "ADDAMT-two-customers",
+      "source": ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl/ADDAMT.cobol",
+      "source_sha256": "4780cd35bb05fb30f4d40427741575c80b2e2a58617ea9349918fafcfd7eb9b9",
+      "stdin": "Alice\n10000\n20000\n30000\nyes\nBob\n00001\n00002\n00003\nNO\n",
+      "stdin_sha256": "391b95006e046841a91384ea6b025e2e0a4d6cdb01d27e57d20cda785afdfe7b",
+      "data_dir": ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl",
+      "includes": [
+        ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl"
+      ],
+      "call_paths": [
+        ".tools/corpora/cobol-programming-course/COBOL Programming Course #2 - Learning COBOL/Labs/cbl"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "ENTER NAME       (15 CHARACTERS)\nEnter amount of first purchase (5 digits)\nEnter amount of second purchase (5 digits)\nEnter amount of third purchase (5 digits)\nAlice          Total Amount = 060000\nMORE INPUT DATA (YES/NO)?\nENTER NAME       (15 CHARACTERS)\nEnter amount of first purchase (5 digits)\nEnter amount of second purchase (5 digits)\nEnter amount of third purchase (5 digits)\nBob            Total Amount = 000006\nMORE INPUT DATA (YES/NO)?\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing6-6-immediate-stop",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06/Listing6-6.cbl",
+      "source_sha256": "cc8a26b8197f87d2761939f2a0c1a9bac38781fe22a45f5ea452b0fdb70a09aa",
+      "stdin": "s\n",
+      "stdin_sha256": "cbc80bb5c0c0f8944bf73b3a429505ac5cde16644978bc9a1e74c5755f8ca556",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "Enter an arithmetic operator (+ - * /) (s to end) : End of calculations\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing6-6-invalid-then-all-four-operators",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06/Listing6-6.cbl",
+      "source_sha256": "cc8a26b8197f87d2761939f2a0c1a9bac38781fe22a45f5ea452b0fdb70a09aa",
+      "stdin": "x\n+\n2\n3\n-\n2\n9\n*\n7\n8\n/\n3\n2\ns\n",
+      "stdin_sha256": "c1feef9e805e86c5545541820f521650d559a5131f9883b618aa1b2539543c4f",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch06"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "Enter an arithmetic operator (+ - * /) (s to end) : Enter an arithmetic operator (+ - * /) (s to end) : Enter a single digit number - Enter a single digit number - Result is =   5.00\nEnter an arithmetic operator (+ - * /) (s to end) : Enter a single digit number - Enter a single digit number - Result is =  -7.00\nEnter an arithmetic operator (+ - * /) (s to end) : Enter a single digit number - Enter a single digit number - Result is =  56.00\nEnter an arithmetic operator (+ - * /) (s to end) : Enter a single digit number - Enter a single digit number - Result is =   1.50\nEnter an arithmetic operator (+ - * /) (s to end) : End of calculations\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing13-1-first-letter",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13/Listing13-1.cbl",
+      "source_sha256": "eb95ca9d6c1e539c5dead5927acb279b60581aeaf01fecd1506d8152ee146d39",
+      "stdin": "A\n",
+      "stdin_sha256": "06f961b802bc46ee168555f066d28f4f0e9afdf3f88174c1ee6f9de004fc30a0",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "Enter an upper case letter please - A is in position 01\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing13-1-invalid-then-last-letter",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13/Listing13-1.cbl",
+      "source_sha256": "eb95ca9d6c1e539c5dead5927acb279b60581aeaf01fecd1506d8152ee146d39",
+      "stdin": "g\nZ\n",
+      "stdin_sha256": "561a714fcc686f7bf54cc5b0b7a5cd7af2366c78e0c24336ef876e0511a94d7b",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "Enter an upper case letter please - Enter an upper case letter please - Z is in position 26\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing13-2-immediate-stop",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13/Listing13-2.cbl",
+      "source_sha256": "5d2f8bf53b7d8ffc272ad92c6cfe906058d14ac64f7b79c880aa2fc7a3116cec",
+      "stdin": "4\n",
+      "stdin_sha256": "7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": " \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - ",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing13-2-invalid-menu-and-three-searches-and-not-found",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13/Listing13-2.cbl",
+      "source_sha256": "5d2f8bf53b7d8ffc272ad92c6cfe906058d14ac64f7b79c880aa2fc7a3116cec",
+      "stdin": "9\n1\nca\n2\nTexas\n3\nAustin\n1\nXX\n4\n",
+      "stdin_sha256": "201a72e708a1cb2f3b03e44f16fdf74064813ba29e0685d6318c7ccc21ebb378",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch13"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": " \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) -  \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - Enter the two letter State Code - State Name    = California    \nState Capital = Sacramento    \n \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - Enter the State Name - State Code    = TX\nState Capital = Austin        \n \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - Enter the State Capital - State Code = TX\nState Name = Texas         \n \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - Enter the two letter State Code - State code XX does not exist\n \nSearch by StateCode (1), StateName (2), StateCaptial (3), STOP (4) - ",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing15-10-not-due-yet-and-invalid-then-valid-date",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl",
+      "source_sha256": "a09415d5c2e80531595989c74f7c4a591e2c0ab0d555c0238e16bf8e03874285",
+      "stdin": "20261001\n010\n20260230\n20261025\n",
+      "stdin_sha256": "4578bd8b3021632c765e2f6f2a03fbcd06e14ed03008100945c030b5895c4d99",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "eg1 - get the current date\nCurrent Date is 10/25/2026\nCurrent Time is 12:00:00\nThe local time is - GMT +00:00\n \neg2 - find the difference between two dates\nEnter the date of the bill (yyyymmdd) - This bill is not yet due.\n \neg3 - find the date x days from now\nEnter the number of days - The date in 010 days time will be 11/05/2026\n \neg4 - validate the date\nEnter a valid date (yyyymmdd) - 20260230 is not a valid date\n \nEnter a valid date (yyyymmdd) - Thank you! 20261025 is a valid date.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing15-10-overdue",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl",
+      "source_sha256": "a09415d5c2e80531595989c74f7c4a591e2c0ab0d555c0238e16bf8e03874285",
+      "stdin": "20260901\n001\n20261025\n",
+      "stdin_sha256": "0f7c46df632996acd81a92b9cff175376ccb6c5ab31a76eb05de03329f46c42e",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "eg1 - get the current date\nCurrent Date is 10/25/2026\nCurrent Time is 12:00:00\nThe local time is - GMT +00:00\n \neg2 - find the difference between two dates\nEnter the date of the bill (yyyymmdd) - This bill is overdue.\n \neg3 - find the date x days from now\nEnter the number of days - The date in 001 days time will be 10/27/2026\n \neg4 - validate the date\nEnter a valid date (yyyymmdd) - Thank you! 20261025 is a valid date.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "id": "Listing15-10-due-today",
+      "source": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15/Listing15-10.cbl",
+      "source_sha256": "a09415d5c2e80531595989c74f7c4a591e2c0ab0d555c0238e16bf8e03874285",
+      "stdin": "20260925\n000\n20261025\n",
+      "stdin_sha256": "8af2f8a98987793ce8f58c202cc15502b3ea3fff8ac7cadbbf39b012c16a0014",
+      "data_dir": ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15",
+      "includes": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "call_paths": [
+        ".tools/corpora/beg-cobol-for-programmers/978-1-4302-6253-4_Coughlan_Ch15"
+      ],
+      "runtime_env": {
+        "COB_CURRENT_DATE": "2026/10/25 12:00:00.00"
+      },
+      "fmt": "auto",
+      "std": "default",
+      "timeout": 15,
+      "release": true,
+      "expected_native": {
+        "exit": 0,
+        "stdout": "eg1 - get the current date\nCurrent Date is 10/25/2026\nCurrent Time is 12:00:00\nThe local time is - GMT +00:00\n \neg2 - find the difference between two dates\nEnter the date of the bill (yyyymmdd) - This bill is due today.\n \neg3 - find the date x days from now\nEnter the number of days - The date in 000 days time will be 10/26/2026\n \neg4 - validate the date\nEnter a valid date (yyyymmdd) - Thank you! 20261025 is a valid date.\n",
+        "stderr": ""
+      }
+    }
+  ]
+}

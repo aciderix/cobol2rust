@@ -1,5 +1,61 @@
 # Validation — 29 octobre 2026
 
+## Capacité ODO et scénarios d'entrée — 29 octobre 2026
+
+Le travail porte sur la fidélité d'exécution, en réponse aux écarts de la
+mesure précédente. Les règles du convertisseur dépendent des déclarations
+et du profil GnuCOBOL 3.2 ; les jeux d'entrée sont des données de validation.
+
+- Une référence indexée `OCCURS DEPENDING ON` conserve la capacité déclarée
+  sans contrôles ; le contrôleur n'est pas lu. Avec `--runtime-checks`,
+  contrôleur et indice sont vérifiés. Les opérations sur la table entière,
+  notamment SORT, gardent le nombre courant. Les accès au-delà de la
+  capacité restent des arrêts nommés. Quatre nouveaux tests couvrent les
+  deux profils, la longueur active et un SORT partiel.
+- INTEGER-OF-DATE, INTEGER-OF-DAY, DATE-OF-INTEGER et DAY-OF-INTEGER
+  renvoient zéro pour un argument hors domaine dans le modèle numérique
+  existant, comme `cob_intr_*`. Les champs résultats gardent respectivement
+  leurs 9, 9, 8 et 7 chiffres à l'affichage. Deux tests différentiels
+  comparent **119 résultats**, dont limites, années bissextiles, fractions,
+  DISPLAY, COMP-3, COMP-5 et profil contrôlé. Les limites d'arguments C int
+  et le refus des lecteurs EXCEPTION-* sont conservés.
+- `tools/verify_cases.py` traite un manifeste déclaratif, sans sélection
+  selon un nom de source. Sources, stdin et dossiers d'entrée sont épinglés
+  par empreinte, vérifiés avant et pendant la campagne. Six tests couvrent
+  le passage des paramètres, les mutations, les oracles, les écarts et les
+  délais. Les entrées de cinq programmes interactifs sont versionnées dans
+  `measurements/real-input-cases.json` : **11/11 comparaisons identiques**,
+  avec contrôle des sorties natives attendues et de stderr.
+  Rapport : `build/real-input-cases-final-20261029.json`.
+- Mesure finale sur le même convertisseur : **1203/3593 émissions
+  acceptées**, écart à cobc 414, zéro acceptation refusée par cobc ;
+  **71/84 exécutions identiques**, cinq divergentes et huit délais, contre
+  70/84 avant correction. Le seul résultat modifié est Listing13-6,
+  désormais identique (stdout, fichiers et code zéro). CardDemo 8/8,
+  zopeneditor 0/3, cours 10/12 et livre **53/61**.
+- NIST statique : **451/458 émissions**, zéro erreur interne, rapport
+  `build/coverage-nist-odo-calendar-final-20261029.json`. Le runner complet
+  NIST n'est pas relancé ; sa preuve historique distingue 413 exécutions
+  comparées de 14 autres programmes seulement compilés.
+- Suite Python complète : **460 tests découverts, 459 validés, un test PE
+  Windows ignoré**, aucun échec ni erreur (296 secondes). Journal :
+  `/workspace/tooling/odo-calendar-all-tests-final-20261029.log`.
+  Bilan et empreintes : `build/odo-calendar-validation-final-20261029.json`.
+
+Les onze scénarios sont une campagne distincte du protocole « stdin vide ».
+Ils ne retirent aucun délai de son dénominateur. L'audit des huit délais a
+identifié cinq programmes interactifs sans saisie et trois boucles infinies
+des sources (CBL0015 et les exercices Listing12-3/4).
+
+Les deux rapports du chapitre 18 ont un autre problème : leur dernier
+enregistrement n'a pas de LF. Le comportement natif de LINE SEQUENTIAL,
+avec COB_LS_SPLIT par défaut, produit un fragment qui mène à l'indice 70
+dans une table de 50 éléments. `-debug` arrête aussi le natif. Les contrôles
+sur copies de données et avec `COB_LS_SPLIT=0` montrent de plus un accès à
+l'indice 165 après HIGH-VALUES dans Listing18-2. Les sources et données du
+corpus restent inchangées ; les gardes Rust sont conservées. Preuves dans
+`/workspace/tooling/report-bounds-20261029`.
+
 ## Paramètres ANY LENGTH — 29 octobre 2026
 
 - `01 arg [PIC X] ANY LENGTH` transmet la taille réelle de l'argument,

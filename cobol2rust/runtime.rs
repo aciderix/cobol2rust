@@ -280,6 +280,12 @@ impl Value {
     pub fn at(&self, indices: &[Value]) -> Self {
         match self { Self::View(view) => Self::View(view.at(indices)), _ => fail("subscript requires storage view") }
     }
+    pub fn subscript_count(&self, dimension: usize, controller: &Value, minimum: usize, maximum: usize) -> Self {
+        // codegen.c output_data: without EC-BOUND checks, an indexed ODO
+        // reference does not read its controller. Keep the allocated extent.
+        if !crate::storage_runtime::runtime_checks() { return self.clone(); }
+        self.active_count(dimension, controller, minimum, maximum)
+    }
     pub fn active_count(&self, dimension: usize, controller: &Value, minimum: usize, maximum: usize) -> Self {
         let count = controller.occurrences(minimum, maximum);
         match self {
@@ -1256,19 +1262,21 @@ pub mod intrinsic {
     fn leap(y: i64) -> bool { (y % 4 == 0 && y % 100 != 0) || y % 400 == 0 }
     fn days_in_year(y: i64) -> i64 { 365 + leap(y) as i64 }
     fn days_up_to_year(y: i64) -> i64 { (1601..y).map(days_in_year).sum() }
+    // cob_intr_* calendar conversions return zero on EC-ARGUMENT-FUNCTION.
+    // The frontend still refuses the exception-state readers.
     pub fn integer_of_date(v: &Value) -> Value {
         let date = get_int(v);
         let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
-        if !(1601..=9999).contains(&year) || !(1..=12).contains(&month) { argument_error("INTEGER-OF-DATE"); }
+        if !(1601..=9999).contains(&year) || !(1..=12).contains(&month) { return int_of(0); }
         let limit = if leap(year) { LEAP_MONTH[month as usize] } else { NORMAL_MONTH[month as usize] };
-        if !(1..=limit).contains(&day) { argument_error("INTEGER-OF-DATE"); }
+        if !(1..=limit).contains(&day) { return int_of(0); }
         let before = if leap(year) { LEAP_DAYS[month as usize - 1] } else { NORMAL_DAYS[month as usize - 1] };
         int_of((days_up_to_year(year) + before + day) as i128)
     }
     pub fn integer_of_day(v: &Value) -> Value {
         let date = get_int(v);
         let (year, day) = (date / 1000, date % 1000);
-        if !(1601..=9999).contains(&year) || !(1..=days_in_year(year)).contains(&day) { argument_error("INTEGER-OF-DAY"); }
+        if !(1601..=9999).contains(&year) || !(1..=days_in_year(year)).contains(&day) { return int_of(0); }
         int_of((days_up_to_year(year) + day) as i128)
     }
     fn year_of(days: i64) -> (i64, i64) {
@@ -1278,7 +1286,7 @@ pub mod intrinsic {
     }
     pub fn date_of_integer(v: &Value) -> Value {
         let n = get_int(v);
-        if !(1..=3067671).contains(&n) { argument_error("DATE-OF-INTEGER"); }
+        if !(1..=3067671).contains(&n) { return int_of(0); }
         let (year, mut days) = year_of(n);
         let table = if leap(year) { &LEAP_DAYS } else { &NORMAL_DAYS };
         let mut month = 13;
@@ -1287,7 +1295,7 @@ pub mod intrinsic {
     }
     pub fn day_of_integer(v: &Value) -> Value {
         let n = get_int(v);
-        if !(1..=3067671).contains(&n) { argument_error("DAY-OF-INTEGER"); }
+        if !(1..=3067671).contains(&n) { return int_of(0); }
         let (year, days) = year_of(n);
         int_of((year * 1000 + days) as i128)
     }

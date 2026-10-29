@@ -16,12 +16,13 @@ Claude », sans réapplication de leur production déjà remplacée.
 Mesure des corpus réels : **1203/3593 sources acceptées** (cobc 1617,
 écart 414, à examiner 0) ; testsuite GnuCOBOL 479/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 29 octobre : CardDemo 8/8,
-zopeneditor 0/3, cours 10/12, livre 52/61, soit **70/84 identiques**,
-six divergences et huit délais. Les trois exemples zopeneditor ont stdout
+zopeneditor 0/3, cours 10/12, livre 53/61, soit **71/84 identiques**,
+cinq divergences et huit délais. Les trois exemples zopeneditor ont stdout
 et fichiers identiques, mais plantent en natif à la fermeture implicite
-après GOBACK (descripteur ASSIGN périmé, codes -11/16). Les trois autres
-divergences sont les indices hors bornes de Listing13-6 et des deux rapports
-du chapitre 18. Voir VALIDATION.md et `measurements/real-corpora.json`.
+après GOBACK (descripteur ASSIGN périmé, codes -11/16). Les deux autres
+divergences sont les indices hors bornes des deux rapports du chapitre 18.
+Listing13-6 est désormais identique. Voir VALIDATION.md et
+`measurements/real-corpora.json`.
 NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
 exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
 est statique ; elle ne relance pas les 413 programmes.
@@ -39,32 +40,39 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (29 octobre) : paramètres `01 arg [PIC X] ANY LENGTH`.
-Le descripteur garde ses attributs alphanumériques et reçoit la taille de
-l'appelant ; les tailles persistent après OMITTED, CANCEL et INITIAL.
-L'ordre ENTRY reproduit le bogue natif #902 (tailles au rang de l'union,
-adresses selon l'entrée). `View.limit` diffère le contrôle mémoire au
-premier accès, tandis que LENGTH peut lire la taille sans adresse. Les
-motifs ALL/figuratives des niveaux 88 sont dynamiques. INITIALIZE simple
-et la validation INSPECT gardent la taille nominale, comme cobc.
-ANY NUMERIC, ANY LENGTH GLOBAL et les formats autres que PIC X DISPLAY
-restent refusés explicitement. Les paramètres ANY doivent figurer dans le
-USING principal et ne peuvent être retransmis que BY REFERENCE.
-Trois fichiers `tests/test_any_length*.py`, 17 nouveaux tests.
-Mesure NIST : `build/coverage-nist-any-length-20261029.json`.
-Suite Python complète : **448 tests découverts, 447 validés et un PE Windows
-ignoré**, aucun échec ni erreur ; journal
-`/workspace/tooling/any-length-all-tests-20261029.log`.
-Les huit sources débloquées : quatre programmes d'exécution comparés à
-cobc (**4/4 identiques**), deux callees couverts par ces appels, deux
-modules syntaxiques seulement compilés des deux côtés. Rapport :
-`build/any-length-real-source-verification-20261029.json`.
-Bilan des preuves et empreintes : `build/any-length-validation-20261029.json`.
+Dernière étape (29 octobre) : distinguer capacité ODO et longueur logique.
+`Emitter.reference` choisit `Value.subscript_count` pour une référence
+indexée : le profil par défaut ne lit pas le contrôleur et garde la borne
+physique ; le profil contrôlé valide compteur et borne courante. Les
+opérations sur la table entière, notamment SORT, utilisent toujours
+`active_count`, et les groupes `active_size`. Les accès hors capacité
+restent refusés ; aucune disposition mémoire native n'est inventée.
 
-Sources natives locales : `.tools/corpora/gnucobol-3.2/cobc/field.c`
-(`validate_any_length_item`), `typeck.c` (`cb_validate_program_body`) et
-`codegen.c` (`output_entry_function`). L'étape NUMVAL précédente est
-détaillée dans VALIDATION.md (28 octobre).
+La campagne d'entrée a révélé ensuite les dates invalides : les quatre
+conversions INTEGER-OF-DATE/DAY et DATE/DAY-OF-INTEGER renvoient zéro au
+lieu d'un arrêt, comme `cob_intr_*`. Les limites des arguments C int et le
+refus des lecteurs d'exception sont conservés. Les résultats gardent leurs
+largeurs natives à l'affichage. Deux tests comparent 119 résultats, plus
+quatre tests sur les profils ODO et six sur l'outil de scénarios.
+
+`tools/verify_cases.py` est un moteur générique de comparaisons avec
+manifeste déclaratif : `measurements/real-input-cases.json`, sources/stdin/
+dossiers épinglés, profils et oracles natifs. Les onze cas couvrent les
+cinq programmes interactifs parmi les huit délais du protocole à stdin
+vide. Ils gardent leur dénominateur distinct ; trois exercices ont des
+boucles infinies même au natif (CBL0015 et Listing12-3/4).
+Les onze comparaisons réussissent : `build/real-input-cases-final-20261029.json`.
+NIST statique : `build/coverage-nist-odo-calendar-final-20261029.json`.
+Suite complète : **460 tests découverts, 459 validés et un test PE Windows
+ignoré**, sans échec ni erreur. Journal :
+`/workspace/tooling/odo-calendar-all-tests-final-20261029.log`.
+Bilan des preuves : `build/odo-calendar-validation-final-20261029.json`.
+
+Sources natives locales : `.tools/corpora/gnucobol-3.2/cobc/codegen.c`
+(`output_data`, EC-BOUND), `libcob/common.c` (`cob_check_odo`,
+`cob_check_subscript`) et `libcob/intrinsic.c` (`cob_intr_*` calendrier).
+Les étapes NUMVAL et ANY LENGTH précédentes sont détaillées dans
+VALIDATION.md ; ANY NUMERIC et ANY LENGTH GLOBAL restent refusés.
 Environnement Codex : `. /workspace/tooling/activate.sh`. La bibliothèque
 XML du sysroot a été alignée sur le compilateur natif avec libxml2 2.12.10
 construite en local ; provenance `/workspace/tooling/xml212/manifest.json`.
@@ -84,8 +92,18 @@ modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
 COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. ANY NUMERIC et partage de
 descripteurs GLOBAL sont des extensions distinctes à mesurer.
-Exécution : six divergences (trois plantages natifs zopeneditor, trois
+Exécution : cinq divergences (trois plantages natifs zopeneditor, deux
 indices hors bornes dans le livre), six délais du livre et deux du cours.
+
+Autres points issus de l'audit, à traiter par règles générales : la lecture
+des indices suit `output_index`/`output_integer`, pas simplement la valeur
+décimale (DISPLAY court, entier C int32, COMP-3 et PICTURE P ont des chemins
+différents). Matrices natives : `/workspace/tooling/report-bounds-20261029`.
+Un contre-exemple Report Writer valide dans ce dossier
+(`report-indexed-source.cob`) suggère aussi une différence entre le
+précalcul natif des SOURCE indexés et notre callback différé lors d'une
+rupture de contrôle. À comparer en Rust avant de choisir une correction ;
+ne pas relâcher les gardes pour faire passer les deux rapports du livre.
 
 ## Historique
 

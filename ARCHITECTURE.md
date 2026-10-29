@@ -66,8 +66,12 @@ conservées dans FileSpec et validées contre les tailles après layout.
 Les vues REDEFINES réutilisent l'offset de leur zone d'origine. Les tailles
 supérieures à la zone et les dispositions indirectes sont refusées. Les ODO
 terminaux conservent une allocation maximale et des offsets fixes. L'émetteur
-calcule la longueur active des groupes et les bornes actives de la dimension
-variable à chaque référence. Les contrôleurs externes scalaires évitent les
+calcule la longueur active des groupes avec `active_size`, et la dimension
+logique pour les opérations sur la table entière avec `active_count`.
+Les références indexées utilisent `subscript_count` : en profil par défaut,
+le contrôleur n'est pas lu et la capacité déclarée borne l'accès ; en profil
+contrôlé, le compteur et la borne courante sont vérifiés. Ce sont les deux
+chemins de `output_data` dans cobc, selon EC-BOUND. Les contrôleurs scalaires évitent les
 cycles d'adressage ; les tables à stride variable et le glissement sont refusés.
 Un tableau conserve son stride par dimension ; un sous-script
 ne modifie pas le descripteur partagé.
@@ -275,6 +279,13 @@ distincts, copie les mêmes jeux d'entrée, puis compare stdout et les fichiers
 finaux octet pour octet. Les rapports comprennent les empreintes des sources,
 copybooks, entrées, fichiers produits et le profil de stockage. Les cas réussis
 sont une preuve pour les entrées testées, pas pour l'ensemble du langage.
+
+`tools/verify_cases.py` exécute les jeux d'entrée déclarés dans un manifeste
+versionné, via le même vérificateur différentiel. Sources, stdin, données,
+COPY et appelés sont épinglés par empreinte. Chaque cas choisit explicitement
+ses données et son profil ; le moteur ne sélectionne aucun comportement
+selon le nom de programme. Le rapport conserve son propre dénominateur,
+distinct de `real_corpora.py --execute` avec stdin vide.
 
 `audit.py` ne lance aucun programme : il inventorie seulement les sources
 acceptées par le frontend et leurs blocages. `binary.py` inspecte PE/ELF ; il

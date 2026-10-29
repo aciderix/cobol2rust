@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "measured_at": "2026-10-29T08:03:26+00:00",
- "git_head": "d707c80f339e89cdf4922d3f13bb38126ccc1ba1",
- "implementation_sha256": "d4e2b683c22cf05a21c9dff3800c4349ddf95fd42814604d45cb8984d6ad0685",
+ "measured_at": "2026-10-29T13:24:14+00:00",
+ "git_head": "e7778d99e7ba88169d3290aaa917abf6a3b2606e",
+ "implementation_sha256": "9aa5e9d84853674f621deeb97167e9ec1050e90e2342a71e27ec192497581d2f",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
@@ -2146,9 +2146,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-29T08:03:26+00:00",
-  "git_head": "d707c80f339e89cdf4922d3f13bb38126ccc1ba1",
-  "implementation_sha256": "d4e2b683c22cf05a21c9dff3800c4349ddf95fd42814604d45cb8984d6ad0685",
+  "measured_at": "2026-10-29T13:24:14+00:00",
+  "git_head": "e7778d99e7ba88169d3290aaa917abf6a3b2606e",
+  "implementation_sha256": "9aa5e9d84853674f621deeb97167e9ec1050e90e2342a71e27ec192497581d2f",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -2282,8 +2282,8 @@
    },
    "beg-cobol-for-programmers": {
     "programs": 61,
-    "identical": 52,
-    "different": 3,
+    "identical": 53,
+    "different": 2,
     "refused": 0,
     "timeout": 6,
     "error": 0,
@@ -2436,12 +2436,8 @@
       "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch13/Listing13-6.cbl": {
-      "status": "different",
-      "reasons": [
-       "stdout",
-       "sortie 0/70"
-      ],
-      "rust_stderr": "cobol2rust: COBOL line 75: COBOL subscript out of bounds\n"
+      "status": "identical",
+      "exit": 0
      },
      "978-1-4302-6253-4_Coughlan_Ch13/Listing13-8.cbl": {
       "status": "identical",

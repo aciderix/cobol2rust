@@ -1,5 +1,22 @@
 # Outils de validation
 
+## Scénarios d'entrée déclarés
+
+```bash
+python tools/verify_cases.py --cases measurements/real-input-cases.json \
+  --report build/real-input-cases.json
+```
+
+Le manifeste décrit les sources et leurs SHA-256, le stdin UTF-8 et son
+empreinte, les dossiers de données/COPY/appelés et leurs empreintes d'arbre,
+le format, le dialecte et les options d'exécution. `expected_native` peut
+fixer stdout, stderr et le code natif attendus. Chaque scénario passe par
+`cobol2rust.verification.verify` ; aucun comportement n'est choisi selon
+le nom de programme. Toute divergence, erreur ou délai reste dans le bilan.
+Le code de sortie vaut 0 si tous les cas correspondent, 1 pour un écart,
+2 pour un manifeste invalide. Ce rapport est distinct de la référence des
+corpus à stdin vide ; ses résultats ne se substituent pas à cette mesure.
+
 ## Environnement Linux de référence
 
 Dans une session cloud Claude Code, le hook `.claude/hooks/session-start.sh`

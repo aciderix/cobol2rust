@@ -76,7 +76,7 @@ fn unchecked_data() -> bool { UNCHECKED_DATA.load(std::sync::atomic::Ordering::R
 static RUNTIME_CHECKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// cobc -debug: invalid numeric data stops the run instead of being read.
 pub fn set_runtime_checks() { RUNTIME_CHECKS.store(true, std::sync::atomic::Ordering::Relaxed); }
-fn runtime_checks() -> bool { RUNTIME_CHECKS.load(std::sync::atomic::Ordering::Relaxed) }
+pub(crate) fn runtime_checks() -> bool { RUNTIME_CHECKS.load(std::sync::atomic::Ordering::Relaxed) }
 
 fn display_digits(bytes: &[u8], usage: Usage, signed: bool) -> (Vec<u8>, bool) {
     let mut digits = bytes.to_vec();
