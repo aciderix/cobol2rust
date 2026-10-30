@@ -1026,3 +1026,14 @@ compris) et `indexed_read_next`. Acceptation **1240 → 1245/3593**, testsuite
 s'exécutent à l'identique avec des codes zéro. Exécution globale **74/84**,
 inchangée ; NIST statique **451/458**. Fixture `start_previous.cob`
 identique au natif.
+
+## Progression : INITIALIZE VALUE et DEFAULT — 30 octobre 2026
+
+`INITIALIZE … {ALL|catégorie} [TO] VALUE … [THEN] [TO] DEFAULT` suit
+`cb_emit_initialize`, `deduce_initialize_type` et `output_initialize` : VALUE
+de l'article ou du groupe, REPLACING, puis ZERO/SPACE ; un article OCCURS est
+initialisé dans sa première occurrence, recopiée sur les autres
+(`propagate_table`). Acceptation **1245 → 1250/3593**, testsuite **521 →
+526/1135**, écart **372 → 367** ; les cinq sources débloquées s'exécutent à
+l'identique avec des codes zéro. Exécution globale **74/84**, inchangée ;
+NIST statique **451/458**. Fixture `initialize_value.cob` identique au natif.

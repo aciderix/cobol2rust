@@ -1746,6 +1746,27 @@ pub fn display_overflow(item: &Value, source: &Value, rounded: bool) -> bool {
     }
 }
 
+/// propagate_table (codegen.c): the bytes of the first occurrence of an
+/// OCCURS item copied over its other occurrences, the outer subscripts given.
+pub fn propagate_table(table: &Value, outer: &[Value]) {
+    let Value::View(view) = table else { fail("OCCURS item requires storage") };
+    let Some(&(stride, count)) = view.dimensions.last() else { fail("propagate_table of an item without OCCURS") };
+    if outer.len() + 1 != view.dimensions.len() { fail("wrong number of subscripts"); }
+    let mut base = view.offset;
+    for (index, (step, limit)) in outer.iter().zip(&view.dimensions) {
+        let number = index.integer("subscript");
+        if number < 1 || number > *limit as i128 { fail("COBOL subscript out of bounds"); }
+        base += (number as usize - 1) * step;
+    }
+    let first = View { memory: view.memory.clone(), offset: base, size: view.size, kind: Kind::Text, dimensions: vec![],
+                       initializers: vec![], limit: view.limit };
+    let bytes = first.raw();
+    for occurrence in 1..count {
+        let next = View { offset: base + occurrence * stride, ..first.clone() };
+        next.mem_mut()[next.offset..next.offset + next.size].copy_from_slice(&bytes);
+    }
+}
+
 /// COB_FIELD_SIZE: the storage size without a separate sign byte.
 pub fn field_size(item: &Value) -> usize {
     match item {

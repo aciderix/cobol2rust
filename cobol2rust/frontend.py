@@ -4265,11 +4265,20 @@ class Parser:
             if self.accept("WITH"):
                 self.expect("FILLER")
                 with_filler = True
+            categories = {"ALPHABETIC", "ALPHANUMERIC", "NUMERIC", "ALPHANUMERIC-EDITED", "NUMERIC-EDITED"}
+            # _initialize_value: ALL or a category [TO] VALUE; codegen.c does
+            # not check the category (deduce_initialize_type).
+            value = None
+            ahead = [t.key for t in self.tokens[self.i + 1:self.i + 3]]
+            if self.at("ALL") or (not self.t.string and self.t.key in categories | {"NATIONAL", "NATIONAL-EDITED"}
+                                  and (ahead[:1] == ["VALUE"] or ahead == ["TO", "VALUE"])):
+                value = self.take().key
+                self.accept("TO")
+                self.expect("VALUE")
             # REPLACING {category [DATA] BY value} ...: without DEFAULT only
             # the items of these categories change (cb_emit_initialize).
             replacing = []
             if self.accept("REPLACING"):
-                categories = {"ALPHABETIC", "ALPHANUMERIC", "NUMERIC", "ALPHANUMERIC-EDITED", "NUMERIC-EDITED"}
                 while not self.t.string and self.t.key in categories:
                     category = self.take().key
                     self.accept("DATA")
@@ -4279,10 +4288,16 @@ class Parser:
                     replacing.append((category, self.expr(primary=True)))
                 if not replacing:
                     self.error("INITIALIZE REPLACING requiert une catégorie")
-            if self.at("DEFAULT") or self.at("ALL") or self.at("TO") or self.at("THEN"):
-                self.error("INITIALIZE VALUE/DEFAULT non pris en charge")
+            # _initialize_default: [THEN] [TO] DEFAULT; without VALUE and
+            # REPLACING the default applies anyway.
+            default = not value and not replacing
+            if self.at("THEN") or self.at("TO") or self.at("DEFAULT"):
+                self.accept("THEN")
+                self.accept("TO")
+                self.expect("DEFAULT")
+                default = True
             self.accept("END-INITIALIZE")
-            return Stmt("initialize", (targets, with_filler, replacing), line)
+            return Stmt("initialize", (targets, with_filler, replacing, value, default), line)
         if verb == "STOP":
             if self.t.string or re.fullmatch(r"[+-]?\d*\.?\d+", self.t.key) \
                     or self.t.key in {"SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES", "QUOTE", "QUOTES"}:

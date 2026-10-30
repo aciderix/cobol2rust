@@ -17,8 +17,8 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1245/3593 sources acceptées** (cobc 1617,
-écart 372, à examiner 0) ; testsuite GnuCOBOL 521/1135, six corpus d'origine
+Mesure des corpus réels : **1250/3593 sources acceptées** (cobc 1617,
+écart 367, à examiner 0) ; testsuite GnuCOBOL 526/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
 deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
@@ -45,7 +45,19 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : START complet et READ PREVIOUS. Le frontend
+Dernière étape (30 octobre) : INITIALIZE VALUE et DEFAULT.
+`Stmt("initialize")` porte `(cibles, with_filler, replacing, value, default)`.
+`Emitter.initialize_statement` porte `deduce_initialize_type`,
+`output_initialize_one` et `output_initialize_compound` pour les formes avec
+VALUE ou REPLACING + DEFAULT ; `declare_value` factorise la VALUE de
+l'initialisation ; `storage_runtime::propagate_table` recopie la première
+occurrence. Les formes simples et REPLACING seul gardent leurs chemins.
+Acceptation **1245 → 1250/3593**, écart **372 → 367** ; les cinq sources
+débloquées identiques avec codes zéro. NIST statique **451/458**
+(`build/coverage-nist-initialize-20261030.json`). Suite complète : **510
+découverts, 509 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : START complet et READ PREVIOUS. Le frontend
 porte `start_op` (`start_operator`, formes NOT, NOT = refusé), FIRST, LAST et
 `WITH SIZE/LENGTH` (index[2] de la clé INDEXED) ; `Stmt("read")` porte un
 sixième argument `previous`. `file_runtime.rs` : `StartCondition` à sept

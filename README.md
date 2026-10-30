@@ -135,7 +135,7 @@ Ces résultats portent sur les entrées testées.
 | Tri de table | `SORT table [ON ASCENDING/DESCENDING KEY [clés]]… [WITH DUPLICATES]` comme `cob_table_sort` (stable, offset de clé relatif à son parent, clé OCCURS par défaut, ODO actif) |
 | Directives | `>>SOURCE FORMAT`, compilation conditionnelle de pplex (`>>DEFINE nom [AS] littéral|OFF [OVERRIDE]`, `>>IF`/`>>ELIF` avec `[NOT] DEFINED` ou une comparaison, `>>ELSE`, `>>END-IF`, DEFINE standard `CHARSET`, `ENDIAN`, `SIGN`, `PERFORM-TYPE`), `>>DISPLAY` sans effet à l'exécution ; directives MF `$SET` (options sans effet ignorées comme les `#OPTION` de cobc, options actives refusées), `$IF`/`$ELSE`/`$END`, `$DISPLAY` ; `>>TURN`, `>>SET`, `>>DEFINE CONSTANT`/`PARAMETER` refusés |
 | Fonctions | `REPOSITORY` : `FUNCTION ALL INTRINSIC` et `FUNCTION nom... INTRINSIC` (noms appelés sans le mot FUNCTION dans le programme et ses programmes contenus) ; fonctions utilisateur (FUNCTION-ID) refusées |
-| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... REPLACING`, `CONTINUE`, `STOP RUN`, `GOBACK` ; hors `-std=cobol85`, alias de mots réservés de default.conf (`INITIALISE`, `ORGANISATION`, `SYNCHRONISED`, `TIMEOUT`…) |
+| Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... {ALL|catégorie} TO VALUE`, `INITIALIZE ... REPLACING`, `... THEN TO DEFAULT`, `CONTINUE`, `STOP RUN`, `GOBACK` ; hors `-std=cobol85`, alias de mots réservés de default.conf (`INITIALISE`, `ORGANISATION`, `SYNCHRONISED`, `TIMEOUT`…) |
 
 Les champs numériques DISPLAY et COMP-3 vont jusqu'à **38 chiffres** comme
 cobc (`COB_MAX_DIGITS`), les BINARY/COMP/COMP-5 jusqu'à 18 (au-delà, l'erreur
@@ -804,7 +804,15 @@ REDEFINES nommée directement peut être initialisée. `INITIALIZE … REPLACING
 {ALPHABETIC|ALPHANUMERIC|NUMERIC|ALPHANUMERIC-EDITED|NUMERIC-EDITED} [DATA] BY
 valeur` suit `output_initialize_one` : un MOVE vers chaque article élémentaire
 de la catégorie, occurrence par occurrence, les autres articles restant
-inchangés ; VALUE et DEFAULT (COBOL 2002) restent refusés.
+inchangés. `{ALL|catégorie} [TO] VALUE` et `[THEN] [TO] DEFAULT` (COBOL 2002)
+suivent `deduce_initialize_type` et `output_initialize` : un article ayant
+une VALUE la reprend comme à l'initialisation (VALUE de groupe comprise), un
+REPLACING s'applique ensuite, DEFAULT met ZERO ou SPACE, le reste ne change
+pas. La catégorie de `catégorie TO VALUE` n'est pas vérifiée par cobc 3.2 :
+elle vaut ALL. Un article OCCURS est initialisé dans sa première occurrence,
+puis celle-ci est recopiée sur les autres (`propagate_table`), octets non
+initialisés compris. Une sous-chaîne ou une table variable reste refusée
+avec ces phrases.
 
 Un groupe OCCURS DEPENDING peut contenir son propre contrôleur, être un
 enregistrement FD ou le partager avec les autres 01 du FD. Comme le

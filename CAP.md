@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-30T22:44:23+00:00 (commit `3f70d8d89b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-30T23:16:25+00:00 (commit `e1103066ba`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,10 +101,10 @@ Dernière mesure : 2026-10-30T22:44:23+00:00 (commit `3f70d8d89b`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 521 | 879 | 358 | 0 |
-| **Total** | | **3593** | **1245** | **1617** | **372** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 526 | 879 | 353 | 0 |
+| **Total** | | **3593** | **1250** | **1617** | **367** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T22:44:23+00:00, commit `3f70d8d89b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T23:16:25+00:00, commit `e1103066ba`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -522,3 +522,21 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   identiques au natif). Deux cas du test RELATIVE qui attendaient le refus
   de START < et READ PREVIOUS deviennent NOT = et WITH LENGTH. Suite
   complète : **507 découverts, 506 validés, un PE Windows ignoré**.
+- 2026-10-30 — INITIALIZE VALUE et DEFAULT : `{ALL|catégorie} [TO] VALUE`
+  et `[THEN] [TO] DEFAULT` (COBOL 2002, cinq premiers blocages), sur la
+  base du portage d'ALLOCATE INITIALIZED. Port de `cb_emit_initialize`
+  (DEFAULT implicite sans VALUE ni REPLACING), de `deduce_initialize_type`
+  et d'`output_initialize`/`output_initialize_compound` : VALUE de
+  l'article ou du groupe comme à l'initialisation, puis REPLACING, puis
+  ZERO/SPACE ; un article OCCURS initialisé dans sa première occurrence
+  puis recopié (`propagate_table`, octets non initialisés compris) ; la
+  catégorie de `catégorie TO VALUE` n'est pas vérifiée par cobc 3.2 (essai
+  natif). Sous-chaîne et table variable refusées avec ces phrases. Aucun
+  cas spécial par programme. Testsuite **521 → 526/1135**, total
+  **1245 → 1250/3593**, écart **372 → 367**, à examiner zéro. Les cinq
+  sources débloquées (run_extensions-023/038, run_initialize-007/010,
+  run_misc-143) s'exécutent à l'identique avec codes zéro. Exécution
+  globale renouvelée : **74/84**, inchangée. NIST statique **451/458**.
+  Trois nouveaux tests, dont la fixture `initialize_value.cob` (neuf cas)
+  identique au natif. Suite complète : **510 découverts, 509 validés, un
+  PE Windows ignoré**.

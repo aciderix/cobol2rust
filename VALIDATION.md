@@ -1,5 +1,36 @@
 # Validation — 30 octobre 2026
 
+## INITIALIZE VALUE et DEFAULT — 30 octobre 2026
+
+- Grammaire de parser.y : `_initialize_filler`, `_initialize_value` (ALL ou
+  une catégorie, TO facultatif), `_initialize_replacing`,
+  `_initialize_default` ([THEN] [TO] DEFAULT) ; sans VALUE ni REPLACING,
+  DEFAULT s'applique (`cb_emit_initialize`).
+- `deduce_initialize_type` : SIGN SEPARATE élémentaire, REDEFINES subordonné,
+  FILLER élémentaire sans WITH FILLER, VALUE de l'article ou du groupe,
+  groupe uniforme ou composé, REPLACING par catégorie, DEFAULT (édité et
+  packé par MOVE). `output_initialize_one` : VALUE comme à l'initialisation
+  du stockage (`output_initialize_to_value`), REPLACING par MOVE, DEFAULT par
+  MOVE ZERO/SPACE. `output_initialize_compound` : un article OCCURS est
+  initialisé dans sa première occurrence, recopiée octet pour octet sur les
+  autres (`propagate_table`) ; les parties non initialisées de la première
+  occurrence écrasent donc celles des suivantes, comme en natif.
+- La catégorie de `catégorie TO VALUE` n'est pas vérifiée (aucun test de
+  `p->val` contre la catégorie dans codegen.c) : elle vaut ALL, essai natif à
+  l'appui. Une sous-chaîne ou une table variable reste refusée avec ces
+  phrases ; les formes simples et REPLACING sans DEFAULT gardent leur chemin.
+- Preuves : `tests/fixtures/initialize_value.cob` (neuf cas : VALUE, VALUE
+  de groupe, FILLER, REDEFINES, édité, packé, REPLACING THEN DEFAULT,
+  propagation d'occurrence, occurrence indicée) identique au natif ;
+  `tests/test_initialize_value.py` : trois tests. Suite complète : **510
+  découverts, 509 validés, un PE Windows ignoré**.
+
+Mesure : **1245 → 1250/3593**, testsuite **521 → 526/1135**, écart **372 →
+367**, aucune acceptation refusée par cobc. Les cinq sources débloquées
+s'exécutent à l'identique avec codes zéro. Exécution globale renouvelée :
+**74/84 identiques**, inchangée. NIST statique : **451/458**
+(`build/coverage-nist-initialize-20261030.json`).
+
 ## START complet et READ PREVIOUS — 30 octobre 2026
 
 - START : `start_op` de parser.y (`NOT >` = LE, `NOT <` = GE, `NOT >=` = LT,

@@ -208,6 +208,96 @@ class Emitter:
             return None
         return "ALPHABETIC" if self.is_alphabetic(f) else "ALPHANUMERIC"
 
+    def initialize_statement(self, ref, with_filler, value, replacing, default):
+        """output_initialize of INITIALIZE with a VALUE phrase, or REPLACING
+        with DEFAULT: deduce_initialize_type item by item; an OCCURS item is
+        initialized in its first occurrence, then copied over the others
+        (propagate_table)."""
+        fields = self.program.fields
+        root = fields[ref.name]
+        if ref.start is not None or ref.name in self.variable_groups or ref.name in self.variable_dimensions:
+            raise CobolError("INITIALIZE VALUE/DEFAULT d'une sous-chaîne ou d'une table variable non pris en charge")
+        ONE, DEFAULT, COMPOUND, NONE = "one", "default", "compound", "none"
+
+        def deduce(f, top):
+            if f.sign_separate and f.picture:
+                return ONE
+            if f.redefines and not top:
+                return NONE
+            if f.filler and not with_filler and f.picture:
+                return NONE
+            if value and (f.explicit_value or f.group_value is not None):
+                return ONE
+            if not f.picture:
+                kinds = [deduce(fields[child], False) for child in f.children]
+                if not kinds or kinds[0] == ONE or any(kind != kinds[0] for kind in kinds):
+                    return COMPOUND
+                return kinds[0]
+            if self.category(f) in replacing:
+                return ONE
+            if default:
+                # MOVE ZERO or SPACE (output_initialize_to_default).
+                packed = f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-6"}
+                return ONE if packed or f.kind == "edited" or f.alnum_edit else DEFAULT
+            return NONE
+
+        def target(f, indices):
+            return DataRef(f.name, tuple(indices))
+
+        def one(f, indices):
+            if value and (f.explicit_value or f.group_value is not None):
+                # output_initialize_to_value: as the storage initialization.
+                self.declare_value(self.reference(target(f, indices)), f)
+            elif f.picture and self.category(f) in replacing:
+                self.assignment(replacing[self.category(f)], [target(f, indices)], False, move=True)
+            elif default:
+                self.write(f"{self.reference(target(f, indices))}.initialize_with_filler(true);")
+
+        def compound(group, indices):
+            for child in group.children:
+                f = fields[child]
+                kind = deduce(f, False)
+                if kind == NONE:
+                    continue
+                inner = list(indices) + ([Expr("number", ("1",))] if f.table else [])
+                if kind == ONE:
+                    one(f, inner)
+                elif kind == DEFAULT:
+                    self.write(f"{self.reference(target(f, inner))}.initialize_with_filler(true);")
+                else:
+                    compound(f, inner)
+                if f.table and f.occurs > 1:
+                    # propagate_table: the first occurrence over the others.
+                    outer = ", ".join(self.expression(i) for i in indices)
+                    self.write(f"storage_runtime::propagate_table(&self.{self.names[f.name]}, &[{outer}]);")
+
+        kind = deduce(root, True)
+        if kind == ONE:
+            one(root, ref.indices)
+        elif kind == DEFAULT:
+            self.write(f"{self.reference(ref)}.initialize_with_filler({str(with_filler).lower()});")
+        elif kind == COMPOUND:
+            compound(root, ref.indices)
+
+    def declare_value(self, target, field):
+        """The VALUE of an item, or of a group, stored as at initialization."""
+        if field.group_value is not None:
+            text, fill = field.group_value
+            if isinstance(fill, tuple):
+                text = (fill[1] * field.size)[:field.size]
+            elif fill in {"0", '"', "\xff", "\x00"}:
+                text = fill * field.size
+            self.write(f"{target}.declare(&{text_value(text)});")
+            return
+        constructor = "text" if field.initial.string else "number"
+        initial = field.initial.text if field.initial.string else numeric_text(field.initial.text)
+        value = text_value(initial) if constructor == "text" else f"Value::{constructor}({quoted(initial)})"
+        self.write(f"{target}.declare(&{value});")
+        if (constructor == "number" and initial.startswith("-") and not initial.replace(".", "").strip("-0")
+                and field.kind == "number" and field.signed and field.usage == "DISPLAY"):
+            # cob_move of the literal keeps its sign: a negative zero.
+            self.write(f"{target}.negative_zero();")
+
     def initialize_replacing(self, ref, with_filler, replacing):
         """output_initialize_one with REPLACING and no DEFAULT: a MOVE of the
         value to each elementary item of a listed category, occurrence by
@@ -1464,6 +1554,9 @@ class Emitter:
                 self.assignment(Expr("clock", (kind,)), [ref], False, move=True)
         elif op == "accept_omitted":
             self.write("runtime::accept_omitted();")
+        elif op == "initialize" and (a[3] or (a[2] and a[4])):
+            for ref in a[0]:
+                self.initialize_statement(ref, a[1], a[3] is not None, dict(a[2]), a[4])
         elif op == "initialize" and a[2]:
             for ref in a[0]:
                 self.initialize_replacing(ref, a[1], a[2])

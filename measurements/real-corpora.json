@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-30T22:44:23+00:00",
- "git_head": "3f70d8d89b04b5feb73c701228c745bff928bbde",
- "implementation_sha256": "0940017e196ae2b6e274c43431ae06f24682fa0a77616ad3223b91af89e01e73",
+ "measured_at": "2026-10-30T23:16:25+00:00",
+ "git_head": "e1103066ba5d7079e2809fe3b1a024734c325824",
+ "implementation_sha256": "0a35a9cf8cbf2f231267b1ba76dd51b556d6421ffb987d4fcd7b849c0bdd8186",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1245,
+  "accepted": 1250,
   "cobc_accepted": 1617,
-  "gap": 372,
+  "gap": 367,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 521,
+   "accepted": 526,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 358,
+   "gap": 353,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -529,10 +529,6 @@
      "VALUE en LINKAGE SECTION non pris en charge"
     ],
     [
-     "run_extensions-023/prog.cob",
-     "INITIALIZE VALUE/DEFAULT non pris en charge"
-    ],
-    [
      "run_extensions-025/prog.cob",
      "CALL USING requiert au moins un argument"
     ],
@@ -555,10 +551,6 @@
     [
      "run_extensions-037/caller.cob",
      "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE"
-    ],
-    [
-     "run_extensions-038/init.cob",
-     "INITIALIZE VALUE/DEFAULT non pris en charge"
     ],
     [
      "run_extensions-042/prog.cob",
@@ -1085,14 +1077,6 @@
      "paragraphe CONFIGURATION non pris en charge"
     ],
     [
-     "run_initialize-007/prog.cob",
-     "INITIALIZE VALUE/DEFAULT non pris en charge"
-    ],
-    [
-     "run_initialize-010/prog.cob",
-     "INITIALIZE VALUE/DEFAULT non pris en charge"
-    ],
-    [
      "run_initialize-013/prog.cob",
      "zone de données trop grande: T01-ALL.T01-REC"
     ],
@@ -1503,10 +1487,6 @@
     [
      "run_misc-142/prog.cob",
      "REPOSITORY PROGRAM non pris en charge"
-    ],
-    [
-     "run_misc-143/prog.cob",
-     "INITIALIZE VALUE/DEFAULT non pris en charge"
     ],
     [
      "run_misc-146/prog.cob",
@@ -1978,9 +1958,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-30T22:44:23+00:00",
-  "git_head": "3f70d8d89b04b5feb73c701228c745bff928bbde",
-  "implementation_sha256": "0940017e196ae2b6e274c43431ae06f24682fa0a77616ad3223b91af89e01e73",
+  "measured_at": "2026-10-30T23:16:25+00:00",
+  "git_head": "e1103066ba5d7079e2809fe3b1a024734c325824",
+  "implementation_sha256": "0a35a9cf8cbf2f231267b1ba76dd51b556d6421ffb987d4fcd7b849c0bdd8186",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
