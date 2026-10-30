@@ -7,8 +7,12 @@
 
 ## État courant — 30 octobre 2026 (à tenir à jour à chaque commit)
 
-Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4),
-sans branche distante plus avancée au contrôle du 28 octobre. Reprise locale
+Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4).
+Contrôle du 30 octobre sur `7ca8420` : aucune branche distante en avance sur
+`main` (`claude/upbeat-fermi-2hplbi` repart de `main`, `claude/hopeful-allen-q389mo`
+y est contenue) ; suite Python **491 découverts, 490 validés, un PE Windows
+ignoré** (environ 8 min), NIST statique **451/458**, mesure des corpus réels à
+jour (`tools/real_corpora.py --check`). Reprise locale
 sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.

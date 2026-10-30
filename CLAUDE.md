@@ -30,7 +30,7 @@ signale une mesure périmée, la refaire avant de conclure quoi que ce soit.
 ## Commandes
 
 ```bash
-python3 -m unittest discover -q                 # suite complète (~5 min avec cobc)
+python3 -m unittest discover -q                 # suite complète (~8 min avec cobc)
 python3 tools/real_corpora.py --cobc --record     # boussole : corpus réels face à cobc
 python3 tools/real_corpora.py --check             # la mesure enregistrée est-elle à jour ?
 python3 tools/coverage.py .tools/nist-ccvs85/extracted --format fixed --include-subprograms \
@@ -40,6 +40,10 @@ python3 tools/coverage.py .tools/nist-ccvs85/extracted --format fixed --include-
 
 Vérification NIST complète (environ 1 h 15) : dernière section de
 VALIDATION.md, avec `CARGO_INCREMENTAL=0` (sinon plus de 20 Go de cache).
+Lancer les commandes longues en tâche de fond de l'outil, jamais avec `&` :
+un processus détaché ignore SIGINT et `test_runtime_registers` échoue.
+Avant de reprendre, `git fetch` et repartir de `origin/main` si la branche de
+travail y est déjà fusionnée (d'autres sessions poussent sur `main`).
 Les corpus réels se récupèrent par `python3 tools/fetch_corpora.py --output
 .tools/corpora --without-gnucobol` ; GnuCOBOL par `tools/install_gnucobol.sh`.
 
