@@ -244,7 +244,9 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   compris) est l'erreur libcob `attempt to CANCEL active program` (`P_cancel`,
   code 1) ; un CALL d'un programme actif est `recursive CALL from 'A' to 'B'
   which is NOT RECURSIVE` (`COB_FERROR_RECURSIVE`, code 1 ; RECURSIVE n'est
-  pas pris en charge) ;
+  pas pris en charge), sauf sous ON EXCEPTION : `cob_module_global_enter`
+  lève alors EC-PROGRAM-RECURSIVE-CALL, l'appel rend -1 dans RETURN-CODE et
+  ON EXCEPTION s'exécute ;
 - un littéral alphanumérique ou une figurative en argument (`output_call`)
   : BY CONTENT, une copie neuve de ses octets (une figurative vaut un
   caractère) ; BY REFERENCE, la constante du programme elle-même, en lecture
@@ -497,13 +499,13 @@ un littéral numérique `-12.30` fournit les octets `-1230`. Le stockage des
 résultats numériques calculés, qui dépend notamment du pliage de constantes
 de cobc, reste refusé dans ces quatre fonctions. Les limites générales du
 runtime restent 1024 décimales et 4096 chiffres ; au-delà, arrêt nommé.
-Les fonctions de lecture du registre d'exception ne sont pas modélisées.
+Le registre d'exception est décrit plus bas (« Dernière exception »).
 
 INTEGER-OF-DATE, INTEGER-OF-DAY, DATE-OF-INTEGER et DAY-OF-INTEGER
 renvoient zéro pour les arguments hors domaine, comme GnuCOBOL. Les
 résultats s'affichent sur 9, 9, 8 et 7 chiffres. Le modèle d'arguments
-numériques et sa limite C int restent inchangés ; la lecture du registre
-EC-ARGUMENT-FUNCTION reste refusée.
+numériques et sa limite C int restent inchangés ; leur exception n'est pas
+portée et rend la dernière exception inconnue.
 
 `DISPLAY` d'un résultat numérique montre le champ temporaire de libcob :
 copie de l'argument retenu pour MAX, MIN, MEDIAN (tri stable de glibc) et
@@ -515,8 +517,36 @@ le DISPLAY de RANDOM (double imprimé par `%G`), d'un argument PICTURE P
 (échelle négative) et d'une expression en argument de MAX/MIN/MEDIAN. Un
 littéral alphanumérique vide vaut une espace, comme le scanner de cobc, et
 est refusé sous `-std=cobol85`. Les fonctions LOCALE-*,
-MODULE-*, EXCEPTION-*, BIT-OF, COMBINED-DATETIME,
+MODULE-*, EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF, COMBINED-DATETIME,
 SECONDS-PAST-MIDNIGHT et les fonctions utilisateur restent refusées.
+
+### Dernière exception : FUNCTION EXCEPTION-* et SET LAST EXCEPTION
+
+`FUNCTION EXCEPTION-STATUS`, `EXCEPTION-LOCATION`, `EXCEPTION-STATEMENT`,
+`EXCEPTION-FILE` et `SET LAST EXCEPTION TO OFF` lisent et remettent à zéro la
+dernière exception de libcob (`cob_set_exception`), commune à toute l'unité
+d'exécution : seule `SET LAST EXCEPTION TO OFF` l'efface. Sans `-debug`,
+l'emplacement est « programme; ; 0 » et l'instruction inconnue (espaces),
+comme cobc sans `-fsource-location`. Exceptions portées : statuts d'E/S de
+`save_status` (classe du statut, EC-I-O-EOP, fichier de `cob_error_file`
+même sans exception), division par zéro, EC-SIZE-OVERFLOW des stockages
+arithmétiques dans un receveur DISPLAY ou édité (avec ou sans SIZE ERROR,
+compteurs TALLYING et pas de VARYING compris), EC-SIZE-OVERFLOW de tout
+receveur sous SIZE ERROR, EC-SIZE-TRUNCATION de ROUNDED MODE PROHIBITED,
+STRING/UNSTRING (EC-OVERFLOW-*), INSPECT (EC-RANGE-INSPECT-SIZE),
+ALLOCATE/FREE (EC-STORAGE-IMP, EC-STORAGE-NOT-ALLOC), ACCEPT en fin
+d'entrée (EC-IMP-ACCEPT), CALL introuvable (EC-PROGRAM-NOT-FOUND) et appel
+récursif sous ON EXCEPTION (EC-PROGRAM-RECURSIVE-CALL, RETURN-CODE -1, au
+lieu de l'arrêt fatal), MOD/REM par zéro et fonctions ISO 8601
+(EC-ARGUMENT-FUNCTION). Les fonctions sans exception (TRIM, UPPER-CASE…)
+n'y touchent pas. Toute autre source possible rend la dernière exception
+inconnue : fonction intrinsèque non auditée, exponentiation, stockage
+arithmétique dans un receveur binaire ou packé, SORT/MERGE, Report Writer,
+CANCEL ou sortie d'un programme INITIAL avec des fichiers ouverts, USE
+GLOBAL… La lire alors est un arrêt nommé. Ce suivi n'est généré que si une
+fonction EXCEPTION-* figure dans l'unité. Sous `--runtime-checks` (`-debug`),
+EXCEPTION-LOCATION et EXCEPTION-STATEMENT sont refusées : cobc y suit
+section, paragraphe, ligne et sous-clauses (WHEN, AT END…).
 
 ## SPECIAL-NAMES, ACCEPT et DISPLAY UPON
 

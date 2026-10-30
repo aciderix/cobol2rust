@@ -512,6 +512,9 @@ impl CobolFile {
 
     /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !matches!(self.state, State::Closed) }
 
     pub fn open(&mut self, mode: &str) -> u8 {
         if self.linage.is_some() && !matches!(mode, "OUTPUT" | "EXTEND") {
@@ -942,8 +945,9 @@ pub fn release_shared() {
 /// Returns libcob's END-OF-PAGE exception: a pending EOP is reported by
 /// the next 0x status, whatever the file.
 pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool,
-                   name: &dyn Fn() -> Vec<u8>) -> bool {
+                   select: &str, name: &dyn Fn() -> Vec<u8>) -> bool {
     let eop = status < 10 && EOP.with(|eop| eop.replace(false));
+    crate::runtime::exception::save_status(status, eop, select);
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
@@ -1026,6 +1030,9 @@ impl RelativeFile {
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !self.open_mode.is_empty() || self.locked }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
     pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
@@ -1572,6 +1579,9 @@ impl IndexedFile {
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !self.open_mode.is_empty() || self.locked }
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.

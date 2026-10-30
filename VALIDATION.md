@@ -1,5 +1,58 @@
 # Validation — 30 octobre 2026
 
+## Dernière exception — 30 octobre 2026
+
+FUNCTION EXCEPTION-STATUS (9 premiers blocages) et ses voisines EXCEPTION-
+LOCATION/STATEMENT/FILE (6) forment la troisième ligne de la mesure, après
+SCREEN (backend terminal) et les verrous SELECT (essais entre processus).
+Aucune règle ne dépend du nom d'un programme.
+
+- Registre : `cob_set_exception`, `cob_get_last_exception_name` (entrée
+  exacte, puis inclusion depuis la fin de la table) et les quatre fonctions
+  de intrinsic.c ; seule SET LAST EXCEPTION TO OFF (`cob_set_exception (0)`)
+  l'efface. Sans `-fsource-location` (profil par défaut), l'emplacement est
+  « programme; ; 0 » et l'instruction des espaces. Le programme courant
+  (COB_MODULE_PTR) suit les CALL.
+- Sources portées : `save_status` (classe du statut, EC-I-O-EOP ;
+  `cob_error_file` change à chaque opération, même réussie), `cob_decimal_div`,
+  `cob_decimal_get_display` pour un receveur DISPLAY ou le temporaire DISPLAY
+  d'un édité (sans SIZE ERROR, compteurs TALLYING de `cob_add_int`, pas de
+  VARYING), tout receveur sous SIZE ERROR (KEEP_ON_OVERFLOW), PROHIBITED
+  (EC-SIZE-TRUNCATION), strings.c, `cob_allocate`/`cob_free_alloc`,
+  `cob_accept` en fin d'entrée, `cob_mod_or_rem` (zéro au lieu de l'arrêt
+  nommé précédent), les sept fonctions ISO 8601 (`invalid_args`), le CALL
+  introuvable et `cob_module_global_enter` : sous ON EXCEPTION, un appel
+  récursif rend -1 avec EC-PROGRAM-RECURSIVE-CALL, sans NOT ON EXCEPTION.
+- Inconnu, puis arrêt nommé à la lecture : fonctions intrinsèques non
+  auditées (une fermeture des appels d'intrinsic.c isole 44 fonctions sans
+  exception), exponentiation (`cob_decimal_pow`), stockage dans un receveur
+  binaire, packé ou index (chemins optimisés de `cb_build_optim_add`),
+  division par zéro dans une expression contenant une fonction (remise à
+  zéro de `cob_exception_code`), SORT/MERGE, RELEASE, Report Writer, CANCEL
+  ou fin d'un programme INITIAL avec des fichiers ouverts (`cob_close`),
+  USE GLOBAL, SET UP/DOWN et toute instruction non auditée.
+- Refus : EXCEPTION-LOCATION et EXCEPTION-STATEMENT sous `--runtime-checks`
+  (cobc -debug suit section, paragraphe, ligne et sous-clauses).
+- Preuves : `tests/fixtures/exceptions.cob` (E/S, cob_error_file, division,
+  dépassements DISPLAY et édité, PROHIBITED, SIZE ERROR, MOD, FORMATTED-DATE,
+  STRING, UNSTRING, INSPECT, FREE, ALLOCATE, CALL introuvable) et
+  `exception_recursive_call.cob` (trois programmes, code de sortie 255)
+  identiques au natif ; `tests/test_exceptions.py` : six tests dont les
+  refus et trois arrêts nommés. Suite complète : **504 découverts, 503
+  validés, un PE Windows ignoré**.
+
+Mesure : **1225 → 1240/3593 émissions acceptées**, testsuite **501 →
+516/1135**, écart **392 → 377**, aucune acceptation refusée par cobc. Les
+quinze sources débloquées sont de la testsuite : douze identiques avec codes
+zéro (run_functions-024/025 ×2/026/027/036/062/086/119, run_misc-132/170/171) ;
+run_misc-040 caller et callee identiques, terminés par le STOP RUN RETURNING
+1 de leur gestionnaire (codes 1/1, non comptés comme réussites) ; callee2
+exécuté seul s'arrête des deux côtés sur la récursion fatale, mais la pile
+« Last statement of … Started by <chemin> » de libcob n'est pas reproduite.
+Exécution globale renouvelée : **74/84 identiques**, deux divergences et huit
+délais, inchangés. NIST statique : **451/458**, zéro erreur interne
+(`build/coverage-nist-exceptions-20261030.json`).
+
 ## Modèle d'adresses — 30 octobre 2026
 
 USAGE POINTER (14 premiers blocages de la mesure précédente avec SET ADDRESS,

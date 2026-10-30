@@ -1516,6 +1516,8 @@ class Parser:
         # POINTER, BASED or ADDRESS OF: the run unit registers its records.
         program.uses_addresses = getattr(self, "uses_addresses", False) or any(
             f.kind == "pointer" or f.based for f in self.fields.values())
+        # FUNCTION EXCEPTION-*: the run unit follows the last exception.
+        program.uses_exceptions = getattr(self, "uses_exceptions", False)
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
         program.runtime_checks = RUNTIME_CHECKS
@@ -3155,6 +3157,8 @@ class Parser:
         "FORMATTED-DATE": (2, "text"), "FORMATTED-TIME": (-2, "text"), "FORMATTED-DATETIME": (-3, "text"),
         "FORMATTED-CURRENT-DATE": (1, "text"), "TEST-FORMATTED-DATETIME": (2, "number"),
         "INTEGER-OF-FORMATTED-DATE": (2, "number"), "SECONDS-FROM-FORMATTED-TIME": (2, "number"),
+        "EXCEPTION-STATUS": (0, "text"), "EXCEPTION-LOCATION": (0, "text"), "EXCEPTION-STATEMENT": (0, "text"),
+        "EXCEPTION-FILE": (0, "text"),
     }
     MAX_ARGUMENTS = {"NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
                      "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
@@ -3185,6 +3189,12 @@ class Parser:
         name = self.take()
         if name.string or name.key not in self.FUNCTIONS:
             self.error(f"FUNCTION {name.text} non prise en charge")
+        if name.key.startswith("EXCEPTION-"):
+            # The last exception of libcob: the run unit follows it.
+            if RUNTIME_CHECKS and name.key in {"EXCEPTION-LOCATION", "EXCEPTION-STATEMENT"}:
+                self.error(f"FUNCTION {name.key} avec les contrôles d'exécution (-debug, -fsource-location) "
+                           "non prise en charge")
+            self.uses_exceptions = True
         count, _ = self.FUNCTIONS[name.key]
         args = []
         system_offset = False
@@ -3566,6 +3576,13 @@ class Parser:
     def statement_body(self):
         line = self.t.line
         verb = self.take().key
+        if verb == "SET" and self.at("LAST") and self.tokens[self.i + 1].key == "EXCEPTION":
+            # SET LAST EXCEPTION TO OFF: cob_set_exception (0).
+            self.take()
+            self.take()
+            self.expect("TO")
+            self.expect("OFF")
+            return Stmt("exception_off", (), line)
         if verb == "SET" and (self.at("ADDRESS") or self.pointer_ahead()):
             return self.set_address(line)
         if verb == "SET":

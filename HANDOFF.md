@@ -17,8 +17,8 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1225/3593 sources acceptées** (cobc 1617,
-écart 392, à examiner 0) ; testsuite GnuCOBOL 501/1135, six corpus d'origine
+Mesure des corpus réels : **1240/3593 sources acceptées** (cobc 1617,
+écart 377, à examiner 0) ; testsuite GnuCOBOL 516/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
 deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
@@ -45,7 +45,32 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : modèle d'adresses (USAGE POINTER, BASED,
+Dernière étape (30 octobre) : dernière exception (FUNCTION EXCEPTION-STATUS/
+LOCATION/STATEMENT/FILE, SET LAST EXCEPTION TO OFF). `runtime.rs`, module
+`exception` : table `exception.def`, `set`, `off`, `module`, `save_status`,
+`unknown`/`unknown_file` et les quatre lectures, arrêt nommé si l'état est
+inconnu. Sources portées dans le runtime (division, PROHIBITED, MOD/REM,
+ISO 8601, ACCEPT, strings.c, ALLOCATE/FREE, `file_status`) et dans
+l'émetteur : `store_exception` (DISPLAY/édité), `checked_assign` sous SIZE
+ERROR, `tally_store`, `nan_exception`, liste blanche `EXCEPTION_STATEMENTS`
+et `EXCEPTION_FUNCTIONS` (fermeture des appels d'intrinsic.c) ; le reste
+écrit `runtime::exception::unknown` au point exact d'évaluation. Suivi
+généré seulement si l'unité lit la dernière exception (`uses_exceptions`).
+`RunUnit` porte `stmt_exception`/`call_exception` : un CALL récursif sous ON
+EXCEPTION rend -1 avec EC-PROGRAM-RECURSIVE-CALL (`cob_module_global_enter`).
+`open_files()` décide si CANCEL ou la fin d'un INITIAL ferme des fichiers.
+Attention : un NOT ON EXCEPTION écrit après le DISPLAY d'un ON EXCEPTION
+appartient à ce DISPLAY (refus nommé existant) ; une sonde native ainsi
+écrite fait croire que cobc enchaîne les deux branches du CALL, à tort.
+Acceptation **1225 → 1240/3593**, écart **392 → 377** ; douze des quinze
+sources débloquées identiques avec codes zéro, deux identiques en code 1
+voulu, callee2 de run_misc-040 seul ne diffère que par la pile de l'erreur
+fatale. NIST statique **451/458**
+(`build/coverage-nist-exceptions-20261030.json`). Sous `-debug`,
+EXCEPTION-LOCATION/STATEMENT restent refusées. Suite complète : **504
+découverts, 503 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : modèle d'adresses (USAGE POINTER, BASED,
 ADDRESS OF, SET ADDRESS/UP/DOWN, ALLOCATE, FREE). `storage_runtime.rs`
 (section « Addresses ») remplace une adresse native par une région et un
 décalage dans les 8 octets du POINTER : `records` enregistre chaque 01/77
@@ -70,13 +95,7 @@ d'un pointeur, PROGRAM-POINTER, CONTENT-OF, VALUE en LINKAGE hors BASED,
 OCCURS UNBOUNDED, TYPEDEF, EXTERNAL AS, RECURSIVE. Suite complète :
 **498 découverts, 497 validés, un PE Windows ignoré**.
 
-Analyse préparée pour la suite : FUNCTION EXCEPTION-STATUS/LOCATION et
-SET LAST EXCEPTION (une douzaine de sources de la testsuite) exigent de
-porter `cob_set_exception` (environ 165 appels dans libcob : common.c,
-intrinsic.c, numeric.c, fileio.c…). Modèle conseillé : un registre de la
-dernière exception, et un état « inconnu » posé par toute opération dont les
-exceptions ne sont pas portées, la lecture dans cet état étant un arrêt
-nommé. Les douze clauses SELECT LOCK MODE/SHARING sont des tests de verrous
+Les douze clauses SELECT LOCK MODE/SHARING restent des tests de verrous
 entre processus (`fcntl`, verrous Berkeley DB) avec CALL "SYSTEM".
 
 Étape précédente (30 octobre) : routines système d'octets. `system_calls.py`
@@ -201,10 +220,10 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
 SCREEN SECTION (36 des 37 « niveau de donnée attendu »), clauses SELECT de
-verrouillage (12), DISPLAY ... LINE/COLUMN
+verrouillage (12, essais entre processus), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
-EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
-modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
+les sources d'exception encore inconnues (fonctions non auditées,
+receveurs binaires/packés, -debug), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
 (7), fonctions LOCALE-*
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
 COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. ANY NUMERIC et partage de

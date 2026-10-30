@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-30T16:52:47+00:00",
- "git_head": "527014ed086bb8ea7bc3e69da7204d6f23ab47af",
- "implementation_sha256": "98600f508764abf9a429c4fd38858154ba33ba14c7c8ff2d0f1942767560e36e",
+ "measured_at": "2026-10-30T21:37:42+00:00",
+ "git_head": "b84d00da7ff66597fd306d0847e1b33ddda535c9",
+ "implementation_sha256": "ff146a5617f96a9cc067784a17b8ab7b547b05246072cdabbfb4e6941ad43a72",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1225,
+  "accepted": 1240,
   "cobc_accepted": 1617,
-  "gap": 392,
+  "gap": 377,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 501,
+   "accepted": 516,
    "internal_errors": 0,
    "blockers": [
     [
@@ -471,10 +471,6 @@
      10
     ],
     [
-     "FUNCTION EXCEPTION-STATUS non prise en charge",
-     9
-    ],
-    [
      "USAGE/clause non pris en charge: DEPENDING",
      8
     ],
@@ -485,12 +481,16 @@
     [
      "USAGE/clause non pris en charge: COMP-1",
      7
+    ],
+    [
+     "COLUMN PLUS non pris en charge",
+     7
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 378,
+   "gap": 363,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -901,30 +901,6 @@
      "FUNCTION CURRENCY-SYMBOL non prise en charge"
     ],
     [
-     "run_functions-024/prog.cob",
-     "FUNCTION EXCEPTION-FILE non prise en charge"
-    ],
-    [
-     "run_functions-025/caller.cob",
-     "FUNCTION EXCEPTION-LOCATION non prise en charge"
-    ],
-    [
-     "run_functions-025/prog.cob",
-     "FUNCTION EXCEPTION-LOCATION non prise en charge"
-    ],
-    [
-     "run_functions-026/prog.cob",
-     "FUNCTION EXCEPTION-STATEMENT non prise en charge"
-    ],
-    [
-     "run_functions-027/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_functions-036/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
      "run_functions-047/prog.cob",
      "FUNCTION LOCALE-COMPARE non prise en charge"
     ],
@@ -939,10 +915,6 @@
     [
      "run_functions-050/prog.cob",
      "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
-    ],
-    [
-     "run_functions-062/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-063/prog.cob",
@@ -993,20 +965,12 @@
      "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
     ],
     [
-     "run_functions-086/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
      "run_functions-090/prog.cob",
      "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
     ],
     [
      "run_functions-091/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
-     "run_functions-119/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -1449,18 +1413,6 @@
      ". attendu"
     ],
     [
-     "run_misc-040/callee.cob",
-     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_misc-040/callee2.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_misc-040/caller.cob",
-     "programme appelé callee2.cob: ligne 6: FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
      "run_misc-041/callee.cob",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
@@ -1561,10 +1513,6 @@
      "PROCEDURE attendu"
     ],
     [
-     "run_misc-132/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
      "run_misc-133/caller.cob",
      "CALL RETURNING/GIVING non pris en charge"
     ],
@@ -1619,14 +1567,6 @@
     [
      "run_misc-169/prog.cob",
      "USAGE/clause non pris en charge: COMP-2"
-    ],
-    [
-     "run_misc-170/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
-    ],
-    [
-     "run_misc-171/prog.cob",
-     "FUNCTION EXCEPTION-STATUS non prise en charge"
     ],
     [
      "run_misc-176/prog.cob",
@@ -2015,10 +1955,6 @@
      12
     ],
     [
-     "FUNCTION EXCEPTION-STATUS non prise en charge",
-     9
-    ],
-    [
      "expression non prise en charge: LINE",
      9
     ],
@@ -2053,14 +1989,18 @@
     [
      "EXTERNAL AS non pris en charge",
      6
+    ],
+    [
+     "NO attendu",
+     6
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-30T16:52:47+00:00",
-  "git_head": "527014ed086bb8ea7bc3e69da7204d6f23ab47af",
-  "implementation_sha256": "98600f508764abf9a429c4fd38858154ba33ba14c7c8ff2d0f1942767560e36e",
+  "measured_at": "2026-10-30T21:37:42+00:00",
+  "git_head": "b84d00da7ff66597fd306d0847e1b33ddda535c9",
+  "implementation_sha256": "ff146a5617f96a9cc067784a17b8ab7b547b05246072cdabbfb4e6941ad43a72",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

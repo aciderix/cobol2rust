@@ -177,7 +177,9 @@ impl Number {
     }
     fn divide(self, other: Self) -> Self {
         if other.n == BigInt::from(0) {
-            // cob_decimal_div: COB_DECIMAL_NAN inside an arithmetic statement.
+            // cob_decimal_div: EC-SIZE-ZERO-DIVIDE, then COB_DECIMAL_NAN
+            // inside an arithmetic statement.
+            exception::set("EC-SIZE-ZERO-DIVIDE");
             if DECIMAL_NAN.with(|nan| nan.get().is_some()) {
                 DECIMAL_NAN.with(|nan| nan.set(Some(true)));
                 return Self::new(BigInt::from(0), 0);
@@ -224,7 +226,8 @@ pub fn round_mode(value: &Value, scale: i32, mode: u8) -> Option<Value> {
     let step = |n: &mut BigInt| { *n += if negative { -5 } else { 5 }; };
     match mode {
         1 => {}
-        2 => return None,
+        // cob_decimal_get_field: EC-SIZE-TRUNCATION.
+        2 => { exception::set("EC-SIZE-TRUNCATION"); return None },
         3 | 5 | 6 => {
             let unit = power((own - scale) as u32);
             let remainder: BigInt = &n % &unit;
@@ -373,7 +376,7 @@ impl Value {
     pub fn power(&self, b: &Self) -> Self { Self::Num(self.num().power(b.num()), None) }
     pub fn checked_divide(&self, b: &Self) -> Result<Self, SizeError> {
         let left = self.num(); let right = b.num();
-        if right.n == BigInt::from(0) { return Err(SizeError); }
+        if right.n == BigInt::from(0) { exception::set("EC-SIZE-ZERO-DIVIDE"); return Err(SizeError); }
         Ok(Self::Num(left.divide(right), None))
     }
     pub fn neg(&self) -> Self { Self::Num(self.num().neg(), None) }
@@ -386,7 +389,7 @@ impl Value {
         Self::Num(dividend.plus(product.neg()), None)
     }
     pub fn checked_remainder(&self, divisor: &Self, quotient_scale: i32) -> Result<Self, SizeError> {
-        if divisor.num().n == BigInt::from(0) { return Err(SizeError); }
+        if divisor.num().n == BigInt::from(0) { exception::set("EC-SIZE-ZERO-DIVIDE"); return Err(SizeError); }
         Ok(self.remainder_after(divisor, quotient_scale))
     }
     pub fn checked_assign(&mut self, source: &Self, rounded: bool) -> Result<(), SizeError> {
@@ -533,7 +536,8 @@ impl Value {
         let mut end = false;
         while line.len() < 8191 {
             match io::Read::read(&mut input, &mut byte) {
-                Ok(0) => { end = true; break; },
+                // cob_accept: EC-IMP-ACCEPT at end of input.
+                Ok(0) => { end = true; exception::set("EC-IMP-ACCEPT"); break; },
                 Ok(_) if byte[0] == b'\n' => break,
                 Ok(_) if byte[0] == 3 => interrupt(),
                 Ok(_) => line.push(byte[0]),
@@ -767,7 +771,7 @@ pub mod intrinsic {
     }
     /// cob_mod_or_rem: f1 - f2 * INTEGER (MOD) or INTEGER-PART (REM) of f1 / f2.
     pub fn mod_or_rem(f1: &Value, f2: &Value, rem: bool) -> Value {
-        if f2.num().n == BigInt::from(0) { argument_error(if rem { "REM" } else { "MOD" }); }
+        if f2.num().n == BigInt::from(0) { super::exception::set("EC-ARGUMENT-FUNCTION"); return int_of(0); }
         let quotient = value(f1.num().divide(f2.num()));
         let whole = if rem { integer_part(&quotient) } else { integer(&quotient) };
         value(f1.num().plus(whole.num().times(f2.num()).neg()))
@@ -1531,6 +1535,10 @@ pub mod intrinsic {
         Value::Bytes(buff)
     }
     fn spaces(length: usize) -> Value { Value::Bytes(vec![b' '; length]) }
+    /// invalid_args of the ISO 8601 functions: EC-ARGUMENT-FUNCTION and spaces.
+    fn invalid_args(length: usize) -> Value { super::exception::set("EC-ARGUMENT-FUNCTION"); spaces(length) }
+    /// invalid_args of the numeric ISO 8601 functions: EC-ARGUMENT-FUNCTION and zero.
+    fn invalid_value() -> Value { super::exception::set("EC-ARGUMENT-FUNCTION"); int_of(0) }
     /// get_fractional_seconds: the argument less its cob_get_int.
     fn fractional_seconds(v: &Value) -> Number {
         let n = v.num();
@@ -1549,15 +1557,15 @@ pub mod intrinsic {
     pub fn formatted_date(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATESTR_MAX);
         let days = get_int(&args[1]);
-        if !(1..=3067671).contains(&days) || !valid_date_format(&format) { return spaces(format.len()); }
+        if !(1..=3067671).contains(&days) || !valid_date_format(&format) { return invalid_args(format.len()); }
         sized(format_date(parse_date_format(&format), days), format.len())
     }
     pub fn formatted_time(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), TIMESTR_MAX);
         let seconds = get_int(&args[1]);
-        if !(0..=86400).contains(&seconds) || !valid_time_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !(0..=86400).contains(&seconds) || !valid_time_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let fraction = fractional_seconds(&args[1]);
-        let Ok(offset) = offset_argument(args, 2) else { return spaces(format.len()) };
+        let Ok(offset) = offset_argument(args, 2) else { return invalid_args(format.len()) };
         sized(format_time(parse_time_format(&format), seconds, &fraction, offset).0, format.len())
     }
     fn format_datetime(date: DateFormat, time: TimeFormat, days: i64, seconds: i64, fraction: &Number, offset: Option<i64>) -> Vec<u8> {
@@ -1569,17 +1577,17 @@ pub mod intrinsic {
     }
     pub fn formatted_datetime(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
-        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !valid_datetime_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let (days, seconds) = (get_int(&args[1]), get_int(&args[2]));
-        if !(1..=3067671).contains(&days) || !(0..=86400).contains(&seconds) { return spaces(format.len()); }
+        if !(1..=3067671).contains(&days) || !(0..=86400).contains(&seconds) { return invalid_args(format.len()); }
         let (date_format, time_format, _) = split_around_t(&format);
-        let Ok(offset) = offset_argument(args, 3) else { return spaces(format.len()) };
+        let Ok(offset) = offset_argument(args, 3) else { return invalid_args(format.len()) };
         let fraction = fractional_seconds(&args[2]);
         sized(format_datetime(parse_date_format(&date_format), parse_time_format(&time_format), days, seconds, &fraction, offset), format.len())
     }
     pub fn formatted_current_date(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
-        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !valid_datetime_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let (date_format, time_format, _) = split_around_t(&format);
         let t = super::current_datetime();
         let table = if leap(t.year) { &LEAP_DAYS } else { &NORMAL_DAYS };
@@ -1718,7 +1726,7 @@ pub mod intrinsic {
         let (date_present, time_present) = if valid_date_format(&format) { (true, false) }
             else if valid_time_format(&format, point) { (false, true) }
             else if valid_datetime_format(&format, point) { (true, true) }
-            else { return int_of(0) };
+            else { return invalid_value() };
         let (date_format, time_format) = if date_present && time_present { let (d, t, _) = split_around_t(&format); (d, t) }
             else if date_present { (format.clone(), Vec::new()) } else { (Vec::new(), format.clone()) };
         let (date, time) = if date_present && time_present { let (d, t, _) = split_around_t(&value); (d, t) }
@@ -1739,10 +1747,10 @@ pub mod intrinsic {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
         let value = leading(&args[1].bytes(), DATETIMESTR_MAX);
         let is_date = valid_date_format(&format);
-        let date_format = if is_date { format } else if valid_datetime_format(&format, decimal_point()) { split_around_t(&format).0 } else { return int_of(0) };
+        let date_format = if is_date { format } else if valid_datetime_format(&format, decimal_point()) { split_around_t(&format).0 } else { return invalid_value() };
         let date = if is_date { value } else { split_around_t(&value).0 };
         let date_format = parse_date_format(&date_format);
-        if test_formatted_date(date_format, &date, true) != 0 { return int_of(0); }
+        if test_formatted_date(date_format, &date, true) != 0 { return invalid_value(); }
         // integer_of_formatted_date: the parts read back with sscanf.
         let number = |from: usize, len: usize| -> i64 { std::str::from_utf8(&date[from..from + len]).unwrap().parse().unwrap() };
         let year = number(0, 4);
@@ -1768,7 +1776,7 @@ pub mod intrinsic {
         let format = c_string(&data[..length]).to_vec();
         let point = decimal_point();
         let is_datetime = valid_datetime_format(&format, point);
-        if !is_datetime && !valid_time_format(&format, point) { return int_of(0); }
+        if !is_datetime && !valid_time_format(&format, point) { return invalid_value(); }
         let data = time.bytes();
         let (time_format, time) = if is_datetime {
             if !terminated { fail("SECONDS-FROM-FORMATTED-TIME of a datetime item reads past the item (C string)"); }
@@ -1778,7 +1786,7 @@ pub mod intrinsic {
             (format.clone(), c_string(&data[..length]).to_vec())
         };
         let time_format = parse_time_format(&time_format);
-        if test_formatted_time(time_format, &time, point) != 0 { return int_of(0); }
+        if test_formatted_time(time_format, &time, point) != 0 { return invalid_value(); }
         let number = |from: usize| -> i64 { (at(&time, from) - b'0') as i64 * 10 + (at(&time, from + 1) - b'0') as i64 };
         let step = if time_format.colons { 3 } else { 2 };
         let seconds = number(0) * 3600 + number(step) * 60 + number(2 * step);
@@ -2369,5 +2377,313 @@ impl MersenneTwister {
         y ^= (y << 15) & 0xEFC6_0000;
         y ^= y >> 18;
         y
+    }
+}
+
+// GnuCOBOL 3.2 cob_set_exception (common.c) and the last exception it keeps
+// for the EXCEPTION- functions of intrinsic.c: only SET LAST EXCEPTION TO OFF
+// resets it. An operation whose exceptions are not ported makes it unknown;
+// reading it then is a named stop.
+pub mod exception {
+    use super::{fail, Value};
+    use std::cell::RefCell;
+
+    /// cob_exception_tab_code and cob_exception_tab_name: COB_EC_ZERO,
+    /// exception.def with exception-io.def in place, then COB_EC_MAX.
+    const TABLE: &[(u32, &str)] = &[
+    (0, "None"),
+    (0xFFFF, "EC-ALL"),
+    (0x0100, "EC-ARGUMENT"),
+    (0x0101, "EC-ARGUMENT-FUNCTION"),
+    (0x0102, "EC-ARGUMENT-IMP"),
+    (0x0200, "EC-BOUND"),
+    (0x0209, "EC-BOUND-FUNC-RET-VALUE"),
+    (0x0201, "EC-BOUND-IMP"),
+    (0x0202, "EC-BOUND-ODO"),
+    (0x0203, "EC-BOUND-OVERFLOW"),
+    (0x0204, "EC-BOUND-PTR"),
+    (0x0205, "EC-BOUND-REF-MOD"),
+    (0x0206, "EC-BOUND-SET"),
+    (0x0207, "EC-BOUND-SUBSCRIPT"),
+    (0x0208, "EC-BOUND-TABLE-LIMIT"),
+    (0x1800, "EC-CONTINUE"),
+    (0x1801, "EC-CONTINUE-IMP"),
+    (0x1802, "EC-CONTINUE-LESS-THAN-ZERO"),
+    (0x0300, "EC-DATA"),
+    (0x0301, "EC-DATA-CONVERSION"),
+    (0x0302, "EC-DATA-IMP"),
+    (0x0303, "EC-DATA-INCOMPATIBLE"),
+    (0x0304, "EC-DATA-NOT-FINITE"),
+    (0x0305, "EC-DATA-OVERFLOW"),
+    (0x0306, "EC-DATA-PTR-NULL"),
+    (0x1900, "EC-EXTERNAL"),
+    (0x1901, "EC-EXTERNAL-DATA-MISMATCH"),
+    (0x1902, "EC-EXTERNAL-FILE-MISMATCH"),
+    (0x1903, "EC-EXTERNAL-FORMAT-CONFLICT"),
+    (0x1904, "EC-EXTERNAL-IMP"),
+    (0x0400, "EC-FLOW"),
+    (0x040A, "EC-FLOW-APPLY-COMMIT"),
+    (0x040B, "EC-FLOW-COMMIT"),
+    (0x0401, "EC-FLOW-GLOBAL-EXIT"),
+    (0x0402, "EC-FLOW-GLOBAL-GOBACK"),
+    (0x0403, "EC-FLOW-IMP"),
+    (0x0404, "EC-FLOW-RELEASE"),
+    (0x0405, "EC-FLOW-REPORT"),
+    (0x0406, "EC-FLOW-RETURN"),
+    (0x040C, "EC-FLOW-ROLLBACK"),
+    (0x0407, "EC-FLOW-SEARCH"),
+    (0x0408, "EC-FLOW-USE"),
+    (0x1500, "EC-FUNCTION"),
+    (0x1503, "EC-FUNCTION-ARG-OMITTED"),
+    (0x1503, "EC-FUNCTION-IMP"),
+    (0x1504, "EC-FUNCTION-NOT-FOUND"),
+    (0x1501, "EC-FUNCTION-PTR-INVALID"),
+    (0x1502, "EC-FUNCTION-PTR-NULL"),
+    (0x0500, "EC-I-O"),
+    (0x0501, "EC-I-O-AT-END"),
+    (0x0502, "EC-I-O-EOP"),
+    (0x0503, "EC-I-O-EOP-OVERFLOW"),
+    (0x0504, "EC-I-O-FILE-SHARING"),
+    (0x0505, "EC-I-O-IMP"),
+    (0x0506, "EC-I-O-INVALID-KEY"),
+    (0x0507, "EC-I-O-LINAGE"),
+    (0x0508, "EC-I-O-LOGIC-ERROR"),
+    (0x0509, "EC-I-O-PERMANENT-ERROR"),
+    (0x050B, "EC-I-O-RECORD-CONTENT"),
+    (0x050A, "EC-I-O-RECORD-OPERATION"),
+    (0x050C, "EC-I-O-RECORD-WARNING"),
+    (0x0600, "EC-IMP"),
+    (0x0601, "EC-IMP-ACCEPT"),
+    (0x0602, "EC-IMP-DISPLAY"),
+    (0x0603, "EC-IMP-UTC-UNKNOWN"),
+    (0x0604, "EC-IMP-FEATURE-DISABLED"),
+    (0x0605, "EC-IMP-FEATURE-MISSING"),
+    (0x0700, "EC-LOCALE"),
+    (0x0701, "EC-LOCALE-IMP"),
+    (0x0702, "EC-LOCALE-INCOMPATIBLE"),
+    (0x0703, "EC-LOCALE-INVALID"),
+    (0x0704, "EC-LOCALE-INVALID-PTR"),
+    (0x0705, "EC-LOCALE-MISSING"),
+    (0x0706, "EC-LOCALE-SIZE"),
+    (0x1A00, "EC-MCS"),
+    (0x1A01, "EC-MCS-ABNORMAL-TERMINATION"),
+    (0x1A02, "EC-MCS-IMP"),
+    (0x1A03, "EC-MCS-INVALID-TAG"),
+    (0x1A04, "EC-MCS-MESSAGE-LENGTH"),
+    (0x1A05, "EC-MCS-NO-REQUESTER"),
+    (0x1A06, "EC-MCS-NO-SERVER"),
+    (0x1A07, "EC-MCS-NORMAL-TERMINATION"),
+    (0x1A08, "EC-MCS-REQUESTOR-FAILED"),
+    (0x0800, "EC-OO"),
+    (0x0803, "EC-OO-ARG-OMITTED"),
+    (0x0801, "EC-OO-CONFORMANCE"),
+    (0x0802, "EC-OO-EXCEPTION"),
+    (0x0804, "EC-OO-IMP"),
+    (0x0805, "EC-OO-METHOD"),
+    (0x0806, "EC-OO-NULL"),
+    (0x0807, "EC-OO-RESOURCE"),
+    (0x0808, "EC-OO-UNIVERSAL"),
+    (0x0900, "EC-ORDER"),
+    (0x0901, "EC-ORDER-IMP"),
+    (0x0902, "EC-ORDER-NOT-SUPPORTED"),
+    (0x0A00, "EC-OVERFLOW"),
+    (0x0A01, "EC-OVERFLOW-IMP"),
+    (0x0A02, "EC-OVERFLOW-STRING"),
+    (0x0A03, "EC-OVERFLOW-UNSTRING"),
+    (0x0B00, "EC-PROGRAM"),
+    (0x0B01, "EC-PROGRAM-ARG-MISMATCH"),
+    (0x0B02, "EC-PROGRAM-ARG-OMITTED"),
+    (0x0B03, "EC-PROGRAM-CANCEL-ACTIVE"),
+    (0x0B04, "EC-PROGRAM-IMP"),
+    (0x0B05, "EC-PROGRAM-NOT-FOUND"),
+    (0x0B06, "EC-PROGRAM-PTR-NULL"),
+    (0x0B07, "EC-PROGRAM-RECURSIVE-CALL"),
+    (0x0B08, "EC-PROGRAM-RESOURCES"),
+    (0x0C00, "EC-RAISING"),
+    (0x0C01, "EC-RAISING-IMP"),
+    (0x0C02, "EC-RAISING-NOT-SPECIFIED"),
+    (0x0D00, "EC-RANGE"),
+    (0x0D01, "EC-RANGE-IMP"),
+    (0x0D02, "EC-RANGE-INDEX"),
+    (0x0D03, "EC-RANGE-INSPECT-SIZE"),
+    (0x0D04, "EC-RANGE-INVALID"),
+    (0x0D05, "EC-RANGE-PERFORM-VARYING"),
+    (0x0D06, "EC-RANGE-PTR"),
+    (0x0D07, "EC-RANGE-SEARCH-INDEX"),
+    (0x0D08, "EC-RANGE-SEARCH-NO-MATCH"),
+    (0x0E00, "EC-REPORT"),
+    (0x0E01, "EC-REPORT-ACTIVE"),
+    (0x0E02, "EC-REPORT-COLUMN-OVERLAP"),
+    (0x0E03, "EC-REPORT-FILE-MODE"),
+    (0x0E04, "EC-REPORT-IMP"),
+    (0x0E05, "EC-REPORT-INACTIVE"),
+    (0x0E06, "EC-REPORT-LINE-OVERLAP"),
+    (0x0E08, "EC-REPORT-NOT-TERMINATED"),
+    (0x0E09, "EC-REPORT-PAGE-LIMIT"),
+    (0x0E0A, "EC-REPORT-PAGE-WIDTH"),
+    (0x0E0B, "EC-REPORT-SUM-SIZE"),
+    (0x0E0C, "EC-REPORT-VARYING"),
+    (0x0F00, "EC-SCREEN"),
+    (0x0F01, "EC-SCREEN-FIELD-OVERLAP"),
+    (0x0F02, "EC-SCREEN-IMP"),
+    (0x0F03, "EC-SCREEN-ITEM-TRUNCATED"),
+    (0x0F04, "EC-SCREEN-LINE-NUMBER"),
+    (0x0F05, "EC-SCREEN-STARTING-COLUMN"),
+    (0x1000, "EC-SIZE"),
+    (0x1001, "EC-SIZE-ADDRESS"),
+    (0x1002, "EC-SIZE-EXPONENTIATION"),
+    (0x1003, "EC-SIZE-IMP"),
+    (0x1004, "EC-SIZE-OVERFLOW"),
+    (0x1005, "EC-SIZE-TRUNCATION"),
+    (0x1006, "EC-SIZE-UNDERFLOW"),
+    (0x1007, "EC-SIZE-ZERO-DIVIDE"),
+    (0x1100, "EC-SORT-MERGE"),
+    (0x1101, "EC-SORT-MERGE-ACTIVE"),
+    (0x1102, "EC-SORT-MERGE-FILE-OPEN"),
+    (0x1103, "EC-SORT-MERGE-IMP"),
+    (0x1104, "EC-SORT-MERGE-RELEASE"),
+    (0x1105, "EC-SORT-MERGE-RETURN"),
+    (0x1106, "EC-SORT-MERGE-SEQUENCE"),
+    (0x1200, "EC-STORAGE"),
+    (0x1201, "EC-STORAGE-IMP"),
+    (0x1202, "EC-STORAGE-NOT-ALLOC"),
+    (0x1203, "EC-STORAGE-NOT-AVAIL"),
+    (0x1300, "EC-USER"),
+    (0x1400, "EC-VALIDATE"),
+    (0x1401, "EC-VALIDATE-CONTENT"),
+    (0x1402, "EC-VALIDATE-FORMAT"),
+    (0x1403, "EC-VALIDATE-IMP"),
+    (0x1404, "EC-VALIDATE-RELATION"),
+    (0x1405, "EC-VALIDATE-VARYING"),
+    (0x1600, "EC-XML"),
+    (0x1601, "EC-XML-CODESET"),
+    (0x1602, "EC-XML-CODESET-CONVERSION"),
+    (0x1603, "EC-XML-COUNT"),
+    (0x1604, "EC-XML-DOCUMENT-TYPE"),
+    (0x1605, "EC-XML-IMPLICIT-CLOSE"),
+    (0x1606, "EC-XML-INVALID"),
+    (0x1607, "EC-XML-NAMESPACE"),
+    (0x1608, "EC-XML-STACKED-OPEN"),
+    (0x1609, "EC-XML-RANGE"),
+    (0x1610, "EC-XML-IMP"),
+    (0x1700, "EC-JSON"),
+    (0x1710, "EC-JSON-IMP"),
+    (0, "Invalid"),
+    ];
+
+    /// status_exception of fileio.c, by first digit of the I-O status.
+    const STATUS_EXCEPTION: [&str; 10] = ["None", "EC-I-O-AT-END", "EC-I-O-INVALID-KEY", "EC-I-O-PERMANENT-ERROR",
+        "EC-I-O-LOGIC-ERROR", "EC-I-O-RECORD-OPERATION", "EC-I-O-FILE-SHARING", "EC-I-O-RECORD-CONTENT",
+        "EC-I-O", "EC-I-O-IMP"];
+
+    #[derive(Clone)]
+    struct Last { code: u32, module: Option<&'static str> }
+
+    struct State {
+        /// last_exception_code and last_exception_id; the line is 0 and the
+        /// statement unknown without -fsource-location.
+        last: Result<Last, &'static str>,
+        /// cob_error_file: the I-O status and SELECT name of the last save_status.
+        file: Result<Option<(u8, String)>, &'static str>,
+        /// COB_MODULE_PTR->module_name.
+        module: &'static str,
+    }
+
+    thread_local! {
+        static STATE: RefCell<State> = const { RefCell::new(State { last: Ok(Last { code: 0, module: None }), file: Ok(None), module: "" }) };
+    }
+
+    fn code(name: &str) -> u32 {
+        TABLE.iter().find(|(_, n)| *n == name).map(|(c, _)| *c).unwrap_or_else(|| fail(&format!("unknown exception {name}")))
+    }
+
+    /// cob_set_exception: the code, and the current module unless it is 0.
+    pub fn set(name: &str) {
+        let code = code(name);
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let module = if code != 0 { Some(state.module) } else { None };
+            state.last = Ok(Last { code, module });
+        });
+    }
+
+    /// SET LAST EXCEPTION TO OFF: cob_set_exception (0).
+    pub fn off() { set("None") }
+
+    /// The entry and the return of a program set COB_MODULE_PTR.
+    pub fn module(name: &'static str) { STATE.with(|state| state.borrow_mut().module = name) }
+
+    /// An operation that may raise exceptions not ported here.
+    pub fn unknown(reason: &'static str) { STATE.with(|state| state.borrow_mut().last = Err(reason)) }
+
+    /// An operation that may call save_status without being ported here.
+    pub fn unknown_file(reason: &'static str) {
+        STATE.with(|state| { let mut state = state.borrow_mut(); state.last = Err(reason); state.file = Err(reason); })
+    }
+
+    /// save_status: the file becomes cob_error_file; a status of class 1 to 9
+    /// raises its exception, an end of page EC-I-O-EOP.
+    pub fn save_status(status: u8, eop: bool, select: &str) {
+        STATE.with(|state| state.borrow_mut().file = Ok(Some((status, select.to_string()))));
+        if status >= 10 { set(STATUS_EXCEPTION[status as usize / 10]); } else if eop { set("EC-I-O-EOP"); }
+    }
+
+    fn last(function: &str) -> Last {
+        STATE.with(|state| state.borrow().last.clone()).unwrap_or_else(|reason| {
+            fail(&format!("FUNCTION {function} after {reason}, whose GnuCOBOL exceptions are not modelled"))
+        })
+    }
+
+    /// cob_last_exception_is.
+    fn is(last: &Last, name: &str) -> bool { let c = code(name); last.code & c == c }
+
+    /// cob_get_last_exception_name: an exact entry, then the most specific
+    /// one included, from the end of the table (where COB_EC_MAX matches).
+    fn name(last: &Last) -> &'static str {
+        if let Some((_, name)) = TABLE[1..].iter().find(|(c, _)| *c == last.code) { return name; }
+        for missing in ["EC-IMP-FEATURE-MISSING", "EC-IMP-FEATURE-DISABLED"] {
+            if is(last, missing) { return TABLE.iter().find(|(_, n)| *n == missing).unwrap().1; }
+        }
+        TABLE[1..].iter().rev().find(|(c, _)| last.code & c == *c).map_or("EXCEPTION-OBJECT", |(_, n)| n)
+    }
+
+    /// cob_intr_exception_status: X(31), spaces without an exception.
+    pub fn status() -> Value {
+        let last = last("EXCEPTION-STATUS");
+        let mut field = vec![b' '; 31];
+        if last.code != 0 {
+            let name = name(&last).as_bytes();
+            field[..name.len()].copy_from_slice(name);
+        }
+        Value::Bytes(field)
+    }
+
+    /// cob_intr_exception_location: "module; ; line" without section or
+    /// paragraph names (-fsource-location), one space without an exception.
+    pub fn location() -> Value {
+        match last("EXCEPTION-LOCATION").module {
+            None => Value::Bytes(b" ".to_vec()),
+            Some(module) => Value::Bytes(format!("{module}; ; 0").into_bytes()),
+        }
+    }
+
+    /// cob_intr_exception_statement: X(31), the statement is unknown without
+    /// -fsource-location.
+    pub fn statement() -> Value {
+        last("EXCEPTION-STATEMENT");
+        Value::Bytes(vec![b' '; 31])
+    }
+
+    /// cob_intr_exception_file: "00", or the status and SELECT name of
+    /// cob_error_file while the last exception is an I-O one.
+    pub fn file() -> Value {
+        let last = last("EXCEPTION-FILE");
+        let file = STATE.with(|state| state.borrow().file.clone()).unwrap_or_else(|reason| {
+            fail(&format!("FUNCTION EXCEPTION-FILE after {reason}, whose GnuCOBOL file statuses are not modelled"))
+        });
+        match file {
+            Some((status, select)) if is(&last, "EC-I-O") => Value::Bytes(format!("{status:02}{select}").into_bytes()),
+            _ => Value::Bytes(b"00".to_vec()),
+        }
     }
 }

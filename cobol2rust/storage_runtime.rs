@@ -1495,7 +1495,7 @@ impl Inspect {
         if len == 0 { return; }
         let f2 = &from.data[..];
         let f1: Vec<u8> = if to.data.len() != f2.len() {
-            if !to.all { return; } // EC-RANGE-INSPECT-SIZE, not checked
+            if !to.all { crate::runtime::exception::set("EC-RANGE-INSPECT-SIZE"); return; }
             to.data.iter().cycle().take(f2.len()).copied().collect()
         } else { to.data.clone() };
         if f2.len() > len { return; }
@@ -1552,7 +1552,7 @@ impl Inspect {
         let len = self.end - self.start;
         if len == 0 { return; }
         let f2: Vec<u8> = if from.data.len() != to.data.len() {
-            if !to.all { return; } // EC-RANGE-INSPECT-SIZE
+            if !to.all { crate::runtime::exception::set("EC-RANGE-INSPECT-SIZE"); return; }
             to.data.iter().cycle().take(from.data.len()).copied().collect()
         } else { to.data.clone() };
         let mut table = [None; 256];
@@ -1601,7 +1601,7 @@ impl StringInto {
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
             s.position = p as i64 - 1;
-            if s.position < 0 || s.position >= s.size as i64 { s.overflow = true; }
+            if s.position < 0 || s.position >= s.size as i64 { s.overflow = true; crate::runtime::exception::set("EC-OVERFLOW-STRING"); }
         }
         s
     }
@@ -1627,6 +1627,7 @@ impl StringInto {
             memory[start..start + room as usize].copy_from_slice(&data[..room as usize]);
             self.position += room;
             self.overflow = true;
+            crate::runtime::exception::set("EC-OVERFLOW-STRING");
         }
     }
     /// The overflow condition and the value cob_set_int stores in the POINTER.
@@ -1643,7 +1644,7 @@ impl Unstring {
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("UNSTRING POINTER outside the C int range"); }
             u.position = p as i64 - 1;
-            if u.position < 0 || u.position >= u.data().len() as i64 { u.exception = true; }
+            if u.position < 0 || u.position >= u.data().len() as i64 { u.exception = true; crate::runtime::exception::set("EC-OVERFLOW-UNSTRING"); }
         }
         u
     }
@@ -1726,8 +1727,22 @@ impl Unstring {
     pub fn count(&self) -> i64 { self.count }
     /// The overflow condition, whether any exception is set, and the POINTER value.
     pub fn finish(&mut self, size_exception: bool) -> (bool, bool, i64) {
+        // cob_unstring_tallying (cob_add_int), then cob_unstring_finish.
+        if size_exception { crate::runtime::exception::set("EC-SIZE-OVERFLOW"); }
+        if self.position < self.data().len() as i64 { crate::runtime::exception::set("EC-OVERFLOW-UNSTRING"); }
         let overflow = self.exception || self.position < self.data().len() as i64;
         (overflow, overflow || size_exception, self.position + 1)
+    }
+}
+
+/// cob_decimal_get_display (opt 0), for a DISPLAY receiver or the DISPLAY
+/// temporary of an edited one: the result has more digits than the PICTURE.
+pub fn display_overflow(item: &Value, source: &Value, rounded: bool) -> bool {
+    let Value::View(view) = item else { fail("arithmetic receiver requires storage") };
+    match view.kind {
+        Kind::Numeric { digits, scale, usage, .. } if usage.is_display() => absolute(&source.num().units(scale, rounded)) >= power(digits),
+        Kind::Edited { digits, scale, .. } => absolute(&source.num().units(scale, rounded)) >= power(digits),
+        _ => fail("DISPLAY overflow check of another receiver"),
     }
 }
 
@@ -1912,6 +1927,7 @@ pub fn compare_addresses(left: u64, right: u64) -> std::cmp::Ordering {
 /// COB_MAX_ALLOC_SIZE. calloc for INITIALIZED to low-values; otherwise the
 /// malloc area is undetermined until written, and reading it is a named stop.
 pub fn allocate(size: i128, zeroed: bool) -> u64 {
+    if size > MAX_ALLOC_SIZE { crate::runtime::exception::set("EC-STORAGE-IMP"); }
     if size <= 0 || size > MAX_ALLOC_SIZE { return 0; }
     let memory = memory(size as usize);
     if !zeroed {
@@ -1974,16 +1990,18 @@ pub fn allocated_area(address: u64) -> Value {
 /// storage then has no bytes); any other address leaves EC-STORAGE-NOT-ALLOC.
 pub fn free(address: u64) -> bool {
     if address == 0 { return false; }
-    let Some(relative) = address.checked_sub(ADDRESS_BASE) else { return false };
-    if relative % REGION_SPAN != 0 { return false; }
-    REGIONS.with(|regions| {
-        let mut regions = regions.borrow_mut();
-        let Some(region) = regions.get_mut((relative / REGION_SPAN) as usize) else { return false };
-        match region.allocated.take() {
-            Some(memory) => { memory.borrow_mut().clear(); region.freed = true; true },
-            None => false,
-        }
-    })
+    let freed = address.checked_sub(ADDRESS_BASE).filter(|relative| relative % REGION_SPAN == 0).is_some_and(|relative| {
+        REGIONS.with(|regions| {
+            let mut regions = regions.borrow_mut();
+            let Some(region) = regions.get_mut((relative / REGION_SPAN) as usize) else { return false };
+            match region.allocated.take() {
+                Some(memory) => { memory.borrow_mut().clear(); region.freed = true; true },
+                None => false,
+            }
+        })
+    });
+    if !freed { crate::runtime::exception::set("EC-STORAGE-NOT-ALLOC"); }
+    freed
 }
 
 /// The bytes of an ASSIGN data item; none when it has no address.

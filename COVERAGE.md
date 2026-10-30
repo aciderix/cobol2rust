@@ -992,3 +992,25 @@ zopeneditor passe de 0/3 à 3/3 sans changement côté Rust (le plantage natif �
 la fermeture implicite n'est plus observé). NIST statique **451/458**.
 Fixtures `pointers.cob` et `pointer_tables.cob` identiques au natif ;
 détails dans [VALIDATION.md](VALIDATION.md).
+
+## Progression : dernière exception — 30 octobre 2026
+
+`FUNCTION EXCEPTION-STATUS`, `EXCEPTION-LOCATION`, `EXCEPTION-STATEMENT`,
+`EXCEPTION-FILE` et `SET LAST EXCEPTION TO OFF` suivent la dernière exception
+de libcob (`cob_set_exception`, table `exception.def`), commune à l'unité
+d'exécution. Sources portées : `save_status`, division par zéro, stockages
+arithmétiques DISPLAY ou édités (`cob_decimal_get_display`), SIZE ERROR,
+ROUNDED MODE PROHIBITED, STRING/UNSTRING, INSPECT, ALLOCATE/FREE, ACCEPT en
+fin d'entrée, CALL introuvable ou récursif sous ON EXCEPTION, MOD/REM et
+fonctions ISO 8601. Toute autre source possible rend l'exception inconnue :
+sa lecture est alors un arrêt nommé. Sous `-debug`, EXCEPTION-LOCATION et
+EXCEPTION-STATEMENT restent refusées.
+
+Acceptation **1225 → 1240/3593**, testsuite **501 → 516/1135**, écart à cobc
+**392 → 377**, aucune acceptation refusée par cobc. Douze des quinze sources
+débloquées s'exécutent à l'identique avec des codes zéro, deux à l'identique
+avec le code 1 voulu par le test ; la troisième de run_misc-040, exécutée
+seule, ne diffère que par la pile de l'erreur fatale de libcob. Exécution
+globale **74/84**, inchangée ; NIST statique **451/458**. Fixtures
+`exceptions.cob` et `exception_recursive_call.cob` identiques au natif ;
+détails dans [VALIDATION.md](VALIDATION.md).

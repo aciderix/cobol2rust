@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-30T16:52:47+00:00 (commit `527014ed08`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-30T21:37:42+00:00 (commit `b84d00da7f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,10 +101,10 @@ Dernière mesure : 2026-10-30T16:52:47+00:00 (commit `527014ed08`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 501 | 879 | 378 | 0 |
-| **Total** | | **3593** | **1225** | **1617** | **392** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 516 | 879 | 363 | 0 |
+| **Total** | | **3593** | **1240** | **1617** | **377** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T16:52:47+00:00, commit `527014ed08`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T21:37:42+00:00, commit `b84d00da7f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -117,14 +117,14 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 
 1. 37 × niveau de donnée attendu
 2. 12 × clause SELECT non prise en charge
-3. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
-4. 9 × expression non prise en charge: LINE
-5. 8 × PROCEDURE attendu
-6. 8 × . attendu
-7. 8 × PROGRAM-ID attendu
-8. 7 × USAGE/clause non pris en charge: DEPENDING
-9. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
-10. 7 × USAGE/clause non pris en charge: IS
+3. 9 × expression non prise en charge: LINE
+4. 8 × PROCEDURE attendu
+5. 8 × . attendu
+6. 8 × PROGRAM-ID attendu
+7. 7 × USAGE/clause non pris en charge: DEPENDING
+8. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
+9. 7 × USAGE/clause non pris en charge: IS
+10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -470,3 +470,36 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   tests (quatorze refus, deux fixtures identiques au natif, message du
   statut 31, huit arrêts nommés). Suite complète : **498 découverts, 497
   validés, un PE Windows ignoré**, sans échec ni erreur.
+- 2026-10-30 — Dernière exception : FUNCTION EXCEPTION-STATUS/LOCATION/
+  STATEMENT/FILE et SET LAST EXCEPTION TO OFF, troisième ligne des premiers
+  blocages (9 + 6 sources de la même famille). Port de `cob_set_exception`
+  et de la table `exception.def` (exception-io.def à sa place, nom par
+  `cob_get_last_exception_name`), de `save_status` (classe du statut,
+  EC-I-O-EOP, `cob_error_file` à chaque opération), de `cob_decimal_div`,
+  des stockages de `cob_decimal_get_display` (receveurs DISPLAY ou édités,
+  SIZE ERROR, TALLYING, VARYING), de PROHIBITED, de strings.c, de
+  `cob_allocate`/`cob_free_alloc`, de `cob_accept` en fin d'entrée, de
+  `cob_mod_or_rem` (zéro et EC-ARGUMENT-FUNCTION au lieu d'un arrêt), des
+  fonctions ISO 8601, du CALL introuvable et de `cob_module_global_enter` :
+  un appel récursif sous ON EXCEPTION rend -1 avec
+  EC-PROGRAM-RECURSIVE-CALL au lieu de l'arrêt fatal. Audit par fermeture
+  des appels d'intrinsic.c : 44 fonctions sans exception, les autres non
+  auditées rendent la dernière exception inconnue, comme l'exponentiation,
+  les receveurs binaires ou packés, SORT/MERGE, Report Writer, CANCEL ou
+  fin d'un programme INITIAL avec fichiers ouverts, USE GLOBAL ; la lire
+  alors est un arrêt nommé. Suivi généré seulement pour une unité qui lit
+  la dernière exception. Sous `-debug`, EXCEPTION-LOCATION/STATEMENT
+  restent refusées (section, paragraphe et sous-clauses de cobc). Un
+  littéral entier en valeur d'une fonction ISO 8601 donne ses chiffres
+  (`cb_build_numeric_literal`). Aucun cas spécial par programme.
+  Testsuite **501 → 516/1135**, total **1225 → 1240/3593**, écart
+  **392 → 377**, à examiner zéro. Sur les quinze sources débloquées, douze
+  s'exécutent à l'identique avec codes zéro ; run_misc-040 caller et callee
+  sont identiques et finissent par le STOP RUN RETURNING 1 de leur
+  gestionnaire (codes 1/1, non comptés comme réussites) ; callee2 exécuté
+  seul s'arrête des deux côtés sur la récursion fatale, seule la pile
+  « Last statement of … Started by <chemin> » de libcob diffère. Exécution
+  globale renouvelée : **74/84**, deux divergences et huit délais,
+  inchangés. NIST statique **451/458**. Six nouveaux tests, deux fixtures
+  identiques au natif. Suite complète : **504 découverts, 503 validés, un
+  PE Windows ignoré**, sans échec ni erreur.
