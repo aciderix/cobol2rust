@@ -38,7 +38,7 @@ class CallTests(unittest.TestCase):
         rust = Emitter(Parser(program("01 n pic 9.", 'call "ABSENT" on exception move 1 to n end-call. stop run.')).parse(),
                        called=["MAIN"]).generate()[0]
         self.assertNotIn("unit.call", rust)
-        for name in ("lowercase", "SYSTEM", "CBL_TOUPPER"):
+        for name in ("lowercase", "SYSTEM", "C$JUSTIFY"):
             with self.subTest(name=name), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic 9.", f'call "{name}". stop run.')).parse()).generate()
 

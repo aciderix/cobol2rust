@@ -880,6 +880,7 @@ def declaration(p, file_record=False):
     elif isinstance(figurative, str) and figurative not in {"0", " "} and initial is not None and kind == "text":
         # A figurative constant fills every position of the item.
         initial = Token(figurative * digits, initial.line, True)
+    explicit_sign_clause = sign_clause is not None
     group_sign = None
     if not picture:
         # A group SIGN clause applies to its signed numeric DISPLAY items.
@@ -921,6 +922,7 @@ def declaration(p, file_record=False):
     descriptor.alnum_edit = alnum_edit
     descriptor.synchronized = synchronized
     descriptor.group_sign = group_sign
+    descriptor.sign_clause = explicit_sign_clause
     descriptor.sign_leading = bool(sign_clause and sign_clause[0] == "LEADING")
     descriptor.sign_separate = bool(sign_clause and sign_clause[1])
     descriptor.justified = justified

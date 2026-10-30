@@ -26,7 +26,7 @@ CM que cobc ne compile pas non plus ([VALIDATION.md](VALIDATION.md)).
 publics épinglés (2458 sources, dont l'application mainframe CardDemo), le
 convertisseur accepte 724 sources là où cobc en accepte 738 (CardDemo 14/14
 des sources que cobc accepte) ; sur la testsuite de GnuCOBOL 3.2 (1135
-sources), 479 contre 879. Accepter n'est pas exécuter à l'identique : le cap
+sources), 490 contre 879. Accepter n'est pas exécuter à l'identique : le cap
 du projet et sa mesure, exécution comprise, sont dans [CAP.md](CAP.md).
 
 La branche de développement ajoute les fichiers `SEQUENTIAL` fixes, implicites
@@ -90,6 +90,7 @@ Le projet produit contient :
 | `src/main.rs` | Champs, instructions, conditions, boucles, sections et paragraphes traduits |
 | `src/runtime.rs` | Arithmétique décimale, remplissage des champs, saisie et affichage |
 | `src/storage_runtime.rs` | Mémoire partagée, disposition des données, tableaux, vues REDEFINES et sérialisation |
+| `src/system_runtime.rs` | Routines système d'octets, alias de stockage et ABI scalaire du profil Linux x86_64 |
 | `src/file_runtime.rs` | Fichiers LINE SEQUENTIAL et SEQUENTIAL fixes, présent quand le programme utilise des fichiers |
 | `expanded.cob` | Source normalisé avec les COPY développés |
 | `conversion.json` | Empreintes source/copybooks, champs et offsets, conditions, sections/blocs de procédure, profil mémoire et correspondance des lignes |
@@ -248,8 +249,10 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   : BY CONTENT, une copie neuve de ses octets (une figurative vaut un
   caractère) ; BY REFERENCE, la constante du programme elle-même, en lecture
   seule (une écriture de l'appelé est un arrêt nommé, cobc mourant de
-  SIGSEGV) ; `OMITTED` passe une adresse nulle. Un littéral numérique (entier C
-  dans 8 octets en partie non initialisés) et BY VALUE restent refusés ;
+  SIGSEGV) ; `OMITTED` passe une adresse nulle. Les littéraux numériques
+  transmis par adresse (entier C dans 8 octets en partie non initialisés)
+  restent refusés ; le BY VALUE scalaire des routines décrites ci-dessous
+  suit un contrat distinct ;
 - les articles LINKAGE (et leurs REDEFINES) deviennent des vues sur la mémoire
   de l'argument ; BY CONTENT passe une copie ; un article LINKAGE plus long que
   son argument s'arrête au lieu de lire la mémoire voisine ; un article que
@@ -294,6 +297,52 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   `libcob: error: module 'NOM' not found`, avertissements des fichiers ouverts,
   code de sortie 1.
 
+Les appels littéraux et dynamiques aux routines `CBL_AND`, `CBL_OR`,
+`CBL_NOR`, `CBL_XOR`, `CBL_IMP`, `CBL_NIMP`, `CBL_NOT` et `CBL_EQ` portent
+les boucles de `common.c`. `C$TOUPPER` et `C$TOLOWER`, avec leurs alias
+`CBL_TOUPPER` et `CBL_TOLOWER`, complètent ces douze noms. Les arguments de
+données passent BY REFERENCE ou BY CONTENT ; la longueur finale passe BY
+VALUE en entier C. Comme `cb_build_call_parameter`, un argument
+alphanumérique BY VALUE est réécrit BY CONTENT, sans ajouter de paramètre
+formel BY VALUE. Les écritures relisent les octets sources après chaque
+octet modifié : des zones qui se chevauchent gardent l'ordre natif. La
+longueur peut dépasser la PICTURE ou une sous-chaîne décrite, tant qu'elle
+reste dans l'allocation adressée et dans la limite de l'argument LINKAGE.
+Une longueur nulle ou négative ne lit ni n'écrit les données, même si leur
+adresse est OMITTED. Ces routines renvoient zéro dans RETURN-CODE.
+
+Ce contrat scalaire vise **Linux x86_64**, avec la locale C de LC_CTYPE
+initialisée par GnuCOBOL. Les tailles 1, 2, 4 et 8, SIZE AUTO, SIZE DEFAULT
+et UNSIGNED conservent les casts et promotions observés dans le C natif ;
+la taille implicite vaut 8, SIZE DEFAULT explicite vaut 4. Un littéral
+numérique transmet son coefficient sans point décimal, alors qu'un champ
+suit son décodeur de stockage natif. Dans les formats pris en charge, les
+particularités des signes, des PICTURE P et de la clause SIGN explicite sont
+conservées. Ce chemin ne
+constitue pas un support général de BY VALUE entre programmes ou vers du C
+externe ; les paramètres formels BY VALUE et CALL RETURNING/GIVING restent
+refusés.
+
+Comme `cb_build_call_parameter`, un argument alphanumérique écrit BY VALUE
+est transmis BY CONTENT ; cette règle de l'appelant ne rend pas les
+paramètres formels BY VALUE compatibles.
+
+Les résultats de FUNCTION ABS, MAX, MIN, MEDIAN et MEAN à un argument sont
+refusés comme longueur BY VALUE, car leur description de champ doit encore
+être reproduite à cet endroit. Les longueurs numériques éditées et les
+expressions de longueur ODO qui ne sont pas encore représentées par un
+scalaire restent aussi refusées. Une FUNCTION supplémentaire à un appel
+littéral de routine connue reste aussi refusée ; les autres arguments
+supplémentaires suivent le chemin natif qui les ignore. Une adresse NULL
+avec longueur positive, une écriture de littéral en lecture seule ou un
+accès au-delà de l'allocation provoquent des arrêts nommés.
+
+Les noms littéraux sont normalisés selon les espaces, le premier NUL et le
+dernier composant après `/` ou `\`, sans changer leur casse. Un nom dynamique
+conserve l'avertissement natif pour les espaces initiaux. La résolution
+dynamique donne priorité aux programmes contenus ; un littéral reconnu
+comme routine système garde la priorité de l'appel natif direct.
+
 Les programmes qui suivent `END PROGRAM` dans le même source sont des frères :
 ils sont dans l'exécutable et GnuCOBOL les trouve avant le chemin d'appel.
 Les programmes contenus (IDENTIFICATION DIVISION à la fin de la PROCEDURE
@@ -319,7 +368,8 @@ données et les fichiers du programme qui la déclare (entrée 2 de sa fonction
 C : un alias qui partage son stockage), puis rend la main au programme
 appelant. Un programme `INITIAL` est annulé (CANCEL implicite) à chaque retour.
 
-Restent refusés : BY VALUE, OMITTED, RETURNING/GIVING, USE GLOBAL sur un nom de
+Restent refusés : BY VALUE hors du contrat système ci-dessus, les paramètres
+formels USING autres que BY REFERENCE, CALL RETURNING/GIVING, USE GLOBAL sur un nom de
 fichier, un USE GLOBAL que le parcours de cobc.c prendrait à un programme non
 contenant, ALTER dans un programme à USE GLOBAL et GOBACK ou EXIT PROGRAM dans
 sa procédure, FD

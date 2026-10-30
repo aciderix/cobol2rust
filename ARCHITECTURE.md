@@ -122,6 +122,40 @@ appelé (`Option<Box<…>>` et un indicateur actif). `run` rend
 `runtime::Outcome::{Return, Stop}` ; un appelé lie ses articles LINKAGE aux
 arguments par `storage_runtime::rebind` dans sa méthode `call`.
 
+`system_calls.py` décrit les signatures des huit opérations CBL sur les bits
+et de TOUPPER/TOLOWER avec leurs alias (douze noms). `Scalar` garde l'opérande,
+la taille et UNSIGNED jusqu'à l'émission ; le frontend réécrit le BY VALUE
+alphanumérique en BY CONTENT comme `cb_build_call_parameter`.
+`scalar_expression` porte
+`output_call_by_value_args`, y compris ses casts de signe observables ; les
+littéraux conservent leur coefficient, les champs passent par
+`storage_runtime::system_integer`. Le marqueur `Field.sign_clause` désigne
+une clause SIGN explicite avant héritage : il sélectionne le chemin natif
+non optimisé sans confondre les attributs SIGN hérités. Ce décodeur sert aux
+arguments scalaires de ces routines, pas à tous les indices du programme.
+
+`cli.convert` copie aussi `src/system_runtime.rs` dans le projet autonome.
+Ce module porte les boucles de `common.c` sur les vues de stockage : chaque
+itération lit les octets après l'écriture précédente, sans snapshot qui
+effacerait l'aliasage. Le compte d'octets peut dépasser la taille de la vue,
+mais reste borné par l'allocation et `View.limit`. Un compte non positif
+revient avant tout accès aux adresses. Les écritures gardent la protection
+des constantes. Les tables de casse utilisent la libc dans une locale C
+privée, comme LC_CTYPE au démarrage natif, sans changer la locale globale.
+Le contrat ABI est explicitement limité à Linux x86_64 ; les profils non
+portés et les accès natifs hors stockage sont des refus nommés.
+
+Le frontend normalise les noms littéraux (espaces, NUL, composant de chemin)
+et vérifie l'arité minimale des routines connues. L'émetteur conserve les
+modes de passage et distingue l'appel littéral système de la résolution
+dynamique, dont les programmes contenus sont prioritaires. Les noms
+dynamiques gardent l'avertissement pour les espaces initiaux. Les autres
+ABI BY VALUE, les paramètres formels BY VALUE et CALL RETURNING/GIVING
+restent refusés. Il en va de même pour les résultats qui conservent une
+description de champ (ABS, MAX, MIN, MEDIAN et MEAN à un argument) comme
+longueur scalaire et pour une FUNCTION supplémentaire d'appel littéral
+système ; aucun résultat décimal générique ne remplace leur contrat natif.
+
 Pour `PIC X ANY LENGTH`, `update_any_length` porte l'initialisation de
 `output_entry_function` : seule la taille du descripteur est copiée depuis
 l'appelant. Le rang est celui de l'union des paramètres, même si ENTRY les

@@ -5,7 +5,7 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
-## État courant — 29 octobre 2026 (à tenir à jour à chaque commit)
+## État courant — 30 octobre 2026 (à tenir à jour à chaque commit)
 
 Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4),
 sans branche distante plus avancée au contrôle du 28 octobre. Reprise locale
@@ -13,9 +13,9 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1203/3593 sources acceptées** (cobc 1617,
-écart 414, à examiner 0) ; testsuite GnuCOBOL 479/1135, six corpus d'origine
-724/2458. Exécution globale renouvelée le 29 octobre : CardDemo 8/8,
+Mesure des corpus réels : **1214/3593 sources acceptées** (cobc 1617,
+écart 403, à examiner 0) ; testsuite GnuCOBOL 490/1135, six corpus d'origine
+724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 0/3, cours 10/12, livre 53/61, soit **71/84 identiques**,
 cinq divergences et huit délais. Les trois exemples zopeneditor ont stdout
 et fichiers identiques, mais plantent en natif à la fermeture implicite
@@ -40,7 +40,51 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (29 octobre) : capture des SOURCE de rapports avant les
+Dernière étape (30 octobre) : routines système d'octets. `system_calls.py`
+décrit les douze noms natifs et l'ABI de leur longueur scalaire ;
+`system_runtime.rs` porte les boucles de `common.c` avec alias vivants.
+Les huit CBL logiques et TOUPPER/TOLOWER (alias compris) renvoient zéro.
+La longueur BY VALUE suit les casts de `output_call_by_value_args`, dans le
+profil Linux x86_64. `system_integer` porte les chemins DISPLAY optimisés,
+SIGN explicite/hérité, packed/COMP-6 et binaire, sans ajouter de contrôle
+numérique absent du natif. `Field.sign_clause` garde le fait qu'un SIGN
+est explicite, avant héritage. La table packed conserve `0x2F → 25`.
+
+Les noms sont normalisés (espaces/NUL/composant de chemin) ; les appels
+dynamiques gardent leur avertissement et la priorité des programmes
+contenus, tandis qu'un appel système littéral reste direct. Les scalaires
+statiques supplémentaires ne sont pas décodés. Un argument alphanumérique
+BY VALUE est réécrit BY CONTENT, comme dans cobc. Les autres ABI utilisateur,
+paramètres formels BY VALUE, CALL RETURNING, résultats de FUNCTION à
+description conservée et FUNCTION scalaires supplémentaires restent refusés.
+Les accès hors allocation, littéraux en écriture et pointeurs omis positifs
+restent nommés. Les autres limites de lecture des indices ne changent pas.
+
+Acceptation **1203 → 1214/3593**, écart **414 → 403**, à examiner zéro :
+les dix routines visées et un cas syntaxique d'argument alphanumérique.
+Quatorze nouveaux tests incluent une fixture de 3072 octets et 29 longueurs
+scalaires dans les deux profils. Ciblage avec les appels existants :
+**22/22 réussis**, journal
+`/workspace/tooling/system-calls-targeted-final-20261030.log`.
+NIST statique renouvelé : `build/coverage-nist-system-calls-20261030.json`,
+**451/458**, sans erreur interne. Exécution globale : **71/84**, cinq
+divergences et huit délais, avec les mêmes programmes dans chaque catégorie.
+Les dix nouveaux programmes de routines s'exécutent à l'identique avec
+codes zéro ; le onzième cas syntaxique appelle PROG2 absent (codes 1/1 des
+deux côtés), sans être compté comme une exécution réussie. Rapport :
+`build/system-calls-new-sources-verification-20261030.json`.
+Attention : `verify['match']` peut être vrai pour deux codes non nuls égaux ;
+le classement positif exige en plus les codes zéro. Les scénarios d'entrée
+restent **11/11 identiques**, rapport distinct :
+`build/real-input-cases-system-calls-20261030.json`.
+Suite complète : **491 découverts, 490 validés et un PE Windows ignoré**,
+sans échec ni erreur ; journal
+`/workspace/tooling/system-calls-all-tests-20261030.log`.
+Bilan des preuves : `build/system-calls-validation-20261030.json`.
+Empreinte du convertisseur :
+`3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305`.
+
+Étape précédente (29 octobre) : capture des SOURCE de rapports avant les
 ruptures de contrôle. `prepare_sources` crée des temporaires typés distincts
 comme `cb_field_dup`, après une première disposition mémoire ; les lignes
 pointent sur ces champs. `prepare_moves` construit les deux passes au premier
@@ -117,8 +161,8 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 `/workspace/tooling/bdb-dev-20261028/manifest.json`.
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
-SCREEN SECTION (36 des 37 « niveau de donnée attendu »), USAGE POINTER (14), CALL
-BY VALUE (13), clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
+SCREEN SECTION (36 des 37 « niveau de donnée attendu »), USAGE POINTER (14),
+clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
 EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
 modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
@@ -126,6 +170,9 @@ modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
 COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. ANY NUMERIC et partage de
 descripteurs GLOBAL sont des extensions distinctes à mesurer.
+Les ABI BY VALUE utilisateur/externe et les paramètres formels restent un
+chantier distinct ; les treize blocages historiques ne sont plus un groupe
+de treize sources à débloquer après le port des routines système.
 Exécution : cinq divergences (trois plantages natifs zopeneditor, deux
 indices hors bornes dans le livre), six délais du livre et deux du cours.
 

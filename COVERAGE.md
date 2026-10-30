@@ -933,3 +933,33 @@ Les scénarios avec entrées déclarées restent **11/11 identiques**, avec leur
 propre dénominateur. Suite Python complète : **476/477 validés**, un PE
 Windows ignoré, aucun échec ni erreur. Bilan des preuves :
 `build/report-source-validation-20261029.json`.
+
+## Progression : routines système d'octets — 30 octobre 2026
+
+Port des huit opérations logiques CBL sur les octets et de TOUPPER/TOLOWER,
+avec leurs alias : douze noms de `system.def`. Les lectures et écritures
+gardent les alias vivants et les chevauchements ; BY CONTENT isole sa copie.
+La longueur non positive ne touche pas aux adresses. Les scalaires BY VALUE
+de ces routines suivent le profil Linux x86_64 ; les autres ABI et CALL
+RETURNING restent refusés, ainsi que les descriptions de résultats de
+FUNCTION non reproduites. Un BY VALUE alphanumérique devient BY CONTENT,
+sans rendre les paramètres formels BY VALUE compatibles.
+
+Acceptation **1203 → 1214/3593**, testsuite **479 → 490/1135**, écart à cobc
+**414 → 403**, aucune acceptation refusée par cobc. Les six autres corpus
+restent à 724/2458. NIST statique **451/458**, zéro erreur interne.
+Exécution globale renouvelée : **71/84 identiques**, cinq divergences et
+huit délais. Les onze nouvelles sources sont validées séparément ; elles
+n'entrent pas dans le dénominateur des 84 programmes batch d'origine.
+Les dix programmes de routines s'exécutent à l'identique avec des codes
+zéro. Le cas syntaxique restant s'arrête des deux côtés sur PROG2 absent
+(codes 1/1) et n'est pas compté comme une exécution réussie.
+
+Quatorze tests ajoutés, dont une fixture de **3072 octets** sur toutes les
+valeurs d'octet et **29 longueurs scalaires dans deux profils**. Avec les
+appels existants, **22/22 tests ciblés réussissent**. Les détails, limites
+et preuves sont dans [VALIDATION.md](VALIDATION.md).
+Suite Python complète : **490/491 validés**, un PE Windows ignoré, sans
+échec ni erreur. Les scénarios d'entrée restent **11/11 identiques**,
+distincts des campagnes des corpus et des nouvelles sources.
+Preuves : `build/system-calls-validation-20261030.json`.

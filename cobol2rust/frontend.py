@@ -608,6 +608,7 @@ class Field:
     alnum_edit: str = ""
     justified: bool = False
     # SIGN clause of a signed DISPLAY item; a group's clause for its items.
+    sign_clause: bool = False
     sign_leading: bool = False
     sign_separate: bool = False
     group_sign: tuple | None = None
@@ -4121,23 +4122,66 @@ class Parser:
                 if self.fields[ref.name].kind != "text" and ref.start is None:
                     self.error("CALL identifiant requiert un champ alphanumérique")
                 target = ("dynamic", ref)
+            from .system_calls import CATALOG, Scalar
+            if target[0] == "literal":
+                name = target[1].split("\0", 1)[0].strip(" ")
+                if not name:
+                    self.error("nom CALL vide non pris en charge")
+                basename = name.replace("\\", "/").rsplit("/", 1)[-1]
+                target = ("literal", basename if basename in CATALOG else name)
             arguments, mode = [], "REFERENCE"
+            scalar_size, scalar_unsigned = 8, False
             if self.accept("USING"):
                 while True:
+                    argument_start = self.i
                     if self.accept("BY"):
-                        if not (self.at("REFERENCE") or self.at("CONTENT")):
-                            self.error("CALL USING limité à BY REFERENCE et BY CONTENT")
+                        if not (self.at("REFERENCE") or self.at("CONTENT") or self.at("VALUE")):
+                            self.error("mode CALL USING attendu")
                     if self.accept("REFERENCE"):
                         mode = "REFERENCE"
                     elif self.accept("CONTENT"):
                         mode = "CONTENT"
+                    elif self.accept("VALUE"):
+                        mode = "VALUE"
+                    if self.at("UNSIGNED") or self.at("SIZE"):
+                        if mode != "VALUE":
+                            self.error("SIZE only allowed for BY VALUE items")
+                        scalar_unsigned = bool(self.accept("UNSIGNED"))
+                        self.expect("SIZE")
+                        self.accept("IS")
+                        if self.accept("AUTO"):
+                            scalar_size = "AUTO"
+                        elif not scalar_unsigned and self.accept("DEFAULT"):
+                            scalar_size = 4
+                        elif self.t.text in {"1", "2", "4", "8"} and not self.t.string:
+                            scalar_size = int(self.take().text)
+                        else:
+                            self.error("invalid value for SIZE")
                     if self.at("OMITTED") and mode == "REFERENCE":
                         # A NULL address: the callee's item is not passed.
                         self.take()
                         arguments.append((mode, None))
                         continue
-                    if self.at("OMITTED") or self.at("VALUE"):
-                        self.error("CALL USING limité aux identifiants BY REFERENCE/CONTENT")
+                    if self.at("OMITTED"):
+                        self.error("OMITTED only allowed when arguments are passed BY REFERENCE")
+                    if mode == "VALUE":
+                        if not self.operand_start() and not self.at("+") and not self.at("-"):
+                            if self.i != argument_start:
+                                self.error("argument CALL attendu après BY VALUE/SIZE")
+                            break
+                        value = self.expr(primary=True)
+                        # cb_build_call_parameter: alphanumeric VALUE becomes CONTENT.
+                        if value.op == "text":
+                            arguments.append(("CONTENT", value))
+                        elif value.op == "var" and (value.args[0].start is not None or
+                                                     self.fields[value.args[0].name].kind == "text"):
+                            ref = value.args[0]
+                            if self.fields[ref.name].any_length:
+                                self.error("article ANY LENGTH requis BY REFERENCE dans CALL USING")
+                            arguments.append(("CONTENT", ref))
+                        else:
+                            arguments.append((mode, Scalar(value, scalar_size, scalar_unsigned)))
+                        continue
                     if re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", self.t.text) and not self.t.string:
                         # output_call: an 8-byte union whose int holds the
                         # literal's digits, the rest left uninitialized.
@@ -4157,6 +4201,10 @@ class Parser:
                     arguments.append((mode, ref))
                 if not arguments:
                     self.error("CALL USING requiert au moins un argument")
+            if target[0] == "literal" and target[1] in CATALOG and len(arguments) < CATALOG[target[1]][1]:
+                self.error(f"CALL {target[1]} requiert au moins {CATALOG[target[1]][1]} arguments")
+            if target[0] == "literal" and target[1] not in CATALOG and any(mode == "VALUE" for mode, _ in arguments):
+                self.error("CALL BY VALUE : ABI hors des routines système d'octets non prise en charge")
             if self.at("RETURNING") or self.at("GIVING"):
                 self.error("CALL RETURNING/GIVING non pris en charge")
             exception, success = [], []

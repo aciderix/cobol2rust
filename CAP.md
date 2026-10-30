@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-29T18:36:55+00:00 (commit `a0226811a0`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-30T08:11:52+00:00 (commit `20473c52a9`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,10 +101,10 @@ Dernière mesure : 2026-10-29T18:36:55+00:00 (commit `a0226811a0`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 479 | 879 | 400 | 0 |
-| **Total** | | **3593** | **1203** | **1617** | **414** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 490 | 879 | 389 | 0 |
+| **Total** | | **3593** | **1214** | **1617** | **403** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-29T18:36:55+00:00, commit `a0226811a0`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T08:11:52+00:00, commit `20473c52a9`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -117,14 +117,14 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 
 1. 37 × niveau de donnée attendu
 2. 14 × USAGE/clause non pris en charge: POINTER
-3. 13 × CALL USING limité à BY REFERENCE et BY CONTENT
-4. 12 × clause SELECT non prise en charge
-5. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
-6. 9 × expression non prise en charge: LINE
-7. 8 × PROCEDURE attendu
-8. 8 × . attendu
-9. 8 × PROGRAM-ID attendu
-10. 7 × USAGE/clause non pris en charge: DEPENDING
+3. 12 × clause SELECT non prise en charge
+4. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
+5. 9 × expression non prise en charge: LINE
+6. 8 × PROCEDURE attendu
+7. 8 × . attendu
+8. 8 × PROGRAM-ID attendu
+9. 7 × USAGE/clause non pris en charge: DEPENDING
+10. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -422,3 +422,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   aucun échec ni erreur ; scénarios d'entrée **11/11 identiques**, avec
   leur dénominateur distinct. Les limites restantes sont documentées dans
   VALIDATION.md et HANDOFF.md.
+- 2026-10-30 — Routines système d'octets : choix de dix blocages BY VALUE
+  isolables avant SCREEN (backend et preuve terminale absents) et POINTER
+  (modèle d'adresses à porter). Port des huit CBL logiques et des routines
+  de casse avec leurs alias, en conservant les alias mémoire, les lectures
+  scalaires et casts natifs du profil Linux x86_64. Les autres ABI, CALL
+  RETURNING et descriptions de résultats non reproduites restent des refus
+  nommés. Un BY VALUE alphanumérique devient BY CONTENT, comme dans cobc.
+  Aucun cas spécial par programme. Testsuite **479 → 490**, total
+  **1203 → 1214/3593**, écart **414 → 403**, à examiner zéro. Dix programmes
+  de routines exécutés à l'identique avec codes zéro ; le onzième cas
+  syntaxique s'arrête des deux côtés sur PROG2 absent (codes 1/1), sans être
+  compté comme exécution réussie. Exécution globale renouvelée : **71/84**,
+  cinq divergences et huit délais inchangés ; NIST statique **451/458**,
+  zéro erreur interne. Quatorze nouveaux tests ; ciblage **22/22**, dont
+  3072 octets et 29 longueurs scalaires dans les deux profils. Les scénarios
+  d'entrée restent **11/11**, avec leur propre dénominateur.
+  Suite complète : **491 découverts, 490 validés, un PE Windows ignoré**,
+  sans échec ni erreur ; preuves et empreintes dans
+  `build/system-calls-validation-20261030.json`.

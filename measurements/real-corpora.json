@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-29T18:36:55+00:00",
- "git_head": "a0226811a0aea3575497b953f1ffc99796d76d44",
- "implementation_sha256": "aa33eb3af3fe6cac36ae680e4ecd10a5fcc02dbb3c85913da9e51c2ff09340f9",
+ "measured_at": "2026-10-30T08:11:52+00:00",
+ "git_head": "20473c52a961683a96ebab8df5e951c7e7ed69ce",
+ "implementation_sha256": "3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1203,
+  "accepted": 1214,
   "cobc_accepted": 1617,
-  "gap": 414,
+  "gap": 403,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 479,
+   "accepted": 490,
    "internal_errors": 0,
    "blockers": [
     [
@@ -453,10 +453,6 @@
     [
      "clause SELECT non prise en charge",
      14
-    ],
-    [
-     "CALL USING limité à BY REFERENCE et BY CONTENT",
-     13
     ],
     [
      ". attendu",
@@ -485,12 +481,16 @@
     [
      "FUNCTION EXCEPTION-STATUS non prise en charge",
      9
+    ],
+    [
+     "USAGE/clause non pris en charge: DEPENDING",
+     8
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 400,
+   "gap": 389,
    "gap_sources": [
     [
      "data_pointer-001/prog.cob",
@@ -546,7 +546,7 @@
     ],
     [
      "run_extensions-028/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
+     "PROCEDURE DIVISION USING limité à BY REFERENCE"
     ],
     [
      "run_extensions-034/callee.cob",
@@ -623,46 +623,6 @@
     [
      "run_extensions-059/prog.cob",
      "CALL C$GETPID: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-060/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-061/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-062/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-063/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-064/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-065/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-066/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-067/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-068/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
-     "run_extensions-069/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
     ],
     [
      "run_extensions-070/prog.cob",
@@ -814,7 +774,7 @@
     ],
     [
      "run_file-043/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_file-055/prog1.cob",
@@ -1861,10 +1821,6 @@
      "PROGRAM-ID attendu"
     ],
     [
-     "syn_definition-039/prog.cob",
-     "CALL USING limité à BY REFERENCE et BY CONTENT"
-    ],
-    [
      "syn_definition-040/prog.cob",
      "PICTURE non prise en charge: N(4)"
     ],
@@ -2103,10 +2059,6 @@
      14
     ],
     [
-     "CALL USING limité à BY REFERENCE et BY CONTENT",
-     13
-    ],
-    [
      "clause SELECT non prise en charge",
      12
     ],
@@ -2141,14 +2093,18 @@
     [
      "PROCEDURE attendu",
      6
+    ],
+    [
+     "USAGE/clause non pris en charge: BASED",
+     6
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-29T18:36:55+00:00",
-  "git_head": "a0226811a0aea3575497b953f1ffc99796d76d44",
-  "implementation_sha256": "aa33eb3af3fe6cac36ae680e4ecd10a5fcc02dbb3c85913da9e51c2ff09340f9",
+  "measured_at": "2026-10-30T08:11:52+00:00",
+  "git_head": "20473c52a961683a96ebab8df5e951c7e7ed69ce",
+  "implementation_sha256": "3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

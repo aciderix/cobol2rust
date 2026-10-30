@@ -62,6 +62,116 @@ fn native_bytes(units: &BigInt, size: usize) -> Vec<u8> {
     bytes
 }
 
+/// codegen.c output_integer, for scalar arguments of native system calls.
+/// CALL does not insert cob_check_numeric, including in the -debug profile.
+pub fn system_integer(value: &Value) -> i128 {
+    system_integer_impl(value, true)
+}
+
+/// An explicit item SIGN clause disables cob_get_numdisp(s).
+pub fn system_integer_unoptimized(value: &Value) -> i128 {
+    system_integer_impl(value, false)
+}
+
+/// move.c pack_to_bin, including its observable 0x2F -> 25 entry.
+const SYSTEM_PACK_TO_BIN: [u8; 256] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+    20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 25,
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+    40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
+    50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
+    60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
+    70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85,
+    80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+    90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105,
+    100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
+    110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
+    120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+    130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145,
+    140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+    150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165,
+];
+
+fn system_integer_impl(value: &Value, optimized_display: bool) -> i128 {
+    fn int32(units: &BigInt) -> i128 {
+        let bytes: [u8; 4] = native_bytes(units, 4).try_into().unwrap();
+        i32::from_le_bytes(bytes) as i128
+    }
+    let view = match value {
+        Value::Num(number, _) => return int32(&number.units(0, false)),
+        Value::View(view) => view,
+        _ => fail("argument entier BY VALUE non numérique non pris en charge"),
+    };
+    let (digits, scale, signed, usage) = match view.kind {
+        Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage),
+        _ => fail("argument entier BY VALUE édité ou alphanumérique non pris en charge"),
+    };
+    let mut bytes = view.raw();
+    if bytes.is_empty() { fail("argument entier BY VALUE sans stockage"); }
+    match usage {
+        Usage::Binary | Usage::Native | Usage::Register | Usage::Index => {
+            if !matches!(bytes.len(), 1 | 2 | 4 | 8) {
+                fail("taille binaire BY VALUE non prise en charge");
+            }
+            let signed = signed || matches!(usage, Usage::Index);
+            let number = if matches!(usage, Usage::Binary) {
+                if signed { BigInt::from_signed_bytes_be(&bytes) } else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
+            } else if signed {
+                BigInt::from_signed_bytes_le(&bytes)
+            } else {
+                BigInt::from_bytes_le(Sign::Plus, &bytes)
+            };
+            number.to_string().parse().unwrap()
+        },
+        Usage::Packed | Usage::PackedNoSign => {
+            // cob_packed_get_int ignores scale. Native metadata counts trailing P.
+            let native_digits = digits + (-scale).max(0) as u32;
+            let no_sign = matches!(usage, Usage::PackedNoSign);
+            let low_first = if no_sign { native_digits % 2 == 1 } else { native_digits % 2 == 0 };
+            if !no_sign && low_first && bytes.len() == 1 {
+                fail("lecture BY VALUE au-delà du stockage packed natif non prise en charge");
+            }
+            let mut n = if low_first { (bytes.remove(0) & 15) as i32 } else { 0 };
+            let last = if no_sign { None } else { bytes.pop() };
+            for byte in bytes {
+                n = n.wrapping_mul(100).wrapping_add(SYSTEM_PACK_TO_BIN[byte as usize] as i32);
+            }
+            if let Some(byte) = last {
+                n = n.wrapping_mul(10).wrapping_add((byte >> 4) as i32);
+                if byte & 15 == 13 { n = n.wrapping_neg(); }
+            }
+            n as i128
+        },
+        Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate
+            if optimized_display && scale >= 0 && (1..=9).contains(&(bytes.len() as i32 - scale)) => {
+            // cob_get_numdisp(s): sign comes from the last INTEGER byte.
+            let prefix = &bytes[..bytes.len() - scale as usize];
+            let n = prefix.iter().fold(0i32, |n, byte| n.wrapping_mul(10).wrapping_add((byte & 15) as i32));
+            if signed && prefix[prefix.len() - 1] & 0x40 != 0 { n.wrapping_neg() as i128 } else { n as i128 }
+        },
+        Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {
+            // cob_display_get_int / cob_real_get_sign with the ASCII profile.
+            let mut negative = false;
+            if signed {
+                let first = matches!(usage, Usage::SignLeading | Usage::SignLeadingSeparate);
+                let separate = matches!(usage, Usage::SignLeadingSeparate | Usage::SignTrailingSeparate);
+                let position = if first { 0 } else { bytes.len() - 1 };
+                negative = if separate { bytes[position] == b'-' } else { bytes[position] & 0xf0 == 0x70 };
+                if separate { bytes.remove(position); }
+            }
+            if scale > bytes.len() as i32 || scale < -9 {
+                fail("PICTURE P hors des bornes de cob_display_get_int non prise en charge");
+            }
+            let count = bytes.len() - scale.max(0) as usize;
+            let mut n = bytes[..count].iter().fold(0i32, |n, byte| n.wrapping_mul(10).wrapping_add((byte & 15) as i32));
+            if scale < 0 { n = n.wrapping_mul(10i32.pow((-scale) as u32)); }
+            if negative { n = n.wrapping_neg(); }
+            n as i128
+        },
+    }
+}
+
 /// The digits of DISPLAY storage and its sign, as cob_real_get_sign reads
 /// them: an overpunch 'p'..'y' on the sign digit, or a separate byte where
 /// only '-' is negative. Unsigned items have no sign position.

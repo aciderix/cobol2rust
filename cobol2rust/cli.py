@@ -166,7 +166,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
     while pruned:
         pruned = False
         for name in [name for name in units if name not in targets]:
-            if any(callee not in units and callee != main.entry_name and not surely_absent(callee, present)
+            from .system_calls import CATALOG
+            if any(callee not in CATALOG and callee not in units and callee != main.entry_name and not surely_absent(callee, present)
                    for callee in call_targets(units[name][1])[0]):
                 del units[name]
                 pruned = True
@@ -250,6 +251,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     (output / "src" / "main.rs").write_text(rust, encoding="utf-8")
     (output / "src" / "runtime.rs").write_text(Path(__file__).with_name("runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
+    (output / "src" / "system_runtime.rs").write_text(Path(__file__).with_name("system_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     if program.files or any(sub.files for _, sub, _, _ in subprograms):
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     # One character per source byte: expanded.cob keeps the original bytes.

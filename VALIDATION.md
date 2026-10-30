@@ -1,4 +1,78 @@
-# Validation — 29 octobre 2026
+# Validation — 30 octobre 2026
+
+## Routines système d'octets — 30 octobre 2026
+
+Le chantier vise dix des treize premiers écarts `CALL BY VALUE` de la
+mesure précédente. SCREEN et POINTER demandent respectivement un backend
+terminal vérifiable et un modèle d'adresses ; les routines d'octets offrent
+un contrat natif isolable. Les noms reconnus sont les symboles de
+`system.def`, sans sélection selon le nom d'un programme du corpus.
+
+- Port de `cob_sys_and/or/nor/xor/imp/nimp/eq/not` et
+  `cob_sys_toupper/tolower` de `common.c`. Douze noms sont reconnus, alias
+  `CBL_TOUPPER/TOLOWER` et `C$TOUPPER/TOLOWER` compris. La fixture compare
+  les 256 valeurs d'octet dans douze enregistrements : **3072 octets**,
+  SHA256 `d420b7baf1c856087bc5d76514c10da561903bd4b3b036b231ec8406aa275515`,
+  stdout `byte calls OK`, stderr vide et codes zéro dans les deux profils.
+- Les opérations lisent et écrivent chaque octet dans l'ordre natif,
+  avec alias vivants et chevauchements. BY CONTENT isole la copie. La
+  longueur non positive ne déréférence aucun pointeur ; une longueur
+  positive peut dépasser la PICTURE dans l'allocation adressée. Les accès
+  hors allocation, pointeurs omis et écritures dans les littéraux restent
+  des arrêts nommés, sans inventer de mémoire native.
+- La longueur est un scalaire C int après les conversions de
+  `output_call_by_value_args`. Taille implicite 8, SIZE 1/2/4/8, AUTO,
+  DEFAULT et UNSIGNED suivent le profil **Linux x86_64**, bogues de signe
+  compris. DISPLAY optimisé, SIGN explicite ou hérité, packed, COMP-6 et
+  binaire ont leurs lecteurs distincts ; la table native `pack_to_bin`
+  conserve son entrée anormale `0x2F → 25`. CALL n'insère pas de validation
+  numérique dans le profil `-debug` non plus.
+- Les **29 cas scalaires** sont comparés dans les deux profils ; sortie
+  native SHA256 `4890e551b71bb9e9ac30ffe4c83e4fea159cd5b43ba54ff3edc0751285fec607`.
+  Les autres tests couvrent les noms, chemins, NUL, avertissement des noms
+  dynamiques avec espaces, priorité des programmes contenus, appel système
+  littéral direct et absence de lecture d'un scalaire supplémentaire statique.
+  **14 nouveaux tests** ; avec les appels existants, **22/22 réussis**.
+  Journal : `/workspace/tooling/system-calls-targeted-final-20261030.log`.
+
+Le support BY VALUE reste propre à l'ABI de ces routines. Les paramètres
+formels ou ABI utilisateur/externe, CALL RETURNING, les résultats de FUNCTION
+conservant une description non reproduite (ABS, MAX, MIN, MEDIAN, MEAN à un
+argument) et les FUNCTION scalaires supplémentaires d'un appel littéral
+restent refusés. Les positions/indices et les autres limites générales du
+modèle numérique restent applicables. La casse utilise la libc dans une
+locale C privée, comme LC_CTYPE après `cob_init`, sans GnuCOBOL à l'exécution.
+
+Mesure complète renouvelée : **1203 → 1214/3593 émissions acceptées**,
+testsuite **479 → 490/1135**, écart à cobc **414 → 403**, aucune acceptation
+refusée par cobc. Dix cas correspondent aux routines ciblées ; le onzième
+utilise la conversion de l'argument alphanumérique BY VALUE en BY CONTENT.
+Les six autres corpus restent à 724/2458 ; leurs sources et données ne sont
+pas modifiées. Exécution globale : **71/84 identiques**, cinq divergentes
+et huit délais, avec les mêmes programmes dans chaque catégorie.
+NIST statique : **451/458**, zéro erreur interne,
+`build/coverage-nist-system-calls-20261030.json`. Les 413 exécutions NIST et
+14 compilations seules restent une preuve historique.
+
+Les onze sources nouvellement émises ont été compilées et exécutées avec
+leurs dossiers et chemins d'appels : **10/10 programmes de routines
+système identiques**, stdout/stderr, fichiers et codes zéro. La source
+syntaxique restante appelle PROG2, absent du corpus : même arrêt nommé et
+mêmes sorties des deux côtés, codes **1/1**. Elle n'est pas comptée comme
+une exécution réussie. Rapport :
+`build/system-calls-new-sources-verification-20261030.json`.
+Le champ `match` du vérificateur compare aussi des codes non nuls égaux ;
+le classement positif de cette campagne exige explicitement le code zéro.
+Les onze scénarios avec entrées déclarées restent **11/11 identiques**,
+dans leur dénominateur distinct :
+`build/real-input-cases-system-calls-20261030.json`.
+
+Suite Python complète : **491 tests découverts, 490 validés et un test PE
+Windows ignoré**, aucun échec ni erreur (311 secondes). Journal :
+`/workspace/tooling/system-calls-all-tests-20261030.log`.
+Bilan avec empreintes : `build/system-calls-validation-20261030.json`.
+L'empreinte du convertisseur est
+`3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305`.
 
 ## Capture des SOURCE de rapports — 29 octobre 2026
 
