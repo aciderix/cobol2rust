@@ -962,7 +962,9 @@ pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: boo
 enum Access { Sequential, Random, Dynamic }
 
 #[derive(Clone, Copy)]
-pub enum StartCondition { Equal, Greater, NotLess }
+/// The START conditions of cob_start: COB_EQ, COB_GT, COB_GE, COB_LT,
+/// COB_LE, COB_FI (FIRST) and COB_LA (LAST).
+pub enum StartCondition { Equal, Greater, NotLess, Less, NotGreater, First, Last }
 
 /// GnuCOBOL 3.2 RELATIVE file on Linux x86-64: each slot is a native size_t
 /// (8 bytes, little endian) holding the record size, then `record_max` bytes.
@@ -986,6 +988,8 @@ pub struct RelativeFile {
     last_open_mode: &'static str,
     nonexistent: bool,
     end_of_file: bool,
+    /// flag_begin_of_file: READ PREVIOUS reached the start.
+    begin_of_file: bool,
     first_read: u8,
     read_done: bool,
 }
@@ -1026,7 +1030,7 @@ impl RelativeFile {
             _ => fail("unsupported RELATIVE access mode"),
         };
         Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
-               last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
+               last_open_mode: "", nonexistent: false, end_of_file: false, begin_of_file: false, first_read: 0, read_done: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
@@ -1124,13 +1128,14 @@ impl RelativeFile {
     }
 
     /// cob_read_next followed by relative_read_next.
-    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>, depending: Option<&mut Value>) -> u8 {
-        let status = self.cob_read_next(record, key);
+    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool, depending: Option<&mut Value>) -> u8 {
+        let status = self.cob_read_next(record, key, previous);
         if status < 10 { set_depending(depending, self.last_read_size); }
         status
     }
 
-    fn cob_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+    /// cob_read_next: READ NEXT, or PREVIOUS (COB_READ_PREVIOUS).
+    fn cob_read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -1138,26 +1143,38 @@ impl RelativeFile {
             self.first_read = 0;
             return 10;
         }
-        if self.end_of_file { return 46; }
-        let status = self.relative_read_next(record, key);
+        if self.end_of_file && !previous { return 46; }
+        if self.begin_of_file && previous { return 46; }
+        let status = self.relative_read_next(record, key, previous);
         if status < 10 {
             self.first_read = 0;
             self.read_done = true;
             self.end_of_file = false;
+            self.begin_of_file = false;
         } else if status == 10 {
-            self.end_of_file = true;
+            if previous { self.begin_of_file = true; } else { self.end_of_file = true; }
         }
         status
     }
 
-    fn relative_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+    /// relative_read_next. READ PREVIOUS steps back two slots from the
+    /// current position, and after a record one slot (lseek fails below
+    /// the start of the file and leaves the position), as libcob 3.2 does.
+    fn relative_read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool) -> u8 {
         let slot = self.slot_size();
         let record_max = self.record_max;
+        let first_read = self.first_read != 0;
         let file = self.file.as_mut().unwrap();
         let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
         if length == 0 { return 10; }
         if length < slot { return 30; }
         let mut offset = seek(file, SeekFrom::Current(0));
+        let mut moveback = false;
+        if previous && !first_read {
+            if offset <= slot { return 10; }
+            offset = seek(file, SeekFrom::Start(offset - 2 * slot));
+            moveback = true;
+        }
         loop {
             let mut size = [0u8; 8];
             let count = read_full(file, &mut size);
@@ -1178,9 +1195,15 @@ impl RelativeFile {
                         return 14;
                     }
                 }
+                if moveback && offset >= slot { seek(file, SeekFrom::Start(offset - slot)); }
                 return 0;
             }
-            offset = seek(file, SeekFrom::Current(record_max as i64));
+            if moveback {
+                if offset <= slot { return 10; }
+                offset = seek(file, SeekFrom::Start(offset - 2 * slot));
+            } else {
+                offset = seek(file, SeekFrom::Current(record_max as i64));
+            }
         }
     }
 
@@ -1306,7 +1329,7 @@ impl RelativeFile {
         0
     }
 
-    /// cob_start then relative_start for EQUAL, GREATER and NOT LESS.
+    /// cob_start then relative_start.
     pub fn start(&mut self, condition: StartCondition, key: &Value) -> u8 {
         self.read_done = false;
         self.first_read = 0;
@@ -1315,28 +1338,48 @@ impl RelativeFile {
         if self.nonexistent { return 23; }
         let status = self.relative_start(condition, key);
         self.end_of_file = status != 0;
+        self.begin_of_file = false;
         self.first_read = 1;
         status
     }
 
     fn relative_start(&mut self, condition: StartCondition, key: &Value) -> u8 {
+        use StartCondition::*;
         let slot = self.slot_size();
         let file = self.file.as_mut().unwrap();
         let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
         if length == 0 { return 23; }
-        let mut index = key_number(key) - 1;
+        let last = (length / slot) as i64 - 1;
+        let (condition, mut index) = match condition {
+            First => (NotLess, 0),
+            Last => (NotGreater, last),
+            Less | NotGreater => {
+                // Against the current file size; LT decrements below.
+                let index = key_number(key) - 1;
+                (condition, if index > last { last + matches!(condition, Less) as i64 } else { index })
+            },
+            _ => (condition, key_number(key) - 1),
+        };
         if index < 0 {
             index = match condition {
-                StartCondition::NotLess => 0,
-                StartCondition::Greater => -1,
-                StartCondition::Equal => return 23,
+                NotLess => 0,
+                Greater => -1,
+                _ => return 23,
             };
         }
-        if matches!(condition, StartCondition::Greater) { index += 1; }
+        if matches!(condition, Less) {
+            index -= 1;
+            if index < 0 { return 23; }
+        } else if matches!(condition, Greater) {
+            index += 1;
+        }
         loop {
             if index < 0 { return 23; }
             let offset = index as u64 * slot;
-            if offset >= length { return 23; }
+            if offset >= length {
+                if matches!(condition, Less | NotGreater) { index -= 1; continue; }
+                return 23;
+            }
             seek(file, SeekFrom::Start(offset));
             let mut size = [0u8; 8];
             if read_full(file, &mut size) == 8 && u64::from_le_bytes(size) > 0 {
@@ -1344,7 +1387,8 @@ impl RelativeFile {
                 return 0;
             }
             match condition {
-                StartCondition::Equal => return 23,
+                Equal => return 23,
+                Less | NotGreater => index -= 1,
                 _ => index += 1,
             }
         }
@@ -1702,12 +1746,18 @@ impl IndexedFile {
 
     /// cob_start then indexed_start_internal. `key` is the key of index
     /// `index` given by the START KEY item, `partlen` that item's size.
-    pub fn start(&mut self, condition: StartCondition, index: usize, partlen: usize, area: &Value) -> u8 {
+    /// `keysize` is the value of WITH SIZE/LENGTH.
+    pub fn start(&mut self, condition: StartCondition, index: usize, partlen: usize, keysize: Option<i128>, area: &Value) -> u8 {
         self.read_done = false;
         self.first_read = 0;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.access == Access::Random { return 47; }
         if self.nonexistent { return 23; }
+        let partlen = match keysize {
+            Some(size) if size < 1 || size > partlen as i128 => return 23,
+            Some(size) => size as usize,
+            None => partlen,
+        };
         let status = self.start_internal(condition, index, partlen, &area.bytes());
         self.end_of_file = status != 0;
         self.begin_of_file = false;
@@ -1723,7 +1773,11 @@ impl IndexedFile {
         let mut key = self.savekey(record, idx);
         key.truncate(partlen);
         let tree = &self.db[idx];
-        let mut found = tree.set_range(&key);
+        let mut found = match condition {
+            StartCondition::First => tree.first(),
+            StartCondition::Last => tree.last(),
+            _ => tree.set_range(&key),
+        };
         match condition {
             StartCondition::Equal => {
                 if let Some(p) = &found {
@@ -1736,7 +1790,19 @@ impl IndexedFile {
                     found = tree.next(&p);
                 }
             },
-            StartCondition::NotLess => {},
+            StartCondition::Less => found = match found { None => tree.last(), Some(p) => tree.prev(&p) },
+            StartCondition::NotGreater => {
+                found = match found {
+                    None => tree.last(),
+                    Some(p) if self.cmpkey(&p.0, record, idx, partlen) != std::cmp::Ordering::Equal => tree.prev(&p),
+                    Some(p) if self.keys[idx].duplicates => match tree.next_nodup(&p) {
+                        None => tree.last(),
+                        Some(next) => tree.prev(&next),
+                    },
+                    Some(p) => Some(p),
+                }
+            },
+            StartCondition::NotLess | StartCondition::First | StartCondition::Last => {},
         }
         let Some(position) = found else { return 23 };
         let (found_key, found_data) = tree.at(&position);
@@ -1798,7 +1864,8 @@ impl IndexedFile {
     }
 
     /// cob_read_next then indexed_read_next (NEXT only).
-    pub fn read_next(&mut self, area: &mut Value, depending: Option<&mut Value>) -> u8 {
+    /// cob_read_next: READ NEXT, or PREVIOUS (COB_READ_PREVIOUS).
+    pub fn read_next(&mut self, area: &mut Value, previous: bool, depending: Option<&mut Value>) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -1806,8 +1873,9 @@ impl IndexedFile {
             self.first_read = 0;
             return 10;
         }
-        if self.end_of_file { return 46; }
-        let status = self.indexed_read_next(area);
+        if self.end_of_file && !previous { return 46; }
+        if self.begin_of_file && previous { return 46; }
+        let status = self.indexed_read_next(area, previous);
         if status < 10 {
             self.first_read = 0;
             self.read_done = true;
@@ -1815,20 +1883,26 @@ impl IndexedFile {
             self.begin_of_file = false;
             set_depending(depending, self.last_read_size);
         } else if status == 10 {
-            self.end_of_file = true;
+            if previous { self.begin_of_file = true; } else { self.end_of_file = true; }
         }
         status
     }
 
-    fn indexed_read_next(&mut self, area: &mut Value) -> u8 {
+    fn indexed_read_next(&mut self, area: &mut Value, previous: bool) -> u8 {
+        #[derive(PartialEq)]
+        enum Step { First, Last, Next, Prev }
         let idx = self.key_index;
         let n = self.keys.len();
         let primekeylen = self.primekeylen();
         let duplicates = idx > 0 && self.keys[idx].duplicates;
-        let first = self.begin_of_file;
+        // nextprev of the BDB indexed_read_next.
+        let step = if previous {
+            if self.end_of_file { Step::Last } else { Step::Prev }
+        } else if self.begin_of_file { Step::First } else { Step::Next };
         let mut file_changed = false;
         if self.first_read != 0 {
-            if self.data.is_none() { return 10; }
+            // Data read by OPEN or START; PREVIOUS right after OPEN is the end.
+            if self.data.is_none() || (self.first_read == 2 && step == Step::Prev) { return 10; }
             // Check that the record read by OPEN/START still exists.
             let tree = &self.db[idx];
             let mut position = tree.set(&self.last_readkey[idx]);
@@ -1864,30 +1938,41 @@ impl IndexedFile {
         }
         if self.first_read == 0 || file_changed {
             let tree = &self.db[idx];
-            let target = if first {
-                tree.first()
-            } else {
-                let mut read_next = false;
-                let found = tree.set_range(&self.last_readkey[idx]);
-                let mut position = match found {
+            let prev = step == Step::Prev;
+            let target = match step {
+                Step::First => tree.first(),
+                Step::Last => tree.last(),
+                _ => match tree.set_range(&self.last_readkey[idx]) {
+                    // Records may be deleted since the last read.
+                    None if prev => tree.last(),
                     None => return 10,
-                    Some(p) => p,
-                };
-                if position.0 == self.last_readkey[idx] {
-                    if duplicates {
-                        let mut dupno = Self::dupno(&tree.at(&position).1, primekeylen);
-                        let mut current = Some(position.clone());
-                        while current.is_some() && position.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
-                            current = tree.next(&position);
-                            if let Some(q) = &current { position = q.clone(); dupno = Self::dupno(&tree.at(&position).1, primekeylen); }
+                    Some(mut position) => {
+                        let mut read_nextprev = prev;
+                        let mut last = false;
+                        if position.0 == self.last_readkey[idx] {
+                            if duplicates {
+                                let mut dupno = Self::dupno(&tree.at(&position).1, primekeylen);
+                                let mut current = Some(position.clone());
+                                while current.is_some() && position.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
+                                    current = tree.next(&position);
+                                    if let Some(q) = &current { position = q.clone(); dupno = Self::dupno(&tree.at(&position).1, primekeylen); }
+                                }
+                                if current.is_none() {
+                                    if !prev { return 10; }
+                                    last = true;
+                                } else if position.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx] {
+                                    read_nextprev = true;
+                                }
+                            } else {
+                                read_nextprev = true;
+                            }
                         }
-                        if current.is_none() { return 10; }
-                        read_next = position.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx];
-                    } else {
-                        read_next = true;
-                    }
-                }
-                if read_next { tree.next(&position) } else { Some(position) }
+                        if last { tree.last() }
+                        else if !read_nextprev { Some(position) }
+                        else if prev { tree.prev(&position) }
+                        else { tree.next(&position) }
+                    },
+                },
             };
             let Some(position) = target else { return 10 };
             let (found_key, found_data) = tree.at(&position);

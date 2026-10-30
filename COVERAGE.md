@@ -1014,3 +1014,15 @@ seule, ne diffère que par la pile de l'erreur fatale de libcob. Exécution
 globale **74/84**, inchangée ; NIST statique **451/458**. Fixtures
 `exceptions.cob` et `exception_recursive_call.cob` identiques au natif ;
 détails dans [VALIDATION.md](VALIDATION.md).
+
+## Progression : START complet et READ PREVIOUS — 30 octobre 2026
+
+START suit `cob_start` pour toutes les conditions de `start_op` (=, >, >=,
+<, <= et leurs formes NOT), FIRST, LAST et `WITH SIZE/LENGTH`, en RELATIVE
+(`relative_start`) et INDEXED (`indexed_start_internal`, Berkeley DB). READ
+PREVIOUS suit `cob_read_next`, `relative_read_next` (reculs de libcob 3.2
+compris) et `indexed_read_next`. Acceptation **1240 → 1245/3593**, testsuite
+**516 → 521/1135**, écart **377 → 372** ; les cinq sources débloquées
+s'exécutent à l'identique avec des codes zéro. Exécution globale **74/84**,
+inchangée ; NIST statique **451/458**. Fixture `start_previous.cob`
+identique au natif.

@@ -48,8 +48,8 @@ class RelativeFrontendTests(unittest.TestCase):
         cases = [
             (relative(key=""), "stop run."),
             (relative(access="random", key=""), "stop run."),
-            (relative(), "start f key < rk stop run."),
-            (relative(), "read f previous stop run."),
+            (relative(), "start f key not = rk stop run."),
+            (relative(), "start f key < rk with length 2 stop run."),
             (relative(), "read f at end display 'x' invalid key display 'y' stop run."),
             (relative(access="random"), "read f at end display 'x' stop run."),
             (relative(access="random"), "start f stop run."),

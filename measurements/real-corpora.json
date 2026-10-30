@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-30T21:37:42+00:00",
- "git_head": "b84d00da7ff66597fd306d0847e1b33ddda535c9",
- "implementation_sha256": "ff146a5617f96a9cc067784a17b8ab7b547b05246072cdabbfb4e6941ad43a72",
+ "measured_at": "2026-10-30T22:44:23+00:00",
+ "git_head": "3f70d8d89b04b5feb73c701228c745bff928bbde",
+ "implementation_sha256": "0940017e196ae2b6e274c43431ae06f24682fa0a77616ad3223b91af89e01e73",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1240,
+  "accepted": 1245,
   "cobc_accepted": 1617,
-  "gap": 377,
+  "gap": 372,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 516,
+   "accepted": 521,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 363,
+   "gap": 358,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -721,18 +721,6 @@
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
     ],
     [
-     "run_file-030/prog.cob",
-     "START KEY limité à =, > ou NOT <"
-    ],
-    [
-     "run_file-031/prog.cob",
-     "START KEY limité à =, > ou NOT <"
-    ],
-    [
-     "run_file-032/prog.cob",
-     "START KEY limité à =, > ou NOT <"
-    ],
-    [
      "run_file-038/prog.cob",
      "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
     ],
@@ -827,14 +815,6 @@
     [
      "run_file-072/prog1.cob",
      "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-073/prog.cob",
-     "START KEY limité à =, > ou NOT <"
-    ],
-    [
-     "run_file-074/prog.cob",
-     "START KEY limité à =, > ou NOT <"
     ],
     [
      "run_file-078/prog.cob",
@@ -1998,9 +1978,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-30T21:37:42+00:00",
-  "git_head": "b84d00da7ff66597fd306d0847e1b33ddda535c9",
-  "implementation_sha256": "ff146a5617f96a9cc067784a17b8ab7b547b05246072cdabbfb4e6941ad43a72",
+  "measured_at": "2026-10-30T22:44:23+00:00",
+  "git_head": "3f70d8d89b04b5feb73c701228c745bff928bbde",
+  "implementation_sha256": "0940017e196ae2b6e274c43431ae06f24682fa0a77616ad3223b91af89e01e73",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

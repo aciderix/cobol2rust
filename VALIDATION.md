@@ -1,5 +1,33 @@
 # Validation — 30 octobre 2026
 
+## START complet et READ PREVIOUS — 30 octobre 2026
+
+- START : `start_op` de parser.y (`NOT >` = LE, `NOT <` = GE, `NOT >=` = LT,
+  `NOT <=` = GT ; NOT = est une erreur), FIRST et LAST sur la clé du fichier,
+  `WITH SIZE/LENGTH` réservé à INDEXED (`cb_emit_start`), statut 23 hors de
+  1..taille de la clé (`cob_start`). RELATIVE : `relative_start` (FIRST = GE
+  depuis 0, LAST = LE depuis le dernier emplacement, LT/LE bornés à la
+  taille du fichier). INDEXED : chemin BDB d'`indexed_start_internal`
+  (DB_SET_RANGE puis DB_PREV ou DB_LAST ; LE avec doublons par
+  DB_NEXT_NODUP puis DB_PREV).
+- READ PREVIOUS : `cob_read_next` (46 au début de fichier, drapeaux de fin et
+  de début), `relative_read_next` (recul de deux emplacements depuis la
+  position courante, d'un après un enregistrement, `lseek` négatif sans
+  effet : en natif des enregistrements sont sautés, essai à l'appui) et
+  `indexed_read_next` (DB_PREV, DB_LAST en fin de fichier ou après
+  suppression, fin immédiate après OPEN).
+- Preuves : `tests/fixtures/start_previous.cob` (INDEXED à clé alternée avec
+  doublons, clés partielles, toutes les conditions, WITH LENGTH/SIZE ;
+  RELATIVE à trous) identique au natif, statuts, enregistrements et
+  fichiers ; `tests/test_start_previous.py` : trois tests. Suite complète :
+  **507 découverts, 506 validés, un PE Windows ignoré**.
+
+Mesure : **1240 → 1245/3593**, testsuite **516 → 521/1135**, écart **377 →
+372**, aucune acceptation refusée par cobc. Les cinq sources débloquées
+(run_file-030/031/032/073/074) s'exécutent à l'identique avec codes zéro.
+Exécution globale renouvelée : **74/84 identiques**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-start-20261030.json`).
+
 ## Dernière exception — 30 octobre 2026
 
 FUNCTION EXCEPTION-STATUS (9 premiers blocages) et ses voisines EXCEPTION-

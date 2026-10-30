@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-30T21:37:42+00:00 (commit `b84d00da7f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-30T22:44:23+00:00 (commit `3f70d8d89b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,10 +101,10 @@ Dernière mesure : 2026-10-30T21:37:42+00:00 (commit `b84d00da7f`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 516 | 879 | 363 | 0 |
-| **Total** | | **3593** | **1240** | **1617** | **377** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 521 | 879 | 358 | 0 |
+| **Total** | | **3593** | **1245** | **1617** | **372** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T21:37:42+00:00, commit `b84d00da7f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T22:44:23+00:00, commit `3f70d8d89b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -503,3 +503,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   inchangés. NIST statique **451/458**. Six nouveaux tests, deux fixtures
   identiques au natif. Suite complète : **504 découverts, 503 validés, un
   PE Windows ignoré**, sans échec ni erreur.
+- 2026-10-30 — START complet et READ PREVIOUS : deuxième groupe hors
+  SCREEN après les verrous SELECT (essais entre processus), dont les cinq
+  sources START visent une construction de fichiers réelle. Ports de
+  `start_op` (=, >, >=, <, <= et leurs formes NOT ; NOT = refusé), FIRST,
+  LAST, `WITH SIZE/LENGTH` (INDEXED, statut 23 hors de 1..taille de la
+  clé), `relative_start` et du chemin BDB d'`indexed_start_internal`
+  (DB_PREV, DB_LAST, DB_NEXT_NODUP des doublons), puis de READ PREVIOUS
+  (`cob_read_next`, `relative_read_next` avec ses reculs de deux
+  emplacements qui sautent des enregistrements en natif, `indexed_read_next`
+  DB_PREV/DB_LAST et la fin immédiate après OPEN). Aucun cas spécial par
+  programme. Testsuite **516 → 521/1135**, total **1240 → 1245/3593**,
+  écart **377 → 372**, à examiner zéro. Les cinq sources débloquées
+  (run_file-030/031/032/073/074) s'exécutent à l'identique avec codes zéro.
+  Exécution globale renouvelée : **74/84**, deux divergences et huit délais,
+  inchangés. NIST statique **451/458**. Trois nouveaux tests, dont la
+  fixture `start_previous.cob` (statuts, enregistrements et fichiers
+  identiques au natif). Deux cas du test RELATIVE qui attendaient le refus
+  de START < et READ PREVIOUS deviennent NOT = et WITH LENGTH. Suite
+  complète : **507 découverts, 506 validés, un PE Windows ignoré**.

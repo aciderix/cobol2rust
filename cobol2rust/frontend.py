@@ -3262,6 +3262,27 @@ class Parser:
             args.append(Expr("number", ("1" if system_offset else "0",)))
         return Expr("function", (name.key, tuple(args)))
 
+    def start_operator(self):
+        """eq, gt, lt, ge and le of parser.y (THAN and TO are noise words)."""
+        if self.accept("=") or self.accept("EQUAL"):
+            self.accept("TO")
+            return "="
+        if self.accept(">="):
+            return ">="
+        if self.accept("<="):
+            return "<="
+        for symbol, word in ((">", "GREATER"), ("<", "LESS")):
+            if self.accept(symbol) or self.accept(word):
+                self.accept("THAN")
+                if self.accept("="):
+                    return symbol + "="
+                if self.accept("OR"):
+                    self.expect("EQUAL")
+                    self.accept("TO")
+                    return symbol + "="
+                return symbol
+        self.error("opérateur de START attendu")
+
     def using_list(self, ended):
         """PROCEDURE DIVISION / ENTRY USING: distinct 01/77 LINKAGE items."""
         using = []
@@ -3724,8 +3745,11 @@ class Parser:
             # GnuCOBOL: READ file [NEXT] [RECORD] [INTO x] [[AT] END] [NOT [AT] END].
             spec = self.files[name]
             next_record = self.accept("NEXT")
-            if self.at("PREVIOUS"):
-                self.error("READ PREVIOUS non pris en charge")
+            # cb_emit_read: PREVIOUS reads backward, RELATIVE and INDEXED only.
+            previous = bool(not next_record and self.accept("PREVIOUS"))
+            if previous and spec.organization not in {"RELATIVE", "INDEXED"}:
+                self.error("READ PREVIOUS not allowed for this file type")
+            next_record = next_record or previous
             self.accept("RECORD")
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
@@ -3765,7 +3789,7 @@ class Parser:
                 random = self.index_key(spec, key_item) if key_item else (0, spec.record_key[2])
             if handler == ("end" if random else "key"):
                 self.error("READ " + ("direct requiert INVALID KEY, pas AT END" if random else "séquentiel requiert AT END, pas INVALID KEY"))
-            return Stmt("read", (name, into, exception, success, random), line)
+            return Stmt("read", (name, into, exception, success, random, previous), line)
         if verb == "REWRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
@@ -3804,29 +3828,31 @@ class Parser:
             spec = self.files[name]
             if spec.organization not in {"RELATIVE", "INDEXED"} or spec.access == "RANDOM":
                 self.error("START limité aux fichiers RELATIVE/INDEXED en accès SEQUENTIAL ou DYNAMIC")
-            condition = "Equal"
-            if self.accept("KEY"):
+            condition, key, keysize = "Equal", None, None
+            if self.accept("FIRST"):
+                condition = "First"
+            elif self.accept("LAST"):
+                condition = "Last"
+            elif self.accept("KEY"):
                 self.accept("IS")
-                if self.accept("=") or (self.accept("EQUAL") and (self.accept("TO") or True)):
-                    condition = "Equal"
-                elif self.accept(">="):
-                    condition = "NotLess"
-                elif self.accept(">") or (self.accept("GREATER") and (self.accept("THAN") or True)):
-                    condition = "Greater"
-                    # >= and GREATER OR EQUAL are COB_GE, as NOT LESS.
-                    if self.accept("="):
-                        condition = "NotLess"
-                    elif self.accept("OR"):
-                        self.expect("EQUAL")
-                        self.accept("TO")
-                        condition = "NotLess"
-                elif self.accept("NOT"):
-                    if not (self.accept("<") or (self.accept("LESS") and (self.accept("THAN") or True))):
-                        self.error("START KEY NOT < attendu")
-                    condition = "NotLess"
-                else:
-                    self.error("START KEY limité à =, > ou NOT <")
+                # start_op: NOT inverts the comparison; NOT EQUAL is an error.
+                negate = bool(self.accept("NOT"))
+                op = self.start_operator()
+                if op == "=" and negate:
+                    self.error("NOT EQUAL condition not allowed on START statement")
+                condition = {("=", False): "Equal", (">", False): "Greater", (">", True): "NotGreater",
+                             ("<", False): "Less", ("<", True): "NotLess", (">=", False): "NotLess",
+                             (">=", True): "Less", ("<=", False): "NotGreater", ("<=", True): "Greater"}[op, negate]
                 key = self.variable()
+            if self.accept("WITH") or self.at("SIZE") or self.at("LENGTH"):
+                if not (self.accept("SIZE") or self.accept("LENGTH")):
+                    self.error("SIZE ou LENGTH attendu")
+                keysize = self.expr()
+                if key is None:
+                    self.error("SIZE/LENGTH invalid here")
+                if spec.organization != "INDEXED":
+                    self.error("LENGTH/SIZE clause only allowed on INDEXED files")
+            if key is not None:
                 if spec.organization == "INDEXED":
                     index = self.index_key(spec, key)
                     if index[0] < 0:
@@ -3835,9 +3861,12 @@ class Parser:
                 elif key.name != spec.relative_key or key.indices or key.start is not None:
                     self.error("START KEY doit désigner la RELATIVE KEY du fichier")
             elif spec.organization == "INDEXED":
+                # cb_emit_start: the file's key, for FIRST and LAST too.
                 index = (0, spec.record_key[2])
             elif not spec.relative_key:
                 self.error("START requiert une RELATIVE KEY")
+            if spec.organization == "INDEXED":
+                index = (*index[:2], keysize)
             invalid, valid = self.key_handlers(name, "END-START")
             return Stmt("start", (name, index if spec.organization == "INDEXED" else None, condition, invalid, valid), line)
         if verb == "WRITE":

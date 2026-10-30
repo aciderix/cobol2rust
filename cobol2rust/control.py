@@ -326,7 +326,7 @@ class ControlGraph:
             destinations = [(value, self._body(body, after, block)) for value, body in branches]
             return self._add("evaluate", (subject, destinations, self._body(otherwise, after, block)), stmt)
         if op == "read":
-            name, into, exception, success, _ = args
+            name, into, exception, success, _, _ = args
             success_body = self._body(success, after, block)
             # cb_emit_read: on success, after INTO, the record as DEBUG-CONTENTS.
             success_body = self._file_debug(name, block, success_body, ("record", name)) or success_body

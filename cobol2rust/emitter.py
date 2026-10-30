@@ -1271,7 +1271,9 @@ class Emitter:
             name, index, condition, _, _ = a
             if index is not None:
                 key = "file_runtime::NO_KEY" if index[0] < 0 else index[0]
-                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {key}, {index[1]}, &self.{self.files[name]}_area);")
+                # cob_start: the SIZE/LENGTH value by cob_get_int.
+                keysize = "None" if index[2] is None else f"Some(({self.expression(index[2])}).count())"
+                self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, {key}, {index[1]}, {keysize}, &self.{self.files[name]}_area);")
             else:
                 key = self.names[self.program.files[name].relative_key]
                 self.write(f"let status = {self.handle(name)}.start(file_runtime::StartCondition::{condition}, &self.{key});")
@@ -2071,7 +2073,7 @@ class Emitter:
             record = self.names[spec.record]
             status = self.unique()
             handled = bool(node.stmt.args[2])
-            random = node.stmt.args[4]
+            random, previous = node.stmt.args[4], str(node.stmt.args[5]).lower()
             # INDEXED: (key index, compared length) of the keyed READ.
             keyed = bool(random)
             # AT END takes every 1x status of a sequential read, INVALID KEY every 2x.
@@ -2082,13 +2084,13 @@ class Emitter:
                     key = "file_runtime::NO_KEY" if random[0] < 0 else random[0]
                     self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, {key}, {random[1]}, {depending});")
                 else:
-                    self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {depending});")
+                    self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {previous}, {depending});")
             elif spec.organization != "RELATIVE":
                 self.write(f"let {status} = {self.handle(name)}.read(&mut {area}, {depending});")
             elif random:
                 self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
             else:
-                self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {self.relative_key(name, True)}, {depending});")
+                self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {self.relative_key(name, True)}, {previous}, {depending});")
             self.io_invalid = handled and keyed
             self.file_status(name, status, handled and not keyed)
             self.io_handlers, self.io_invalid = None, False

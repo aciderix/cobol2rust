@@ -17,8 +17,8 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1240/3593 sources acceptées** (cobc 1617,
-écart 377, à examiner 0) ; testsuite GnuCOBOL 516/1135, six corpus d'origine
+Mesure des corpus réels : **1245/3593 sources acceptées** (cobc 1617,
+écart 372, à examiner 0) ; testsuite GnuCOBOL 521/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
 deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
@@ -45,7 +45,20 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : dernière exception (FUNCTION EXCEPTION-STATUS/
+Dernière étape (30 octobre) : START complet et READ PREVIOUS. Le frontend
+porte `start_op` (`start_operator`, formes NOT, NOT = refusé), FIRST, LAST et
+`WITH SIZE/LENGTH` (index[2] de la clé INDEXED) ; `Stmt("read")` porte un
+sixième argument `previous`. `file_runtime.rs` : `StartCondition` à sept
+valeurs, `relative_start` et `start_internal` (chemin BDB) complets,
+`read_next(..., previous, ...)` en RELATIVE (champ `begin_of_file` ajouté,
+reculs de `relative_read_next` portés tels quels) et INDEXED (`Step`
+First/Last/Next/Prev de `indexed_read_next`). Acceptation **1240 →
+1245/3593**, écart **377 → 372** ; les cinq sources débloquées identiques
+avec codes zéro. NIST statique **451/458**
+(`build/coverage-nist-start-20261030.json`). Suite complète : **507
+découverts, 506 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : dernière exception (FUNCTION EXCEPTION-STATUS/
 LOCATION/STATEMENT/FILE, SET LAST EXCEPTION TO OFF). `runtime.rs`, module
 `exception` : table `exception.def`, `set`, `off`, `module`, `save_status`,
 `unknown`/`unknown_file` et les quatre lectures, arrêt nommé si l'état est
