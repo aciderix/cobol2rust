@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-30T08:11:52+00:00 (commit `20473c52a9`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-30T16:52:47+00:00 (commit `527014ed08`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,30 +101,30 @@ Dernière mesure : 2026-10-30T08:11:52+00:00 (commit `20473c52a9`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 490 | 879 | 389 | 0 |
-| **Total** | | **3593** | **1214** | **1617** | **403** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 501 | 879 | 378 | 0 |
+| **Total** | | **3593** | **1225** | **1617** | **392** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T08:11:52+00:00, commit `20473c52a9`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-30T16:52:47+00:00, commit `527014ed08`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | carddemo | 8 | 8 | 0 | 0 | 0 |
-| zopeneditor-sample | 3 | 0 | 3 | 0 | 0 |
+| zopeneditor-sample | 3 | 3 | 0 | 0 | 0 |
 | cobol-programming-course | 12 | 10 | 0 | 0 | 2 |
 | beg-cobol-for-programmers | 61 | 53 | 2 | 0 | 6 |
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 37 × niveau de donnée attendu
-2. 14 × USAGE/clause non pris en charge: POINTER
-3. 12 × clause SELECT non prise en charge
-4. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
-5. 9 × expression non prise en charge: LINE
-6. 8 × PROCEDURE attendu
-7. 8 × . attendu
-8. 8 × PROGRAM-ID attendu
-9. 7 × USAGE/clause non pris en charge: DEPENDING
-10. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
+2. 12 × clause SELECT non prise en charge
+3. 9 × FUNCTION EXCEPTION-STATUS non prise en charge
+4. 9 × expression non prise en charge: LINE
+5. 8 × PROCEDURE attendu
+6. 8 × . attendu
+7. 8 × PROGRAM-ID attendu
+8. 7 × USAGE/clause non pris en charge: DEPENDING
+9. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
+10. 7 × USAGE/clause non pris en charge: IS
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -441,3 +441,32 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   Suite complète : **491 découverts, 490 validés, un PE Windows ignoré**,
   sans échec ni erreur ; preuves et empreintes dans
   `build/system-calls-validation-20261030.json`.
+- 2026-10-30 — Modèle d'adresses : USAGE POINTER, BASED, ADDRESS OF, SET
+  ADDRESS/UP/DOWN, ALLOCATE et FREE, deuxième groupe des « Premiers
+  blocages » après SCREEN (qui exige un backend terminal vérifiable). Une
+  adresse native devient une région (chaque 01/77, zone ALLOCATE, bloc
+  EXTERNAL ou copie BY CONTENT) et un décalage dans les 8 octets du
+  POINTER ; tout accès hors région est un arrêt nommé. Ports de
+  `cob_allocate` (calloc ou malloc ; une zone malloc est suivie octet par
+  octet et lire un octet jamais écrit est un arrêt nommé), `cob_free_alloc`,
+  `cb_check_set_to`, de la comparaison `(int)(a-b)`, de l'adresse statique
+  d'un article LINKAGE hors USING (persistante à travers CALL et CANCEL), de
+  la libération des BASED au CANCEL et du statut 31 d'un ASSIGN sans
+  adresse, avec le nom `field with NULL address` de `cob_field_to_string`.
+  Refus nommés : DISPLAY d'une adresse non NULL (ASLR), ordre de deux
+  régions, arithmétique hors SET, BY VALUE d'un pointeur (tronqué en int par
+  cobc 3.2), PROGRAM-POINTER, VALUE en LINKAGE hors BASED. Aucun cas spécial
+  par programme. Testsuite **490 → 501/1135**, total **1214 → 1225/3593**,
+  écart **403 → 392**, à examiner zéro. Sur les onze sources débloquées,
+  sept s'exécutent à l'identique avec codes zéro ; run_file-020/prog
+  s'arrête des deux côtés sur le statut 31 avec le même message (codes 1/1,
+  non compté comme réussite) ; data_pointer-001 s'arrête nommément sur le
+  DISPLAY d'adresse ; run_misc-115/prog et prog2 plantent en natif (SIGSEGV)
+  là où Rust s'arrête nommément. Exécution globale renouvelée : **74/84
+  identiques**, deux divergences et huit délais ; zopeneditor passe de 0/3 à
+  3/3 parce que le plantage natif -11 à la fermeture implicite n'est plus
+  observé (six essais natifs à 16), sans changement de ces programmes côté
+  Rust ; il peut réapparaître. NIST statique **451/458**. Sept nouveaux
+  tests (quatorze refus, deux fixtures identiques au natif, message du
+  statut 31, huit arrêts nommés). Suite complète : **498 découverts, 497
+  validés, un PE Windows ignoré**, sans échec ni erreur.

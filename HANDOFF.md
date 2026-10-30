@@ -17,15 +17,16 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1214/3593 sources acceptées** (cobc 1617,
-écart 403, à examiner 0) ; testsuite GnuCOBOL 490/1135, six corpus d'origine
+Mesure des corpus réels : **1225/3593 sources acceptées** (cobc 1617,
+écart 392, à examiner 0) ; testsuite GnuCOBOL 501/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
-zopeneditor 0/3, cours 10/12, livre 53/61, soit **71/84 identiques**,
-cinq divergences et huit délais. Les trois exemples zopeneditor ont stdout
-et fichiers identiques, mais plantent en natif à la fermeture implicite
-après GOBACK (descripteur ASSIGN périmé, codes -11/16). Les deux autres
-divergences sont les indices hors bornes des deux rapports du chapitre 18.
-Listing13-6 est désormais identique. Voir VALIDATION.md et
+zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
+deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
+natif à la fermeture implicite après GOBACK (descripteur ASSIGN périmé,
+-11 contre 16) ; ce plantage n'est plus observé (six essais natifs à 16),
+sans changement côté Rust : il dépend de la mémoire native et peut revenir.
+Les deux divergences sont les indices hors bornes des deux rapports du
+chapitre 18. Voir VALIDATION.md et
 `measurements/real-corpora.json`.
 NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
 exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
@@ -44,7 +45,41 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : routines système d'octets. `system_calls.py`
+Dernière étape (30 octobre) : modèle d'adresses (USAGE POINTER, BASED,
+ADDRESS OF, SET ADDRESS/UP/DOWN, ALLOCATE, FREE). `storage_runtime.rs`
+(section « Addresses ») remplace une adresse native par une région et un
+décalage dans les 8 octets du POINTER : `records` enregistre chaque 01/77
+d'un programme (registres, LINKAGE, BASED et blocs partagés exclus),
+`address_of`, `bind_address`, `allocate`, `free`, `compare_addresses`,
+`static_base`. Les vues liées portent la fin de leur région (`limit`) et
+`View::mem/mem_mut` arrêtent nommément tout accès hors région, par NULL ou
+après FREE/CANCEL. Une zone `malloc` garde un masque des octets non écrits
+(`check_defined`/`define`) : `mem_mut` suppose une écriture complète de la
+vue, STRING marque ses seuls octets copiés. Côté frontend, `kind="pointer"`
+fait refuser les pointeurs par défaut aux autres chemins ; `set_address`,
+`allocate_statement`, `free_statement` portent les diagnostics de cobc. Un
+article LINKAGE hors USING garde son adresse (pointeur statique de cobc, à
+travers CALL et CANCEL) ; `cancel_entry` libère les BASED. ASSIGN sans
+adresse : statut 31 et nom `field with NULL address` (`assign_field` de
+`file_runtime.rs`). Acceptation **1214 → 1225/3593**, écart **403 → 392** ;
+sept des onze sources débloquées identiques avec codes zéro, une arrêtée des
+deux côtés sur le statut 31, trois arrêts nommés voulus (DISPLAY d'adresse,
+deux SIGSEGV natifs). NIST statique **451/458**
+(`build/coverage-nist-pointers-20261030.json`). Restent refusés : BY VALUE
+d'un pointeur, PROGRAM-POINTER, CONTENT-OF, VALUE en LINKAGE hors BASED,
+OCCURS UNBOUNDED, TYPEDEF, EXTERNAL AS, RECURSIVE. Suite complète :
+**498 découverts, 497 validés, un PE Windows ignoré**.
+
+Analyse préparée pour la suite : FUNCTION EXCEPTION-STATUS/LOCATION et
+SET LAST EXCEPTION (une douzaine de sources de la testsuite) exigent de
+porter `cob_set_exception` (environ 165 appels dans libcob : common.c,
+intrinsic.c, numeric.c, fileio.c…). Modèle conseillé : un registre de la
+dernière exception, et un état « inconnu » posé par toute opération dont les
+exceptions ne sont pas portées, la lecture dans cet état étant un arrêt
+nommé. Les douze clauses SELECT LOCK MODE/SHARING sont des tests de verrous
+entre processus (`fcntl`, verrous Berkeley DB) avec CALL "SYSTEM".
+
+Étape précédente (30 octobre) : routines système d'octets. `system_calls.py`
 décrit les douze noms natifs et l'ABI de leur longueur scalaire ;
 `system_runtime.rs` porte les boucles de `common.c` avec alias vivants.
 Les huit CBL logiques et TOUPPER/TOLOWER (alias compris) renvoient zéro.
@@ -165,8 +200,8 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 `/workspace/tooling/bdb-dev-20261028/manifest.json`.
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
-SCREEN SECTION (36 des 37 « niveau de donnée attendu »), USAGE POINTER (14),
-clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
+SCREEN SECTION (36 des 37 « niveau de donnée attendu »), clauses SELECT de
+verrouillage (12), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
 EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
 modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
@@ -177,8 +212,8 @@ descripteurs GLOBAL sont des extensions distinctes à mesurer.
 Les ABI BY VALUE utilisateur/externe et les paramètres formels restent un
 chantier distinct ; les treize blocages historiques ne sont plus un groupe
 de treize sources à débloquer après le port des routines système.
-Exécution : cinq divergences (trois plantages natifs zopeneditor, deux
-indices hors bornes dans le livre), six délais du livre et deux du cours.
+Exécution : deux divergences (indices hors bornes dans le livre), six délais
+du livre et deux du cours ; le plantage natif zopeneditor peut revenir.
 
 L'audit des 37 premiers blocages distingue 33 programmes SCREEN manuels,
 trois tests syntaxiques SCREEN et un cas de séparateurs autour de COPY/

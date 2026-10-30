@@ -1,5 +1,59 @@
 # Validation — 30 octobre 2026
 
+## Modèle d'adresses — 30 octobre 2026
+
+USAGE POINTER (14 premiers blocages de la mesure précédente avec SET ADDRESS,
+BASED et ALLOCATE) est le deuxième groupe après SCREEN, qui exige un backend
+terminal vérifiable. Aucune règle ne dépend du nom d'un programme.
+
+- Adresses : une région par 01/77 de chaque programme (tableaux `b_` séparés
+  de cobc), par zone ALLOCATE, bloc EXTERNAL ou copie BY CONTENT, et un
+  décalage, encodés en little endian dans les 8 octets du POINTER. Les vues
+  liées à une adresse portent la fin de leur région : tout accès au-delà, par
+  NULL ou après FREE/CANCEL est un arrêt nommé, distinct selon la cause.
+- Ports : `cob_allocate` (NULL si la taille n'est pas dans 1..2147483646 ;
+  `calloc` pour INITIALIZED à low-values, sinon `malloc` puis `cob_move` de
+  la valeur TO), `cb_emit_allocate_identifier` (INITIALIZE WITH FILLER ALL TO
+  VALUE THEN TO DEFAULT), `cob_free_alloc` (seule l'adresse exacte rendue est
+  libérée, le pointeur passe alors à NULL), `cb_check_set_to`, comparaison
+  `(int)(a-b)`, pointeur statique d'un article LINKAGE hors USING (persistant
+  à travers CALL et CANCEL), libération des BASED au CANCEL, INITIALIZE à
+  NULL (REPLACING n'y touche pas).
+- Une zone `malloc` est suivie octet par octet : lire un octet jamais écrit
+  est un arrêt nommé, puisque son contenu natif est indéterminé. Un ASSIGN
+  vers un article sans adresse donne le statut 31 ; le message d'erreur
+  nomme le fichier `('field with NULL address')`, comme `cob_field_to_string`.
+- Arrêts nommés : DISPLAY d'une adresse non NULL, seule ou dans un groupe
+  (ASLR), ordre de deux régions (disposition de l'éditeur de liens). Refus :
+  pointeur BY VALUE (tronqué en int par cobc 3.2), PROGRAM-POINTER et
+  FUNCTION-POINTER, ADDRESS OF PROGRAM, arithmétique et MOVE entre adresse et
+  autre donnée, VALUE en LINKAGE hors BASED, CONTENT-OF/CONTENT-LENGTH.
+- Preuves : fixtures `tests/fixtures/pointers.cob` (programme et
+  sous-programme `keeper` : toutes les formes, statut 31, persistance au
+  CANCEL) et `pointer_tables.cob` (OCCURS de pointeurs, INITIALIZE/REPLACING,
+  REDEFINES d'un BASED, ADDRESS OF modifié) identiques au natif ;
+  `tests/test_pointers.py` vérifie quatorze refus, le message de statut 31 et
+  huit arrêts nommés.
+
+Mesure : **1214 → 1225/3593 émissions acceptées**, testsuite **490 →
+501/1135**, écart **403 → 392**, aucune acceptation refusée par cobc. Les onze
+sources débloquées sont toutes de la testsuite : sept identiques avec codes
+zéro (run_misc-027/097/098/099/127, run_extensions-007, run_file-020/prog2) ;
+run_file-020/prog identique mais arrêté des deux côtés sur le statut 31
+(codes 1/1, non compté comme réussite) ; data_pointer-001 arrêté nommément sur
+le DISPLAY d'une adresse ; run_misc-115/prog et prog2 plantent en natif
+(SIGSEGV, -11) quand Rust s'arrête nommément (70).
+
+Exécution globale renouvelée : **74/84 identiques**, deux divergences (les
+indices hors bornes du livre) et huit délais. CardDemo 8/8, zopeneditor 3/3,
+cours 10/12, livre 53/61. Le passage de zopeneditor de 0/3 à 3/3 ne vient pas
+de ce changement : le natif terminait par -11 à la fermeture implicite
+(descripteur ASSIGN périmé après GOBACK, voir le 29 octobre) et termine
+désormais à 16 comme Rust, sur six essais natifs successifs. Ce plantage
+dépend de la mémoire native ; il peut réapparaître.
+NIST statique : **451/458**, zéro erreur interne
+(`build/coverage-nist-pointers-20261030.json`).
+
 ## Routines système d'octets — 30 octobre 2026
 
 Le chantier vise dix des treize premiers écarts `CALL BY VALUE` de la

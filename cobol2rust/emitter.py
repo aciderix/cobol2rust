@@ -93,7 +93,59 @@ class Emitter:
         self.counter += 1
         return f"temp{self.counter}"
 
+    def address_family(self, root):
+        """The items whose storage starts at the address of the 01/77 `root`:
+        its subordinates and the records that redefine it."""
+        fields = self.program.fields
+        roots = {root} | {key for key, f in fields.items() if f.parent is None and f.redefines == root}
+        return [key for key, f in fields.items() if key.split(".")[0] in roots]
+
+    def based_roots(self):
+        return [key for key, f in self.program.fields.items() if f.parent is None and f.based]
+
+    def static_bases(self):
+        """LINKAGE 01/77 items of no USING: cobc keeps their address in a
+        static pointer, which CANCEL does not reset."""
+        fields = self.program.fields
+        parameters = set(self.program.using) | {name for _, using in getattr(self.program, "entries", []) for name in using}
+        return [key for key, f in fields.items() if f.parent is None and f.linkage and not f.redefines and key not in parameters]
+
+    def rebind_address(self, root, address, receiver="self"):
+        """SET ADDRESS OF: each item of the family addresses the storage at
+        `address`, at its own offset in the record."""
+        base = self.program.fields[root].offset
+        if root in self.static_bases():
+            self.write(f"storage_runtime::set_static_base({quoted(self.program.entry_name + ' ' + root)}, {address});")
+        for key in self.address_family(root):
+            rust = self.names[key]
+            delta = self.program.fields[key].offset - base
+            self.write(f"{receiver}.{rust} = storage_runtime::bind_address({address}, {delta}, &{receiver}.{rust});")
+
+    def check_no_address(self, ref):
+        """A group shown or written with POINTER items: their non-NULL values
+        are native addresses."""
+        field = self.program.fields[ref.name]
+        if field.picture:
+            return
+        offsets = [leaf.offset - field.offset for leaf in leaves(self.program.fields, ref.name) if leaf.kind == "pointer"]
+        if offsets and not field.dimensions:
+            self.write(f"storage_runtime::check_no_address(&{self.reference(ref)}, &[{', '.join(map(str, offsets))}]);")
+        elif offsets:
+            raise CobolError("sortie d'une table contenant des POINTER non prise en charge")
+
+    def address(self, e):
+        """A pointer-valued expression as its address (u64)."""
+        if e.op == "null":
+            return "0u64"
+        if e.op == "address_of":
+            return f"storage_runtime::address_of(&{self.reference(e.args[0])})"
+        if e.op == "var" and self.kind(e) == "pointer":
+            return f"storage_runtime::pointer_value(&{self.reference(e.args[0])})"
+        raise CobolError("adresse (POINTER, ADDRESS OF ou NULL) attendue")
+
     def kind(self, e):
+        if e.op in {"null", "address_of"}:
+            return "pointer"
         if e.op == "function":
             name, args = e.args
             result = self.program_functions[name][1]
@@ -151,6 +203,9 @@ class Emitter:
             return "NUMERIC-EDITED"
         if f.kind == "number":
             return None if f.usage == "INDEX" else "NUMERIC"
+        if f.kind == "pointer":
+            # CB_CATEGORY_DATA_POINTER: no REPLACING category names it.
+            return None
         return "ALPHABETIC" if self.is_alphabetic(f) else "ALPHANUMERIC"
 
     def initialize_replacing(self, ref, with_filler, replacing):
@@ -230,6 +285,8 @@ class Emitter:
 
     def expression(self, e):
         op, args = e.op, e.args
+        if self.kind(e) == "pointer":
+            raise CobolError("une adresse (POINTER, ADDRESS OF, NULL) n'a de sens que dans SET, MOVE, CALL et les comparaisons d'adresses")
         if op == "var":
             # An operand of a computation, condition or subscript: invalid
             # numeric data is read like libcob without runtime checks.
@@ -304,6 +361,8 @@ class Emitter:
                 raise CobolError("opérateur numérique sur un champ texte")
             result = self.expression(args[0])
             return result if op == "unary+" else f"({result}).neg()"
+        if op in {"+", "-", "*", "/", "**", "unary+", "unary-"} and any(self.kind(x) == "pointer" for x in args):
+            raise CobolError("arithmétique sur une adresse: seul SET ... UP/DOWN BY la déplace")
         if op in {"+", "-", "*", "/", "**"}:
             if any(self.kind(x) != "number" for x in args):
                 raise CobolError("arithmétique sur champ texte non prise en charge")
@@ -317,6 +376,14 @@ class Emitter:
             return f"({self.expression(args[0])} {'&&' if op == 'and' else '||'} {self.expression(args[1])})"
         if op == "not":
             return f"!({self.expression(args[0])})"
+        if op.startswith("cmp") and "pointer" in (self.kind(args[0]), self.kind(args[1])):
+            # (int)(a - b) against zero, as cobc compares two addresses.
+            if self.kind(args[0]) != self.kind(args[1]):
+                raise CobolError("comparaison d'une adresse avec une donnée qui n'est pas une adresse")
+            operator = {"=": "==", "<>": "!=", "<": "<", ">": ">", "<=": "<=", ">=": ">="}[op[3:]]
+            if operator in {"==", "!="}:
+                return f"({self.address(args[0])} {operator} {self.address(args[1])})"
+            return f"(storage_runtime::compare_addresses({self.address(args[0])}, {self.address(args[1])}) {operator} std::cmp::Ordering::Equal)"
         if op.startswith("cmp"):
             folded = self.folded_comparison(op[3:], *args)
             if folded is not None:
@@ -736,6 +803,16 @@ class Emitter:
                                                for r in targets):
             raise CobolError(f"{expr.args[1]} (entier binaire non signé) vers une donnée non numérique non pris en charge")
         source_kind = self.kind(expr)
+        pointers = [ref.start is None and self.program.fields[ref.name].kind == "pointer" for ref in targets]
+        if source_kind == "pointer" or any(pointers):
+            # cob_move between two POINTER items copies the address.
+            if not (move and expr.op == "var" and source_kind == "pointer" and all(pointers)):
+                raise CobolError("MOVE avec un POINTER limité à un POINTER vers des POINTER")
+            address = self.unique()
+            self.write(f"let {address} = {self.address(expr)};")
+            for ref in targets:
+                self.write(f"storage_runtime::set_pointer(&{self.receiver(ref)}, {address});")
+            return
         conversions = []
         for ref in targets:
             conversions.append(None)
@@ -983,9 +1060,10 @@ class Emitter:
         key = self.program.files[file_name].assign_field
         if key:
             name = self.unique()
-            # cob_field_to_string reads the item's storage bytes, even numeric.
-            self.write(f"let {name} = storage_runtime::Operand::of(&{self.reference(DataRef(key))}).data;")
-            self.write(f"{self.handle(file_name)}.assign(&{name});")
+            # cob_field_to_string reads the item's storage bytes, even numeric;
+            # without an address (BASED, LINKAGE) cob_open gives status 31.
+            self.write(f"let {name} = storage_runtime::assign_bytes(&{self.reference(DataRef(key))});")
+            self.write(f"{self.handle(file_name)}.assign({name});")
 
     def file_status(self, file_name, status, eof_handled=False):
         name = self.program.files[file_name].status
@@ -1143,9 +1221,78 @@ class Emitter:
                     # cob_display of the alphanumeric result field, as stored.
                     values.append(f"Value::Bytes(({self.expression(e)}).bytes())")
                     continue
+                if self.kind(e) == "pointer":
+                    values.append(f"storage_runtime::pointer_display({self.address(e)})")
+                    continue
+                if e.op == "var":
+                    self.check_no_address(e.args[0])
                 values.append(self.function_field(e) if e.op == "function" else self.display_operand(e))
             function = "runtime::display_error" if len(a) > 2 and a[2] == "stderr" else "display"
             self.write(f"{function}(&[{', '.join(values)}], {str(a[1]).lower()});")
+        elif op == "set_address":
+            targets, mode, source = a
+            if mode == "to":
+                address = self.unique()
+                self.write(f"let {address} = {self.address(source)};")
+                for kind, ref in targets:
+                    if kind == "pointer":
+                        self.write(f"storage_runtime::set_pointer(&{self.receiver(ref)}, {address});")
+                    else:
+                        self.rebind_address(ref.name, address)
+            else:
+                # cob_pointer_manip: the address moves by cob_get_int bytes.
+                delta = self.unique()
+                sign = "" if mode == "up" else "-"
+                self.write(f"let {delta} = {sign}storage_runtime::address_delta(&{self.expression(source)});")
+                for kind, ref in targets:
+                    if kind == "pointer":
+                        target = self.receiver(ref)
+                        self.write(f"storage_runtime::set_pointer(&{target}, storage_runtime::offset_address(storage_runtime::pointer_value(&{target}), {delta}));")
+                    else:
+                        address = self.unique()
+                        self.write(f"let {address} = storage_runtime::offset_address(storage_runtime::address_of(&{self.reference(ref)}), {delta});")
+                        self.rebind_address(ref.name, address)
+        elif op == "allocate":
+            form, target, initialized, returning = a
+            address = self.unique()
+            if form == "characters":
+                zeroed = initialized is not None and initialized.op == "all" and initialized.args[0] == "\x00"
+                self.write(f"let {address} = storage_runtime::allocate_value(&{self.expression(target)}, {str(zeroed).lower()});")
+                if initialized is not None and not zeroed:
+                    # cob_move of the INITIALIZED TO value into the area.
+                    if initialized.op == "all":
+                        pattern = "&[" + ", ".join(str(ord(c)) for c in initialized.args[0]) + "]"
+                        fill = f"storage_runtime::fill_repeated(&storage_runtime::allocated_area({address}), {pattern})"
+                    else:
+                        fill = f"let mut area = storage_runtime::allocated_area({address}); area.assign(&{self.expression(initialized)}, false)"
+                    self.write(f"if {address} != 0 {{ {fill}; }}")
+            else:
+                field = self.program.fields[target.name]
+                # cob_allocate without INITIALIZED TO: malloc, then INITIALIZE.
+                self.write(f"let {address} = storage_runtime::allocate({field.size}, false);")
+                self.rebind_address(target.name, address)
+                if initialized:
+                    # INITIALIZE item WITH FILLER ALL TO VALUE THEN TO DEFAULT.
+                    family = set(self.address_family(target.name))
+                    self.write(f"if {address} != 0 {{")
+                    self.indent += 1
+                    self.initialize("self", lambda f: f.name in family, bound=True)
+                    self.indent -= 1
+                    self.write("}")
+            if returning is not None:
+                self.write(f"storage_runtime::set_pointer(&{self.receiver(returning)}, {address});")
+        elif op == "free":
+            for kind, ref in a[0]:
+                # cob_free_alloc: NULL only when the area was allocated.
+                if kind == "pointer":
+                    target = self.receiver(ref)
+                    self.write(f"if storage_runtime::free(storage_runtime::pointer_value(&{target})) {{ storage_runtime::set_pointer(&{target}, 0); }}")
+                else:
+                    self.write(f"if storage_runtime::free(storage_runtime::address_of(&{self.reference(ref)})) {{")
+                    self.indent += 1
+                    self.rebind_address(ref.name, "0")
+                    self.indent -= 1
+                    self.write("}")
         elif op == "table_sort":
             # cob_table_sort_init_key per key, then cob_table_sort of the
             # active occurrences.
@@ -1868,6 +2015,9 @@ class Emitter:
             return "SignTrailingSeparate"
         if f.usage in {"INDEX", "DISPLAY"}:
             return f.usage.capitalize()
+        if f.usage == "POINTER":
+            # A void * of libcob: 8 bytes in native order.
+            return "Native"
         if f.usage == "COMP-5":
             return "Register" if getattr(f, "register", False) else "Native"
         if f.usage == "COMP-6":
@@ -1988,10 +2138,25 @@ class Emitter:
         self.write(f"alter_saved: vec![0; {alters}],")
         self.indent -= 1
         self.write("};")
+        if getattr(self, "register_records", False):
+            # Each 01/77 record is a separate allocation of cobc (ADDRESS OF).
+            records = self.storage_records()
+            if records:
+                self.write(f"storage_runtime::records(&memory, &[{', '.join(f'({o}, {s})' for o, s in records)}]);")
         for name, field in self.program.fields.items():
-            if field.linkage:
-                # No address until a CALL passes the item (NULL for cobc).
+            if field.linkage or self.based_item(name):
+                # No address until a CALL passes the item, SET ADDRESS OF or
+                # ALLOCATE (NULL for cobc).
                 self.write(f"result.{self.names[name]} = storage_runtime::unbind(&result.{self.names[name]});")
+        if getattr(self, "register_records", False):
+            for root in self.static_bases():
+                address = self.unique()
+                self.write(f"let {address} = storage_runtime::static_base({quoted(self.program.entry_name + ' ' + root)});")
+                self.write(f"if {address} != 0 {{")
+                self.indent += 1
+                self.rebind_address(root, address, "result")
+                self.indent -= 1
+                self.write("}")
         self.initialize("result", lambda field: True)
         for number, key in enumerate(getattr(self.program, "chaining", []), 1):
             # output_initialize_chaining: after the normal initialization.
@@ -2074,11 +2239,15 @@ class Emitter:
             self.write("    Self { " + " ".join(f"{name}: self.{name}.clone()," for name in fields) + " }")
             self.write("}")
         cancelled = [name for name in self.files if self.file_registry(name) and not self.program.files[name].global_owner]
-        if cancelled:
-            # The cancel entry closes the EXTERNAL and GLOBAL files left open.
-            self.write("fn cancel_files(&self) {")
+        based = self.based_roots()
+        if cancelled or based:
+            # The cancel entry closes the EXTERNAL and GLOBAL files left open
+            # and frees the storage of the BASED items (cob_free_alloc).
+            self.write("fn cancel_entry(&self) {")
             for name in cancelled:
                 self.write(f"    {self.handle(name)}.cancel_close();")
+            for name in based:
+                self.write(f"    storage_runtime::free(storage_runtime::address_of(&self.{self.names[name]}));")
             self.write("}")
         self.indent -= 1
         self.write("}")
@@ -2230,10 +2399,37 @@ class Emitter:
         self.indent -= 1
         self.write("}")
 
-    def initialize(self, receiver, selected):
-        """The VALUE or PICTURE initialization of the selected items."""
+    def storage_records(self):
+        """(offset, size) of the 01/77 records held in the program's memory."""
+        fields = self.program.fields
+        extents = {}
+        for key, f in fields.items():
+            # Registers (RETURN-CODE) have storage of their own.
+            if f.parent is not None or f.linkage or f.based or getattr(f, "register", False) or self.shared_block(key):
+                continue
+            root = f
+            while root.redefines:
+                root = fields[root.redefines]
+            if root.linkage or root.based:
+                continue
+            start, end = extents.get(root.name, (root.offset, root.offset))
+            extents[root.name] = (start, max(end, f.offset + f.size * f.occurs))
+        return sorted((start, end - start) for start, end in extents.values() if end > start)
+
+    def based_item(self, name):
+        root = self.program.fields[name.split(".")[0]]
+        while root.redefines:
+            root = self.program.fields[root.redefines]
+        return root.based
+
+    def initialize(self, receiver, selected, bound=False):
+        """The VALUE or PICTURE initialization of the selected items; with
+        `bound`, of a BASED or LINKAGE item just given storage (INITIALIZE
+        WITH FILLER ALL TO VALUE THEN TO DEFAULT of ALLOCATE ... INITIALIZED)."""
         for name, field in self.program.fields.items():
-            if not field.picture or field.file_record or field.linkage or not selected(field):
+            if not field.picture or field.file_record or not selected(field):
+                continue
+            if not bound and (field.linkage or self.based_item(name)):
                 continue
             if self.external_root(name) is not None:
                 # cob_external_addr storage is not initialized (cob_malloc);
@@ -2241,7 +2437,7 @@ class Emitter:
                 if getattr(field, "explicit_value", False) and self.program.fields[self.external_root(name)].external:
                     raise CobolError(f"VALUE d'un article EXTERNAL non pris en charge: {field.label}")
                 continue
-            if not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
+            if not bound and not getattr(self.program, "default_byte_init", True) and not getattr(field, "explicit_value", True):
                 continue
             cursor = field
             while cursor and not cursor.redefines:
@@ -2262,7 +2458,7 @@ class Emitter:
         # A group VALUE fills the whole group as alphanumeric data after its
         # leaves, on every occurrence: GnuCOBOL gives it precedence.
         for name, field in self.program.fields.items():
-            if field.group_value is None or not selected(field):
+            if field.group_value is None or not selected(field) or (not bound and (field.linkage or self.based_item(name))):
                 continue
             if self.external_root(name) is not None:
                 if self.program.fields[self.external_root(name)].external:
@@ -2309,7 +2505,11 @@ class Emitter:
                     root = fields[root.redefines]
                 rust = self.names[name]
                 if root.name not in using:
-                    self.write(f"self.{rust} = storage_runtime::unbind(&self.{rust});")
+                    # A parameter of another entry has no address; an item of
+                    # no USING keeps the address SET ADDRESS OF gave it
+                    # (a static base pointer of cobc).
+                    if root.name in parameters:
+                        self.write(f"self.{rust} = storage_runtime::unbind(&self.{rust});")
                     continue
                 index = using.index(root.name)
                 binding = (f"storage_runtime::rebind_any_length(&arguments[{index}], &self.{rust})" if field.any_length else
@@ -2361,7 +2561,10 @@ def generate_unit(emitters):
     GnuCOBOL's cancel entry; an active program cannot be called or cancelled.
     """
     bodies = []
+    # An address can reach the storage of any program of the run unit.
+    addresses = any(getattr(emitter.program, "uses_addresses", False) for emitter in emitters)
     for emitter in emitters:
+        emitter.register_records = addresses
         lines, mapping = emitter.program_lines()
         bodies.append((emitter, lines, mapping))
     head = ["// Generated by cobol2rust. Edit the COBOL input and regenerate.",
@@ -2419,11 +2622,12 @@ def generate_unit(emitters):
              "        let name = if prefer_program { entry } else { name };",
              "        match name {"]
     def cancels_files(emitter):
-        return any(emitter.file_registry(name) and not emitter.program.files[name].global_owner for name in emitter.files)
+        return bool(emitter.based_roots()) or any(
+            emitter.file_registry(name) and not emitter.program.files[name].global_owner for name in emitter.files)
     for index, emitter in enumerate(subprograms, 1):
         if getattr(emitter.program, "initial", False):
             # INITIAL: the program is cancelled when it returns.
-            kept = "program.cancel_files();" if cancels_files(emitter) else "drop(program);"
+            kept = "program.cancel_entry();" if cancels_files(emitter) else "drop(program);"
         else:
             kept = f"self.p{index} = Some(program);"
         entries = getattr(emitter.program, "entries", [])
@@ -2473,7 +2677,7 @@ def generate_unit(emitters):
     if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
         unit.append(f"            {quoted(emitters[0].program.entry_name)} => {active},")
     for index, emitter in enumerate(subprograms, 1):
-        cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_files(); }}" \
+        cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_entry(); }}" \
             if cancels_files(emitter) else f"self.p{index} = None;"
         unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ {active}; }} {cancel} }},")
     unit += ["            _ => {}", "        }", "    }"]

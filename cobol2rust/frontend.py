@@ -593,6 +593,8 @@ class Field:
     filler: bool = False
     file_record: bool = False
     linkage: bool = False
+    # BASED (01/77): no storage until SET ADDRESS OF or ALLOCATE.
+    based: bool = False
     offset: int = 0
     size: int = 0
     dimensions: list[tuple[int, int]] = field(default_factory=list)
@@ -744,7 +746,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE ALLOCATE FREE".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
@@ -1511,6 +1513,9 @@ class Parser:
         program.collating = self.collating
         program.decimal_comma, program.currency = self.decimal_comma, self.currency
         program.reports = self.reports
+        # POINTER, BASED or ADDRESS OF: the run unit registers its records.
+        program.uses_addresses = getattr(self, "uses_addresses", False) or any(
+            f.kind == "pointer" or f.based for f in self.fields.values())
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
         program.runtime_checks = RUNTIME_CHECKS
@@ -2851,6 +2856,10 @@ class Parser:
             left = Expr("report_counter", (self.counter_report(t.key), t.key))
         elif not t.string and t.key == "LENGTH" and not self.candidates(t.key):
             left = self.length_of()
+        elif not t.string and t.key in {"NULL", "NULLS"} and not self.candidates(t.key):
+            left = Expr("null", ())
+        elif not t.string and t.key == "ADDRESS" and self.at("OF") and not self.candidates(t.key):
+            left = self.address_of()
         elif self.candidates(t.key, True):
             self.i -= 1
             left = Expr("condition", (self.reference(True),))
@@ -2870,6 +2879,146 @@ class Parser:
             # exp_factor: exponentiation is right associative.
             left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
         return left
+
+    def pointer_ahead(self):
+        """The next identifier is a USAGE POINTER item."""
+        if self.t.string or not self.candidates(self.t.key) or self.candidates(self.t.key, True):
+            return False
+        start = self.i
+        try:
+            ref = self.variable()
+        except CobolError:
+            return False
+        finally:
+            self.i = start
+        return self.fields[ref.name].kind == "pointer"
+
+    def pointer_item(self, context):
+        ref = self.variable()
+        if self.fields[ref.name].kind != "pointer" or ref.start is not None:
+            self.error(f"{context}: data pointer (USAGE POINTER) attendu")
+        return ref
+
+    def base_item(self, ref, context):
+        """cb_check_set_to: only the address of a 01/77 BASED or LINKAGE
+        item can change."""
+        field = self.fields[ref.name]
+        if ref.indices or ref.start is not None or field.parent is not None or field.level not in {1, 77}:
+            self.error(f"cannot change address of '{field.label}', which is not level 1 or 77")
+        if not (field.based or field.linkage):
+            self.error(f"cannot change address of '{field.label}', which is not BASED or a LINKAGE item")
+        if field.any_length:
+            self.error(f"{context} d'un article ANY LENGTH non pris en charge")
+        return ref
+
+    def address_source(self):
+        source = self.expr(primary=True)
+        if not (source.op in {"null", "address_of"} or
+                (source.op == "var" and self.fields[source.args[0].name].kind == "pointer" and source.args[0].start is None)):
+            self.error("SET ... TO: adresse (POINTER, ADDRESS OF ou NULL) attendue")
+        return source
+
+    def set_address(self, line):
+        """SET {pointer | ADDRESS OF item}... {TO address | UP BY n | DOWN BY n}
+        (cb_emit_set_to, cb_emit_set_up_down on a CB_CAST_ADDRESS)."""
+        self.uses_addresses = True
+        targets = []
+        while not (self.at("TO") or self.at("UP") or self.at("DOWN")):
+            if self.at("ADDRESS") and self.tokens[self.i + 1].key == "OF":
+                self.take(); self.take()
+                targets.append(("address", self.base_item(self.variable(), "SET ADDRESS OF")))
+            else:
+                targets.append(("pointer", self.pointer_item("SET")))
+        if not targets:
+            self.error("SET: cible attendue")
+        if self.accept("TO"):
+            return Stmt("set_address", (targets, "to", self.address_source()), line)
+        mode = "up" if self.take().key == "UP" else "down"
+        self.expect("BY")
+        amount = self.expr()
+        if self.kind_of(amount) != "number":
+            self.error("SET UP/DOWN BY requiert un nombre")
+        return Stmt("set_address", (targets, mode, amount), line)
+
+    def allocate_statement(self, line):
+        """ALLOCATE {item [INITIALIZED] | n CHARACTERS [INITIALIZED [TO x]]}
+        [LOC 24|31] [RETURNING pointer] (cb_emit_allocate_identifier and
+        cb_emit_allocate_characters)."""
+        start = self.i
+        size = self.expr()
+        if self.accept("CHARACTERS"):
+            if self.kind_of(size) != "number":
+                self.error("amount must be specified as a numeric expression")
+            initialized = None
+            if self.accept("INITIALIZED"):
+                if self.accept("TO"):
+                    initialized = self.expr(primary=True)
+                    if self.kind_of(initialized) not in {"text", "all"}:
+                        self.error("INITIALIZED TO item is not alphanumeric")
+                else:
+                    # _to_init_val: cb_low.
+                    initialized = Expr("all", (self.low_value,), memset=self.low_value == "\x00")
+            form, target = "characters", size
+        else:
+            self.i = start
+            target = self.variable()
+            if not self.fields[target.name].based or target.indices or target.start is not None:
+                self.error("target of ALLOCATE must have BASED clause")
+            initialized = self.accept("INITIALIZED")
+            form = "item"
+        if self.accept("LOC"):
+            if self.t.string or self.t.key not in {"24", "31"}:
+                self.error("addressing mode should be either 24 or 31 bit")
+            self.take()
+        returning = None
+        if self.accept("RETURNING"):
+            returning = self.variable()
+            if self.fields[returning.name].kind != "pointer" or returning.start is not None:
+                self.error("target of RETURNING is not a data pointer")
+        elif form == "characters":
+            self.error("ALLOCATE CHARACTERS requires RETURNING clause")
+        return Stmt("allocate", (form, target, initialized, returning), line)
+
+    def free_statement(self, line):
+        """FREE {pointer | [ADDRESS OF] BASED item}... (cb_emit_free)."""
+        targets = []
+        while self.at("ADDRESS") or (not self.t.string and self.t.key not in BOUNDARIES and self.candidates(self.t.key)):
+            address = self.at("ADDRESS") and self.tokens[self.i + 1].key == "OF"
+            if address:
+                self.take(); self.take()
+            ref = self.variable()
+            field = self.fields[ref.name]
+            if field.kind == "pointer" and not address and ref.start is None:
+                targets.append(("pointer", ref))
+                continue
+            if not field.based or field.parent is not None or ref.indices or ref.start is not None:
+                self.error(f"target {len(targets) + 1} of FREE is not a BASED data item")
+            targets.append(("item", ref))
+        if not targets:
+            self.error("FREE: cible attendue")
+        return Stmt("free", (targets,), line)
+
+    def kind_of(self, e):
+        """The category of a parsed operand, for the statement checks."""
+        if e.op in {"null", "address_of"}:
+            return "pointer"
+        if e.op == "var":
+            return "text" if e.args[0].start is not None else self.fields[e.args[0].name].kind
+        if e.op in {"text", "all"}:
+            return e.op
+        return "number"
+
+    def address_of(self):
+        """ADDRESS OF identifier (cb_build_address): every subscript is
+        required; a reference modification moves the address."""
+        self.expect("OF")
+        if self.at("PROGRAM") or self.at("FUNCTION"):
+            self.error("ADDRESS OF PROGRAM/FUNCTION (PROGRAM-POINTER) non pris en charge")
+        ref = self.variable()
+        if self.fields[ref.name].any_length:
+            self.error("ADDRESS OF d'un article ANY LENGTH non pris en charge")
+        self.uses_addresses = True
+        return Expr("address_of", (ref,))
 
     def picture_symbols(self, picture):
         """A PICTURE in the internal symbols: '$' for the currency sign and
@@ -3209,6 +3358,8 @@ class Parser:
             return True
         if k == "LENGTH" and not self.candidates(k):
             return True
+        if (k in {"NULL", "NULLS"} or (k == "ADDRESS" and self.tokens[self.i + 1].key == "OF")) and not self.candidates(k):
+            return True
         following = self.tokens[self.i + 1] if k == "ALL" else None
         return (k in INSPECT_FIGURATIVES or (k == "ALL" and (following.string or following.key in INSPECT_FIGURATIVES))
                 or k in self.switch_conditions or k in self.symbolic
@@ -3415,6 +3566,8 @@ class Parser:
     def statement_body(self):
         line = self.t.line
         verb = self.take().key
+        if verb == "SET" and (self.at("ADDRESS") or self.pointer_ahead()):
+            return self.set_address(line)
         if verb == "SET":
             if not self.t.string and isinstance(self.mnemonics.get(self.t.key), tuple):
                 # SET {switch-mnemonic ... TO ON|OFF} ... (cob_set_switch).
@@ -4275,6 +4428,10 @@ class Parser:
             return self.string_statement(line)
         if verb == "UNSTRING":
             return self.unstring_statement(line)
+        if verb == "ALLOCATE":
+            return self.allocate_statement(line)
+        if verb == "FREE":
+            return self.free_statement(line)
         if verb == "CONTINUE":
             return Stmt("continue", (), line)
         if verb == "ENTRY":

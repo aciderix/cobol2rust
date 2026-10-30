@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-30T08:11:52+00:00",
- "git_head": "20473c52a961683a96ebab8df5e951c7e7ed69ce",
- "implementation_sha256": "3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305",
+ "measured_at": "2026-10-30T16:52:47+00:00",
+ "git_head": "527014ed086bb8ea7bc3e69da7204d6f23ab47af",
+ "implementation_sha256": "98600f508764abf9a429c4fd38858154ba33ba14c7c8ff2d0f1942767560e36e",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1214,
+  "accepted": 1225,
   "cobc_accepted": 1617,
-  "gap": 403,
+  "gap": 392,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -357,11 +357,11 @@
      11
     ],
     [
-     "instruction non prise en charge: FIND",
+     "niveau de donnée attendu",
      10
     ],
     [
-     "copybook introuvable: LGCMAREA",
+     "instruction non prise en charge: FIND",
      10
     ]
    ],
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 490,
+   "accepted": 501,
    "internal_errors": 0,
    "blockers": [
     [
@@ -445,10 +445,6 @@
     [
      "PROGRAM-ID attendu",
      20
-    ],
-    [
-     "USAGE/clause non pris en charge: POINTER",
-     14
     ],
     [
      "clause SELECT non prise en charge",
@@ -475,27 +471,27 @@
      10
     ],
     [
-     "USAGE/clause non pris en charge: BASED",
-     9
-    ],
-    [
      "FUNCTION EXCEPTION-STATUS non prise en charge",
      9
     ],
     [
      "USAGE/clause non pris en charge: DEPENDING",
      8
+    ],
+    [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     7
+    ],
+    [
+     "USAGE/clause non pris en charge: COMP-1",
+     7
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 389,
+   "gap": 378,
    "gap_sources": [
-    [
-     "data_pointer-001/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
-    ],
     [
      "run_accept-001/prog.cob",
      "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
@@ -521,20 +517,16 @@
      "littéral attendu"
     ],
     [
-     "run_extensions-007/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
-    ],
-    [
      "run_extensions-010/prog.cob",
      "expression non prise en charge: WHEN-COMPILED"
     ],
     [
      "run_extensions-017/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "borne maximale OCCURS attendue"
     ],
     [
      "run_extensions-019/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "VALUE en LINKAGE SECTION non pris en charge"
     ],
     [
      "run_extensions-023/prog.cob",
@@ -626,23 +618,23 @@
     ],
     [
      "run_extensions-070/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-070/prog2.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-070/prog3.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-070/prog4.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-070/prog5.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-071/prog.cob",
@@ -654,7 +646,7 @@
     ],
     [
      "run_extensions-073/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "EXTERNAL AS non pris en charge"
     ],
     [
      "run_extensions-074/prog.cob",
@@ -699,14 +691,6 @@
     [
      "run_extensions-101/redefines.cob",
      "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_file-020/prog.cob",
-     "USAGE/clause non pris en charge: BASED"
-    ],
-    [
-     "run_file-020/prog2.cob",
-     "USAGE/clause non pris en charge: BASED"
     ],
     [
      "run_file-021/prog.cob",
@@ -902,11 +886,11 @@
     ],
     [
      "run_functions-013/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "FUNCTION CONTENT-LENGTH non prise en charge"
     ],
     [
      "run_functions-014/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
+     "FUNCTION CONTENT-OF non prise en charge"
     ],
     [
      "run_functions-015/prog.cob",
@@ -1441,10 +1425,6 @@
      "directive >>TURN non prise en charge"
     ],
     [
-     "run_misc-027/prog.cob",
-     "nom inconnu: ADDRESS; qualifier avec OF/IN si nécessaire"
-    ],
-    [
      "run_misc-027/prog2.cob",
      "OCCURS DEPENDING ON limité à une table subordonnée"
     ],
@@ -1545,32 +1525,12 @@
      "CALL callee: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-097/prog.cob",
-     "USAGE/clause non pris en charge: BASED"
-    ],
-    [
-     "run_misc-098/prog.cob",
-     "USAGE/clause non pris en charge: BASED"
-    ],
-    [
-     "run_misc-099/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
-    ],
-    [
      "run_misc-101/callee.cob",
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_misc-101/caller.cob",
      "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_misc-115/prog.cob",
-     "USAGE/clause non pris en charge: BASED"
-    ],
-    [
-     "run_misc-115/prog2.cob",
-     "USAGE/clause non pris en charge: BASED"
     ],
     [
      "run_misc-116/callee.cob",
@@ -1591,10 +1551,6 @@
     [
      "run_misc-123/prog.cob",
      "USAGE/clause non pris en charge: COMP-1"
-    ],
-    [
-     "run_misc-127/prog.cob",
-     "USAGE/clause non pris en charge: POINTER"
     ],
     [
      "run_misc-129/prog.cob",
@@ -1962,7 +1918,7 @@
     ],
     [
      "syn_misc-105/prog.cob",
-     "USAGE/clause non pris en charge: pointer"
+     "78 VALUE LENGTH OF non pris en charge"
     ],
     [
      "syn_misc-112/valid.cob",
@@ -2055,10 +2011,6 @@
      37
     ],
     [
-     "USAGE/clause non pris en charge: POINTER",
-     14
-    ],
-    [
      "clause SELECT non prise en charge",
      12
     ],
@@ -2095,16 +2047,20 @@
      6
     ],
     [
-     "USAGE/clause non pris en charge: BASED",
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+     6
+    ],
+    [
+     "EXTERNAL AS non pris en charge",
      6
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-30T08:11:52+00:00",
-  "git_head": "20473c52a961683a96ebab8df5e951c7e7ed69ce",
-  "implementation_sha256": "3f1a8f2de13b8af36d90232d28dec7bef715554fcb0c5d6882586734c3205305",
+  "measured_at": "2026-10-30T16:52:47+00:00",
+  "git_head": "527014ed086bb8ea7bc3e69da7204d6f23ab47af",
+  "implementation_sha256": "98600f508764abf9a429c4fd38858154ba33ba14c7c8ff2d0f1942767560e36e",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
@@ -2151,32 +2107,23 @@
    },
    "zopeneditor-sample": {
     "programs": 3,
-    "identical": 0,
-    "different": 3,
+    "identical": 3,
+    "different": 0,
     "refused": 0,
     "timeout": 0,
     "error": 0,
     "results": {
      "COBOL/SAM1.cbl": {
-      "status": "different",
-      "reasons": [
-       "sortie -11/16"
-      ],
-      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
+      "status": "identical",
+      "exit": 16
      },
      "COBOL/SAM1LIB.cbl": {
-      "status": "different",
-      "reasons": [
-       "sortie -11/16"
-      ],
-      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
+      "status": "identical",
+      "exit": 16
      },
      "multiroot/sam/SAM1.cbl": {
-      "status": "different",
-      "reasons": [
-       "sortie -11/16"
-      ],
-      "rust_stderr": "libcob: warning: implicit CLOSE of CUSTOMER-FILE-OUT ('CUSTOUT')\n"
+      "status": "identical",
+      "exit": 16
      }
     }
    },

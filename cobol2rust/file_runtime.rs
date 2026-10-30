@@ -17,6 +17,8 @@ pub struct CobolFile {
     /// ASSIGN name (literal, or the item read by `assign` before OPEN);
     /// `path` is the name cob_chk_file_mapping gave it at the last OPEN.
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -109,6 +111,15 @@ pub fn assign_text(data: &[u8]) -> Vec<u8> {
     let end = data.iter().rposition(|&b| b != b' ' && b != 0).map_or(0, |i| i + 1);
     if end > 4096 { return Vec::new(); }
     data[..end].split(|&b| b == 0).next().unwrap_or_default().to_vec()
+}
+
+/// cob_field_to_string of an ASSIGN item, whose name is "field with NULL
+/// address" when it has no storage (BASED, LINKAGE).
+fn assign_field(data: Option<Vec<u8>>) -> (Vec<u8>, bool) {
+    match data {
+        Some(data) => (assign_text(&data), false),
+        None => (b"field with NULL address".to_vec(), true),
+    }
 }
 
 fn environment(key: &[u8]) -> Option<Vec<u8>> {
@@ -381,7 +392,7 @@ impl CobolFile {
             }
         }
         let line = organization == Organization::LineSequential;
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, organization, state: State::Closed, eof: false,
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
                validate: line && setting("COB_LS_VALIDATE", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
@@ -389,8 +400,8 @@ impl CobolFile {
     }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -531,6 +542,7 @@ impl CobolFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
@@ -953,6 +965,8 @@ pub enum StartCondition { Equal, Greater, NotLess }
 /// A zero size, including a hole read as zeros, marks an empty slot.
 pub struct RelativeFile {
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -1007,15 +1021,15 @@ impl RelativeFile {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported RELATIVE access mode"),
         };
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
                last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -1044,6 +1058,7 @@ impl RelativeFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
@@ -1505,6 +1520,8 @@ impl Btree {
 /// DUPLICATES, a native little-endian u32 duplicate number).
 pub struct IndexedFile {
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -1547,7 +1564,7 @@ impl IndexedFile {
             _ => fail("unsupported INDEXED access mode"),
         };
         let n = keys.len();
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
                last_open_mode: "", locked: false, nonexistent: false, end_of_file: false, begin_of_file: false,
                first_read: 0, read_done: false, last_read_size: 0, key: Vec::new(), data: None, key_index: 0,
                last_readkey: vec![Vec::new(); 2 * n], last_dupno: vec![0; n], rewrite_sec_key: vec![false; n],
@@ -1558,8 +1575,8 @@ impl IndexedFile {
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -1601,6 +1618,7 @@ impl IndexedFile {
         self.end_of_file = false;
         self.begin_of_file = false;
         self.first_read = 2;
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         let status = self.indexed_open(mode);

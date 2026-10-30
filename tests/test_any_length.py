@@ -135,4 +135,4 @@ class AnyLengthRuntimeTests(unittest.TestCase):
             result = subprocess.run([str(build_rust(root / 'rust'))], capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 70)
         self.assertEqual(result.stdout, b'000000006\n')
-        self.assertIn(b'LINKAGE item extends beyond the storage of its CALL argument', result.stderr)
+        self.assertIn(b'item extends beyond the storage at its address', result.stderr)

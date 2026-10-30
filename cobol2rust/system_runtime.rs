@@ -44,7 +44,10 @@ fn address<'a>(name: &str, argument: &'a Value, count: usize) -> &'a View {
     view
 }
 
-fn byte(view: &View, offset: usize) -> u8 { view.memory.borrow()[view.offset + offset] }
+fn byte(view: &View, offset: usize) -> u8 {
+    crate::storage_runtime::check_defined(&view.memory, view.offset + offset, 1);
+    view.memory.borrow()[view.offset + offset]
+}
 
 fn put(view: &View, offset: usize, value: u8) {
     // Keep mem_mut's protection of literal arguments, without PICTURE conversion.

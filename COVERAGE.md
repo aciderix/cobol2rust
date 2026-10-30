@@ -963,3 +963,32 @@ Suite Python complète : **490/491 validés**, un PE Windows ignoré, sans
 échec ni erreur. Les scénarios d'entrée restent **11/11 identiques**,
 distincts des campagnes des corpus et des nouvelles sources.
 Preuves : `build/system-calls-validation-20261030.json`.
+
+## Progression : modèle d'adresses — 30 octobre 2026
+
+`USAGE POINTER`, `BASED`, `ADDRESS OF`, `SET … TO/UP BY/DOWN BY`, `ALLOCATE`
+et `FREE` suivent cobc 3.2 (`cb_check_set_to`, `cb_emit_allocate_identifier`,
+`cb_emit_allocate_characters`, `cob_allocate`, `cob_free_alloc`). Une adresse
+native devient une région (chaque 01/77 d'un programme, zone ALLOCATE, bloc
+EXTERNAL, copie BY CONTENT) et un décalage, dans les 8 octets du POINTER ;
+tout accès hors région, par NULL ou après FREE est un arrêt nommé. Une zone
+`malloc` (ALLOCATE sans INITIALIZED TO) est suivie octet par octet : lire un
+octet jamais écrit est un arrêt nommé. Un ASSIGN vers un article sans adresse
+donne le statut 31 avec le nom `field with NULL address`
+(`cob_field_to_string`). Restent des arrêts nommés le DISPLAY d'une adresse
+non NULL (ASLR) et l'ordre de deux régions ; restent refusés les pointeurs BY
+VALUE, PROGRAM-POINTER/FUNCTION-POINTER, l'arithmétique hors SET et VALUE en
+LINKAGE hors article BASED.
+
+Acceptation **1214 → 1225/3593**, testsuite **490 → 501/1135**, écart à cobc
+**403 → 392**, aucune acceptation refusée par cobc. Sur les onze sources
+débloquées, sept s'exécutent à l'identique avec des codes zéro ;
+run_file-020/prog s'arrête des deux côtés sur le statut 31 avec le même
+message (codes 1/1, pas compté comme réussite) ; data_pointer-001 s'arrête
+nommément sur le DISPLAY d'une adresse ; les deux programmes de run_misc-115
+plantent en natif (SIGSEGV) là où Rust s'arrête nommément. Exécution globale
+renouvelée : **74/84 identiques**, deux divergences et huit délais ;
+zopeneditor passe de 0/3 à 3/3 sans changement côté Rust (le plantage natif à
+la fermeture implicite n'est plus observé). NIST statique **451/458**.
+Fixtures `pointers.cob` et `pointer_tables.cob` identiques au natif ;
+détails dans [VALIDATION.md](VALIDATION.md).

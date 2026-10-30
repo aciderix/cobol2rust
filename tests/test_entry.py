@@ -52,7 +52,7 @@ class EntryRuntimeTests(unittest.TestCase):
             result = subprocess.run([str(build_rust(root / "rust"))], capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 70)
         self.assertEqual(result.stdout, b"before\n")
-        self.assertIn(b"LINKAGE item not passed by caller", result.stderr)
+        self.assertIn(b"item without storage (LINKAGE item not passed", result.stderr)
 
 
 @unittest.skipUnless(find_tool("cobc") and find_tool("cobcrun") and find_tool("cargo"), "GnuCOBOL and Cargo required")

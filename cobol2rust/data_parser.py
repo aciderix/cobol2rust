@@ -6,7 +6,7 @@ from .frontend import Condition, ConstantToken, Field, Token, VERBS
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
           "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
           "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
-          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6"}
+          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6", "POINTER"}
 # field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
 # digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
 FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18,
@@ -584,7 +584,7 @@ def declaration(p, file_record=False):
     sign_clause = None
     synchronized = False
     search_keys = []
-    external = is_global = False
+    external = is_global = based = False
     any_length = False
     if p.accept("REDEFINES"):
         target = p.name()
@@ -666,6 +666,10 @@ def declaration(p, file_record=False):
             if initial is not None:
                 p.error("VALUE dupliqué")
             p.accept("IS")
+            if p.at("NULL") or p.at("NULLS"):
+                # VALUE NULL: only for USAGE POINTER (checked below).
+                initial, figurative = Token("0", p.take().line), "NULL"
+                continue
             repeated = p.accept("ALL")
             # A group VALUE fills its whole area: keep ZERO distinct from 0.
             figurative = None if p.t.string else (
@@ -712,6 +716,15 @@ def declaration(p, file_record=False):
                 external = True
             else:
                 is_global = True
+        elif p.accept("BASED"):
+            # based_clause: 01/77 items whose address is set at run time.
+            if based:
+                p.error("BASED dupliqué")
+            if level not in {1, 77}:
+                p.error("BASED only allowed at the 01 and 77 levels")
+            if file_record or external or redefines or getattr(p, "in_communication", False):
+                p.error("BASED not allowed here")
+            based = True
         elif p.accept("SYNCHRONIZED") or p.accept("SYNC"):
             p.accept("LEFT") or p.accept("RIGHT")
             synchronized = True
@@ -776,6 +789,17 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 65536)
 
+    if usage == "POINTER":
+        # USAGE POINTER: a native data pointer (void *), 8 bytes on x86_64.
+        if picture:
+            p.error("PICTURE incompatible avec USAGE POINTER")
+        if has_children:
+            p.error("USAGE POINTER de groupe non pris en charge")
+        if initial is not None and figurative != "NULL":
+            p.error("VALUE d'un POINTER limité à NULL")
+        picture = "9(18)"
+    elif figurative == "NULL":
+        p.error("VALUE NULL réservé à USAGE POINTER")
     if usage == "INDEX" and not picture and not has_children:
         if initial is not None:
             p.error("VALUE sur un article USAGE INDEX non pris en charge")
@@ -852,6 +876,8 @@ def declaration(p, file_record=False):
             p.error("PIC éditée limitée à 38 chiffres, 256 caractères DISPLAY")
     else:
         p.error(f"PICTURE non prise en charge: {picture}")
+    if usage == "POINTER":
+        kind, signed = "pointer", False
     if kind == "number" and digits > 18 and usage in {"COMP", "COMPUTATIONAL", "BINARY", "COMP-4", "COMPUTATIONAL-4",
                                                        "COMP-5", "COMPUTATIONAL-5"}:
         # compute_size: BINARY and COMP-5 items hold at most 18 digits.
@@ -908,7 +934,9 @@ def declaration(p, file_record=False):
     else:
         initial = Token("" if kind == "text" else "0", p.t.line, kind == "text")
     linkage = getattr(p, "in_linkage", False)
-    if linkage and (explicit_value or group_value is not None):
+    # The VALUE of a BASED item only serves ALLOCATE ... INITIALIZED.
+    under_based = based or any(getattr(a, "based", False) for a in ancestors)
+    if linkage and not under_based and (explicit_value or group_value is not None):
         p.error("VALUE en LINKAGE SECTION non pris en charge")
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
@@ -927,6 +955,7 @@ def declaration(p, file_record=False):
     descriptor.sign_separate = bool(sign_clause and sign_clause[1])
     descriptor.justified = justified
     descriptor.external, descriptor.is_global = external, is_global
+    descriptor.based = based
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero

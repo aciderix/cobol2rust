@@ -453,21 +453,22 @@ impl View {
     /// The storage of the item; an unbound LINKAGE item (not passed by the
     /// caller, a NULL address for GnuCOBOL) is a named stop.
     fn mem(&self) -> std::cell::Ref<'_, Vec<u8>> {
-        let memory = self.memory.borrow();
-        if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
-            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
-        }
-        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
-        memory
+        self.check_storage();
+        check_defined(&self.memory, self.offset, self.size);
+        self.memory.borrow()
     }
+    /// The storage of the item, which the caller overwrites in full.
     fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
         check_writable(&self.memory);
-        let memory = self.memory.borrow_mut();
+        self.check_storage();
+        define(&self.memory, self.offset, self.size);
+        self.memory.borrow_mut()
+    }
+    fn check_storage(&self) {
         if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
-            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
+            fail("item extends beyond the storage at its address (CALL argument, ADDRESS OF or ALLOCATE); not modelled");
         }
-        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
-        memory
+        if self.memory.borrow().len() < self.offset + self.size { fail("item without storage (LINKAGE item not passed, NULL or freed address)"); }
     }
     pub fn resolved(&self) {
         if !self.dimensions.is_empty() { fail("array reference requires all subscripts"); }
@@ -1172,6 +1173,7 @@ pub fn chain_setup(item: &Value, parameter: usize) {
             let mut bytes = argument.into_vec();
             bytes.resize(view.size, b' ');
             check_writable(&view.memory);
+            define(&view.memory, view.offset, view.size);
             view.memory.borrow_mut()[view.offset..view.offset + view.size].copy_from_slice(&bytes);
         },
         _ => crate::runtime::fail("CHAINING requires a data item"),
@@ -1376,7 +1378,10 @@ impl Inspect {
         inspect
     }
     pub fn init_converting(target: &Value) -> Self { Self::common(target) }
-    fn data(&self) -> Vec<u8> { self.memory.borrow()[self.offset..self.offset + self.size].to_vec() }
+    fn data(&self) -> Vec<u8> {
+        check_defined(&self.memory, self.offset, self.size);
+        self.memory.borrow()[self.offset..self.offset + self.size].to_vec()
+    }
     pub fn start(&mut self) { self.start = 0; self.end = self.size; }
     fn find(&self, operand: &Operand) -> Option<usize> {
         let data = self.data();
@@ -1591,7 +1596,7 @@ impl StringInto {
     pub fn init(target: &Value, pointer: Option<i128>) -> Self {
         let view = match target { Value::View(view) => view, _ => fail("STRING INTO requires a data item") };
         view.resolved();
-        drop(view.mem());
+        view.check_storage();
         let mut s = StringInto { memory: view.memory.clone(), offset: view.offset, size: view.size, position: 0, overflow: false, delimiter: None };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
@@ -1614,6 +1619,7 @@ impl StringInto {
         check_writable(&self.memory);
         let mut memory = self.memory.borrow_mut();
         let start = self.offset + self.position as usize;
+        define(&self.memory, start, (size as i64).min(room) as usize);
         if size as i64 <= room {
             memory[start..start + size].copy_from_slice(&data[..size]);
             self.position += size as i64;
@@ -1747,5 +1753,262 @@ pub fn fill_spaces(item: &Value) {
             view.mem_mut()[view.offset..view.offset + view.size].iter_mut().for_each(|b| *b = b' ');
         },
         _ => fail("DELIMITER IN requires a data item"),
+    }
+}
+
+// Addresses: USAGE POINTER, ADDRESS OF, BASED and LINKAGE items, ALLOCATE
+// and FREE. A native address is replaced by a region (a 01 record of a
+// program, a block without records such as an EXTERNAL item or a BY CONTENT
+// copy, an ALLOCATE area) and an offset in it, encoded in the 8 bytes of a
+// POINTER (a void * of libcob, x86_64). Addresses inside one region keep the
+// native order and differences; the values themselves, like the native ones
+// under ASLR, are not reproducible.
+const ADDRESS_BASE: u64 = 0x0000_7f00_0000_0000;
+const REGION_SPAN: u64 = 1 << 32;
+/// common.c COB_MAX_ALLOC_SIZE on Linux x86_64.
+const MAX_ALLOC_SIZE: i128 = 2_147_483_646;
+
+struct Region {
+    memory: std::rc::Weak<RefCell<Vec<u8>>>,
+    start: usize,
+    len: usize,
+    /// cob_alloc_cache: an ALLOCATE area not yet freed.
+    allocated: Option<Memory>,
+    freed: bool,
+}
+
+thread_local! {
+    static REGIONS: RefCell<Vec<Region>> = const { RefCell::new(Vec::new()) };
+    static REGION_INDEX: RefCell<std::collections::HashMap<(usize, usize), usize>> = RefCell::new(std::collections::HashMap::new());
+    static RECORDS: RefCell<std::collections::HashMap<usize, (std::rc::Weak<RefCell<Vec<u8>>>, Vec<(usize, usize)>)>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+fn memory_key(memory: &Memory) -> usize { Rc::as_ptr(memory) as *const u8 as usize }
+
+fn same_memory(weak: &std::rc::Weak<RefCell<Vec<u8>>>, memory: &Memory) -> bool {
+    weak.upgrade().is_some_and(|alive| Rc::ptr_eq(&alive, memory))
+}
+
+/// The 01 records (offset, size) of a program's storage: each one is a
+/// separate allocation of cobc (its own b_ array).
+pub fn records(memory: &Memory, records: &[(usize, usize)]) {
+    RECORDS.with(|map| { map.borrow_mut().insert(memory_key(memory), (Rc::downgrade(memory), records.to_vec())); });
+}
+
+fn region_id(memory: &Memory, start: usize, len: usize, allocated: Option<Memory>) -> usize {
+    let key = (memory_key(memory), start);
+    let known = REGION_INDEX.with(|index| index.borrow().get(&key).copied());
+    if let Some(id) = known {
+        if REGIONS.with(|regions| same_memory(&regions.borrow()[id].memory, memory)) { return id; }
+    }
+    let id = REGIONS.with(|regions| {
+        let mut regions = regions.borrow_mut();
+        regions.push(Region { memory: Rc::downgrade(memory), start, len, allocated, freed: false });
+        regions.len() - 1
+    });
+    REGION_INDEX.with(|index| { index.borrow_mut().insert(key, id); });
+    id
+}
+
+fn encode(id: usize, offset: usize) -> u64 { ADDRESS_BASE + id as u64 * REGION_SPAN + offset as u64 }
+
+/// The region and the offset in it of an address that this run unit made.
+fn decode(address: u64) -> (Memory, usize, usize, usize) {
+    let relative = address.checked_sub(ADDRESS_BASE)
+        .unwrap_or_else(|| fail("address not obtained from ADDRESS OF or ALLOCATE; not modelled"));
+    let (id, offset) = ((relative / REGION_SPAN) as usize, (relative % REGION_SPAN) as usize);
+    REGIONS.with(|regions| {
+        let regions = regions.borrow();
+        let region = regions.get(id).unwrap_or_else(|| fail("address not obtained from ADDRESS OF or ALLOCATE; not modelled"));
+        let memory = region.memory.upgrade().unwrap_or_else(|| fail(if region.freed {
+            "address of storage released by FREE; not modelled"
+        } else {
+            "address of storage released by CANCEL; not modelled"
+        }));
+        (memory, region.start, region.len, offset)
+    })
+}
+
+/// ADDRESS OF: NULL for an item without storage (BASED or LINKAGE item
+/// whose address is not set).
+pub fn address_of(item: &Value) -> u64 {
+    let Value::View(view) = item else { fail("ADDRESS OF requires storage") };
+    let key = memory_key(&view.memory);
+    if view.memory.borrow().is_empty() {
+        // A freed ALLOCATE area keeps its (dangling) address.
+        return match REGION_INDEX.with(|index| index.borrow().get(&(key, 0)).copied()) {
+            Some(id) if REGIONS.with(|regions| same_memory(&regions.borrow()[id].memory, &view.memory)) => encode(id, view.offset),
+            _ => 0,
+        };
+    }
+    let record = RECORDS.with(|map| {
+        map.borrow().get(&key).filter(|(weak, _)| same_memory(weak, &view.memory))
+            .and_then(|(_, records)| records.iter().find(|(start, size)| *start <= view.offset && view.offset < start + size).copied())
+    });
+    let (start, len) = record.unwrap_or((0, view.memory.borrow().len()));
+    encode(region_id(&view.memory, start, len, None), view.offset - start)
+}
+
+/// SET ADDRESS OF: the item (at `delta` in its 01 record) addresses the
+/// storage at `address`; accesses beyond the region are named stops.
+pub fn bind_address(address: u64, delta: usize, item: &Value) -> Value {
+    let Value::View(template) = item else { fail("SET ADDRESS OF requires storage") };
+    if address == 0 { return unbind(item); }
+    let (memory, start, len, offset) = decode(address);
+    let offset = start.checked_add(offset).and_then(|o| o.checked_add(delta))
+        .unwrap_or_else(|| fail("address outside its storage; not modelled"));
+    Value::View(View { memory, offset, size: template.size, kind: template.kind, dimensions: template.dimensions.clone(),
+                       initializers: template.initializers.clone(), limit: Some(start + len) })
+}
+
+thread_local! {
+    static STATIC_BASES: RefCell<std::collections::HashMap<String, u64>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// The static base pointer of a LINKAGE item of no USING: its address
+/// outlives the program instance (CANCEL).
+pub fn static_base(key: &str) -> u64 { STATIC_BASES.with(|bases| bases.borrow().get(key).copied().unwrap_or(0)) }
+
+pub fn set_static_base(key: &str, address: u64) {
+    STATIC_BASES.with(|bases| { bases.borrow_mut().insert(key.to_string(), address); });
+}
+
+/// The value of a USAGE POINTER item (8 bytes, native byte order).
+pub fn pointer_value(item: &Value) -> u64 {
+    let Value::View(view) = item else { fail("POINTER requires storage") };
+    if view.size != 8 { fail("POINTER item of another size than 8"); }
+    let memory = view.mem();
+    u64::from_le_bytes(memory[view.offset..view.offset + 8].try_into().unwrap())
+}
+
+pub fn set_pointer(item: &Value, address: u64) {
+    let Value::View(view) = item else { fail("POINTER requires storage") };
+    if view.size != 8 { fail("POINTER item of another size than 8"); }
+    let mut memory = view.mem_mut();
+    memory[view.offset..view.offset + 8].copy_from_slice(&address.to_le_bytes());
+}
+
+/// SET pointer UP/DOWN BY n: the address moves by n bytes.
+pub fn offset_address(address: u64, delta: i128) -> u64 {
+    let moved = address as i128 + delta;
+    if !(0..=u64::MAX as i128).contains(&moved) { fail("address arithmetic outside the address space"); }
+    moved as u64
+}
+
+/// A relation between two addresses as cobc generates it, (int)(a - b)
+/// against zero. The order of two different regions depends on the native
+/// layout of storage: a named stop.
+pub fn compare_addresses(left: u64, right: u64) -> std::cmp::Ordering {
+    if left == right { return std::cmp::Ordering::Equal; }
+    let region = |address: u64| address.checked_sub(ADDRESS_BASE).map(|relative| relative / REGION_SPAN);
+    if left == 0 || right == 0 || region(left).is_none() || region(left) != region(right) {
+        fail("order of addresses of different storage areas (native layout); not modelled");
+    }
+    left.cmp(&right)
+}
+
+/// cob_allocate: `size` bytes, NULL when the size is not positive or above
+/// COB_MAX_ALLOC_SIZE. calloc for INITIALIZED to low-values; otherwise the
+/// malloc area is undetermined until written, and reading it is a named stop.
+pub fn allocate(size: i128, zeroed: bool) -> u64 {
+    if size <= 0 || size > MAX_ALLOC_SIZE { return 0; }
+    let memory = memory(size as usize);
+    if !zeroed {
+        UNDEFINED.with(|undefined| undefined.borrow_mut().push((Rc::downgrade(&memory), vec![true; size as usize])));
+    }
+    encode(region_id(&memory.clone(), 0, size as usize, Some(memory)), 0)
+}
+
+/// ALLOCATE n CHARACTERS: cob_get_llint of the size (integer part).
+pub fn allocate_value(size: &Value, zeroed: bool) -> u64 {
+    allocate(size.num().units(0, false).to_string().parse::<i128>().unwrap_or(i128::MAX), zeroed)
+}
+
+thread_local! {
+    /// The bytes of malloc areas not yet written.
+    static UNDEFINED: RefCell<Vec<(std::rc::Weak<RefCell<Vec<u8>>>, Vec<bool>)>> = RefCell::new(Vec::new());
+}
+
+pub fn check_defined(memory: &Memory, offset: usize, size: usize) {
+    UNDEFINED.with(|undefined| {
+        let undefined = undefined.borrow();
+        if undefined.is_empty() { return; }
+        let Some((_, mask)) = undefined.iter().find(|(area, _)| area.strong_count() > 0 && std::ptr::eq(area.as_ptr(), Rc::as_ptr(memory))) else { return };
+        if mask.get(offset..offset + size).is_some_and(|bytes| bytes.contains(&true)) {
+            fail("read of ALLOCATE storage before it is written (undetermined malloc contents in GnuCOBOL); not modelled");
+        }
+    })
+}
+
+fn define(memory: &Memory, offset: usize, size: usize) {
+    UNDEFINED.with(|undefined| {
+        let mut undefined = undefined.borrow_mut();
+        if undefined.is_empty() { return; }
+        undefined.retain(|(area, _)| area.strong_count() > 0);
+        let Some(index) = undefined.iter().position(|(area, _)| std::ptr::eq(area.as_ptr(), Rc::as_ptr(memory))) else { return };
+        let mask = &mut undefined[index].1;
+        if let Some(bytes) = mask.get_mut(offset..offset + size) { bytes.fill(false); }
+        if !mask.contains(&true) { undefined.remove(index); }
+    })
+}
+
+/// SET ... UP/DOWN BY n: cob_get_int of the amount (integer part).
+pub fn address_delta(amount: &Value) -> i128 { amount.num().units(0, false).to_string().parse::<i128>().unwrap_or_else(|_| fail("SET UP/DOWN BY overflow")) }
+
+/// INITIALIZED TO ALL literal: the literal repeated over the area.
+pub fn fill_repeated(area: &Value, pattern: &[u8]) {
+    let Value::View(view) = area else { fail("ALLOCATE area requires storage") };
+    let mut memory = view.mem_mut();
+    for (index, byte) in memory[view.offset..view.offset + view.size].iter_mut().enumerate() { *byte = pattern[index % pattern.len()]; }
+}
+
+/// The area of an ALLOCATE as an alphanumeric item (INITIALIZED TO).
+pub fn allocated_area(address: u64) -> Value {
+    let (memory, start, len, offset) = decode(address);
+    Value::View(View { memory, offset: start + offset, size: len - offset, kind: Kind::Text, dimensions: vec![],
+                       initializers: vec![], limit: Some(start + len) })
+}
+
+/// cob_free_alloc: only the address returned by an ALLOCATE is freed (its
+/// storage then has no bytes); any other address leaves EC-STORAGE-NOT-ALLOC.
+pub fn free(address: u64) -> bool {
+    if address == 0 { return false; }
+    let Some(relative) = address.checked_sub(ADDRESS_BASE) else { return false };
+    if relative % REGION_SPAN != 0 { return false; }
+    REGIONS.with(|regions| {
+        let mut regions = regions.borrow_mut();
+        let Some(region) = regions.get_mut((relative / REGION_SPAN) as usize) else { return false };
+        match region.allocated.take() {
+            Some(memory) => { memory.borrow_mut().clear(); region.freed = true; true },
+            None => false,
+        }
+    })
+}
+
+/// The bytes of an ASSIGN data item; none when it has no address.
+pub fn assign_bytes(item: &Value) -> Option<Vec<u8>> {
+    if let Value::View(view) = item {
+        if view.memory.borrow().len() < view.offset + view.size { return None; }
+    }
+    Some(Operand::of(item).data)
+}
+
+/// DISPLAY of a POINTER: "0x" and 16 hexadecimal digits; a non-NULL value
+/// is a native address, different at each run (ASLR).
+pub fn pointer_display(address: u64) -> Value {
+    if address != 0 { fail("DISPLAY of a non-NULL address (native value, not reproducible); not modelled"); }
+    Value::text("0x0000000000000000")
+}
+
+/// Output of storage containing POINTER items: their non-NULL values are
+/// native addresses.
+pub fn check_no_address(item: &Value, offsets: &[usize]) {
+    let Value::View(view) = item else { return };
+    let memory = view.mem();
+    for offset in offsets {
+        if memory[view.offset + offset..view.offset + offset + 8].iter().any(|&byte| byte != 0) {
+            fail("output of a non-NULL address (native value, not reproducible); not modelled");
+        }
     }
 }

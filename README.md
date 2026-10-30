@@ -148,7 +148,7 @@ Les clauses et variantes absentes
 de cette liste ne sont pas réputées prises en charge.
 
 Sont notamment refusés : tables variables à offsets ou strides variables,
-REDEFINES indirects, USAGE hors liste (POINTER, COMP-1/2, COMP-X…), images
+REDEFINES indirects, USAGE hors liste (PROGRAM-POINTER, COMP-1/2, COMP-X…), images
 éditées hors du sous-ensemble décrit ci-dessous, fonctions intrinsèques hors
 liste ci-dessous, CALL d'un programme ni converti ni sûrement absent,
 STOP identifiant,
@@ -376,9 +376,40 @@ sa procédure, FD
 EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
 GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
 GLOBAL, plusieurs programmes dans un source appelé,
-EXTERNAL AS et VALUE d'un article EXTERNAL, VALUE en LINKAGE, SET ADDRESS OF,
-et `NOT ON EXCEPTION` suivant un
+EXTERNAL AS et VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
+BASED, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
+
+## Adresses : POINTER, ADDRESS OF, BASED, ALLOCATE et FREE
+
+`USAGE POINTER` (8 octets, NULL par défaut, `VALUE NULL`), `ADDRESS OF`
+(indices et modification de référence compris), `SET pointeur | ADDRESS OF
+article … TO {pointeur | ADDRESS OF | NULL}` et `… UP/DOWN BY n`, `MOVE` entre
+pointeurs, les comparaisons d'adresses, les articles `BASED` (01/77, VALUE
+gardé pour ALLOCATE INITIALIZED), `ALLOCATE article [INITIALIZED]` et
+`ALLOCATE n CHARACTERS [INITIALIZED [TO x]] RETURNING pointeur` (`cob_allocate`,
+NULL si la taille n'est pas positive) et `FREE` (`cob_free_alloc` : seule
+l'adresse rendue par ALLOCATE est libérée, le pointeur passe alors à NULL)
+suivent cobc 3.2. Une adresse native est remplacée par une zone et un décalage :
+chaque 01/77 d'un programme est une zone (un tableau `b_` de cobc), comme une
+aire ALLOCATE ou un bloc EXTERNAL ; l'arithmétique et l'ordre restent ceux du
+natif dans une zone, et tout accès au-delà de la zone, par une adresse NULL ou
+après FREE est un arrêt nommé. Un article LINKAGE d'aucune USING garde son
+adresse d'un appel à l'autre et après CANCEL (pointeur statique de cobc) ; le
+CANCEL libère les zones des articles BASED ; un ASSIGN vers un article sans
+adresse donne le statut 31 à l'OPEN, avec le nom `field with NULL address` de
+`cob_field_to_string` dans le message d'erreur. Une zone ALLOCATE sans
+INITIALIZED TO (`malloc`, contenu indéterminé en natif) est suivie octet par
+octet : lire un octet jamais écrit est un arrêt nommé ; `INITIALIZED` seul sur
+`n CHARACTERS` est un `calloc` (zéros).
+
+Sont des arrêts nommés, les valeurs natives n'étant pas reproductibles (ASLR,
+disposition de l'éditeur de liens) : l'affichage d'une adresse non NULL, seule
+ou dans un groupe, et l'ordre de deux adresses de zones différentes. Restent
+refusés : les pointeurs BY VALUE (cobc 3.2 les tronque en `int`),
+PROGRAM-POINTER et FUNCTION-POINTER, ADDRESS OF PROGRAM, l'arithmétique et les
+MOVE entre une adresse et une autre donnée, FUNCTION CONTENT-OF et
+CONTENT-LENGTH.
 
 ## NEXT SENTENCE et PICTURE P
 
