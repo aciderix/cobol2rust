@@ -185,7 +185,9 @@ par `storage_runtime::store_at_address` ; `verify --arg` donne les mêmes
 arguments et le même argv[0] aux deux programmes). PICTURE L est un groupe à
 FILLER ODO implicite (`Field.picture_l`, data_parser) ; `variable_groups`
 s'arrête à l'article PIC L, layout ne demande pas à son ODO de terminer les
-groupes englobants. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+groupes englobants. L'environnement et les arguments (`runtime::environment`,
+`runtime::argv` partagé avec getopt) sont l'instruction `environment` du
+frontend ; ses phrases ON EXCEPTION deviennent un IF sur `imp_exception`. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
 RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
 FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs

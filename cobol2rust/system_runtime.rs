@@ -290,10 +290,7 @@ pub mod getopt {
 
     impl State {
         fn new() -> Self {
-            use std::os::unix::ffi::OsStringExt;
-            let strings: Vec<Vec<u8>> = std::env::args_os().map(|a| { let mut s = a.into_vec(); s.push(0); s }).collect();
-            let argv = (0..strings.len()).collect();
-            State { strings, argv, initialized: false, nextchar: None, ordering: Ordering::Permute,
+            State { strings: Vec::new(), argv: Vec::new(), initialized: false, nextchar: None, ordering: Ordering::Permute,
                     first_nonopt: 1, last_nonopt: 1, optind: 1, optarg: None, optopt: b'?' as i32 }
         }
         fn byte(&self, p: Pointer) -> u8 { self.strings[p.0][p.1] }
@@ -602,8 +599,16 @@ pub mod getopt {
         let (return_value, optarg) = STATE.with(|state| {
             let mut state = state.borrow_mut();
             let state = state.get_or_insert_with(State::new);
-            let value = state.getopt(&shortoptions, &longoptions, &mut longind, long_only);
-            (value, state.optarg.map(|p| state.cstr(p)))
+            // cob_argv itself is permuted: ACCEPT FROM ARGUMENT-VALUE sees it.
+            crate::runtime::argv::with(|strings, order| {
+                std::mem::swap(&mut state.strings, strings);
+                std::mem::swap(&mut state.argv, order);
+                let value = state.getopt(&shortoptions, &longoptions, &mut longind, long_only);
+                let optarg = state.optarg.map(|p| state.cstr(p));
+                std::mem::swap(&mut state.strings, strings);
+                std::mem::swap(&mut state.argv, order);
+                (value, optarg)
+            })
         });
         let mut temp = return_value.to_le_bytes();
         let mut exit_status = if matches!(temp[0], b'?' | b':' | b'W' | 0xFF | 0) { return_value } else { 3 };

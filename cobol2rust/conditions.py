@@ -16,7 +16,7 @@ RELATIONAL = {"=", "~", "<", ">", "[", "]"}
 # cobc's '[' is <=, ']' is >=, '~' is not equal.
 COMPARISON = {"=": "cmp=", "~": "cmp<>", "<": "cmp<", ">": "cmp>", "[": "cmp<=", "]": "cmp>="}
 NEGATED = {"=": "~", "~": "=", "<": "]", ">": "[", "[": ">", "]": "<"}
-BOOLEAN = {"and", "or", "not", "condition", "bool", "numeric_class", "user_class", "switch", "alpha_class"}
+BOOLEAN = {"and", "or", "not", "condition", "bool", "numeric_class", "user_class", "switch", "alpha_class", "imp_exception"}
 TOPSTACK = 3
 
 

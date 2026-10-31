@@ -3992,6 +3992,12 @@ class Parser:
     def statement_body(self):
         line = self.t.line
         verb = self.take().key
+        if verb == "SET" and self.at("ENVIRONMENT"):
+            # set_environment: cb_emit_setenv (cob_set_environment).
+            self.take()
+            name = self.simple_display_value()
+            self.expect("TO")
+            return Stmt("environment", ("set", name, self.simple_display_value()), line)
         if verb == "SET" and self.at("LAST") and self.tokens[self.i + 1].key == "EXCEPTION":
             # SET LAST EXCEPTION TO OFF: cob_set_exception (0).
             self.take()
@@ -4320,12 +4326,13 @@ class Parser:
             # values followed by its display_clauses, emitted on its own.
             atoms = []
             while True:
-                values = []
+                values, starts = [], []
                 while (self.t.string or self.t.key not in BOUNDARIES | {"WITH", "UPON"}) and not self.no_advancing():
                     if self.at("NO") and self.tokens[self.i + 1].key == "DATA":
                         break  # scanner.l folds NO DATA (RECEIVE) into one token
                     # x_list: identifiers and literals, a sign touching digits
                     # making a signed literal (scanner.l).
+                    starts.append(self.t)
                     values.append(self.expr(primary=True))
                 device, newline, seen = "stdout", True, set()
                 while True:
@@ -4334,6 +4341,15 @@ class Parser:
                         self.take()
                         # cb_build_display_mnemonic: CONSOLE and SYSOUT are stdout, SYSERR stderr.
                         target = self.take().key
+                        if target in self.ENVIRONMENT_DISPLAYS and not self.tokens[self.i - 1].string:
+                            # display_body: one id_or_lit UPON ENVIRONMENT-NAME etc.
+                            # id_or_lit: an identifier (not a condition) or a
+                            # LITERAL token, not a figurative constant.
+                            literal = starts and (starts[0].string or values[0].signed_literal or values[0].op == "number"
+                                                  and re.fullmatch(r"(?:\d+(?:\.\d*)?|\.\d+)", starts[0].text))
+                            if atoms or seen or len(values) != 1 or not (literal or values[0].op == "var"):
+                                self.error(f"syntax error, unexpected UPON {target}")
+                            return self.environment_statement("DISPLAY", target, values[0], line)
                         device = self.mnemonics.get(target, self.DEVICES.get(target))
                         device = {"console": "stdout"}.get(device, device)
                         if device not in {"stdout", "stderr"}:
@@ -4385,6 +4401,8 @@ class Parser:
                         self.error(f"ACCEPT FROM {kind} vers un index non pris en charge")
                     self.accept("END-ACCEPT")
                     return Stmt("accept_clock", (name, kind), line)
+                if not self.t.string and self.t.key in self.ENVIRONMENT_ACCEPTS:
+                    return self.environment_statement("ACCEPT", self.take().key, name, line)
                 # cb_emit_accept_mnemonic: CONSOLE and SYSIN read as plain ACCEPT.
                 source = self.take().key
                 if self.mnemonics.get(source, self.DEVICES.get(source)) not in {"stdin", "console"}:
@@ -5023,6 +5041,122 @@ class Parser:
             self.error("INVALID KEY limité aux fichiers RELATIVE et INDEXED")
         self.accept(ending)
         return invalid, valid
+
+    ENVIRONMENT_DISPLAYS = {"ENVIRONMENT-NAME": "display_name", "ENVIRONMENT-VALUE": "display_value",
+                            "ARGUMENT-NUMBER": "display_arg_number", "COMMAND-LINE": "display_command_line"}
+    ENVIRONMENT_ACCEPTS = {"ENVIRONMENT": "get", "ENVIRONMENT-VALUE": "accept_value",
+                           "ARGUMENT-NUMBER": "accept_arg_number", "ARGUMENT-VALUE": "accept_arg_value",
+                           "COMMAND-LINE": "accept_command_line"}
+
+    def simple_display_value(self):
+        """parser.y simple_display_value: an alphanumeric literal or a USAGE
+        DISPLAY identifier (error_if_not_usage_display_or_nonnumeric_lit)."""
+        if self.t.string:
+            return Expr("text", (self.take().text,))
+        if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", self.t.text):
+            self.error(f"{self.t.text} is not an alphanumeric literal")
+        if self.t.key in CALL_FIGURATIVES and not self.candidates(self.t.key):
+            # basic_value: a figurative constant, a field of one character.
+            return Expr("text", (CALL_FIGURATIVES[self.take().key](self),))
+        if self.t.key == "FUNCTION" and not self.candidates(self.t.key):
+            value = self.expr(primary=True)
+            if value.op != "function":
+                self.error("FUNCTION attendue")
+            return value
+        if not self.candidates(self.t.key):
+            self.error("littéral alphanumérique ou identificateur attendu")
+        ref = self.variable()
+        if self.fields[ref.name].usage != "DISPLAY":
+            self.error(f"'{self.fields[ref.name].label}' is not USAGE DISPLAY")
+        return Expr("var", (ref,))
+
+    def environment_statement(self, verb, word, operand, line):
+        """cb_emit_env_name, cb_emit_env_value, cb_emit_arg_number,
+        cb_emit_command_line, cb_emit_get_environment, cb_emit_accept_environment,
+        cb_emit_accept_arg_number, cb_emit_accept_arg_value and
+        cb_emit_accept_command_line: common.c routines, with the ON EXCEPTION
+        phrases of their grammar."""
+        end = "END-" + verb
+        if verb == "DISPLAY":
+            stmt = Stmt("environment", (self.ENVIRONMENT_DISPLAYS[word], None, operand), line)
+            phrases = True
+        else:
+            if self.fields[operand.name].kind == "edited" and operand.start is None:
+                self.error(f"ACCEPT FROM {word} vers une PICTURE éditée non pris en charge")
+            name = self.simple_display_value() if word == "ENVIRONMENT" else None
+            stmt = Stmt("environment", (self.ENVIRONMENT_ACCEPTS[word], operand, name), line)
+            phrases = word in {"ENVIRONMENT", "ENVIRONMENT-VALUE", "ARGUMENT-VALUE"}
+        exception = success = None
+        if phrases:
+            exception, success = self.exception_phrases(end, escape=verb == "ACCEPT")
+        self.accept(end)
+        if exception is None and success is None:
+            return stmt
+        # output_stmt: cob_exception_code = 0, then the handler on
+        # output_display_accept_ex_condition.
+        stmt.handled = True
+        check = Stmt("if", (Expr("imp_exception", (verb == "ACCEPT",)), exception or [], success or []), line)
+        result = Stmt("sequence", ([stmt, check],), line)
+        result.takes_exception = success is None
+        return result
+
+    def exception_phrases(self, end, escape):
+        """_accept_exception_phrases / _common_exception_phrases: ON
+        EXCEPTION (or ESCAPE for ACCEPT) and NOT ON EXCEPTION, either order."""
+        words = {"EXCEPTION", "ESCAPE"} if escape else {"EXCEPTION"}
+
+        def on():
+            if self.at("ON") and self.tokens[self.i + 1].key in words and not self.tokens[self.i + 1].string:
+                self.take()
+            if not self.t.string and self.t.key in words:
+                return self.take().key
+            return None
+
+        def not_on():
+            ahead = [t.key for t in self.tokens[self.i:self.i + 3]]
+            if ahead[:1] == ["NOT"] and (ahead[1] in words or (ahead[1] == "ON" and ahead[2] in words)):
+                self.take(); self.accept("ON")
+                return self.take().key
+            return None
+
+        def body(word, stops):
+            statements = self.block(stops | words | {"ON", "NOT", end})
+            if not statements:
+                self.error(f"{word} without imperative statement")
+            return statements
+
+        exception = success = None
+        word = on()
+        if word:
+            exception = body(f"ON {word}", set())
+            self.check_not_exception_owner(exception)
+            word = not_on()
+            if word:
+                success = body(f"NOT ON {word}", set())
+        else:
+            word = not_on()
+            if word:
+                success = body(f"NOT ON {word}", set())
+                word = on()
+                if word:
+                    if STD == "cobol85":
+                        self.error("NOT EXCEPTION before EXCEPTION does not conform to COBOL 85")
+                    exception = body(f"ON {word}", set())
+        return exception, success
+
+    def check_not_exception_owner(self, exception):
+        """GnuCOBOL gives NOT ON EXCEPTION to the innermost open statement
+        that takes one: a DISPLAY/ACCEPT/CALL ending the ON EXCEPTION body."""
+        if not (self.at("NOT") and self.tokens[self.i + 1].key in {"ON", "EXCEPTION", "ESCAPE"}):
+            return
+        last = exception[-1] if exception and not self.tokens[self.i - 1].key.startswith("END-") else None
+        while last is not None and last.op in {"if", "evaluate"}:
+            bodies = [last.args[1], last.args[2]] if last.op == "if" else [*(b for _, b in last.args[1]), last.args[2]]
+            body = next((b for b in reversed(bodies) if b), None)
+            last = body[-1] if body else None
+        if last is not None and (last.op in {"display", "accept", "call_program", "environment"}
+                                 or getattr(last, "takes_exception", False)):
+            self.error("NOT ON EXCEPTION rattaché par GnuCOBOL au DISPLAY/ACCEPT/CALL de ON EXCEPTION; non pris en charge")
 
     def corresponding_group(self):
         ref = self.variable()

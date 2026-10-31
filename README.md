@@ -482,6 +482,30 @@ variable copie la taille lue et un GIVING écrit `record_max`, comme
 libcob déplace chaque enregistrement à la taille maximale du SD ; RELEASE et
 RETURN d'un tel SD, et SORT … COLLATING SEQUENCE littérale, restent refusés.
 
+## Environnement, arguments et ligne de commande
+
+Les routines de common.c sont portées : `DISPLAY x UPON ENVIRONMENT-NAME`
+(`cob_display_environment`), `DISPLAY x UPON ENVIRONMENT-VALUE` (`setenv` de
+la libc), `SET ENVIRONMENT x TO y`, `ACCEPT x FROM ENVIRONMENT-VALUE`,
+`ACCEPT x FROM ENVIRONMENT nom` (`getenv` ; absent : EC-IMP-ACCEPT et un
+espace déplacé), `ACCEPT x FROM ARGUMENT-NUMBER`, `DISPLAY n UPON
+ARGUMENT-NUMBER` (déplacé vers un binaire non signé de 9 chiffres ; hors des
+arguments : EC-IMP-DISPLAY), `ACCEPT x FROM ARGUMENT-VALUE` (argument
+courant puis suivant, EC-IMP-ACCEPT après le dernier), `ACCEPT x FROM
+COMMAND-LINE` et `DISPLAY x UPON COMMAND-LINE`. Les valeurs suivent
+`cob_field_to_string` (espaces et NUL de fin retirés, COB_MEDIUM_MAX) et
+`cob_move_intermediate` (valeur vide déplacée comme un espace). Les phrases
+`[NOT] ON EXCEPTION` (et ON ESCAPE pour ACCEPT) testent `cob_exception_code`
+comme `output_display_accept_ex_condition`, dans l'ordre que permet le
+dialecte (`not-exception-before-exception`). Les arguments sont ceux de
+`cob_argv`, dans l'ordre où CBL_GC_GETOPT les a permutés. La grammaire est
+celle de parser.y : `id_or_lit` pour DISPLAY (ni figurative ni ALL),
+`simple_display_value` pour SET ENVIRONMENT et ACCEPT FROM ENVIRONMENT
+(littéral alphanumérique, figurative, FUNCTION ou identificateur USAGE
+DISPLAY). Modifier un réglage de libcob relu par `cob_rescan_env_vals` (les
+57 noms de `gc_conf`, par exemple `COB_SET_DEBUG`) et `COB_ENV_MANGLE` sont
+des arrêts nommés.
+
 ## Horloge, ACCEPT FROM DATE et FUNCTION RANDOM
 
 `ACCEPT x FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK` et `TIME`

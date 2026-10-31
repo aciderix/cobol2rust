@@ -1,5 +1,28 @@
 # Validation — 30 octobre 2026
 
+## Environnement, arguments et ligne de commande — 31 octobre 2026
+
+- Fixture `tests/fixtures/environment.cob` identique au natif (stdout,
+  stderr, code) avec les arguments `first`, `two words`, `3` et sans
+  argument : variable absente (EC-IMP-ACCEPT, espace déplacé), valeur
+  tronquée de ses espaces, ON et NOT ON EXCEPTION dans les deux ordres,
+  récepteur numérique, valeur vide, FUNCTION en valeur, `setenv` refusé
+  (nom `A=B`), nom vide, héritage par CALL "SYSTEM", ARGUMENT-NUMBER vers
+  numérique et alphanumérique, parcours d'ARGUMENT-VALUE jusqu'à
+  l'exception, DISPLAY UPON ARGUMENT-NUMBER (2, 9 hors limites, -1 pris en
+  valeur absolue), COMMAND-LINE court, long et remplacé.
+- Sources débloquées : run_extensions-044 (avec arguments),
+  run_file-059/prog1 et run_file-069/prog1 identiques au natif ;
+  run_fundamental-086 s'arrête par « SET ENVIRONMENT de COB_SET_DEBUG :
+  réglage de libcob relu par cob_rescan_env_vals, non modélisé ».
+- Refus de cobc reproduits : figurative ou deux opérandes avec UPON
+  ENVIRONMENT-NAME (« syntax error »), littéral numérique ou article non
+  DISPLAY en `simple_display_value`, phrase sans instruction.
+- Mesure : **1305 → 1310/3593**, écart **312 → 307**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-env.json`) ;
+  suite **568 tests**, 0 échec.
+
 ## PICTURE L — 31 octobre 2026
 
 - Fixture `tests/fixtures/picture_l.cob` identique au natif : PIC LX et LA

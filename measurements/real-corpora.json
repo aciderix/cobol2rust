@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T18:05:04+00:00",
- "git_head": "0ee799ce2caf135a521d63cfed1a4aa94a12eaf3",
- "implementation_sha256": "74826b63956804c1383eefb5bee963affbd3b1d1a432e4692ba315aad1fd83dc",
+ "measured_at": "2026-10-31T18:39:40+00:00",
+ "git_head": "39a42a7427575d8e6a798e63742d86d89eb9dc6c",
+ "implementation_sha256": "9144df1613b39aa5d29539e14e13edfc7de5f36c77d22528f2f3905312ca9ea7",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1305,
+  "accepted": 1310,
   "cobc_accepted": 1617,
-  "gap": 312,
+  "gap": 307,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 581,
+   "accepted": 586,
    "internal_errors": 0,
    "blockers": [
     [
@@ -445,6 +445,10 @@
     [
      "PROGRAM-ID attendu",
      20
+    ],
+    [
+     "expression non prise en charge: LINE",
+     15
     ],
     [
      "clause SELECT non prise en charge",
@@ -467,14 +471,6 @@
      10
     ],
     [
-     "expression non prise en charge: LINE",
-     10
-    ],
-    [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
-     7
-    ],
-    [
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
      6
     ],
@@ -485,12 +481,16 @@
     [
      "instruction non prise en charge: AT",
      6
+    ],
+    [
+     "nombre OCCURS attendu",
+     6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 298,
+   "gap": 293,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -547,10 +547,6 @@
     [
      "run_extensions-042/prog.cob",
      "ASSIGN TO KEYBOARD (périphérique spécial) non pris en charge"
-    ],
-    [
-     "run_extensions-044/prog.cob",
-     "DISPLAY UPON ENVIRONMENT-NAME non pris en charge"
     ],
     [
      "run_extensions-071/prog.cob",
@@ -637,10 +633,6 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "run_file-059/prog1.cob",
-     "ACCEPT FROM ENVIRONMENT non pris en charge"
-    ],
-    [
      "run_file-059/prog2.cob",
      "NO attendu"
     ],
@@ -663,10 +655,6 @@
     [
      "run_file-068/prog1.cob",
      "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-069/prog1.cob",
-     "ACCEPT FROM ENVIRONMENT non pris en charge"
     ],
     [
      "run_file-069/prog2.cob",
@@ -710,7 +698,7 @@
     ],
     [
      "run_file-094/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée"
     ],
     [
      "run_file-096/prog.cob",
@@ -917,10 +905,6 @@
      "DISPLAY UPON STDOUT non pris en charge"
     ],
     [
-     "run_fundamental-086/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
-    ],
-    [
      "run_fundamental-097/callee.cob",
      "USAGE/clause non pris en charge: IS"
     ],
@@ -1102,23 +1086,23 @@
     ],
     [
      "run_manual_screen-046/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: LINE"
     ],
     [
      "run_manual_screen-047/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: LINE"
     ],
     [
      "run_manual_screen-048/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: LINE"
     ],
     [
      "run_manual_screen-049/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: LINE"
     ],
     [
      "run_manual_screen-050/prog.cob",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: LINE"
     ],
     [
      "run_manual_screen-051/prog.cob",
@@ -1541,10 +1525,6 @@
      "CURRENCY ... PICTURE SYMBOL non pris en charge"
     ],
     [
-     "syn_misc-030/prog.cob",
-     "ACCEPT FROM COMMAND-LINE non pris en charge"
-    ],
-    [
      "syn_misc-033/prog.cob",
      "instruction non prise en charge: WITH"
     ],
@@ -1691,12 +1671,12 @@
      36
     ],
     [
-     "clause SELECT non prise en charge",
-     12
+     "expression non prise en charge: LINE",
+     14
     ],
     [
-     "expression non prise en charge: LINE",
-     9
+     "clause SELECT non prise en charge",
+     12
     ],
     [
      ". attendu",
@@ -1705,10 +1685,6 @@
     [
      "PROGRAM-ID attendu",
      8
-    ],
-    [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
-     7
     ],
     [
      "USAGE/clause non pris en charge: IS",
@@ -1733,16 +1709,20 @@
     [
      "instruction non prise en charge: AT",
      5
+    ],
+    [
+     "instruction non prise en charge: JSON",
+     5
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 312,
-  "matching": 312,
-  "complete": 168,
-  "distinct": 201,
+  "sources": 307,
+  "matching": 307,
+  "complete": 163,
+  "distinct": 192,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1764,7 +1744,7 @@
    },
    {
     "diagnostic": "expression non prise en charge: LINE",
-    "first": 9,
+    "first": 14,
     "present": 17,
     "alone": 0
    },
@@ -1785,12 +1765,6 @@
     "first": 12,
     "present": 12,
     "alone": 0
-   },
-   {
-    "diagnostic": "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
-    "first": 7,
-    "present": 11,
-    "alone": 1
    },
    {
     "diagnostic": "instruction non prise en charge: XML",
@@ -1835,16 +1809,10 @@
     "alone": 0
    },
    {
-    "diagnostic": "IF without imperative statement",
-    "first": 0,
-    "present": 6,
-    "alone": 0
-   },
-   {
     "diagnostic": "NO attendu",
     "first": 6,
     "present": 6,
-    "alone": 4
+    "alone": 6
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
@@ -1885,12 +1853,6 @@
    {
     "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
     "first": 4,
-    "present": 4,
-    "alone": 0
-   },
-   {
-    "diagnostic": "ACCEPT FROM ENVIRONMENT non pris en charge",
-    "first": 2,
     "present": 4,
     "alone": 0
    },
@@ -2027,8 +1989,14 @@
     "alone": 1
    },
    {
+    "diagnostic": "IF without imperative statement",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
     "diagnostic": "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
-    "first": 1,
+    "first": 2,
     "present": 2,
     "alone": 0
    },
@@ -2251,36 +2219,6 @@
    {
     "diagnostic": "ASSIGN TO KEYBOARD (périphérique spécial) non pris en charge",
     "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "DISPLAY UPON ENVIRONMENT-NAME non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "ACCEPT FROM ENVIRONMENT-VALUE non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "DISPLAY UPON ENVIRONMENT-VALUE non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "ACCEPT FROM ARGUMENT-VALUE non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "ACCEPT FROM ARGUMENT-NUMBER non pris en charge",
-    "first": 0,
     "present": 1,
     "alone": 0
    },
@@ -2813,18 +2751,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "ACCEPT FROM COMMAND-LINE non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "DISPLAY UPON COMMAND-LINE non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "instruction non prise en charge: LOWER",
     "first": 0,
     "present": 1,
@@ -2954,87 +2880,87 @@
   "greedy": [
    {
     "diagnostic": "NO attendu",
-    "unlocked": 4,
-    "cumulative": 4,
+    "unlocked": 6,
+    "cumulative": 6,
     "first": 6,
     "present": 6
    },
    {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 7,
+    "cumulative": 9,
     "first": 36,
     "present": 38
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 9,
+    "cumulative": 11,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 11,
+    "cumulative": 13,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 13,
+    "cumulative": 15,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 15,
+    "cumulative": 17,
     "first": 3,
     "present": 4
    },
    {
-    "diagnostic": "UNSTRING d'un littéral non pris en charge",
-    "unlocked": 2,
-    "cumulative": 17,
-    "first": 2,
-    "present": 2
-   },
-   {
-    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
+    "diagnostic": "USAGE/clause non pris en charge: is",
     "unlocked": 2,
     "cumulative": 19,
-    "first": 2,
-    "present": 2
+    "first": 4,
+    "present": 4
    },
    {
-    "diagnostic": "nombre OCCURS attendu",
+    "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
     "cumulative": 21,
     "first": 2,
     "present": 2
    },
    {
-    "diagnostic": "opérande INSPECT attendu",
+    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
     "cumulative": 23,
     "first": 2,
     "present": 2
    },
    {
-    "diagnostic": "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
-    "unlocked": 1,
-    "cumulative": 24,
-    "first": 7,
-    "present": 11
+    "diagnostic": "nombre OCCURS attendu",
+    "unlocked": 2,
+    "cumulative": 25,
+    "first": 2,
+    "present": 2
    },
    {
-    "diagnostic": "USAGE/clause non pris en charge: is",
+    "diagnostic": "opérande INSPECT attendu",
     "unlocked": 2,
-    "cumulative": 26,
-    "first": 4,
-    "present": 4
+    "cumulative": 27,
+    "first": 2,
+    "present": 2
+   },
+   {
+    "diagnostic": "instruction non prise en charge: AT",
+    "unlocked": 1,
+    "cumulative": 28,
+    "first": 5,
+    "present": 5
    }
   ],
   "sources_detail": [
@@ -3312,19 +3238,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-044/prog.cob",
-    "diagnostics": [
-     "DISPLAY UPON ENVIRONMENT-NAME non pris en charge",
-     "ACCEPT FROM ENVIRONMENT-VALUE non pris en charge",
-     "DISPLAY UPON ENVIRONMENT-VALUE non pris en charge",
-     "ACCEPT FROM ARGUMENT-VALUE non pris en charge",
-     "ACCEPT FROM ARGUMENT-NUMBER non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_extensions-071/prog.cob",
     "diagnostics": [
      "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge"
@@ -3347,7 +3260,6 @@
     "diagnostics": [
      "USAGE POINTER de groupe non pris en charge",
      "CALL USING requiert au moins un argument",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression attendue",
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
@@ -3494,9 +3406,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-056/prog1.cob",
     "diagnostics": [
-     "NO attendu",
-     "ACCEPT FROM ENVIRONMENT non pris en charge",
-     "IF without imperative statement"
+     "NO attendu"
     ],
     "complete": true,
     "matches_measure": true
@@ -3517,16 +3427,6 @@
      "clause SELECT non prise en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-059/prog1.cob",
-    "diagnostics": [
-     "ACCEPT FROM ENVIRONMENT non pris en charge",
-     "IF without imperative statement"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -3560,9 +3460,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-066/prog1.cob",
     "diagnostics": [
-     "NO attendu",
-     "ACCEPT FROM ENVIRONMENT non pris en charge",
-     "IF without imperative statement"
+     "NO attendu"
     ],
     "complete": true,
     "matches_measure": true
@@ -3583,16 +3481,6 @@
      "clause SELECT non prise en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-069/prog1.cob",
-    "diagnostics": [
-     "ACCEPT FROM ENVIRONMENT non pris en charge",
-     "IF without imperative statement"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -3690,7 +3578,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-094/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
      "REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée"
     ],
@@ -4158,15 +4045,6 @@
     "source": "run_fundamental-079/prog.cob",
     "diagnostics": [
      "DISPLAY UPON STDOUT non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-086/prog.cob",
-    "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
     ],
     "complete": true,
     "matches_measure": true
@@ -4664,7 +4542,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_manual_screen-046/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression non prise en charge: LINE",
      "instruction non prise en charge: LINE",
      "invalid expression: unfinished expression",
@@ -4677,7 +4554,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_manual_screen-047/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression non prise en charge: LINE",
      "instruction non prise en charge: LINE",
      "invalid expression: unfinished expression",
@@ -4690,7 +4566,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_manual_screen-048/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression non prise en charge: LINE",
      "instruction non prise en charge: LINE",
      "invalid expression: unfinished expression",
@@ -4703,7 +4578,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_manual_screen-049/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression non prise en charge: LINE",
      "instruction non prise en charge: LINE",
      "invalid expression: unfinished expression",
@@ -4716,7 +4590,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_manual_screen-050/prog.cob",
     "diagnostics": [
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "expression non prise en charge: LINE",
      "instruction non prise en charge: LINE",
      "expression attendue",
@@ -4852,8 +4725,7 @@
     "source": "run_manual_screen-060/prog2.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: is",
-     "SCREEN SECTION non prise en charge à cet endroit",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     "complete": true,
     "matches_measure": true
@@ -4863,7 +4735,6 @@
     "source": "run_manual_screen-061/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: is",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "DISPLAY WITH blank (écran) non pris en charge",
      "expression non prise en charge: line",
      "instruction non prise en charge: LINE",
@@ -4881,7 +4752,6 @@
     "diagnostics": [
      "USAGE/clause non pris en charge: is",
      "donnée subordonnée sans groupe parent",
-     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      "DISPLAY WITH blank (écran) non pris en charge",
      "expression non prise en charge: line",
      "instruction non prise en charge: LINE",
@@ -5754,16 +5624,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_misc-030/prog.cob",
-    "diagnostics": [
-     "ACCEPT FROM COMMAND-LINE non pris en charge",
-     "DISPLAY UPON COMMAND-LINE non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_misc-033/prog.cob",
     "diagnostics": [
      "instruction non prise en charge: WITH",
@@ -6089,9 +5949,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T18:05:04+00:00",
-  "git_head": "0ee799ce2caf135a521d63cfed1a4aa94a12eaf3",
-  "implementation_sha256": "74826b63956804c1383eefb5bee963affbd3b1d1a432e4692ba315aad1fd83dc",
+  "measured_at": "2026-10-31T18:39:40+00:00",
+  "git_head": "39a42a7427575d8e6a798e63742d86d89eb9dc6c",
+  "implementation_sha256": "9144df1613b39aa5d29539e14e13edfc7de5f36c77d22528f2f3905312ca9ea7",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

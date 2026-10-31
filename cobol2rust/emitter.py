@@ -179,7 +179,7 @@ class Emitter:
             return e.op
         if e.op in {"all", "refmod"}:
             return "text"
-        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class"}:
+        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class", "imp_exception"}:
             return "bool"
         return "number"
 
@@ -421,6 +421,8 @@ class Emitter:
             return f"({self.expression(dividend)}).remainder_after(&({self.expression(divisor)}), {scale})"
         if op == "bool":
             return str(args[0]).lower()
+        if op == "imp_exception":
+            return f"runtime::exception::accept_display_failed({str(args[0]).lower()})"
         if op == "switch":
             number, on = args
             return f"(runtime::switch_on({number}) == {str(on).lower()})"
@@ -1344,7 +1346,7 @@ class Emitter:
     EXCEPTION_STATEMENTS = {
         "set_condition", "open", "close", "rewrite", "delete_file", "delete", "start", "write", "display",
         "set_address", "allocate", "free", "table_sort", "assign", "move", "compute", "accept", "accept_clock",
-        "initialize", "set_switch", "inspect", "continue", "exception_off", "read",
+        "initialize", "set_switch", "inspect", "continue", "exception_off", "read", "environment",
         # cob_cancel: the run unit checks the files it closes.
         "cancel",
     }
@@ -1631,6 +1633,8 @@ class Emitter:
                 self.alphanumeric_move(ref, f"runtime::clock_digits({quoted(kind)})")
             else:
                 self.assignment(Expr("clock", (kind,)), [ref], False, move=True)
+        elif op == "environment":
+            self.environment(stmt)
         elif op == "accept_omitted":
             self.write("runtime::accept_omitted();")
         elif op == "initialize" and (a[3] or (a[2] and a[4])):
@@ -1725,6 +1729,68 @@ class Emitter:
     @staticmethod
     def byte_vector(text):
         return "vec![" + ", ".join(str(b) for b in text.encode("latin-1")) + "]"
+
+    def field_data(self, operand):
+        """The cob_field data a common.c routine reads: a variable's storage
+        (None without an address), a literal's bytes (a numeric literal's
+        digits, without sign or decimal point)."""
+        if operand.op == "var":
+            return f"storage_runtime::parameter_bytes(&{self.reference(operand.args[0])})"
+        if operand.op == "text":
+            return f"Some({self.byte_vector(operand.args[0])})"
+        if operand.signed_literal:
+            operand = operand.args[0]
+        if operand.op == "number":
+            return f"Some({self.byte_vector(operand.args[0].lstrip('+-').replace('.', ''))})"
+        if operand.op == "function" and self.kind(operand) == "text":
+            # The intrinsic's result field.
+            return f"Some(({self.expression(operand)}).bytes())"
+        raise CobolError("opérande calculé d'une routine d'environnement non pris en charge")
+
+    def environment(self, stmt):
+        """common.c environment, argument and command-line routines."""
+        action, target, operand = stmt.args
+        if getattr(stmt, "handled", False):
+            self.write("runtime::exception::clear_current();")
+        if action == "display_arg_number":
+            # cob_display_arg_number: cob_move to an unsigned binary(9).
+            n = self.unique()
+            self.write(f"let mut {n} = storage_runtime::content_number(&[0; 4], 9, false);")
+            if self.kind(operand) == "number":
+                self.write(f"{n}.move_number(&{self.expression(operand)});")
+            else:
+                self.write(f"{n}.assign_text_move(&Value::Bytes(({self.expression(operand)}).bytes()), false);")
+            self.write(f"runtime::environment::display_arg_number(u32::from_le_bytes(storage_runtime::parameter_bytes(&{n}).unwrap().try_into().unwrap()));")
+        elif action in {"display_name", "display_value", "display_command_line"}:
+            self.write(f"runtime::environment::{action}({self.field_data(operand)});")
+        elif action == "set":
+            self.write(f"runtime::environment::set({self.field_data(target)}, {self.field_data(operand)});")
+        elif action == "accept_arg_number":
+            # cob_accept_arg_number: cob_move from an unsigned binary(9).
+            value = "storage_runtime::content_number(&runtime::environment::arg_number().to_le_bytes(), 9, false)"
+            field = self.program.fields[target.name]
+            if target.start is None and field.kind == "number":
+                self.write(f"{self.reference(target)}.move_number(&{value});")
+            elif target.start is None and field.kind != "text":
+                raise CobolError("ACCEPT FROM ARGUMENT-NUMBER vers un article édité non pris en charge")
+            else:
+                group = str(target.start is None and not field.picture).lower()
+                self.write(f"{self.reference(target)}.assign(&{value}.numeric_move_text({group}), false);")
+        else:
+            bytes_name = self.unique()
+            if action == "get":
+                self.write(f"if let Some({bytes_name}) = runtime::environment::get({self.field_data(operand)}) {{")
+            elif action == "accept_arg_value":
+                self.write(f"if let Some({bytes_name}) = runtime::environment::accept_arg_value() {{")
+            elif action == "accept_value":
+                self.write(f"{{ let {bytes_name} = runtime::environment::accept_value();")
+            else:
+                size = f"storage_runtime::descriptor_size(&{self.reference(target)})"
+                self.write(f"{{ let {bytes_name} = runtime::environment::accept_command_line({size});")
+            self.indent += 1
+            self.alphanumeric_move(target, bytes_name)
+            self.indent -= 1
+            self.write("}")
 
     def alphanumeric_move(self, ref, bytes_expr):
         """cob_str_memcpy: a MOVE from an alphanumeric temporary."""

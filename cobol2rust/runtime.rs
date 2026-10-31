@@ -2754,6 +2754,14 @@ pub mod exception {
     /// An operation that may change cob_exception_code without being ported.
     pub fn unknown_current() { STATE.with(|state| state.borrow_mut().current = None) }
 
+    /// output_display_accept_ex_condition: an EC-SCREEN exception, or
+    /// EC-IMP-ACCEPT (EC-IMP-DISPLAY) for an ACCEPT (DISPLAY) handler.
+    pub fn accept_display_failed(accept: bool) -> bool {
+        let current = STATE.with(|state| state.borrow().current)
+            .unwrap_or_else(|| fail("ON EXCEPTION after an operation that may change cob_exception_code not modelled"));
+        current & 0xff00 == code("EC-SCREEN") || current == code(if accept { "EC-IMP-ACCEPT" } else { "EC-IMP-DISPLAY" })
+    }
+
     /// `if (unlikely (cob_glob_ptr->cob_exception_code != 0))` of a deferred
     /// error check.
     pub fn pending() -> bool {
@@ -2819,5 +2827,215 @@ pub mod exception {
             Some((status, select)) if is(&last, "EC-I-O") => Value::Bytes(format!("{status:02}{select}").into_bytes()),
             _ => Value::Bytes(b"00".to_vec()),
         }
+    }
+}
+
+/// cob_argc / cob_argv: the program's arguments, NUL terminated, in the
+/// order CBL_GC_GETOPT leaves them (it permutes them as cobgetopt.c does).
+pub mod argv {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static ARGV: RefCell<Option<(Vec<Vec<u8>>, Vec<usize>)>> = const { RefCell::new(None) };
+    }
+
+    /// The argument strings and their current order.
+    pub fn with<R>(f: impl FnOnce(&mut Vec<Vec<u8>>, &mut Vec<usize>) -> R) -> R {
+        ARGV.with(|argv| {
+            let mut argv = argv.borrow_mut();
+            let (strings, order) = argv.get_or_insert_with(|| {
+                use std::os::unix::ffi::OsStringExt;
+                let strings: Vec<Vec<u8>> = std::env::args_os().map(|a| { let mut s = a.into_vec(); s.push(0); s }).collect();
+                let order = (0..strings.len()).collect();
+                (strings, order)
+            });
+            f(strings, order)
+        })
+    }
+
+    pub fn count() -> usize { with(|_, order| order.len()) }
+
+    /// cob_argv[index] up to its NUL.
+    pub fn argument(index: usize) -> Option<Vec<u8>> {
+        with(|strings, order| order.get(index).map(|&id| {
+            let s = &strings[id];
+            s[..s.iter().position(|&b| b == 0).unwrap()].to_vec()
+        }))
+    }
+}
+
+/// common.c: DISPLAY UPON ENVIRONMENT-NAME / ENVIRONMENT-VALUE /
+/// ARGUMENT-NUMBER / COMMAND-LINE, ACCEPT FROM ENVIRONMENT[-VALUE] /
+/// ARGUMENT-NUMBER / ARGUMENT-VALUE / COMMAND-LINE and SET ENVIRONMENT.
+pub mod environment {
+    use super::{exception, fail};
+    use std::cell::RefCell;
+    use std::ffi::{c_char, c_int, CStr, CString};
+
+    extern "C" {
+        fn getenv(name: *const c_char) -> *const c_char;
+        fn setenv(name: *const c_char, value: *const c_char, overwrite: c_int) -> c_int;
+    }
+
+    /// gc_conf's environment names: cob_rescan_env_vals applies them again
+    /// after each setenv; changing one is a named stop.
+    const SETTINGS: [&str; 57] = [
+        "COB_LOAD_CASE", "COB_PHYSICAL_CANCEL", "default_cancel_mode", "LOGICAL_CANCELS", "COB_LIBRARY_PATH",
+        "COB_PRE_LOAD", "COB_BELL", "COB_DEBUG_LOG", "COB_DISABLE_WARNINGS", "COB_ENV_MANGLE", "COB_REDIRECT_DISPLAY",
+        "COB_SCREEN_ESC", "COB_SCREEN_EXCEPTIONS", "COB_TIMEOUT_SCALE", "COB_INSERT_MODE", "COB_MOUSE_FLAGS",
+        "MOUSE_FLAGS", "COB_MOUSE_INTERVAL", "COB_SET_DEBUG", "COB_SET_TRACE", "COB_TRACE_FILE", "COB_TRACE_FORMAT",
+        "COB_STACKTRACE", "COB_CORE_ON_ERROR", "COB_CORE_FILENAME", "COB_DUMP_FILE", "COB_DUMP_WIDTH", "COB_UNIX_LF",
+        "USERNAME", "LOGNAME", "LANG", "OSTYPE", "TERM", "OS", "COB_FILE_PATH", "COB_VARSEQ_FORMAT", "COB_LS_FIXED",
+        "STRIP_TRAILING_SPACES", "COB_LS_VALIDATE", "COB_LS_NULLS", "COB_LS_SPLIT", "COB_SEQ_CONCAT_NAME",
+        "COB_SEQ_CONCAT_SEP", "COB_SORT_CHUNK", "COB_SORT_MEMORY", "COB_SYNC", "DB_HOME", "COB_COL_JUST_LRC",
+        "COB_DISPLAY_PRINT_PIPE", "COBPRINTER", "COB_DISPLAY_PRINT_FILE", "COB_DISPLAY_PUNCH_FILE", "COB_LEGACY",
+        "COB_EXIT_WAIT", "COB_EXIT_MSG", "COB_CURRENT_DATE", "COB_DATE",
+    ];
+    /// COB_MEDIUM_MAX.
+    const MEDIUM_MAX: usize = 8191;
+
+    struct State { local_env: Option<Vec<u8>>, current_arg: usize, command_line: Option<Vec<u8>> }
+
+    thread_local! {
+        static STATE: RefCell<State> = const { RefCell::new(State { local_env: None, current_arg: 1, command_line: None }) };
+    }
+
+    fn unmangled() {
+        if std::env::var_os("COB_ENV_MANGLE").is_some_and(|value| !value.is_empty()) {
+            fail("COB_ENV_MANGLE (noms d'environnement modifiés) non modélisé");
+        }
+    }
+
+    /// cob_field_to_string: trailing spaces and NULs dropped (the first byte
+    /// kept); Err for an empty field or one longer than `maxsize`.
+    fn field_string(data: &[u8], maxsize: usize) -> Result<Vec<u8>, ()> {
+        if data.is_empty() { return Err(()); }
+        let mut end = data.len() - 1;
+        while end > 0 && (data[end] == b' ' || data[end] == 0) { end -= 1; }
+        if data[end] == b' ' || data[end] == 0 { return Ok(Vec::new()); }
+        if end > maxsize { return Err(()); }
+        Ok(data[..=end].to_vec())
+    }
+
+    /// The C string of `bytes`, up to its first NUL.
+    fn c_string(bytes: &[u8]) -> CString {
+        CString::new(bytes.iter().copied().take_while(|&b| b != 0).collect::<Vec<u8>>()).unwrap()
+    }
+
+    fn lookup(name: &[u8]) -> Option<Vec<u8>> {
+        let name = c_string(name);
+        let value = unsafe { getenv(name.as_ptr()) };
+        if value.is_null() { None } else { Some(unsafe { CStr::from_ptr(value) }.to_bytes().to_vec()) }
+    }
+
+    /// cob_move_intermediate: an empty value moves as one space (cob_move).
+    fn moved(value: Vec<u8>) -> Vec<u8> { if value.is_empty() { vec![b' '] } else { value } }
+
+    /// cob_display_environment.
+    pub fn display_name(data: Option<Vec<u8>>) {
+        unmangled();
+        let Some(data) = data else { fail("DISPLAY UPON ENVIRONMENT-NAME d'un article sans adresse non modélisé") };
+        let size = data.len();
+        if let Ok(name) = field_string(&data, size) {
+            STATE.with(|state| state.borrow_mut().local_env = Some(name));
+        }
+    }
+
+    /// cob_display_env_value: setenv of the current name, then
+    /// cob_rescan_env_vals.
+    pub fn display_value(data: Option<Vec<u8>>) {
+        let name = STATE.with(|state| state.borrow().local_env.clone());
+        let Some(name) = name.filter(|name| !name.is_empty() && name[0] != 0) else {
+            exception::set("EC-IMP-DISPLAY");
+            return;
+        };
+        let Some(data) = data else { fail("DISPLAY UPON ENVIRONMENT-VALUE d'un article sans adresse non modélisé") };
+        let Ok(value) = field_string(&data, MEDIUM_MAX) else {
+            exception::set("EC-IMP-DISPLAY");
+            return;
+        };
+        let name = c_string(&name);
+        if SETTINGS.iter().any(|setting| setting.as_bytes() == name.as_bytes()) {
+            fail(&format!("SET ENVIRONMENT de {} : réglage de libcob relu par cob_rescan_env_vals, non modélisé",
+                          String::from_utf8_lossy(name.as_bytes())));
+        }
+        let value = c_string(&value);
+        if unsafe { setenv(name.as_ptr(), value.as_ptr(), 1) } != 0 {
+            exception::set("EC-IMP-DISPLAY");
+        }
+    }
+
+    /// cob_set_environment.
+    pub fn set(name: Option<Vec<u8>>, value: Option<Vec<u8>>) {
+        display_name(name);
+        display_value(value);
+    }
+
+    /// cob_get_environment: None when nothing is moved.
+    pub fn get(name: Option<Vec<u8>>) -> Option<Vec<u8>> {
+        unmangled();
+        let name = name.and_then(|data| field_string(&data, MEDIUM_MAX).ok()).filter(|name| !name.is_empty());
+        let Some(name) = name else {
+            exception::set("EC-IMP-ACCEPT");
+            return None;
+        };
+        Some(match lookup(&name) {
+            Some(value) => moved(value),
+            None => { exception::set("EC-IMP-ACCEPT"); vec![b' '] },
+        })
+    }
+
+    /// cob_accept_environment.
+    pub fn accept_value() -> Vec<u8> {
+        let name = STATE.with(|state| state.borrow().local_env.clone());
+        match name.and_then(|name| lookup(&name)) {
+            Some(value) => moved(value),
+            None => { exception::set("EC-IMP-ACCEPT"); vec![b' '] },
+        }
+    }
+
+    /// cob_display_arg_number, after the move to an unsigned binary(9).
+    pub fn display_arg_number(n: u32) {
+        if n as usize >= super::argv::count() {
+            exception::set("EC-IMP-DISPLAY");
+        } else {
+            STATE.with(|state| state.borrow_mut().current_arg = n as usize);
+        }
+    }
+
+    /// cob_accept_arg_number: cob_argc - 1.
+    pub fn arg_number() -> u32 { (super::argv::count() as u32).wrapping_sub(1) }
+
+    /// cob_accept_arg_value: None when nothing is moved.
+    pub fn accept_arg_value() -> Option<Vec<u8>> {
+        let current = STATE.with(|state| state.borrow().current_arg);
+        let Some(value) = super::argv::argument(current) else {
+            exception::set("EC-IMP-ACCEPT");
+            return None;
+        };
+        STATE.with(|state| state.borrow_mut().current_arg = current + 1);
+        Some(moved(value))
+    }
+
+    /// cob_display_command_line.
+    pub fn display_command_line(data: Option<Vec<u8>>) {
+        let Some(data) = data else { fail("DISPLAY UPON COMMAND-LINE d'un article sans adresse non modélisé") };
+        STATE.with(|state| state.borrow_mut().command_line = Some(data));
+    }
+
+    /// cob_accept_command_line for a receiver of `size` bytes.
+    pub fn accept_command_line(size: usize) -> Vec<u8> {
+        if let Some(line) = STATE.with(|state| state.borrow().command_line.clone()).filter(|line| !line.is_empty()) {
+            return line;
+        }
+        let argc = super::argv::count();
+        if argc <= 1 { return vec![b' ']; }
+        let mut buff = Vec::new();
+        for i in 1..argc {
+            buff.extend(super::argv::argument(i).unwrap());
+            if i != argc - 1 { buff.push(b' '); }
+            if buff.len() > size { break; }
+        }
+        moved(buff)
     }
 }

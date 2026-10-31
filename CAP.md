@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T18:05:04+00:00 (commit `0ee799ce2c`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T18:39:40+00:00 (commit `39a42a7427`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T18:05:04+00:00 (commit `0ee799ce2c`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 581 | 879 | 298 | 0 |
-| **Total** | | **3593** | **1305** | **1617** | **312** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 586 | 879 | 293 | 0 |
+| **Total** | | **3593** | **1310** | **1617** | **307** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T18:05:04+00:00, commit `0ee799ce2c`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T18:39:40+00:00, commit `39a42a7427`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -120,47 +120,47 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T18:05:04+00:00, commit `
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
 1. 36 × SCREEN SECTION non prise en charge à cet endroit
-2. 12 × clause SELECT non prise en charge
-3. 9 × expression non prise en charge: LINE
+2. 14 × expression non prise en charge: LINE
+3. 12 × clause SELECT non prise en charge
 4. 8 × PROCEDURE attendu
 5. 8 × . attendu
 6. 8 × PROGRAM-ID attendu
-7. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
-8. 7 × USAGE/clause non pris en charge: IS
-9. 6 × NO attendu
-10. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
+7. 7 × USAGE/clause non pris en charge: IS
+8. 6 × NO attendu
+9. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
+10. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 312 sources, 312 au premier diagnostic identique à la mesure, 168 à inventaire complet, 201 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 307 sources, 307 au premier diagnostic identique à la mesure, 163 à inventaire complet, 192 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 1 | NO attendu | 4 | 4 | 6 | 6 |
-| 2 | SCREEN SECTION non prise en charge à cet endroit | 3 | 7 | 36 | 38 |
-| 3 | USAGE/clause non pris en charge: IS | 2 | 9 | 7 | 7 |
-| 4 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 11 | 1 | 5 |
-| 5 | donnée subordonnée sans groupe parent | 2 | 13 | 0 | 7 |
-| 6 | 78 VALUE LENGTH OF non pris en charge | 2 | 15 | 3 | 4 |
-| 7 | UNSTRING d'un littéral non pris en charge | 2 | 17 | 2 | 2 |
-| 8 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 19 | 2 | 2 |
-| 9 | nombre OCCURS attendu | 2 | 21 | 2 | 2 |
-| 10 | opérande INSPECT attendu | 2 | 23 | 2 | 2 |
-| 11 | nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire | 1 | 24 | 7 | 11 |
-| 12 | USAGE/clause non pris en charge: is | 2 | 26 | 4 | 4 |
+| 1 | NO attendu | 6 | 6 | 6 | 6 |
+| 2 | SCREEN SECTION non prise en charge à cet endroit | 3 | 9 | 36 | 38 |
+| 3 | USAGE/clause non pris en charge: IS | 2 | 11 | 7 | 7 |
+| 4 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 13 | 1 | 5 |
+| 5 | donnée subordonnée sans groupe parent | 2 | 15 | 0 | 7 |
+| 6 | 78 VALUE LENGTH OF non pris en charge | 2 | 17 | 3 | 4 |
+| 7 | USAGE/clause non pris en charge: is | 2 | 19 | 4 | 4 |
+| 8 | UNSTRING d'un littéral non pris en charge | 2 | 21 | 2 | 2 |
+| 9 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 23 | 2 | 2 |
+| 10 | nombre OCCURS attendu | 2 | 25 | 2 | 2 |
+| 11 | opérande INSPECT attendu | 2 | 27 | 2 | 2 |
+| 12 | instruction non prise en charge: AT | 1 | 28 | 5 | 5 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
 - 53 × GOBACK RETURNING non pris en charge (1er : 0, seul : 0)
 - 50 × invalid expression: unfinished expression (1er : 0, seul : 0)
 - 38 × SCREEN SECTION non prise en charge à cet endroit (1er : 36, seul : 3)
-- 17 × expression non prise en charge: LINE (1er : 9, seul : 0)
+- 17 × expression non prise en charge: LINE (1er : 14, seul : 0)
 - 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
 - 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
 - 12 × clause SELECT non prise en charge (1er : 12, seul : 0)
-- 11 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire (1er : 7, seul : 1)
 - 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
 - 9 × . attendu (1er : 8, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
+- 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -747,3 +747,18 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   natif, `over` (compteur 9 > 5, lecture hors de l'article) est un arrêt
   nommé. Testsuite **574 → 581/1135**, total **1298 → 1305/3593**, écart
   **319 → 312**.
+- 2026-10-31 — Environnement, arguments et ligne de commande (common.c) :
+  choix justifié hors du seul compte de sources (« NO attendu » vient
+  d'OPEN WITH LOCK, dont les tests 3.2 sont XFAIL et dont les sources
+  demandent aussi ACCEPT FROM ENVIRONMENT, construction très courante du
+  COBOL réel). DISPLAY UPON ENVIRONMENT-NAME/VALUE, SET ENVIRONMENT, ACCEPT
+  FROM ENVIRONMENT[-VALUE], ARGUMENT-NUMBER, ARGUMENT-VALUE et COMMAND-LINE
+  dans les deux sens, avec leurs phrases [NOT] ON EXCEPTION
+  (`output_display_accept_ex_condition`) et la grammaire de parser.y ;
+  `cob_argv` partagé avec CBL_GC_GETOPT ; un réglage de libcob relu par
+  `cob_rescan_env_vals` est un arrêt nommé. Cinq sources débloquées
+  (run_extensions-044, run_file-059/prog1, run_file-069/prog1,
+  run_fundamental-086, syn_misc-030) ; les trois exécutables sans réglage
+  libcob sont identiques au natif, run_fundamental-086 (COB_SET_DEBUG
+  modifié en cours d'exécution) s'arrête par son nom. Testsuite **581 →
+  586/1135**, total **1305 → 1310/3593**, écart **312 → 307**.
