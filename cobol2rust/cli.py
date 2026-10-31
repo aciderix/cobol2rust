@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import pickle
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
@@ -17,6 +19,59 @@ from .toolchain import compiler_env, find_tool
 
 
 SOURCE_SUFFIXES = (".CBL", ".cbl", ".COB", ".cob")
+
+
+_ANALYSIS = None
+
+
+@contextmanager
+def analysis_cache():
+    """Memoize load_source and the parse of each source while measuring a
+    read-only corpus: a dynamic CALL brings in every program of the call path,
+    for each caller. The parse is returned as a fresh copy (pickle) of the
+    first one, so a later change to a program never reaches the cache."""
+    global _ANALYSIS
+    previous, _ANALYSIS = _ANALYSIS, {}
+    try:
+        yield
+    finally:
+        _ANALYSIS = previous
+
+
+def _profile():
+    from . import frontend
+    return frontend.STD, frontend.DEBUGGING_LINES, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS
+
+
+def _memoized(key, compute, store, restore):
+    if _ANALYSIS is None:
+        return compute()
+    if key in _ANALYSIS:
+        kind, value = _ANALYSIS[key]
+        if kind == "error":
+            raise CobolError(*value)
+        return restore(value)
+    try:
+        result = compute()
+    except CobolError as error:
+        _ANALYSIS[key] = ("error", error.args)
+        raise
+    try:
+        _ANALYSIS[key] = ("value", store(result))
+    except (pickle.PicklingError, TypeError, AttributeError, RecursionError):
+        pass
+    return result
+
+
+def load_cached(path: Path, includes, fmt):
+    key = ("load", str(Path(path).absolute()), tuple(map(str, includes)), fmt, _profile())
+    return _memoized(key, lambda: load_source(path, list(includes), fmt),
+                     lambda result: (result[0], list(result[1])), lambda value: (value[0], list(value[1])))
+
+
+def parse_cached(expanded: str):
+    key = ("parse", hashlib.sha256(expanded.encode("utf-8", "surrogatepass")).digest(), _profile())
+    return _memoized(key, lambda: Parser(expanded).parse(), pickle.dumps, pickle.loads)
 
 
 def statements(program):
@@ -75,8 +130,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
     name in the call path. A name found nowhere raises EXCEPTION at run time.
     A dynamic CALL brings in every program of the call path that converts.
     """
-    expanded, copies = load_source(source, list(includes), fmt)
-    main = Parser(expanded).parse()
+    expanded, copies = load_cached(source, includes, fmt)
+    main = parse_cached(expanded)
     directories = [Path(path) for path in call_paths]
     units = {}
     # Programs after the main one in its source are in the executable itself:
@@ -104,7 +159,7 @@ def run_unit(source: Path, fmt, includes, call_paths):
             for path in sorted(directory.iterdir()) if directory.is_dir() else []:
                 if path.suffix in SOURCE_SUFFIXES:
                     try:
-                        load_source(path, list(includes), fmt)
+                        load_cached(path, includes, fmt)
                         scanned.add(path.stem)
                         pending.add(path.stem)
                     except (CobolError, OSError):
@@ -140,8 +195,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
         # when it converts as a single program of that name.
         optional = name not in targets
         try:
-            sub_expanded, sub_copies = load_source(path, list(includes), fmt)
-            program = Parser(sub_expanded).parse()
+            sub_expanded, sub_copies = load_cached(path, includes, fmt)
+            program = parse_cached(sub_expanded)
         except CobolError as exc:
             if optional:
                 continue

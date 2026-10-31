@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T07:45:54+00:00",
- "git_head": "99b8008de59be0e6a5218b51cd0742402522392b",
- "implementation_sha256": "908ed21b2ff8e1df19105e25006e9cae17e6c40906b35098c66ded636916467f",
+ "measured_at": "2026-10-31T09:06:06+00:00",
+ "git_head": "da5705ff33beee9cfc32fd0b12d6446b1288ebf7",
+ "implementation_sha256": "bc62114710d5722f3d4b3660e454646aca74fac7c9e8789c315c676a97350ab9",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
@@ -1910,9 +1910,9 @@
   }
  },
  "execution": {
-  "measured_at": "2026-10-31T07:45:54+00:00",
-  "git_head": "99b8008de59be0e6a5218b51cd0742402522392b",
-  "implementation_sha256": "908ed21b2ff8e1df19105e25006e9cae17e6c40906b35098c66ded636916467f",
+  "measured_at": "2026-10-31T09:06:06+00:00",
+  "git_head": "da5705ff33beee9cfc32fd0b12d6446b1288ebf7",
+  "implementation_sha256": "bc62114710d5722f3d4b3660e454646aca74fac7c9e8789c315c676a97350ab9",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

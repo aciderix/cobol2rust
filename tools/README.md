@@ -56,6 +56,37 @@ python tools/fetch_corpora.py --output .tools/corpora
 Les fichiers de test des parsers contiennent surtout des fragments et
 extensions de dialectes : ils mesurent l'analyse, pas un comportement natif.
 
+## Pipeline de validation parallèle
+
+Les outils longs répartissent leur travail sur les processeurs (`-j N`,
+défaut : un par CPU ; `-j 1` reste séquentiel). Le résultat ne dépend pas de
+la répartition : chaque unité (module de test, source, programme) tourne dans
+son propre processus, et le rapport garde l'ordre des entrées.
+
+| Commande | Rôle | Durée (4 CPU) |
+| --- | --- | ---: |
+| `python3 tools/run_tests.py` | suite Python, un processus par module, plus longs d'abord (`build/test-durations.json`) | ~3 min |
+| `python3 tools/real_corpora.py --cobc --execute --record` | boussole : 3593 sources, cobc, exécution comparée | ~3,5 min |
+| `python3 tools/coverage.py … --report …` | NIST statique (451/458) | ~10 s |
+| `python3 tools/nist_verify.py --accepted-from …` | NIST complet | voir VALIDATION.md |
+
+Trois garanties rendent ce parallélisme sûr :
+
+- **Emplacements de compilation.** `toolchain.build_slot` réserve un
+  répertoire Cargo par build (verrou de fichier, un emplacement par CPU), et
+  `build_rust` copie l'exécutable dans le `target/` du projet. Avant chaque
+  build, `cargo clean -p` retire le paquet : l'empreinte Cargo d'un paquet
+  racine ignore son chemin, si bien que deux programmes de même PROGRAM-ID
+  (`cobol_prog`) pouvaient sinon échanger leurs exécutables.
+- **Profil du frontend.** `frontend.STD` et les autres options sont globaux :
+  chaque conversion parallèle a son processus.
+- **Cache d'analyse de la mesure.** `cli.analysis_cache` mémorise le
+  prétraitement et l'analyse de chaque source pendant une mesure (corpus en
+  lecture seule) : un CALL dynamique rassemble tous les programmes du
+  répertoire, pour chaque appelant. L'analyse est rendue en copie (pickle) de
+  la première. Vérifié une fois sur les 1198 unités acceptées : Rust émis
+  identique octet pour octet avec et sans cache.
+
 ## Mesure d'un corpus externe
 
 `coverage.py` mesure séparément le prétraitement, l'analyse et l'émission Rust.
@@ -121,6 +152,9 @@ python tools/nist_verify.py SQ143A ST121A --work build/nist-check -o build/nist-
 python tools/nist_verify.py --accepted-from build/coverage-nist.json \
   --work build/nist-all -o build/nist-all.json
 ```
+
+Chaque programme a son dossier de travail ; `-j N` en vérifie N à la fois
+(défaut : un par CPU).
 
 Le runner exécute chaque module dans l'ordre alphabétique, dans un même
 dossier, et efface `XXXXX*` avant chaque `.CBL`. L'outil rejoue donc en natif

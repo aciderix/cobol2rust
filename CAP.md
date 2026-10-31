@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T07:45:54+00:00 (commit `99b8008de5`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T09:06:06+00:00 (commit `da5705ff33`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -104,7 +104,7 @@ Dernière mesure : 2026-10-31T07:45:54+00:00 (commit `99b8008de5`, cobc (GnuCOBO
 | gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 538 | 879 | 341 | 0 |
 | **Total** | | **3593** | **1262** | **1617** | **355** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T07:45:54+00:00, commit `99b8008de5`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:06:06+00:00, commit `da5705ff33`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -587,3 +587,24 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   124 PASS, 0 FAIL, 1 INSPECT, `build/nist-verify-open-20261031.json`).
   Exécution globale renouvelée : **74/84**, inchangée. NIST statique
   **451/458**. Cinq nouveaux tests et trois fixtures identiques au natif.
+- 2026-10-31 — Pipeline de validation parallèle (étape d'outillage, hors
+  tableau : elle accélère chaque étape suivante sans changer ce que le
+  convertisseur accepte). Constat chiffré : la conversion des 3593 sources
+  prenait 217 s, dont 180 s pour sept programmes IC (CALL dynamique :
+  analyse et émission de tout le répertoire NIST, pour chaque appelant) et
+  des minutes pour les sources à milliers de constantes 78 (substitution de
+  `cb_add_78` refaite sur tout le reste du source à chaque constante).
+  Corrigé sans changer la sémantique : index des positions des mots
+  (TokenList), cache d'analyse de la mesure (copies pickle), conversion
+  parallèle par source, exécution comparée et NIST parallèles par
+  programme, `tools/run_tests.py` (un processus par module). Défaut latent
+  trouvé et corrigé : l'empreinte Cargo d'un paquet racine ignore son
+  chemin, deux programmes de même PROGRAM-ID pouvaient échanger leurs
+  exécutables ; chaque build prend désormais un emplacement verrouillé, retire
+  le paquet (`cargo clean -p`) et copie son exécutable. Preuves : mesure
+  identique source par source (statut, diagnostic, empreintes : 0 écart),
+  Rust émis identique avec et sans cache sur 1198 unités, exécution
+  comparée identique programme par programme, NIST statique identique
+  (451/458), NIST ciblé 20/20 en 16 s. Durées : mesure complète avec
+  exécution **~8 min 30 → 202 s**, suite **480 s → 162 s**, NIST statique
+  ~60 s → 9 s. Total inchangé : **1262/3593**, écart **355**.

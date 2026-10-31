@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from bisect import bisect_left, insort
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -825,19 +826,85 @@ CALL_FIGURATIVES = {
 }
 
 
+class TokenList(list):
+    """The parser's tokens, with the positions of each word built on demand.
+    Any change but `substitute` drops the index: the cb_add_78 substitution
+    of each constant then costs its occurrences, not the rest of the source."""
+
+    def __init__(self, tokens=()):
+        super().__init__(tokens)
+        self._positions = None
+
+    def positions(self, key):
+        if self._positions is None:
+            index = {}
+            for position, token in enumerate(self):
+                if not token.string:
+                    index.setdefault(token.key, []).append(position)
+            self._positions = index
+        return self._positions.get(key, [])
+
+    def scope_end(self, start, nested):
+        """First END PROGRAM closing the program at `start` (with its contained
+        programs when `nested`), else the end of the source: cb_reset_78."""
+        marks = sorted([(k, "PROGRAM-ID") for k in self.positions("PROGRAM-ID")[bisect_left(self.positions("PROGRAM-ID"), start):]]
+                       + [(k, "END") for k in self.positions("END")[bisect_left(self.positions("END"), start):]
+                          if k + 1 < len(self) and self[k + 1].key == "PROGRAM"])
+        eof = self.positions("<EOF>")
+        limit = eof[bisect_left(eof, start)] if bisect_left(eof, start) < len(eof) else len(self)
+        depth = 0
+        for position, mark in marks:
+            if position >= limit:
+                break
+            if mark == "PROGRAM-ID":
+                if not nested:
+                    return position
+                depth += 1
+            elif depth == 0:
+                return position
+            else:
+                depth -= 1
+        return limit
+
+    def substitute(self, key, start, end, replacement):
+        """Each word `key` in [start, end) becomes the token replacement(word)."""
+        positions = self.positions(key)
+        low, high = bisect_left(positions, start), bisect_left(positions, end)
+        hits = positions[low:high]
+        del positions[low:high]
+        for position in hits:
+            token = replacement(list.__getitem__(self, position))
+            list.__setitem__(self, position, token)
+            if not token.string:
+                insort(self._positions.setdefault(token.key, []), position)
+
+
+def _dropping_index(method):
+    def wrapper(self, *args):
+        self._positions = None
+        return method(self, *args)
+    return wrapper
+
+
+for _name in ("__setitem__", "__delitem__", "__iadd__", "append", "extend", "insert", "pop", "remove",
+              "clear", "sort", "reverse"):
+    setattr(TokenList, _name, _dropping_index(getattr(list, _name)))
+del _name
+
+
 class Parser:
     def __init__(self, source: str):
-        self.tokens = lex(source)
+        self.tokens = TokenList(lex(source))
         # DECIMAL-POINT IS COMMA changes the scanner: read the source again.
         keys = [None if t.string else t.key for t in self.tokens]
         self.decimal_comma = any(keys[k:k + 3] == ["DECIMAL-POINT", "IS", "COMMA"] or keys[k:k + 2] == ["DECIMAL-POINT", "COMMA"]
                                  for k in range(len(keys)))
         if self.decimal_comma:
-            self.tokens = lex(source, True)
+            self.tokens = TokenList(lex(source, True))
         if STD != "cobol85":
             # default.conf "reserved: ALIAS=WORD" entries outside the screen ones.
-            self.tokens = [Token(RESERVED_ALIASES[t.key], t.line, False, t.start, t.end)
-                           if not t.string and t.key in RESERVED_ALIASES else t for t in self.tokens]
+            self.tokens = TokenList(Token(RESERVED_ALIASES[t.key], t.line, False, t.start, t.end)
+                                    if not t.string and t.key in RESERVED_ALIASES else t for t in self.tokens)
         self.currency = "$"
         self.i = 0
         self.fields = {}

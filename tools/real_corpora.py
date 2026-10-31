@@ -102,13 +102,16 @@ def execute_source(name: str, source: str) -> dict:
     return {"status": "different", "reasons": reasons, "rust_stderr": report["rust_stderr"][-200:]}
 
 
-def execute_corpus(name: str, report: dict) -> dict:
+def execute_corpus(name: str, report: dict, jobs: int = 1) -> dict:
     rows = [row for row in report["results"] if row["status"] == "emission_accepted" and not row.get("subprogram")]
     results = {}
-    for row in rows:
-        relative = Path(row["source"]).relative_to(CORPORA_DIR / name).as_posix()
-        results[relative] = execute_source(name, row["source"])
-        print(f"  {name}: {results[relative]['status']:9} {relative}", flush=True)
+    # One process per program at a time: the frontend profile is global.
+    with ProcessPoolExecutor(max_workers=max(1, min(jobs, len(rows) or 1))) as pool:
+        outcomes = pool.map(execute_source, [name] * len(rows), [row["source"] for row in rows])
+        for row, outcome in zip(rows, outcomes):
+            relative = Path(row["source"]).relative_to(CORPORA_DIR / name).as_posix()
+            results[relative] = outcome
+            print(f"  {name}: {outcome['status']:9} {relative}", flush=True)
     counts = Counter(result["status"] for result in results.values())
     return {"programs": len(rows), **{key: counts.get(key, 0) for key in ("identical", "different", "refused", "timeout", "error")},
             "results": results}
@@ -135,7 +138,7 @@ def normalize(diagnostic: str) -> str:
     return re.sub(r" \(près de .*\)$", "", text)[:120]
 
 
-def measure_corpus(name: str) -> dict:
+def measure_corpus(name: str, jobs: int = 1) -> dict:
     from cobol2rust import frontend
     from coverage import measure
     settings = CORPORA[name]
@@ -144,7 +147,7 @@ def measure_corpus(name: str) -> dict:
     # The called programs are looked up in the directory of the caller, as
     # for the execution (execute_source) and cobc's default COB_LIBRARY_PATH.
     report, _ = measure(root, settings["format"], copy_dirs(root), corpus_id=name, extensions=SOURCE_SUFFIXES,
-                        call_paths=(Path("."),))
+                        call_paths=(Path("."),), jobs=jobs)
     return report
 
 
@@ -258,6 +261,8 @@ def main(argv=None) -> int:
                         help="compiler, exécuter et comparer à cobc les programmes acceptés de " + ", ".join(EXECUTED))
     parser.add_argument("--check", action="store_true",
                         help="code 1 si la mesure enregistrée ne correspond plus au convertisseur actuel")
+    parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1,
+                        help="processus de conversion et d'exécution (défaut : un par CPU) ; le résultat n'en dépend pas")
     args = parser.parse_args(argv)
     if args.check:
         reason = stale()
@@ -283,8 +288,7 @@ def main(argv=None) -> int:
         if pins.get(name) != REPOSITORIES[name][1]:
             print(f"{name} : commit {pins.get(name)} différent de l'épinglage {REPOSITORIES[name][1]}", file=sys.stderr)
             return 2
-    with ProcessPoolExecutor(max_workers=min(len(args.only), os.cpu_count() or 1)) as pool:
-        reports = dict(zip(args.only, pool.map(measure_corpus, args.only)))
+    reports = {name: measure_corpus(name, args.jobs) for name in args.only}
     output = ROOT / "build" / "real-corpora"
     output.mkdir(parents=True, exist_ok=True)
     corpora = {}
@@ -308,7 +312,7 @@ def main(argv=None) -> int:
                "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
                "totals": totals, "corpora": corpora}
     if args.execute:
-        executed = {name: execute_corpus(name, reports[name]) for name in args.only if name in EXECUTED}
+        executed = {name: execute_corpus(name, reports[name], args.jobs) for name in args.only if name in EXECUTED}
         summary["execution"] = {"measured_at": measured_at, "git_head": summary["git_head"],
                                 "implementation_sha256": summary["implementation_sha256"],
                                 "scope": "stdin vide, fichiers du dossier du programme en entrée ; "

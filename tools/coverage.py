@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
 import os
@@ -13,7 +14,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cobol2rust import __version__
 from cobol2rust.audit import SKIP
-from cobol2rust.cli import emit_unit
+from cobol2rust.cli import analysis_cache, emit_unit, load_cached, parse_cached
 from cobol2rust.frontend import CobolError, Parser, decode_source, load_source, source_format
 from cobol2rust.toolchain import ROOT
 
@@ -66,7 +67,7 @@ def inspect_source(path, fmt, includes, call_paths=()):
         original = path.read_bytes()
         result["source_sha256"] = hashlib.sha256(original).hexdigest()
         result["initial_source_format"] = source_format(decode_source(original), fmt)
-        expanded, copies = load_source(path, list(includes), fmt)
+        expanded, copies = load_cached(path, includes, fmt)
         result["expanded_sha256"] = hashlib.sha256(expanded.encode("latin-1")).hexdigest()
         # On failure load_source does not return the COPY files it already read.
         # An incomplete list is deliberately not presented as an empty known list.
@@ -74,7 +75,7 @@ def inspect_source(path, fmt, includes, call_paths=()):
                                for name in copies]
         result["copybooks_complete"] = True
         stage = "frontend"
-        program = Parser(expanded).parse()
+        program = parse_cached(expanded)
         result["program"] = program.name
         stage = "emission"
         if program.using:
@@ -114,8 +115,35 @@ def implementation_hashes():
             for path in sorted(paths)}
 
 
+def _worker_start(profile):
+    """A measuring process: the frontend profile of the parent, and an
+    analysis cache kept for the life of the process."""
+    from cobol2rust import frontend
+    frontend.STD, frontend.DEBUGGING_LINES, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS = profile
+    global _WORKER_CACHE
+    _WORKER_CACHE = analysis_cache()
+    _WORKER_CACHE.__enter__()
+
+
+def _inspect(arguments):
+    return inspect_source(*arguments)
+
+
+def inspect_all(paths, fmt, includes, call_paths, jobs=1):
+    """inspect_source of each path, in order; `jobs` processes share the work
+    source by source (the results do not depend on the split)."""
+    arguments = [(path, fmt, includes, call_paths) for path in paths]
+    if jobs <= 1 or len(paths) < 2:
+        with analysis_cache():
+            return [_inspect(argument) for argument in arguments]
+    from cobol2rust import frontend
+    profile = frontend.STD, frontend.DEBUGGING_LINES, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS
+    with ProcessPoolExecutor(max_workers=min(jobs, len(paths)), initializer=_worker_start, initargs=(profile,)) as pool:
+        return list(pool.map(_inspect, arguments, chunksize=1))
+
+
 def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, include_subprograms=False,
-            call_paths=(), extensions=None):
+            call_paths=(), extensions=None, jobs=1):
     root = Path(root).absolute()
     includes = [Path(path).absolute() for path in includes]
     extensions = set(extensions or EXTENSIONS) | ({".sub"} if include_subprograms else set())
@@ -125,7 +153,7 @@ def measure(root, fmt="auto", includes=(), corpus_id=None, corpus_source=None, i
         paths, errors, excluded = [], [str(error)], []
     if not paths and not errors:
         errors.append(f"no source files found for extensions {sorted(extensions)}")
-    results = [inspect_source(path, fmt, includes, call_paths) for path in paths]
+    results = inspect_all(paths, fmt, includes, call_paths, jobs)
     counts = {status: sum(row["status"] == status for row in results) for status in STATUSES}
     grouped = {}
     for row in results:
@@ -173,6 +201,8 @@ def main(argv=None):
                         help="directory of CALLed programs, relative to each source (e.g. lib for NIST IC)")
     parser.add_argument("--report", type=Path, help="new JSON report; default is standard output")
     parser.add_argument("--std", choices=["default", "cobol85"], default="default", help="cobc dialect modelled (-std)")
+    parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1,
+                        help="processes sharing the sources (default: one per CPU)")
     args = parser.parse_args(argv)
     from cobol2rust import frontend
     frontend.STD = args.std
@@ -180,7 +210,7 @@ def main(argv=None):
         print(f"coverage: report already exists: {args.report}", file=sys.stderr)
         return 2
     report, code = measure(args.corpus, args.format, args.copybook_path, args.corpus_id,
-                           args.corpus_source, args.include_subprograms, args.call_path)
+                           args.corpus_source, args.include_subprograms, args.call_path, jobs=args.jobs)
     encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     if args.report:
         try:

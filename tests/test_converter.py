@@ -12,7 +12,7 @@ from cobol2rust.binary import inspect_binary, pe_info, elf_info
 from cobol2rust.cli import convert, main
 from cobol2rust.emitter import Emitter
 from cobol2rust.frontend import CobolError, Parser, lex, load_source, normalize
-from cobol2rust.toolchain import ROOT, build_rust, compiler_env, find_tool
+from cobol2rust.toolchain import ROOT, build_rust, build_slot, compiler_env, find_tool
 
 
 def program(body, data=""):
@@ -194,7 +194,8 @@ class RuntimeTests(unittest.TestCase):
             source.write_text(program("stop run."), encoding="utf-8")
             project = root / "rust"
             convert(source, project)
-            p = subprocess.run([cargo, "test", "--quiet", "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(ROOT / "build" / "rust-target")], capture_output=True, env=compiler_env(cargo), timeout=120)
+            with build_slot() as target:
+                p = subprocess.run([cargo, "test", "--quiet", "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(target)], capture_output=True, env=compiler_env(cargo), timeout=300)
             self.assertEqual(p.returncode, 0, p.stdout.decode(errors="replace") + p.stderr.decode(errors="replace"))
 
     def test_divide_zero_overflow_and_invalid_input_abort(self):

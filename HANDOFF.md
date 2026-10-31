@@ -32,6 +32,14 @@ NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
 exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
 est statique ; elle ne relance pas les 413 programmes.
 
+Pipeline parallèle (31 octobre, tools/README.md) : `tools/run_tests.py`
+(suite en ~3 min), `real_corpora.py` (~3,5 min avec exécution), `coverage.py`
+et `nist_verify.py` répartissent sur les CPU (`-j`). Tout build Rust passe par
+`toolchain.build_slot` ; ne pas réintroduire de `--target-dir` partagé sans
+emplacement verrouillé ni `cargo clean -p` (empreinte Cargo indépendante du
+chemin). Le cache d'analyse (`cli.analysis_cache`) ne sert qu'aux mesures,
+sur corpus en lecture seule.
+
 Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
 blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
 quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des

@@ -386,18 +386,12 @@ def constant_entry(p, level):
     p.constants[key] = tokens
     # Scanner substitution up to the end of the program (cb_reset_78), or of
     # the program and its contained programs for a GLOBAL constant.
-    end, depth = p.i, 0
-    while end < len(p.tokens) and p.tokens[end].key != "<EOF>":
-        t = p.tokens[end]
-        if not t.string and t.key == "PROGRAM-ID":
-            if not is_global:
-                break
-            depth += 1
-        if not t.string and t.key == "END" and p.tokens[end + 1].key == "PROGRAM":
-            if depth == 0:
-                break
-            depth -= 1
-        end += 1
+    end = p.tokens.scope_end(p.i, is_global)
+    if len(tokens) == 1:
+        value = tokens[0]
+        p.tokens.substitute(key, p.i, end, lambda t: ConstantToken(value.text, t.line, value.string, t.start, t.end,
+                                                                   constant=name))
+        return None
     replaced = []
     for t in p.tokens[p.i:end]:
         if not t.string and t.key == key:

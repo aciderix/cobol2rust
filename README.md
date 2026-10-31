@@ -879,7 +879,8 @@ signifie qu'il faut ensuite compiler et vérifier le programme avec ses données
 ## Vérifier le comportement
 
 ```powershell
-python -m unittest discover -v
+python tools/run_tests.py          # suite en parallèle, un processus par module
+python -m unittest discover -v     # même suite, séquentielle
 python tools/verify.py
 python tools/verify_cases.py --report build/real-input-cases.json
 python -m cobol2rust verify examples/invoice.cob -o build/controle-facture.json

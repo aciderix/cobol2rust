@@ -30,8 +30,9 @@ signale une mesure périmée, la refaire avant de conclure quoi que ce soit.
 ## Commandes
 
 ```bash
-python3 -m unittest discover -q                 # suite complète (~8 min avec cobc)
-python3 tools/real_corpora.py --cobc --record     # boussole : corpus réels face à cobc
+python3 tools/run_tests.py                       # suite complète en parallèle (~3 min, 4 CPU)
+python3 -m unittest discover -q                 # même suite, séquentielle (~8 min)
+python3 tools/real_corpora.py --cobc --execute --record  # boussole : corpus réels face à cobc (~3,5 min)
 python3 tools/real_corpora.py --check             # la mesure enregistrée est-elle à jour ?
 python3 tools/coverage.py .tools/nist-ccvs85/extracted --format fixed --include-subprograms \
   --std cobol85 -I .tools/nist-ccvs85/extracted/copy -I .tools/nist-ccvs85/extracted/copyalt \

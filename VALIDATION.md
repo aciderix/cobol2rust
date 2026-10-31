@@ -1,5 +1,37 @@
 # Validation — 30 octobre 2026
 
+## Pipeline de validation parallèle — 31 octobre 2026
+
+Étape d'outillage : rien de ce que le convertisseur accepte ou produit ne
+change. Preuves d'identité :
+
+- Mesure des corpus réels, conversion de 3593 sources : rapports par source
+  identiques à ceux d'avant la modification (statut, diagnostic, programme,
+  empreintes du source étendu et des copybooks) : **0 écart**.
+- Cache d'analyse : Rust émis par `emit_unit` sans cache, avec cache, puis
+  une seconde fois avec cache, comparé sur les **1198 unités acceptées**
+  (programmes principaux des sept corpus) : **0 différence**.
+- Exécution comparée en parallèle : même statut et mêmes raisons pour chacun
+  des 84 programmes (CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
+  53/61).
+- NIST statique : **451/458**, rapport identique source par source
+  (`build/coverage-nist-pipeline.json`), en 9 s au lieu d'environ une minute.
+- NIST ciblé (20 programmes à OPEN multiple) avec `--jobs` : **20/20
+  conformes**, 124 PASS, 0 FAIL, 1 INSPECT, en 16 s
+  (`build/nist-verify-pipeline.json`).
+- Suite Python avec `tools/run_tests.py` (4 processus) : **525 tests en
+  162 s** (somme des modules 603 s), un test PE Windows ignoré ; six
+  nouveaux tests dans `tests/test_pipeline.py` (cache d'analyse, portée des
+  constantes et index, builds parallèles de programmes de même nom).
+
+Défaut latent corrigé : deux crates de même nom (`cobol_prog`) compilées
+dans un même répertoire Cargo pendant que la première existait encore
+recevaient le même exécutable (empreinte Cargo indépendante du chemin d'un
+paquet racine). Reproduit par 8 programmes `prog` (sortie `v2` répétée),
+corrigé par `cargo clean -p` dans un emplacement verrouillé ; le test
+`test_programs_with_one_name_built_in_parallel_keep_their_executable` le
+couvre.
+
 ## COLUMN PLUS, erreurs de reportio et OPEN de plusieurs fichiers — 31 octobre 2026
 
 - `col_or_plus` et `output_report_data` : COLUMN PLUS n se place à
