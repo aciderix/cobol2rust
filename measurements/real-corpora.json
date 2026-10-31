@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T18:39:40+00:00",
- "git_head": "39a42a7427575d8e6a798e63742d86d89eb9dc6c",
- "implementation_sha256": "9144df1613b39aa5d29539e14e13edfc7de5f36c77d22528f2f3905312ca9ea7",
+ "measured_at": "2026-10-31T19:10:50+00:00",
+ "git_head": "c0f6abf0744873fcf287713e10f2acfba7c590f5",
+ "implementation_sha256": "31435d336f22c8dc0315014e780b7819487030cf0c5a386b48058213e769fd37",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1310,
+  "accepted": 1327,
   "cobc_accepted": 1617,
-  "gap": 307,
+  "gap": 290,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 586,
+   "accepted": 603,
    "internal_errors": 0,
    "blockers": [
     [
@@ -449,10 +449,6 @@
     [
      "expression non prise en charge: LINE",
      15
-    ],
-    [
-     "clause SELECT non prise en charge",
-     14
     ],
     [
      ". attendu",
@@ -475,22 +471,26 @@
      6
     ],
     [
-     "NO attendu",
-     6
-    ],
-    [
      "instruction non prise en charge: AT",
      6
     ],
     [
      "nombre OCCURS attendu",
      6
+    ],
+    [
+     "clé INDEXED composée (SOURCE IS) non prise en charge",
+     5
+    ],
+    [
+     "CURRENCY ... PICTURE SYMBOL non pris en charge",
+     5
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 293,
+   "gap": 276,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -597,10 +597,6 @@
      "clé INDEXED composée (SOURCE IS) non prise en charge"
     ],
     [
-     "run_file-028/prog.cob",
-     "instruction non prise en charge: UNLOCK"
-    ],
-    [
      "run_file-029/prog.cob",
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
     ],
@@ -617,64 +613,8 @@
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
-     "run_file-055/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-056/prog1.cob",
-     "NO attendu"
-    ],
-    [
-     "run_file-057/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-058/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-059/prog2.cob",
-     "NO attendu"
-    ],
-    [
      "run_file-064/prog.cob",
      "READ direct requiert INVALID KEY, pas AT END"
-    ],
-    [
-     "run_file-065/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-066/prog1.cob",
-     "NO attendu"
-    ],
-    [
-     "run_file-067/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-068/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-069/prog2.cob",
-     "NO attendu"
-    ],
-    [
-     "run_file-070/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-070/prog2.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-071/prog1.cob",
-     "clause SELECT non prise en charge"
-    ],
-    [
-     "run_file-072/prog1.cob",
-     "clause SELECT non prise en charge"
     ],
     [
      "run_file-078/prog.cob",
@@ -1473,14 +1413,6 @@
      "USAGE/clause non pris en charge: IS"
     ],
     [
-     "syn_file-011/prog.cob",
-     "NO attendu"
-    ],
-    [
-     "syn_file-012/prog.cob",
-     "NO attendu"
-    ],
-    [
      "syn_file-013/prog.cob",
      "RECORD attendu"
     ],
@@ -1675,10 +1607,6 @@
      14
     ],
     [
-     "clause SELECT non prise en charge",
-     12
-    ],
-    [
      ". attendu",
      8
     ],
@@ -1692,10 +1620,6 @@
     ],
     [
      "PROCEDURE attendu",
-     6
-    ],
-    [
-     "NO attendu",
      6
     ],
     [
@@ -1713,16 +1637,24 @@
     [
      "instruction non prise en charge: JSON",
      5
+    ],
+    [
+     "CALL dump: programme non converti ou routine système non pris en charge",
+     4
+    ],
+    [
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+     4
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 307,
-  "matching": 307,
-  "complete": 163,
-  "distinct": 192,
+  "sources": 290,
+  "matching": 290,
+  "complete": 156,
+  "distinct": 190,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1757,12 +1689,6 @@
    {
     "diagnostic": "GENERATE requiert un nom de rapport ou de groupe DETAIL",
     "first": 0,
-    "present": 12,
-    "alone": 0
-   },
-   {
-    "diagnostic": "clause SELECT non prise en charge",
-    "first": 12,
     "present": 12,
     "alone": 0
    },
@@ -1807,12 +1733,6 @@
     "first": 0,
     "present": 7,
     "alone": 0
-   },
-   {
-    "diagnostic": "NO attendu",
-    "first": 6,
-    "present": 6,
-    "alone": 6
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
@@ -2109,6 +2029,12 @@
     "alone": 0
    },
    {
+    "diagnostic": "clause SELECT non prise en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
     "diagnostic": "instruction non prise en charge: WITH",
     "first": 2,
     "present": 2,
@@ -2233,12 +2159,6 @@
     "first": 1,
     "present": 1,
     "alone": 0
-   },
-   {
-    "diagnostic": "instruction non prise en charge: UNLOCK",
-    "first": 1,
-    "present": 1,
-    "alone": 1
    },
    {
     "diagnostic": "nom inconnu: FILE; qualifier avec OF/IN si nécessaire",
@@ -2879,88 +2799,88 @@
   ],
   "greedy": [
    {
-    "diagnostic": "NO attendu",
-    "unlocked": 6,
-    "cumulative": 6,
-    "first": 6,
-    "present": 6
-   },
-   {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 9,
+    "cumulative": 3,
     "first": 36,
     "present": 38
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 11,
+    "cumulative": 5,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 13,
+    "cumulative": 7,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 15,
+    "cumulative": 9,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 17,
+    "cumulative": 11,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: is",
     "unlocked": 2,
-    "cumulative": 19,
+    "cumulative": 13,
     "first": 4,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 21,
+    "cumulative": 15,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 23,
+    "cumulative": 17,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nombre OCCURS attendu",
     "unlocked": 2,
-    "cumulative": 25,
+    "cumulative": 19,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "opérande INSPECT attendu",
     "unlocked": 2,
-    "cumulative": 27,
+    "cumulative": 21,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "instruction non prise en charge: AT",
     "unlocked": 1,
-    "cumulative": 28,
+    "cumulative": 22,
     "first": 5,
     "present": 5
+   },
+   {
+    "diagnostic": "GOBACK RETURNING non pris en charge",
+    "unlocked": 1,
+    "cumulative": 23,
+    "first": 0,
+    "present": 53
    }
   ],
   "sources_detail": [
@@ -3349,15 +3269,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_file-028/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: UNLOCK"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_file-029/prog.cob",
     "diagnostics": [
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
@@ -3395,137 +3306,11 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_file-055/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-056/prog1.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-057/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-058/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-059/prog2.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_file-064/prog.cob",
     "diagnostics": [
      "READ direct requiert INVALID KEY, pas AT END"
     ],
     "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-065/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-066/prog1.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-067/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-068/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-069/prog2.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-070/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-070/prog2.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-071/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-072/prog1.cob",
-    "diagnostics": [
-     "clause SELECT non prise en charge"
-    ],
-    "complete": false,
     "matches_measure": true
    },
    {
@@ -5501,24 +5286,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_file-011/prog.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_file-012/prog.cob",
-    "diagnostics": [
-     "NO attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_file-013/prog.cob",
     "diagnostics": [
      "RECORD attendu"
@@ -5949,9 +5716,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T18:39:40+00:00",
-  "git_head": "39a42a7427575d8e6a798e63742d86d89eb9dc6c",
-  "implementation_sha256": "9144df1613b39aa5d29539e14e13edfc7de5f36c77d22528f2f3905312ca9ea7",
+  "measured_at": "2026-10-31T19:10:50+00:00",
+  "git_head": "c0f6abf0744873fcf287713e10f2acfba7c590f5",
+  "implementation_sha256": "31435d336f22c8dc0315014e780b7819487030cf0c5a386b48058213e769fd37",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

@@ -1346,7 +1346,7 @@ class Emitter:
     EXCEPTION_STATEMENTS = {
         "set_condition", "open", "close", "rewrite", "delete_file", "delete", "start", "write", "display",
         "set_address", "allocate", "free", "table_sort", "assign", "move", "compute", "accept", "accept_clock",
-        "initialize", "set_switch", "inspect", "continue", "exception_off", "read", "environment",
+        "initialize", "set_switch", "inspect", "continue", "exception_off", "read", "environment", "unlock",
         # cob_cancel: the run unit checks the files it closes.
         "cancel",
     }
@@ -1395,9 +1395,13 @@ class Emitter:
                 value = Expr("all", (repeated,)) if repeated is not None else self.literal(token)
                 self.assignment(value, [DataRef(condition.parent, ref.indices)], False, move=repeated is not None)
         elif op == "open":
-            for mode, name in a[0]:
+            sharings = getattr(stmt, "sharings", [False] * len(a[0]))
+            for (mode, name), sharing in zip(a[0], sharings):
                 self.linage_values(name)
                 self.assign_name(name)
+                # cob_open: lock_mode & COB_FILE_EXCLUSIVE after the OPEN's sharing.
+                exclusive = bool(self.program.files[name].lock_mode & 1) or bool(sharing)
+                self.write(f"{self.handle(name)}.lock_mode({str(exclusive).lower()});")
                 self.write(f"let status = {self.handle(name)}.open({quoted(mode)});")
                 self.file_status(name, "status")
         elif op == "close":
@@ -1407,6 +1411,9 @@ class Emitter:
                 else:
                     self.write(f"let status = {self.handle(name)}.close({str(mode == 'lock').lower()});")
                 self.file_status(name, "status")
+        elif op == "unlock":
+            self.write(f"let status = {self.handle(a[0])}.unlock();")
+            self.file_status(a[0], "status")
         elif op == "rewrite":
             name, record, value, _, _ = a
             if value:

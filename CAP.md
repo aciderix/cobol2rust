@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T18:39:40+00:00 (commit `39a42a7427`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T19:10:50+00:00 (commit `c0f6abf074`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T18:39:40+00:00 (commit `39a42a7427`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 586 | 879 | 293 | 0 |
-| **Total** | | **3593** | **1310** | **1617** | **307** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 603 | 879 | 276 | 0 |
+| **Total** | | **3593** | **1327** | **1617** | **290** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T18:39:40+00:00, commit `39a42a7427`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T19:10:50+00:00, commit `c0f6abf074`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -121,31 +121,31 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 
 1. 36 × SCREEN SECTION non prise en charge à cet endroit
 2. 14 × expression non prise en charge: LINE
-3. 12 × clause SELECT non prise en charge
-4. 8 × PROCEDURE attendu
-5. 8 × . attendu
-6. 8 × PROGRAM-ID attendu
-7. 7 × USAGE/clause non pris en charge: IS
-8. 6 × NO attendu
-9. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
-10. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
+3. 8 × PROCEDURE attendu
+4. 8 × . attendu
+5. 8 × PROGRAM-ID attendu
+6. 7 × USAGE/clause non pris en charge: IS
+7. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
+8. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
+9. 5 × instruction non prise en charge: AT
+10. 5 × instruction non prise en charge: JSON
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 307 sources, 307 au premier diagnostic identique à la mesure, 163 à inventaire complet, 192 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 290 sources, 290 au premier diagnostic identique à la mesure, 156 à inventaire complet, 190 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 1 | NO attendu | 6 | 6 | 6 | 6 |
-| 2 | SCREEN SECTION non prise en charge à cet endroit | 3 | 9 | 36 | 38 |
-| 3 | USAGE/clause non pris en charge: IS | 2 | 11 | 7 | 7 |
-| 4 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 13 | 1 | 5 |
-| 5 | donnée subordonnée sans groupe parent | 2 | 15 | 0 | 7 |
-| 6 | 78 VALUE LENGTH OF non pris en charge | 2 | 17 | 3 | 4 |
-| 7 | USAGE/clause non pris en charge: is | 2 | 19 | 4 | 4 |
-| 8 | UNSTRING d'un littéral non pris en charge | 2 | 21 | 2 | 2 |
-| 9 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 23 | 2 | 2 |
-| 10 | nombre OCCURS attendu | 2 | 25 | 2 | 2 |
-| 11 | opérande INSPECT attendu | 2 | 27 | 2 | 2 |
-| 12 | instruction non prise en charge: AT | 1 | 28 | 5 | 5 |
+| 1 | SCREEN SECTION non prise en charge à cet endroit | 3 | 3 | 36 | 38 |
+| 2 | USAGE/clause non pris en charge: IS | 2 | 5 | 7 | 7 |
+| 3 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 7 | 1 | 5 |
+| 4 | donnée subordonnée sans groupe parent | 2 | 9 | 0 | 7 |
+| 5 | 78 VALUE LENGTH OF non pris en charge | 2 | 11 | 3 | 4 |
+| 6 | USAGE/clause non pris en charge: is | 2 | 13 | 4 | 4 |
+| 7 | UNSTRING d'un littéral non pris en charge | 2 | 15 | 2 | 2 |
+| 8 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 17 | 2 | 2 |
+| 9 | nombre OCCURS attendu | 2 | 19 | 2 | 2 |
+| 10 | opérande INSPECT attendu | 2 | 21 | 2 | 2 |
+| 11 | instruction non prise en charge: AT | 1 | 22 | 5 | 5 |
+| 12 | GOBACK RETURNING non pris en charge | 1 | 23 | 0 | 53 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -155,12 +155,12 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 17 × expression non prise en charge: LINE (1er : 14, seul : 0)
 - 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
 - 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
-- 12 × clause SELECT non prise en charge (1er : 12, seul : 0)
 - 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
 - 9 × . attendu (1er : 8, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
+- 7 × USAGE/clause non pris en charge: IS (1er : 7, seul : 2)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -762,3 +762,17 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   libcob sont identiques au natif, run_fundamental-086 (COB_SET_DEBUG
   modifié en cours d'exécution) s'arrête par son nom. Testsuite **581 →
   586/1135**, total **1305 → 1310/3593**, écart **312 → 307**.
+- 2026-10-31 — Partage et verrouillage de fichiers (groupe « NO attendu »,
+  « clause SELECT », UNLOCK) : verrous `fcntl` de `cob_file_open` sur tout
+  fichier SEQUENTIAL, LINE SEQUENTIAL et RELATIVE ouvert (lecture pour
+  INPUT, écriture sinon, statut 61 si refusé), UNLOCK (`cob_unlock_file`,
+  exclusivité par LOCK MODE EXCLUSIVE, WITH LOCK, SHARING WITH NO OTHER,
+  ALLOWING NO OTHERS, OPEN EXCLUSIVE), clauses LOCK MODE et SHARING, syntaxe
+  `open_file_entry` d'OPEN, options de verrou de READ/WRITE/REWRITE et leurs
+  erreurs de cobc ; INDEXED sans DB_HOME n'a pas de verrou, DB_HOME est un
+  arrêt nommé. `verify --companion` compile un second programme principal
+  des deux côtés pour les essais entre processus. Dix-sept sources
+  débloquées (run_file-028, -055 à -059, -065 à -072, syn_file-011, -012),
+  toutes identiques au natif (avec leur prog2 comme compagnon), y compris
+  les XFAIL de 3.2 (deux lecteurs compatibles). Testsuite **586 →
+  603/1135**, total **1310 → 1327/3593**, écart **307 → 290**.

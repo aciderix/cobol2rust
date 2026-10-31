@@ -39,6 +39,9 @@ pub struct CobolFile {
     record_max: usize,
     linage: Option<Linage>,
     line_advancing: bool,
+    /// lock_mode & COB_FILE_EXCLUSIVE: LOCK MODE EXCLUSIVE, or the OPEN's
+    /// WITH LOCK / SHARING WITH NO OTHER (COB_LOCK_OPEN_EXCLUSIVE).
+    exclusive: bool,
 }
 
 /// FD LINAGE (cob_linage): the values cob_get_int reads from the clause,
@@ -85,6 +88,50 @@ fn claim_path(path: &str) {
         fail("simultaneous OPEN of one path by several files not modelled");
     }
     crate::runtime::OPEN_FILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// cob_file_open / cob_fd_file_open (HAVE_FCNTL): a whole-file F_RDLCK for
+/// INPUT, F_WRLCK otherwise, not on /dev/ names; refused: 61 (EACCES,
+/// EAGAIN, EDEADLK) or 30. Closing the descriptor releases it.
+mod whole_file_lock {
+    use std::os::fd::RawFd;
+
+    #[repr(C)]
+    struct Flock { l_type: i16, l_whence: i16, l_start: i64, l_len: i64, l_pid: i32 }
+
+    extern "C" {
+        fn fcntl(fd: RawFd, cmd: i32, ...) -> i32;
+        fn fdatasync(fd: RawFd) -> i32;
+    }
+    const F_SETLK: i32 = 6;
+    const F_RDLCK: i16 = 0;
+    const F_WRLCK: i16 = 1;
+    const F_UNLCK: i16 = 2;
+
+    fn set(fd: RawFd, kind: i16) -> Result<(), i32> {
+        let lock = Flock { l_type: kind, l_whence: 0, l_start: 0, l_len: 0, l_pid: 0 };
+        if unsafe { fcntl(fd, F_SETLK, &lock as *const Flock) } < 0 {
+            return Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
+        }
+        Ok(())
+    }
+
+    pub fn lock(fd: RawFd, path: &str, write: bool) -> Result<(), u8> {
+        if path.starts_with("/dev/") { return Ok(()); }
+        set(fd, if write { F_WRLCK } else { F_RDLCK }).map_err(|errno| match errno {
+            13 | 11 | 35 => 61,
+            _ => 30,
+        })
+    }
+
+    /// cob_file_unlock: fdcobsync, then F_UNLCK unless COB_FILE_EXCLUSIVE.
+    pub fn unlock(fd: RawFd, exclusive: bool) {
+        unsafe { fdatasync(fd); }
+        if !exclusive && set(fd, F_UNLCK).is_err() {
+            eprintln!("libcob: warning: issue during unlock (cob_file_unlock), errno: {}",
+                      std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
+        }
+    }
 }
 
 fn release_path(path: &str) {
@@ -396,7 +443,7 @@ impl CobolFile {
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
                validate: line && setting("COB_LS_VALIDATE", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
-               linage: None, line_advancing: false }
+               linage: None, line_advancing: false, exclusive: false }
     }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
@@ -532,9 +579,40 @@ impl CobolFile {
                 linage.counter = 1;
             }
         }
+        if status < 10 {
+            if let Some(fd) = self.raw_fd() {
+                if let Err(code) = whole_file_lock::lock(fd, &self.path, mode != "INPUT") {
+                    self.state = State::Closed;
+                    status = code;
+                }
+            }
+        }
         if status < 10 { claim_path(&self.path); }
         cache_open(self.id, status < 10 && !matches!(self.state, State::Missing));
         status
+    }
+
+    fn raw_fd(&self) -> Option<std::os::fd::RawFd> {
+        use std::os::fd::AsRawFd;
+        match &self.state {
+            State::Input(reader) => Some(reader.get_ref().as_raw_fd()),
+            State::Output(file) | State::InputOutput(file) => Some(file.as_raw_fd()),
+            _ => None,
+        }
+    }
+
+    /// cob_open: lock_mode &= ~COB_LOCK_OPEN_EXCLUSIVE; lock_mode |= sharing.
+    pub fn lock_mode(&mut self, exclusive: bool) { self.exclusive = exclusive; }
+
+    /// UNLOCK (cob_unlock_file): status 00.
+    pub fn unlock(&mut self) -> u8 {
+        if !matches!(self.state, State::Closed | State::Locked) {
+            if let Some(file) = match &mut self.state { State::Output(file) | State::InputOutput(file) => Some(file), _ => None } {
+                file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+            }
+            if let Some(fd) = self.raw_fd() { whole_file_lock::unlock(fd, self.exclusive); }
+        }
+        0
     }
 
     fn open_file(&mut self, mode: &str) -> u8 {
@@ -992,6 +1070,7 @@ pub struct RelativeFile {
     begin_of_file: bool,
     first_read: u8,
     read_done: bool,
+    exclusive: bool,
 }
 
 fn read_full(file: &mut File, buffer: &mut [u8]) -> usize { read_into(file, buffer) }
@@ -1030,7 +1109,7 @@ impl RelativeFile {
             _ => fail("unsupported RELATIVE access mode"),
         };
         Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
-               last_open_mode: "", nonexistent: false, end_of_file: false, begin_of_file: false, first_read: 0, read_done: false }
+               last_open_mode: "", nonexistent: false, end_of_file: false, begin_of_file: false, first_read: 0, read_done: false, exclusive: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
@@ -1056,10 +1135,32 @@ impl RelativeFile {
     fn slot_size(&self) -> u64 { self.record_max as u64 + 8 }
 
     pub fn open(&mut self, mode: &str) -> u8 {
-        let status = self.open_file(mode);
+        let mut status = self.open_file(mode);
+        if status < 10 {
+            use std::os::fd::AsRawFd;
+            if let Some(fd) = self.file.as_ref().map(|file| file.as_raw_fd()) {
+                if let Err(code) = whole_file_lock::lock(fd, &self.path, mode != "INPUT") {
+                    self.file = None;
+                    self.open_mode = "";
+                    status = code;
+                }
+            }
+        }
         if status < 10 { claim_path(&self.path); }
         cache_open(self.id, status < 10 && !self.nonexistent);
         status
+    }
+
+    pub fn lock_mode(&mut self, exclusive: bool) { self.exclusive = exclusive; }
+
+    /// UNLOCK (cob_unlock_file): status 00.
+    pub fn unlock(&mut self) -> u8 {
+        use std::os::fd::AsRawFd;
+        if let Some(file) = self.file.as_mut() {
+            file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+            whole_file_lock::unlock(file.as_raw_fd(), self.exclusive);
+        }
+        0
     }
 
     fn open_file(&mut self, mode: &str) -> u8 {
@@ -1660,7 +1761,15 @@ impl IndexedFile {
         u32::from_le_bytes(data[primekeylen..primekeylen + 4].try_into().unwrap())
     }
 
+    /// bdb_open without a BDB environment takes no lock; UNLOCK does nothing.
+    pub fn lock_mode(&mut self, _exclusive: bool) {}
+
+    pub fn unlock(&mut self) -> u8 { 0 }
+
     pub fn open(&mut self, mode: &str) -> u8 {
+        if std::env::var_os("DB_HOME").is_some_and(|home| !home.is_empty()) {
+            fail("DB_HOME : environnement Berkeley DB (verrous de fichiers et d'enregistrements) non modélisé");
+        }
         if self.locked { return 38; }
         if !self.open_mode.is_empty() { return 41; }
         self.read_done = false;

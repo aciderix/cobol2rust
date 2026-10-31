@@ -782,6 +782,10 @@ class FileSpec:
     assign_field: object = None
     # The SELECT name as written: libcob's select_name in its messages.
     select_text: str = ""
+    # LOCK MODE (COB_LOCK_EXCLUSIVE / MANUAL / AUTOMATIC / MULTIPLE bits) and
+    # SHARING WITH NO OTHER (COB_LOCK_OPEN_EXCLUSIVE) of the SELECT.
+    lock_mode: int = 0
+    sharing: bool = False
 
 
 @dataclass
@@ -833,7 +837,7 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE ALLOCATE FREE".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE ALLOCATE FREE UNLOCK".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
@@ -2904,6 +2908,7 @@ class Parser:
                 qualifiers.append(self.name())
             return label, tuple(qualifiers)
 
+        lock_mode, lock_seen, sharing = 0, False, None
         clause_words = {"ACCESS", "FILE", "STATUS", "RESERVE", "RECORD", "LOCK", "SHARING",
                         "ORGANIZATION", "PADDING", "ALTERNATE", "COLLATING", ".", "SORT"}
         ends = ("SELECT", "I-O-CONTROL", "DATA", "PROCEDURE") if STD != "cobol85" else ()
@@ -2986,6 +2991,41 @@ class Parser:
                 status = reference()
                 if not self.t.string and self.t.key not in clause_words | {"RELATIVE", "SEQUENTIAL", "LINE", "BINARY", "INDEXED"}:
                     self.error("statut VSAM supplémentaire de FILE STATUS non pris en charge")
+            elif self.at("LOCK") and not lock_seen:
+                # lock_mode_clause: LOCK [MODE] [IS] MANUAL | AUTOMATIC [WITH
+                # [LOCK] ON [MULTIPLE] RECORD[S]] [WITH ROLLBACK] | EXCLUSIVE
+                # [WITH MASS-UPDATE].
+                lock_seen = True
+                self.take(); self.accept("MODE"); self.accept("IS")
+                if self.at("MANUAL") or self.at("AUTOMATIC"):
+                    lock_mode |= 2 if self.take().key == "MANUAL" else 4
+                    if self.at("WITH") and self.tokens[self.i + 1].key in {"LOCK", "ON"}:
+                        self.take(); self.accept("LOCK"); self.expect("ON")
+                        if self.accept("MULTIPLE"):
+                            lock_mode |= 8
+                        if not (self.accept("RECORD") or self.accept("RECORDS")):
+                            self.error("RECORD ou RECORDS attendu")
+                        if self.at("ROLLBACK") or (self.at("WITH") and self.tokens[self.i + 1].key == "ROLLBACK"):
+                            self.accept("WITH"); self.take()  # CB_PENDING ("WITH ROLLBACK")
+                    elif self.at("ROLLBACK") or (self.at("WITH") and self.tokens[self.i + 1].key == "ROLLBACK"):
+                        self.accept("WITH"); self.take()
+                        lock_mode |= 8
+                elif self.accept("EXCLUSIVE"):
+                    lock_mode |= 1
+                    if self.at("MASS-UPDATE") or (self.at("WITH") and self.tokens[self.i + 1].key == "MASS-UPDATE"):
+                        self.accept("WITH"); self.take()
+                        if organization != "INDEXED":
+                            self.error("MASS-UPDATE only valid with ORGANIZATION INDEXED")
+                else:
+                    self.error("MANUAL, AUTOMATIC ou EXCLUSIVE attendu")
+            elif self.at("LOCK"):
+                self.error("duplicate LOCK clause")
+            elif self.at("SHARING"):
+                # sharing_clause (3.2): only NO OTHER changes the open mode.
+                if sharing is not None:
+                    self.error("duplicate SHARING clause")
+                self.take(); self.accept("WITH")
+                sharing = self.sharing_option()
             elif self.accept("RESERVE"):
                 # GnuCOBOL 3.2 checks and ignores RESERVE {NO | integer} [AREA | AREAS].
                 if not self.accept("NO"):
@@ -3014,6 +3054,7 @@ class Parser:
                                     record_key=record_key, alternate_keys=alternate_keys,
                                     assign_field=assign_field, select_text=select_text)
         self.files[name].line_advancing = line_advancing
+        self.files[name].lock_mode, self.files[name].sharing = lock_mode, bool(sharing)
 
     # assign_device of parser.y: general devices keep the SELECT name as file
     # name when no name follows (flag_fileid); line devices are LINE SEQUENTIAL.
@@ -4065,34 +4106,76 @@ class Parser:
                 truth = False
             return Stmt("set_condition", (refs, truth), line)
         if verb == "OPEN":
-            actions, mode, entries = [], None, []
+            actions, entries, sharings = [], [], []
             modes = {"INPUT", "OUTPUT", "EXTEND", "I-O"}
-            while self.t.key in modes | self.files.keys():
-                if self.t.key in modes:
-                    mode = self.take().key
-                    entries.append([])
-                elif not mode:
-                    self.error("mode INPUT, OUTPUT, I-O ou EXTEND attendu avant le fichier")
-                name = self.file_name()
-                if mode == "I-O" and self.files[name].organization == "LINE SEQUENTIAL":
-                    self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
-                actions.append((mode, name))
-                entries[-1].append(len(actions) - 1)
-                # cobc parses OPEN ... WITH NO REWIND and REVERSED and ignores
-                # them (CB_PENDING): the file opens as usual.
-                if self.accept("WITH") or self.at("NO"):
-                    self.expect("NO")
-                    self.expect("REWIND")
-                else:
-                    self.accept("REVERSED")
+            while self.at("EXCLUSIVE") or (not self.t.string and self.t.key in modes):
+                # open_file_entry: [EXCLUSIVE] mode [SHARING WITH ...] [RETRY ...]
+                # file_name_list [lock_allowing] [WITH NO REWIND | REVERSED].
+                exclusive = bool(self.accept("EXCLUSIVE"))
+                if self.t.string or self.t.key not in modes:
+                    self.error("mode INPUT, OUTPUT, I-O ou EXTEND attendu")
+                mode = self.take().key
+                shared = None
+                if self.accept("SHARING"):
+                    self.accept("WITH")
+                    shared = self.sharing_option()
+                self.retry_phrase()
+                names = []
+                while not self.t.string and self.t.key in self.files:
+                    names.append(self.file_name())
+                if not names:
+                    self.error("nom de fichier attendu")
+                locked = None
+                if self.at("ALLOWING"):
+                    self.take()
+                    if self.accept("NO"):
+                        self.accept("OTHERS")
+                        locked = True
+                    elif self.accept("WRITERS") or self.accept("UPDATERS") or self.accept("ALL") or self.accept("READERS"):
+                        locked = False
+                    else:
+                        self.error("option ALLOWING attendue")
+                elif ((self.at("WITH") or self.at("FOR")) and self.tokens[self.i + 1].key in {"LOCK", "MASS-UPDATE", "BULK-ADDITION"}) \
+                        or self.at("LOCK") or self.at("MASS-UPDATE") or self.at("BULK-ADDITION"):
+                    # open_lock_option: LOCK; MASS-UPDATE and BULK-ADDITION are CB_PENDING.
+                    self.accept("WITH") or self.accept("FOR")
+                    self.take()
+                    locked = True
+                # open_option_sequential: CB_PENDING, the file opens as usual.
+                if self.at("NO") or (self.at("WITH") and self.tokens[self.i + 1].key == "NO"):
+                    self.accept("WITH"); self.expect("NO"); self.expect("REWIND")
+                elif self.accept("REVERSED"):
+                    pass
+                elif self.at("LEAVE") or self.at("REREAD") or self.at("DISP"):
+                    self.error(f"OPEN {self.t.key} non pris en charge")
+                if (exclusive and shared) or (exclusive and locked) or (shared and locked):
+                    self.error("SHARING and LOCK clauses are mutually exclusive")
+                # cb_emit_open: the lock option, else SHARING, else EXCLUSIVE,
+                # else the SELECT's SHARING.
+                value = True if locked or shared or exclusive else None
+                entries.append([])
+                for name in names:
+                    if mode == "I-O" and self.files[name].organization == "LINE SEQUENTIAL":
+                        self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
+                    actions.append((mode, name))
+                    sharings.append(value if value is not None else self.files[name].sharing)
+                    entries[-1].append(len(actions) - 1)
             if not actions:
                 self.error("OPEN requiert INPUT, OUTPUT, I-O ou EXTEND et un fichier déclaré")
             stmt = Stmt("open", (actions,), line)
+            stmt.sharings = sharings
             # open_file_entry: each mode starts an entry of implicit statements.
             stmt.entries = entries
             if len(entries) > 1:
                 self.deferred_open = True
             return stmt
+        if verb == "UNLOCK":
+            # unlock_body: file_name [RECORD | RECORDS] (cob_unlock_file).
+            name = self.file_name()
+            if self.files[name].sort:
+                self.error("UNLOCK invalid for SD files")
+            self.accept("RECORD") or self.accept("RECORDS")
+            return Stmt("unlock", (name,), line)
         if verb == "CLOSE":
             names = []
             while not names or (self.t.key in self.files and not self.t.string):
@@ -4162,12 +4245,12 @@ class Parser:
             into = self.variable() if self.accept("INTO") else None
             if into and self.fields[into.name].kind != "text" and into.start is None:
                 self.error("READ INTO requiert un champ alphanumérique")
+            if self.read_lock_phrases() and spec.lock_mode & 4:
+                self.error("LOCK clause invalid with file LOCK AUTOMATIC")
             key_item = None
             if self.accept("KEY"):
                 self.accept("IS")
                 key_item = self.variable()
-            if self.at("WITH"):
-                self.error("READ LOCK non pris en charge")
             handler, exception, success = None, [], []
             if self.accept("AT") or self.at("END"):
                 self.expect("END")
@@ -4206,6 +4289,9 @@ class Parser:
             if self.files[files[0]].organization == "LINE SEQUENTIAL":
                 self.error("REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée")
             value = self.expr() if self.accept("FROM") else None
+            # _retry_phrase _with_lock: record locks of BDB files only.
+            self.retry_phrase()
+            self.with_lock()
             invalid, valid = self.key_handlers(files[0], "END-REWRITE")
             return Stmt("rewrite", (files[0], record.name, value, invalid, valid), line)
         if verb == "DELETE":
@@ -4315,6 +4401,13 @@ class Parser:
                 if self.files[files[0]].organization not in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
                     self.error("WRITE ADVANCING limité aux fichiers SEQUENTIAL et LINE SEQUENTIAL")
                 advancing = (direction, count)
+            # _retry_phrase _with_lock (cb_emit_write): BDB record locks only.
+            self.retry_phrase()
+            if self.with_lock():
+                if self.files[files[0]].lock_mode & 4:
+                    self.error("LOCK clause invalid with file LOCK AUTOMATIC")
+                if advancing is not None:
+                    self.error("LOCK clause invalid here")
             if self.files[files[0]].organization in {"SEQUENTIAL", "LINE SEQUENTIAL"}:
                 # at_eop_clauses take the place of INVALID KEY for these files.
                 invalid, valid = self.eop_handlers()
@@ -5157,6 +5250,67 @@ class Parser:
         if last is not None and (last.op in {"display", "accept", "call_program", "environment"}
                                  or getattr(last, "takes_exception", False)):
             self.error("NOT ON EXCEPTION rattaché par GnuCOBOL au DISPLAY/ACCEPT/CALL de ON EXCEPTION; non pris en charge")
+
+    def sharing_option(self):
+        """sharing_option (3.2): ALL [OTHER] and READ ONLY are NULL, NO
+        [OTHER] is COB_LOCK_OPEN_EXCLUSIVE."""
+        if self.accept("ALL"):
+            self.accept("OTHER")
+            return False
+        if self.accept("NO"):
+            self.accept("OTHER")
+            return True
+        if self.accept("READ"):
+            self.expect("ONLY")
+            return False
+        self.error("ALL, NO ou READ ONLY attendu")
+
+    def retry_phrase(self):
+        """retry_phrase: CB_PENDING (\"RETRY\"), no effect."""
+        if not self.accept("RETRY"):
+            return
+        self.accept("FOR")
+        if self.accept("FOREVER"):
+            return
+        self.expr()
+        if not (self.accept("TIMES") or self.accept("SECONDS")):
+            self.error("TIMES ou SECONDS attendu")
+
+    def with_lock(self):
+        """with_lock: [WITH] LOCK (1) or [WITH] NO LOCK (2)."""
+        if self.at("WITH") and self.tokens[self.i + 1].key in {"LOCK", "NO"} \
+                or self.at("LOCK") or (self.at("NO") and self.tokens[self.i + 1].key == "LOCK"):
+            self.accept("WITH")
+            if self.accept("NO"):
+                self.expect("LOCK")
+                return 2
+            self.expect("LOCK")
+            return 1
+        return None
+
+    def read_lock_phrases(self):
+        """_lock_phrases of READ: IGNORING LOCK, [WITH] IGNORE LOCK, or
+        [ADVANCING [ON] LOCK | RETRY ...] [WITH LOCK | NO LOCK | KEPT LOCK |
+        WAIT]; record locks of BDB files only. True when cb_emit_read gets a
+        lock option."""
+        ahead = [t.key for t in self.tokens[self.i:self.i + 3]]
+        if ahead[:2] == ["IGNORING", "LOCK"] or ahead[:2] == ["IGNORE", "LOCK"] or ahead == ["WITH", "IGNORE", "LOCK"]:
+            self.accept("WITH"); self.take(); self.take()
+            return True
+        if self.accept("ADVANCING"):
+            self.accept("ON"); self.expect("LOCK")  # CB_PENDING
+        else:
+            self.retry_phrase()
+        if self.with_lock():
+            return True
+        ahead = [t.key for t in self.tokens[self.i:self.i + 3]]
+        if ahead[:2] == ["KEPT", "LOCK"] or ahead == ["WITH", "KEPT", "LOCK"]:
+            self.accept("WITH"); self.take(); self.take()
+            return True
+        if ahead[:1] == ["WAIT"] or ahead[:2] == ["WITH", "WAIT"]:
+            self.accept("WITH"); self.take()
+            return True
+        return False
 
     def corresponding_group(self):
         ref = self.variable()

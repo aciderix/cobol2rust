@@ -384,7 +384,7 @@ class ControlGraph:
             if args[2] is not None:
                 node = self._add("execute", (Stmt("assign", (args[2], [args[1]], False), stmt.line), node), stmt)
             return node
-        if op in {"open", "close", "write", "rewrite", "delete", "start"}:
+        if op in {"open", "close", "write", "rewrite", "delete", "start", "unlock"}:
             name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
             invalid = valid = None
             if op in {"write", "rewrite", "delete", "start"} and (args[-2] or args[-1]):

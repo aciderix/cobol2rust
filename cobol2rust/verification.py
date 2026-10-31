@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -95,13 +96,17 @@ def validate_file_paths(conversion, file_env=()):
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
            call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
            no_ec_data_incompatible=False, file_env=None, timeout=15, release=False, runtime_checks=False,
-           arguments=()):
+           arguments=(), companions=()):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
     files written by converted predecessors in cobol2rust's own format.
     `arguments` follow argv[0] on both command lines; argv[0] is the same
     for both programs (`./<source stem>`, or the module name under cobcrun),
-    since libcob's messages (CBL_GC_GETOPT) print it."""
+    since libcob's messages (CBL_GC_GETOPT) print it. `companions` are
+    other main programs the tested one runs (CALL "SYSTEM" "./name"): each
+    is compiled by cobc for the GnuCOBOL run and converted for the Rust run,
+    as `./<source stem>` in that run's directory."""
     arguments = [str(argument) for argument in arguments]
+    companions = [Path(companion) for companion in companions]
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -171,6 +176,24 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             translated = build_rust(output, release=True) if release else build_rust(output)
         except RuntimeError as exc:
             raise CobolError(str(exc)) from exc
+        companion_binaries = {"cobol": [], "rust": []}
+        for index, companion in enumerate(companions):
+            native_companion = work / f"companion{index}-native{suffix}"
+            companion_format = source_format(decode_source(companion.read_bytes()), "auto")
+            command = [cobc, "-x", *(f for f in options if f not in {"-free", "-fixed"}),
+                       "-free" if companion_format == "free" else "-fixed", str(companion.resolve()), "-o", str(native_companion)]
+            result = subprocess.run(command, cwd=work, env=compiler_env(cobc), capture_output=True, timeout=60)
+            if result.returncode:
+                raise CobolError(f"échec de compilation cobc du compagnon {companion.name}:\n{result.stderr.decode(errors='replace')}")
+            companion_output = work / f"companion{index}-rust"
+            convert(companion, companion_output, "auto", includes, call_paths, debugging_lines, std, no_ec_data_incompatible,
+                    runtime_checks)
+            try:
+                companion_rust = build_rust(companion_output, release=True) if release else build_rust(companion_output)
+            except RuntimeError as exc:
+                raise CobolError(str(exc)) from exc
+            companion_binaries["cobol"].append((companion.stem + suffix, native_companion))
+            companion_binaries["rust"].append((companion.stem + suffix, companion_rust))
         results, artifacts = [], []
         for name, binary, compiler in [("cobol", native, cobc), ("rust", translated, rustc)]:
             directory = work / ("run_" + name)
@@ -181,6 +204,8 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
                 target = directory / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(contents)
+            for executable_name, executable in companion_binaries[name]:
+                shutil.copy2(executable, directory / executable_name)
             environment = compiler_env(compiler)
             environment.update(runtime_env)
             environment.update(file_env)
@@ -197,6 +222,10 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
         a, b = results
         left, right = artifacts
         indexed = indexed_contents(left, right, work / "run_cobol")
+        companion_names = {executable_name for executable_name, _ in companion_binaries["cobol"]}
+        for artifact in (left, right):
+            for executable_name in companion_names:
+                artifact.pop(executable_name, None)
         differences = sorted(name for name in left.keys() | right.keys() if left.get(name) != right.get(name))
         return {"schema_version": 1, "source": conversion["source"], "source_sha256": conversion["source_sha256"],
                 "expanded_sha256": conversion["expanded_sha256"], "copybook_sha256": conversion["copybook_sha256"],

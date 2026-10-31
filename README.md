@@ -667,6 +667,33 @@ liste par défaut, ou celle de `config/cobol85.words` avec `--std cobol85`
 (NOTHING y redevient un nom, AUTHOR y est réservé). Deux articles frères de même
 nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée.
 
+## Partage et verrouillage de fichiers
+
+Comme `cob_file_open` (HAVE_FCNTL), tout OPEN réussi d'un fichier
+SEQUENTIAL, LINE SEQUENTIAL ou RELATIVE pose un verrou `fcntl` sur le
+fichier entier : en lecture pour INPUT, en écriture sinon (pas pour un nom
+`/dev/…`) ; un verrou refusé par un autre processus donne le statut 61, et
+le CLOSE le relâche. `UNLOCK fichier [RECORD|RECORDS]` (`cob_unlock_file`)
+synchronise le fichier et relâche ce verrou, sauf si `LOCK MODE IS
+EXCLUSIVE`, `OPEN … WITH LOCK`, `ALLOWING NO OTHERS`, `OPEN EXCLUSIVE` ou
+`SHARING WITH NO OTHER` le rendent exclusif ; son statut est 00. Les clauses
+`LOCK MODE IS MANUAL|AUTOMATIC [WITH LOCK ON [MULTIPLE] RECORD[S]] [WITH
+ROLLBACK]`, `LOCK MODE IS EXCLUSIVE [WITH MASS-UPDATE]` et `SHARING WITH ALL
+[OTHER] | NO [OTHER] | READ ONLY`, la syntaxe complète d'OPEN
+(`open_file_entry` : `[EXCLUSIVE] mode [SHARING …] [RETRY …] fichiers
+[WITH LOCK | ALLOWING … ] [WITH NO REWIND | REVERSED]`) et les options de
+verrou de READ, WRITE et REWRITE suivent parser.y et typeck.c (erreurs
+« LOCK clause invalid with file LOCK AUTOMATIC », « LOCK clause invalid
+here », « SHARING and LOCK clauses are mutually exclusive ») ; RETRY, NO
+REWIND, REVERSED, ROLLBACK, MASS-UPDATE et BULK-ADDITION sont, comme dans
+cobc, sans effet. Les verrous d'enregistrement et les verrous de fichiers
+INDEXED de libcob n'existent qu'avec un environnement Berkeley DB
+(`DB_HOME`) : sans lui, rien n'est verrouillé, et `DB_HOME` est un arrêt
+nommé. Limite : un fichier INDEXED converti n'est écrit qu'au CLOSE, si bien
+qu'un autre processus ne voit pas un fichier encore ouvert en OUTPUT.
+`verify --companion source.cob` compile un second programme principal des
+deux côtés et le place en `./<nom>` pour les essais entre processus.
+
 ## Fichiers, RENAMES, exponentiation
 
 Les clauses SELECT s'écrivent dans n'importe quel ordre ; PADDING CHARACTER

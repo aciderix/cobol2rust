@@ -1,5 +1,23 @@
 # Validation — 30 octobre 2026
 
+## Partage et verrouillage de fichiers — 31 octobre 2026
+
+- Fixture `tests/fixtures/file_locks/` (lock-main et son compagnon
+  lock-probe, qui tente un OPEN INPUT de chaque fichier) identique au
+  natif : écrivains (61 pour SEQUENTIAL, LINE SEQUENTIAL, RELATIVE et LOCK
+  MODE EXCLUSIVE, 00 pour INDEXED), UNLOCK (00 ; relâché sauf mode
+  exclusif), lecteurs compatibles, EXTEND et I-O WITH LOCK (61), INPUT
+  SHARING WITH NO OTHER (00 : verrou en lecture), UNLOCK d'un fichier fermé
+  (00), lectures WITH NO LOCK / KEPT LOCK, tout relâché au CLOSE.
+- Sources débloquées identiques au natif : run_file-028, -055 à -059, -065
+  à -072 (avec prog2 en compagnon), syn_file-011 (arrêt libcob 35
+  identique) et -012.
+- Mesure : **1310 → 1327/3593**, écart **307 → 290**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lock.json`) ;
+  suite **571 tests**, 0 échec après retrait du cas `read f with lock` de
+  `test_files` (cobc l'accepte).
+
 ## Environnement, arguments et ligne de commande — 31 octobre 2026
 
 - Fixture `tests/fixtures/environment.cob` identique au natif (stdout,

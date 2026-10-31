@@ -187,7 +187,10 @@ FILLER ODO implicite (`Field.picture_l`, data_parser) ; `variable_groups`
 s'arrête à l'article PIC L, layout ne demande pas à son ODO de terminer les
 groupes englobants. L'environnement et les arguments (`runtime::environment`,
 `runtime::argv` partagé avec getopt) sont l'instruction `environment` du
-frontend ; ses phrases ON EXCEPTION deviennent un IF sur `imp_exception`. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+frontend ; ses phrases ON EXCEPTION deviennent un IF sur `imp_exception`.
+Les verrous de fichiers sont `file_runtime::whole_file_lock` (fcntl) ; l'OPEN
+reçoit l'exclusivité par `lock_mode()` (`Stmt.sharings` de l'OPEN, bits
+`FileSpec.lock_mode`), UNLOCK est l'op `unlock`. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
 RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
 FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs
