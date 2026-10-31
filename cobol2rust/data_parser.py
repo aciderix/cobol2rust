@@ -818,6 +818,8 @@ def declaration(p, file_record=False):
             p.expect("LENGTH")
             any_length = True
         elif p.accept("OCCURS"):
+            if not table and (p.at("UNBOUNDED") or p.tokens[p.i + 1].key == "TO" and p.tokens[p.i + 2].key == "UNBOUNDED"):
+                p.error("OCCURS UNBOUNDED non pris en charge")
             if table or not p.t.key.isdigit():
                 p.error("nombre OCCURS attendu")
             count = int(p.take().key)

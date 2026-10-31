@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T20:27:15+00:00",
- "git_head": "1fb28f955f2c73f1f40e5c335a348af1d1b579f8",
- "implementation_sha256": "e8cb4ccc702c1dd0afdc4b9f94a7c57e7e064b0ffcaeadf5be8eb7bda4388e35",
+ "measured_at": "2026-10-31T22:38:28+00:00",
+ "git_head": "10f7b2af8ee05ab4093ec336ec0bebb953092d69",
+ "implementation_sha256": "156f7c7f4fb4610e63184f38ca4fb8bc5e4b1e2ce0abe0f0140edc11df2129a1",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1331,
+  "accepted": 1336,
   "cobc_accepted": 1617,
-  "gap": 286,
+  "gap": 281,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 607,
+   "accepted": 612,
    "internal_errors": 0,
    "blockers": [
     [
@@ -467,15 +467,15 @@
      10
     ],
     [
+     "OCCURS UNBOUNDED non pris en charge",
+     6
+    ],
+    [
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
      6
     ],
     [
      "instruction non prise en charge: AT",
-     6
-    ],
-    [
-     "nombre OCCURS attendu",
      6
     ],
     [
@@ -490,12 +490,8 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 272,
+   "gap": 267,
    "gap_sources": [
-    [
-     "run_accept-001/prog.cob",
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
-    ],
     [
      "run_accept-003/prog.cob",
      "ACCEPT FROM MICROSECOND-TIME non pris en charge"
@@ -514,7 +510,7 @@
     ],
     [
      "run_extensions-017/prog.cob",
-     "borne maximale OCCURS attendue"
+     "OCCURS UNBOUNDED non pris en charge"
     ],
     [
      "run_extensions-019/prog.cob",
@@ -1149,22 +1145,6 @@
      "paragraphe CONFIGURATION non pris en charge"
     ],
     [
-     "run_misc-048/prog.cob",
-     "opérande INSPECT attendu"
-    ],
-    [
-     "run_misc-049/prog.cob",
-     "opérande INSPECT attendu"
-    ],
-    [
-     "run_misc-074/prog.cob",
-     "UNSTRING d'un littéral non pris en charge"
-    ],
-    [
-     "run_misc-080/prog.cob",
-     "UNSTRING d'un littéral non pris en charge"
-    ],
-    [
      "run_misc-085/prog.cob",
      "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge"
     ],
@@ -1254,7 +1234,7 @@
     ],
     [
      "run_misc-176/prog.cob",
-     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+     "CALL broken: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_ml-002/prog.cob",
@@ -1466,7 +1446,7 @@
     ],
     [
      "syn_misc-059/prog.cob",
-     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+     "CALL STATIC stuff: programme non converti (édition de liens statique de cobc)"
     ],
     [
      "syn_misc-059/prog2.cob",
@@ -1522,11 +1502,11 @@
     ],
     [
      "syn_occurs-006/prog.cob",
-     "nombre OCCURS attendu"
+     "OCCURS UNBOUNDED non pris en charge"
     ],
     [
      "syn_occurs-006/prog2.cob",
-     "nombre OCCURS attendu"
+     "OCCURS UNBOUNDED non pris en charge"
     ],
     [
      "syn_redefines-013/prog.cob",
@@ -1635,10 +1615,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 286,
-  "matching": 286,
-  "complete": 152,
-  "distinct": 186,
+  "sources": 281,
+  "matching": 281,
+  "complete": 145,
+  "distinct": 183,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1710,19 +1690,13 @@
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "first": 7,
     "present": 7,
-    "alone": 2
+    "alone": 3
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "first": 0,
     "present": 7,
     "alone": 0
-   },
-   {
-    "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
-    "first": 1,
-    "present": 5,
-    "alone": 1
    },
    {
     "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
@@ -1759,6 +1733,12 @@
     "first": 4,
     "present": 4,
     "alone": 0
+   },
+   {
+    "diagnostic": "OCCURS UNBOUNDED non pris en charge",
+    "first": 3,
+    "present": 4,
+    "alone": 2
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
@@ -1847,12 +1827,6 @@
    {
     "diagnostic": "expression non prise en charge: XML-EVENT",
     "first": 0,
-    "present": 2,
-    "alone": 0
-   },
-   {
-    "diagnostic": "borne maximale OCCURS attendue",
-    "first": 1,
     "present": 2,
     "alone": 0
    },
@@ -1953,18 +1927,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "opérande INSPECT attendu",
-    "first": 2,
-    "present": 2,
-    "alone": 2
-   },
-   {
-    "diagnostic": "UNSTRING d'un littéral non pris en charge",
-    "first": 2,
-    "present": 2,
-    "alone": 2
-   },
-   {
     "diagnostic": "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
     "first": 2,
     "present": 2,
@@ -1975,12 +1937,6 @@
     "first": 2,
     "present": 2,
     "alone": 0
-   },
-   {
-    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
-    "first": 2,
-    "present": 2,
-    "alone": 2
    },
    {
     "diagnostic": "option $SET DPC-IN-DATA non prise en charge",
@@ -2017,12 +1973,6 @@
     "first": 2,
     "present": 2,
     "alone": 0
-   },
-   {
-    "diagnostic": "nombre OCCURS attendu",
-    "first": 2,
-    "present": 2,
-    "alone": 2
    },
    {
     "diagnostic": "VALUE incompatible avec la PICTURE",
@@ -2517,6 +2467,12 @@
     "alone": 0
    },
    {
+    "diagnostic": "CALL broken: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
     "diagnostic": "expression non prise en charge: JSON-CODE",
     "first": 0,
     "present": 1,
@@ -2658,13 +2614,19 @@
     "diagnostic": "ACCEPT FROM ESCAPE non pris en charge",
     "first": 1,
     "present": 1,
-    "alone": 0
+    "alone": 1
    },
    {
     "diagnostic": "expression non prise en charge: OMITTED",
     "first": 1,
     "present": 1,
     "alone": 1
+   },
+   {
+    "diagnostic": "CALL STATIC stuff: programme non converti (édition de liens statique de cobc)",
+    "first": 1,
+    "present": 1,
+    "alone": 0
    },
    {
     "diagnostic": "CALL stuff: programme non converti ou routine système non pris en charge",
@@ -2767,80 +2729,80 @@
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
-    "unlocked": 2,
-    "cumulative": 5,
+    "unlocked": 3,
+    "cumulative": 6,
     "first": 7,
     "present": 7
    },
    {
-    "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
-    "unlocked": 2,
-    "cumulative": 7,
-    "first": 1,
-    "present": 5
-   },
-   {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 9,
+    "cumulative": 8,
     "first": 0,
     "present": 7
    },
    {
+    "diagnostic": "OCCURS UNBOUNDED non pris en charge",
+    "unlocked": 2,
+    "cumulative": 10,
+    "first": 3,
+    "present": 4
+   },
+   {
     "diagnostic": "USAGE/clause non pris en charge: is",
     "unlocked": 2,
-    "cumulative": 11,
+    "cumulative": 12,
     "first": 4,
     "present": 4
    },
    {
-    "diagnostic": "UNSTRING d'un littéral non pris en charge",
-    "unlocked": 2,
-    "cumulative": 13,
-    "first": 2,
-    "present": 2
-   },
-   {
-    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
-    "unlocked": 2,
-    "cumulative": 15,
-    "first": 2,
-    "present": 2
-   },
-   {
-    "diagnostic": "nombre OCCURS attendu",
-    "unlocked": 2,
-    "cumulative": 17,
-    "first": 2,
-    "present": 2
-   },
-   {
-    "diagnostic": "opérande INSPECT attendu",
-    "unlocked": 2,
-    "cumulative": 19,
-    "first": 2,
-    "present": 2
-   },
-   {
     "diagnostic": "instruction non prise en charge: AT",
     "unlocked": 1,
-    "cumulative": 20,
+    "cumulative": 13,
     "first": 5,
     "present": 5
    },
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
     "unlocked": 1,
-    "cumulative": 21,
+    "cumulative": 14,
     "first": 0,
     "present": 53
    },
    {
     "diagnostic": "invalid expression: unfinished expression",
     "unlocked": 31,
-    "cumulative": 52,
+    "cumulative": 45,
     "first": 0,
     "present": 50
+   },
+   {
+    "diagnostic": "expression non prise en charge: LINE",
+    "unlocked": 3,
+    "cumulative": 48,
+    "first": 14,
+    "present": 17
+   },
+   {
+    "diagnostic": "instruction non prise en charge: LINE",
+    "unlocked": 13,
+    "cumulative": 61,
+    "first": 0,
+    "present": 16
+   },
+   {
+    "diagnostic": "DISPLAY UPON CRT non pris en charge",
+    "unlocked": 2,
+    "cumulative": 63,
+    "first": 0,
+    "present": 2
+   },
+   {
+    "diagnostic": "expression attendue",
+    "unlocked": 1,
+    "cumulative": 64,
+    "first": 1,
+    "present": 8
    }
   ],
   "sources_detail": [
@@ -2988,15 +2950,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_accept-001/prog.cob",
-    "diagnostics": [
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_accept-003/prog.cob",
     "diagnostics": [
      "ACCEPT FROM MICROSECOND-TIME non pris en charge"
@@ -3035,7 +2988,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-017/prog.cob",
     "diagnostics": [
-     "borne maximale OCCURS attendue",
+     "OCCURS UNBOUNDED non pris en charge",
      "COL2 requiert 0 sous-script(s), reçu 1"
     ],
     "complete": true,
@@ -3046,7 +2999,7 @@
     "source": "run_extensions-019/prog.cob",
     "diagnostics": [
      "VALUE en LINKAGE SECTION non pris en charge",
-     "borne maximale OCCURS attendue",
+     "OCCURS UNBOUNDED non pris en charge",
      "COL2 requiert 0 sous-script(s), reçu 1",
      "length of 'A-TABLE' out of bounds: 10"
     ],
@@ -4615,42 +4568,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-048/prog.cob",
-    "diagnostics": [
-     "opérande INSPECT attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-049/prog.cob",
-    "diagnostics": [
-     "opérande INSPECT attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-074/prog.cob",
-    "diagnostics": [
-     "UNSTRING d'un littéral non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-080/prog.cob",
-    "diagnostics": [
-     "UNSTRING d'un littéral non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-085/prog.cob",
     "diagnostics": [
      "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge",
@@ -4859,9 +4776,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-176/prog.cob",
     "diagnostics": [
-     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+     "CALL broken: programme non converti ou routine système non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -5283,8 +5200,7 @@
     "source": "syn_misc-024/prog3.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: IS",
-     "donnée subordonnée sans groupe parent",
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+     "donnée subordonnée sans groupe parent"
     ],
     "complete": true,
     "matches_measure": true
@@ -5294,8 +5210,7 @@
     "source": "syn_misc-024/prog4.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: IS",
-     "donnée subordonnée sans groupe parent",
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+     "donnée subordonnée sans groupe parent"
     ],
     "complete": true,
     "matches_measure": true
@@ -5304,8 +5219,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_misc-024/prog6.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: IS",
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+     "USAGE/clause non pris en charge: IS"
     ],
     "complete": true,
     "matches_measure": true
@@ -5354,8 +5268,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_misc-043/prog.cob",
     "diagnostics": [
-     "ACCEPT FROM ESCAPE non pris en charge",
-     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+     "ACCEPT FROM ESCAPE non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5373,9 +5286,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_misc-059/prog.cob",
     "diagnostics": [
-     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+     "CALL STATIC stuff: programme non converti (édition de liens statique de cobc)"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -5499,7 +5412,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_occurs-006/prog.cob",
     "diagnostics": [
-     "nombre OCCURS attendu"
+     "OCCURS UNBOUNDED non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5508,7 +5421,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_occurs-006/prog2.cob",
     "diagnostics": [
-     "nombre OCCURS attendu"
+     "OCCURS UNBOUNDED non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5637,9 +5550,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T20:27:15+00:00",
-  "git_head": "1fb28f955f2c73f1f40e5c335a348af1d1b579f8",
-  "implementation_sha256": "e8cb4ccc702c1dd0afdc4b9f94a7c57e7e064b0ffcaeadf5be8eb7bda4388e35",
+  "measured_at": "2026-10-31T22:38:28+00:00",
+  "git_head": "10f7b2af8ee05ab4093ec336ec0bebb953092d69",
+  "implementation_sha256": "156f7c7f4fb4610e63184f38ca4fb8bc5e4b1e2ce0abe0f0140edc11df2129a1",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

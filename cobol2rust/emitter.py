@@ -1643,6 +1643,8 @@ class Emitter:
         elif op == "environment":
             self.environment(stmt)
         elif op == "accept_omitted":
+            if getattr(stmt, "handled", False):
+                self.write("runtime::exception::clear_current();")
             self.write("runtime::accept_omitted();")
         elif op == "initialize" and (a[3] or (a[2] and a[4])):
             for ref in a[0]:
@@ -1828,7 +1830,16 @@ class Emitter:
         source, delimiters, targets, pointer, tallying, _, _ = stmt.args
         pointer_value = f"Some({self.reference(pointer)}.snapshot().integer(\"POINTER\"))" if pointer else "None"
         u = self.unique()
-        self.write(f"let mut {u} = storage_runtime::Unstring::init(&{self.reference(source)}, {pointer_value});")
+        if isinstance(source, Expr):
+            if self.kind(source) != "text":
+                raise CobolError("UNSTRING d'une FUNCTION numérique non pris en charge")
+            # The literal's or the intrinsic's alphanumeric field.
+            value = (f"Value::Bytes({self.byte_vector(source.args[0])})" if source.op == "text"
+                     else self.expression(source))
+            source_field = f"storage_runtime::temporary(&{value})"
+        else:
+            source_field = self.reference(source)
+        self.write(f"let mut {u} = storage_runtime::Unstring::init(&{source_field}, {pointer_value});")
         for operand, all_flag in delimiters:
             self.write(f"{u}.delimited({self.string_operand(operand)}, {str(all_flag).lower()});")
         for target, delimiter, count in targets:
@@ -2026,6 +2037,8 @@ class Emitter:
                          else "runtime::module_not_found({});")
             from .system_calls import SYSTEM_ROUTINES
             if target[0] == "literal" and target[1] not in self.called and target[1] not in SYSTEM_ROUTINES:
+                if getattr(node.stmt, "static", False):
+                    raise CobolError(f"CALL STATIC {target[1]}: programme non converti (édition de liens statique de cobc)")
                 if not surely_absent(target[1], self.present):
                     raise CobolError(f"CALL {target[1]}: programme non converti ou routine système non pris en charge")
                 self.write(not_found.format(f"b{quoted(target[1])}"))

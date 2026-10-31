@@ -1,5 +1,22 @@
 # Validation — 30 octobre 2026
 
+## Lot de constructions générales — 31 octobre 2026
+
+- Fixture `tests/fixtures/small_constructs.cob` identique au natif (avec
+  une ligne en entrée) : UNSTRING d'un littéral avec ON/NOT ON OVERFLOW et
+  d'une FUNCTION UPPER-CASE, CALL STATIC d'un programme contenu (ON
+  EXCEPTION ignoré, NOT ON EXCEPTION exécuté), INSPECT TALLYING FOR ALL NULL
+  et CONVERTING NULL, ACCEPT OMITTED nu et avec NOT ON EXCEPTION.
+- Essais natifs : INSPECT NULL avec un alphabet de collation modifié (NULL
+  reste x"00"), REPLACING ALL/FIRST NULL, CONVERTING vers NULL ; CALL
+  STATIC d'un programme absent (échec de l'édition de liens de cobc).
+- Sources débloquées identiques au natif : run_accept-001, run_misc-048,
+  -049, -074, -080.
+- Mesure : **1331 → 1336/3593**, écart **286 → 281**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-small.json`) ;
+  suite **578 tests**, 0 échec.
+
 ## Expressions de constantes — 31 octobre 2026
 
 - Fixture `tests/fixtures/constant_lengths.cob` identique au natif :

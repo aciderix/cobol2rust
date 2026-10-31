@@ -126,7 +126,7 @@ Ces résultats portent sur les entrées testées.
 | MOVE numérique vers texte | Entier DISPLAY/COMP/COMP-3/index vers PIC X ou sous-chaîne ; copie brute vers groupe hors index ; chiffres lexicaux des littéraux et remplissage ZERO |
 | MOVE depuis du texte | Champ PIC X ou sous-chaîne vers numérique/édité ; littéral texte vers édité ou numérique DISPLAY ; groupe source copié brut vers numérique/édité |
 | Comparaisons mixtes | Champ numérique face à une variable texte, groupe ou sous-chaîne ; littéral numérique non signé et ZERO face à du texte ; littéral texte face à un champ numérique (`cob_cmp_alnum` des chiffres stockés, sauf repli de `compare_field_literal`) |
-| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03 lu par un ACCEPT tue le programme par SIGINT comme `cob_raise`, arrêt nommé si un fichier est encore ouvert, libcob perdant alors ses tampons) |
+| Contrôle | `IF` / `ELSE`, comparaisons explicites, `AND` / `OR` / `NOT`, `EVALUATE` simple, `GO [TO]` vers paragraphe/section, `GO TO ... DEPENDING [ON]` avec contrôleur entier de 9 chiffres au plus, `GO TO` sans cible et `ALTER` (label_N de cobc ; segments indépendants 50-99 remis à zéro comme codegen.c avec `--std cobol85`, ignorés par défaut comme `section-segments: ignore`), noms de procédure homonymes qualifiés `IN`/`OF` et noms entièrement numériques (règles de `cb_ref`), `PERFORM a THRU b` avec `b` avant `a`, `ACCEPT OMITTED [ON EXCEPTION …]` (`cob_accept (NULL)` : lit jusqu'à la fin de ligne, ne lève rien), `STOP littéral` (DISPLAY puis ACCEPT OMITTED ; le caractère 03 lu par un ACCEPT tue le programme par SIGINT comme `cob_raise`, arrêt nommé si un fichier est encore ouvert, libcob perdant alors ses tampons) |
 | Boucles | `PERFORM ... TIMES`, `UNTIL`, `VARYING`, `WITH TEST BEFORE/AFTER`, `UNTIL EXIT` et `FOREVER`, `EXIT PERFORM [CYCLE]` dans un PERFORM en ligne (étiquettes de sortie et de cycle de codegen.c) |
 | Procédures | Sections et paragraphes, `PERFORM`, plages `THRU`/`THROUGH` mixtes, retours imbriqués/récursifs, enchaînement séquentiel, `EXIT PARAGRAPH`, `EXIT SECTION` (hors section : fin de la « MAIN SECTION » implicite de cobc, avant la première SECTION), `EXIT` nu sans effet |
 | Console | `DISPLAY` de champs, littéraux (signés compris) et fonctions alphanumériques, clauses `UPON` et `[WITH] NO ADVANCING` dans tout ordre, plusieurs listes avec leurs clauses dans une instruction (`display_atom`), `ACCEPT` simple, `ACCEPT ... FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` |
@@ -418,6 +418,13 @@ VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
 BASED, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
 
+Conventions d'appel (`_mnemonic_conv`) : `CALL STATIC` (et `WINAPI`) lie le
+programme statiquement : nom littéral obligatoire, `ON EXCEPTION` ignoré comme
+le dit cobc, `NOT ON EXCEPTION` conservé ; un programme qui n'est pas converti
+avec l'unité d'exécution est refusé, comme l'échec de l'édition de liens de
+cobc. `STDCALL` est sans effet sous Linux ; `C`, `EXTERN` et `PASCAL` sont
+refusés.
+
 ## Adresses : POINTER, ADDRESS OF, BASED, ALLOCATE et FREE
 
 `USAGE POINTER` (8 octets, NULL par défaut, `VALUE NULL`), `ADDRESS OF`
@@ -643,7 +650,10 @@ entre instructions (y compris le marquage incomplet de LEADING en TALLYING),
 signe incrusté retiré puis remis, compteurs mis à jour par `cob_add_int`
 (troncature des chiffres de poids fort). Un accès hors des tampons de libcob,
 qui ferait planter le programme natif, est un arrêt nommé. Les cibles binaires
-ou packées et INSPECT BACKWARD restent refusés.
+ou packées et INSPECT BACKWARD restent refusés. La figurative `NULL` y est
+le `str_cob_low` de strings.c (ALL x"00", quel que soit l'alphabet) ; en
+BEFORE/AFTER ou en `CHARACTERS BY`, où libcob lirait le pointeur nul, elle
+est refusée par son nom.
 
 `EVALUATE` suit `cb_emit_evaluate` : sujets multiples `ALSO`, `TRUE`/`FALSE`,
 objets `ANY`, `NOT`, `THRU`, conditions, lignes `WHEN` consécutives partageant
@@ -662,7 +672,9 @@ et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
 `STRING` (DELIMITED BY, POINTER, ON OVERFLOW) et `UNSTRING` (DELIMITED BY
 [ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
 reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune
-exception levée). Les mots réservés de cobc sont refusés comme noms : la
+exception levée) ; la source d'UNSTRING peut être un littéral alphanumérique
+ou une FUNCTION alphanumérique (`id_or_lit_or_func`, extension de cobc),
+lus comme un champ temporaire (un littéral numérique reste refusé). Les mots réservés de cobc sont refusés comme noms : la
 liste par défaut, ou celle de `config/cobol85.words` avec `--std cobol85`
 (NOTHING y redevient un nom, AUTHOR y est réservé). Deux articles frères de même
 nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée.

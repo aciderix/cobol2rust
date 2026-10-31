@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T20:27:15+00:00 (commit `1fb28f955f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T22:38:28+00:00 (commit `10f7b2af8e`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T20:27:15+00:00 (commit `1fb28f955f`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 607 | 879 | 272 | 0 |
-| **Total** | | **3593** | **1331** | **1617** | **286** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 612 | 879 | 267 | 0 |
+| **Total** | | **3593** | **1336** | **1617** | **281** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T20:27:15+00:00, commit `1fb28f955f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T22:38:28+00:00, commit `10f7b2af8e`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,22 +130,22 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 5 × instruction non prise en charge: AT
 10. 5 × instruction non prise en charge: JSON
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 286 sources, 286 au premier diagnostic identique à la mesure, 152 à inventaire complet, 186 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 281 sources, 281 au premier diagnostic identique à la mesure, 145 à inventaire complet, 183 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1 | SCREEN SECTION non prise en charge à cet endroit | 3 | 3 | 36 | 38 |
-| 2 | USAGE/clause non pris en charge: IS | 2 | 5 | 7 | 7 |
-| 3 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 7 | 1 | 5 |
-| 4 | donnée subordonnée sans groupe parent | 2 | 9 | 0 | 7 |
-| 5 | USAGE/clause non pris en charge: is | 2 | 11 | 4 | 4 |
-| 6 | UNSTRING d'un littéral non pris en charge | 2 | 13 | 2 | 2 |
-| 7 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 15 | 2 | 2 |
-| 8 | nombre OCCURS attendu | 2 | 17 | 2 | 2 |
-| 9 | opérande INSPECT attendu | 2 | 19 | 2 | 2 |
-| 10 | instruction non prise en charge: AT | 1 | 20 | 5 | 5 |
-| 11 | GOBACK RETURNING non pris en charge | 1 | 21 | 0 | 53 |
-| 12 | invalid expression: unfinished expression | 31 | 52 | 0 | 50 |
+| 2 | USAGE/clause non pris en charge: IS | 3 | 6 | 7 | 7 |
+| 3 | donnée subordonnée sans groupe parent | 2 | 8 | 0 | 7 |
+| 4 | OCCURS UNBOUNDED non pris en charge | 2 | 10 | 3 | 4 |
+| 5 | USAGE/clause non pris en charge: is | 2 | 12 | 4 | 4 |
+| 6 | instruction non prise en charge: AT | 1 | 13 | 5 | 5 |
+| 7 | GOBACK RETURNING non pris en charge | 1 | 14 | 0 | 53 |
+| 8 | invalid expression: unfinished expression | 31 | 45 | 0 | 50 |
+| 9 | expression non prise en charge: LINE | 3 | 48 | 14 | 17 |
+| 10 | instruction non prise en charge: LINE | 13 | 61 | 0 | 16 |
+| 11 | DISPLAY UPON CRT non pris en charge | 2 | 63 | 0 | 2 |
+| 12 | expression attendue | 1 | 64 | 1 | 8 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -160,7 +160,7 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
-- 7 × USAGE/clause non pris en charge: IS (1er : 7, seul : 2)
+- 7 × USAGE/clause non pris en charge: IS (1er : 7, seul : 3)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -788,3 +788,15 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   débloquées (run_fundamental-044, run_misc-163, -164, syn_misc-105),
   toutes identiques au natif. Testsuite **603 → 607/1135**, total **1327 →
   1331/3593**, écart **290 → 286**.
+- 2026-10-31 — Lot de constructions générales (chantiers « UNSTRING d'un
+  littéral », « STATIC », « opérande INSPECT », « OMITTED ») : source
+  d'UNSTRING littérale ou FUNCTION (`id_or_lit_or_func`), conventions
+  d'appel `CALL STATIC`/`WINAPI`/`STDCALL` (ON EXCEPTION ignoré, programme
+  absent refusé comme l'édition de liens de cobc), figurative NULL en
+  INSPECT (`str_cob_low`), `ACCEPT OMITTED` avec ses phrases d'exception ;
+  OCCURS UNBOUNDED refusé par son nom. Cinq sources débloquées
+  (run_accept-001, run_misc-048, -049, -074, -080), toutes identiques au
+  natif ; syn_misc-059 (CALL STATIC d'un programme absent, que cobc ne peut
+  pas lier) et run_misc-176 (CALL d'un module minuscule absent) restent
+  refusées à juste titre. Testsuite **607 → 612/1135**, total **1331 →
+  1336/3593**, écart **286 → 281**.

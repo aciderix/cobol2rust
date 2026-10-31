@@ -743,6 +743,8 @@ class Expr:
     # cb_norm_low): a MOVE to any numeric item is a memset.
     memset: bool = False
     signed_literal: bool = False
+    # figurative_constant NULL (cb_null) used as an INSPECT operand.
+    null: bool = False
     # A floating-point literal (FloatLiteralToken): valid where only its
     # value counts; elsewhere cobc shows its digits with a negative scale.
     floating_literal: bool = False
@@ -4485,6 +4487,20 @@ class Parser:
                 self.expect("COUNT")
                 self.accept("END-ACCEPT")
                 return Stmt("continue", (), line)
+            if self.at("OMITTED") and not self.candidates(self.t.key):
+                # accp_identifier OMITTED: cob_accept (NULL) reads up to the end
+                # of the line or of the input and raises nothing.
+                self.take()
+                stmt = Stmt("accept_omitted", (), line)
+                exception, success = self.exception_phrases("END-ACCEPT", escape=True)
+                self.accept("END-ACCEPT")
+                if exception is None and success is None:
+                    return stmt
+                stmt.handled = True
+                check = Stmt("if", (Expr("imp_exception", (True,)), exception or [], success or []), line)
+                result = Stmt("sequence", ([stmt, check],), line)
+                result.takes_exception = success is None
+                return result
             # parser.y accept_body: an identifier, not a target_identifier.
             name = self.variable()
             if self.accept("FROM"):
@@ -4851,6 +4867,20 @@ class Parser:
                 self.error("GOBACK RETURNING non pris en charge")
             return Stmt("goback", (), line)
         if verb == "CALL":
+            # _mnemonic_conv: STATIC (and WINAPI) link the program statically,
+            # STDCALL is ignored on this platform; C, EXTERN and PASCAL change
+            # the argument convention.
+            static = False
+            if not self.t.string and self.t.key in {"STATIC", "STDCALL", "WINAPI", "C", "EXTERN", "PASCAL"} \
+                    and not self.candidates(self.t.key):
+                if STD == "cobol85":
+                    self.error("CALL-/ENTRY-CONVENTION does not conform to COBOL 85")
+                convention = self.take().key
+                if convention in {"C", "EXTERN", "PASCAL"}:
+                    self.error(f"CALL {convention} : convention d'appel non prise en charge")
+                static = convention in {"STATIC", "WINAPI"}
+            if static and not self.t.string:
+                self.error("STATIC CALL convention requires a literal program name")
             if self.t.string:
                 target = ("literal", self.take().text)
             else:
@@ -4990,8 +5020,13 @@ class Parser:
                     self.error("NOT ON EXCEPTION attendu")
                 success = self.block({"END-CALL"})
             self.accept("END-CALL")
+            if static and exception:
+                # "ON EXCEPTION ignored because of STATIC CALL": NOT ON
+                # EXCEPTION still follows the call.
+                exception = []
             stmt = Stmt("call_program", (target, arguments, exception, success), line)
             stmt.returning = returning
+            stmt.static = static
             return stmt
         if verb in {"INITIATE", "GENERATE", "TERMINATE"}:
             # cb_emit_initiate/generate/terminate: report names, or for
@@ -5441,9 +5476,20 @@ class Parser:
         return Stmt("string", (tuple(groups), target, pointer, overflow, success), line)
 
     def unstring_statement(self, line):
-        if self.t.string or not self.candidates(self.t.key):
-            self.error("UNSTRING d'un littéral non pris en charge")
-        source = self.variable()
+        # unstring_body: id_or_lit_or_func (a literal or a function result is
+        # an extension of cobc, unstrung like a temporary alphanumeric field).
+        if self.t.string:
+            source = Expr("text", (self.take().text,))
+        elif self.t.key == "FUNCTION" and not self.candidates(self.t.key):
+            source = self.expr(primary=True)
+            if source.op != "function":
+                self.error("FUNCTION attendue")
+        elif re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", self.t.text):
+            self.error("UNSTRING d'un littéral numérique non pris en charge")
+        elif not self.candidates(self.t.key):
+            self.error("UNSTRING : identificateur, littéral ou FUNCTION attendu")
+        else:
+            source = self.variable()
         delimiters = []
         if self.accept("DELIMITED"):
             self.accept("BY")
@@ -5497,6 +5543,11 @@ class Parser:
             if operand.op == "var":
                 self.error("ALL requiert un littéral")
             return Expr("all", operand.args, literal_all=True) if operand.op == "text" else operand
+        if t.key == "NULL" and not self.candidates(t.key):
+            # figurative_constant TOK_NULL: a NULL field, which strings.c
+            # takes as str_cob_low (ALL x"00", whatever the alphabet).
+            self.take()
+            return Expr("all", ("\x00",), memset=True, null=True)
         if t.key in INSPECT_FIGURATIVES:
             self.take()
             value = self.figurative_value(t.key)
@@ -5530,7 +5581,7 @@ class Parser:
 
     def inspect_operand_start(self):
         t = self.t
-        return t.string or t.key in INSPECT_FIGURATIVES or (t.key in self.symbolic and not self.candidates(t.key)) \
+        return t.string or t.key in INSPECT_FIGURATIVES or t.key == "NULL" or (t.key in self.symbolic and not self.candidates(t.key)) \
             or (t.key not in BOUNDARIES and bool(self.candidates(t.key)))
 
     def operand_size(self, e):
@@ -5555,7 +5606,11 @@ class Parser:
                 break
             self.take()
             self.accept("INITIAL")
-            region.append((word.lower(), self.inspect_operand()))
+            operand = self.inspect_operand()
+            if operand.null:
+                # cob_inspect_before/after read the NULL field (SIGSEGV).
+                self.error(f"INSPECT {word} NULL non pris en charge (champ NULL lu par libcob)")
+            region.append((word.lower(), operand))
         return tuple(region)
 
     def inspect_statement(self, line):
@@ -5620,6 +5675,8 @@ class Parser:
                 if self.accept("CHARACTERS"):
                     self.expect("BY")
                     to = self.inspect_operand()
+                    if to.null:
+                        self.error("REPLACING CHARACTERS BY NULL non pris en charge (champ NULL lu par libcob)")
                     if to.op == "text" and len(to.args[0]) != 1:
                         self.error("operand has wrong size")
                     items.append(("characters", None, to, self.inspect_region()))
