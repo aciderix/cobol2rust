@@ -910,6 +910,21 @@ RECOVERY_LIMIT = 40
 RESUMED = object()
 
 
+def call_content(text):
+    """codegen.c output_call: the bytes of a numeric literal's cob_content,
+    a native int when cb_fits_int, else the u64 (sign >= 0) or i64 of
+    cb_get_[u_]long_long, which reads its digits without the decimal point."""
+    negative = text.startswith("-")
+    digits = text.lstrip("+-")
+    integer, _, decimals = digits.partition(".")
+    value = int(integer + decimals or "0") * (-1 if negative else 1)
+    if not decimals and -(1 << 31) <= value < (1 << 31):
+        return value.to_bytes(4, "little", signed=True).decode("latin-1")
+    if not -(1 << 63) <= value < (1 << 64):
+        raise CobolError("littéral de CALL au-delà de 64 bits (cb_get_long_long) non pris en charge")
+    return value.to_bytes(8, "little", signed=value < 0).decode("latin-1")
+
+
 def numeric_literal(e):
     """(coefficient, scale, size) of a numeric literal: cobc's data digits
     (leading zeros included, or those of a folded result) and their scale."""
@@ -4711,13 +4726,13 @@ class Parser:
                 if self.fields[ref.name].kind != "text" and ref.start is None:
                     self.error("CALL identifiant requiert un champ alphanumérique")
                 target = ("dynamic", ref)
-            from .system_calls import CATALOG, Scalar
+            from .system_calls import CATALOG, SYSTEM_ROUTINES, VALUE_ROUTINES, Scalar
             if target[0] == "literal":
                 name = target[1].split("\0", 1)[0].strip(" ")
                 if not name:
                     self.error("nom CALL vide non pris en charge")
                 basename = name.replace("\\", "/").rsplit("/", 1)[-1]
-                target = ("literal", basename if basename in CATALOG else name)
+                target = ("literal", basename if basename in SYSTEM_ROUTINES else name)
             arguments, mode = [], "REFERENCE"
             scalar_size, scalar_unsigned = 8, False
             if self.accept("USING"):
@@ -4771,10 +4786,16 @@ class Parser:
                         else:
                             arguments.append((mode, Scalar(value, scalar_size, scalar_unsigned)))
                         continue
+                    sign = ""
+                    if (not self.t.string and self.t.key in {"+", "-"} and not self.tokens[self.i + 1].string
+                            and self.tokens[self.i + 1].start == self.t.end
+                            and re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", self.tokens[self.i + 1].text)):
+                        sign = self.take().key
                     if re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", self.t.text) and not self.t.string:
-                        # output_call: an 8-byte union whose int holds the
-                        # literal's digits, the rest left uninitialized.
-                        self.error("CALL USING d'un littéral numérique non pris en charge (entier C de cobc)")
+                        # output_call: a cob_content temporary at each CALL,
+                        # BY REFERENCE as BY CONTENT.
+                        arguments.append(("CONTENT", Expr("text", (call_content(sign + self.take().text),))))
+                        continue
                     if self.t.string or (self.t.key in CALL_FIGURATIVES and not self.candidates(self.t.key)):
                         # output_call: a literal (or a figurative, one
                         # character) passed as a field of its own size.
@@ -4792,7 +4813,8 @@ class Parser:
                     self.error("CALL USING requiert au moins un argument")
             if target[0] == "literal" and target[1] in CATALOG and len(arguments) < CATALOG[target[1]][1]:
                 self.error(f"CALL {target[1]} requiert au moins {CATALOG[target[1]][1]} arguments")
-            if target[0] == "literal" and target[1] not in CATALOG and any(mode == "VALUE" for mode, _ in arguments):
+            if (target[0] == "literal" and target[1] not in CATALOG and target[1] not in VALUE_ROUTINES
+                    and any(mode == "VALUE" for mode, _ in arguments)):
                 self.error("CALL BY VALUE : ABI hors des routines système d'octets non prise en charge")
             if self.at("RETURNING") or self.at("GIVING"):
                 self.error("CALL RETURNING/GIVING non pris en charge")

@@ -1260,6 +1260,27 @@ pub fn chain_setup(item: &Value, parameter: usize) {
 }
 
 /// CALL ... USING OMITTED: a NULL address.
+/// A system routine's view of a parameter: the bytes behind its data
+/// pointer (None for an omitted parameter, a NULL address).
+pub fn parameter_bytes(item: &Value) -> Option<Vec<u8>> {
+    match item {
+        Value::View(view) if view.memory.borrow().is_empty() => None,
+        Value::View(view) => { view.resolved(); Some(view.raw()) },
+        _ => fail("paramètre de routine système sans stockage"),
+    }
+}
+
+/// A system routine writing `bytes` at `offset` of a parameter, without
+/// PICTURE conversion; a literal passed BY REFERENCE stays protected.
+pub fn store_parameter(item: &Value, offset: usize, bytes: &[u8]) {
+    let Value::View(view) = item else { fail("paramètre de routine système sans stockage") };
+    if view.memory.borrow().is_empty() { fail("écriture d'une routine système à une adresse NULL (SIGSEGV)"); }
+    if offset + bytes.len() > view.size { fail("écriture d'une routine système au-delà du paramètre non modélisée"); }
+    let mut target = View { memory: view.memory.clone(), offset: view.offset + offset, size: bytes.len(),
+        kind: Kind::Text, dimensions: vec![], initializers: vec![], limit: view.limit };
+    target.assign_text_move(&Value::Bytes(bytes.to_vec()), true);
+}
+
 pub fn omitted() -> Value {
     Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
                        dimensions: vec![], initializers: vec![], limit: None })

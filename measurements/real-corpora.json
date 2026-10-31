@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T13:10:37+00:00",
- "git_head": "10014e8592f8a24342215f96727599b64c044cb3",
- "implementation_sha256": "099c350891833d3b0062a52dea1910cc76dc46506f33cf1710199671df8d7ab1",
+ "measured_at": "2026-10-31T13:33:58+00:00",
+ "git_head": "f7426dbd3029193841b71c9d36fab1ea4046e9c8",
+ "implementation_sha256": "ffead05aefc63164cfd951a426f5b14a24a533486cbdfdbac1550f1df623346a",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1272,
+  "accepted": 1277,
   "cobc_accepted": 1617,
-  "gap": 345,
+  "gap": 340,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 548,
+   "accepted": 553,
    "internal_errors": 0,
    "blockers": [
     [
@@ -479,18 +479,18 @@
      7
     ],
     [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
      6
     ],
     [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
      6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 331,
+   "gap": 326,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -506,7 +506,7 @@
     ],
     [
      "run_extensions-001/prog.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL dump: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-010/prog.cob",
@@ -591,10 +591,6 @@
     [
      "run_extensions-057/prog.cob",
      "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-058/prog.cob",
-     "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-059/prog.cob",
@@ -705,28 +701,12 @@
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
     ],
     [
-     "run_file-038/prog.cob",
-     "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_file-039/prog.cob",
      "PIC X/A limité à 65535 caractères DISPLAY"
     ],
     [
-     "run_file-040/prog.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    [
      "run_file-040/prog2.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    [
-     "run_file-041/prog.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    [
-     "run_file-042/prog2.cob",
-     "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge"
+     "instruction non prise en charge: NULL"
     ],
     [
      "run_file-043/prog.cob",
@@ -1334,15 +1314,15 @@
     ],
     [
      "run_misc-041/callee.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL RETURNING/GIVING non pris en charge"
     ],
     [
      "run_misc-041/caller.cob",
-     "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge"
     ],
     [
      "run_misc-042/prog.cob",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL USING requiert au moins un argument"
     ],
     [
      "run_misc-045/prog.cob",
@@ -1855,26 +1835,26 @@
      6
     ],
     [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
-     6
-    ],
-    [
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
      6
     ],
     [
      "NO attendu",
      6
+    ],
+    [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     5
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 345,
-  "matching": 345,
-  "complete": 187,
-  "distinct": 213,
+  "sources": 340,
+  "matching": 340,
+  "complete": 184,
+  "distinct": 210,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1929,12 +1909,6 @@
     "first": 8,
     "present": 9,
     "alone": 0
-   },
-   {
-    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
-    "first": 6,
-    "present": 9,
-    "alone": 5
    },
    {
     "diagnostic": ". attendu",
@@ -2004,15 +1978,21 @@
    },
    {
     "diagnostic": "CALL USING requiert au moins un argument",
-    "first": 3,
+    "first": 4,
     "present": 5,
-    "alone": 3
+    "alone": 4
    },
    {
     "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
     "first": 5,
     "present": 5,
     "alone": 0
+   },
+   {
+    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
+    "first": 4,
+    "present": 5,
+    "alone": 4
    },
    {
     "diagnostic": "clé INDEXED composée (SOURCE IS) non prise en charge",
@@ -2039,16 +2019,16 @@
     "alone": 0
    },
    {
-    "diagnostic": "CALL C$NARG: programme non converti ou routine système non pris en charge",
+    "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
     "first": 4,
     "present": 4,
     "alone": 0
    },
    {
-    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
-    "first": 3,
+    "diagnostic": "CALL C$NARG: programme non converti ou routine système non pris en charge",
+    "first": 4,
     "present": 4,
-    "alone": 1
+    "alone": 0
    },
    {
     "diagnostic": "REDEFINES requiert un champ précédent au même niveau",
@@ -2107,12 +2087,6 @@
    {
     "diagnostic": "littéral flottant hors d'un emploi numérique (display) non pris en charge",
     "first": 2,
-    "present": 3,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
-    "first": 3,
     "present": 3,
     "alone": 0
    },
@@ -2471,12 +2445,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "CALL C$GETPID: programme non converti ou routine système non pris en charge",
     "first": 1,
     "present": 1,
@@ -2507,22 +2475,16 @@
     "alone": 1
    },
    {
-    "diagnostic": "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "PIC X/A limité à 65535 caractères DISPLAY",
     "first": 1,
     "present": 1,
     "alone": 0
    },
    {
-    "diagnostic": "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge",
+    "diagnostic": "instruction non prise en charge: NULL",
     "first": 1,
     "present": 1,
-    "alone": 0
+    "alone": 1
    },
    {
     "diagnostic": "READ direct requiert INVALID KEY, pas AT END",
@@ -2795,7 +2757,7 @@
     "alone": 0
    },
    {
-    "diagnostic": "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "diagnostic": "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge",
     "first": 1,
     "present": 1,
     "alone": 0
@@ -3164,79 +3126,79 @@
     "present": 7
    },
    {
-    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
-    "unlocked": 5,
-    "cumulative": 11,
-    "first": 6,
-    "present": 9
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
     "unlocked": 4,
-    "cumulative": 15,
+    "cumulative": 10,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "NO attendu",
     "unlocked": 4,
-    "cumulative": 19,
+    "cumulative": 14,
     "first": 6,
     "present": 6
    },
    {
+    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
+    "unlocked": 4,
+    "cumulative": 18,
+    "first": 4,
+    "present": 5
+   },
+   {
     "diagnostic": "CALL USING requiert au moins un argument",
     "unlocked": 4,
-    "cumulative": 23,
-    "first": 3,
+    "cumulative": 22,
+    "first": 4,
     "present": 5
    },
    {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 26,
+    "cumulative": 25,
     "first": 36,
     "present": 38
    },
    {
-    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
-    "unlocked": 3,
-    "cumulative": 29,
-    "first": 3,
-    "present": 4
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 31,
+    "cumulative": 27,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 33,
+    "cumulative": 29,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 35,
+    "cumulative": 31,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 37,
+    "cumulative": 33,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 39,
+    "cumulative": 35,
+    "first": 2,
+    "present": 2
+   },
+   {
+    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
+    "unlocked": 2,
+    "cumulative": 37,
     "first": 2,
     "present": 2
    }
@@ -3415,9 +3377,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-001/prog.cob",
     "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL dump: programme non converti ou routine système non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -3620,15 +3582,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-058/prog.cob",
-    "diagnostics": [
-     "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_extensions-059/prog.cob",
     "diagnostics": [
      "CALL C$GETPID: programme non converti ou routine système non pris en charge"
@@ -3685,8 +3638,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-071/prog.cob",
     "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL RETURNING/GIVING non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -3695,8 +3647,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-072/prog.cob",
     "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL RETURNING/GIVING non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -3882,29 +3833,10 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_file-038/prog.cob",
-    "diagnostics": [
-     "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_file-039/prog.cob",
     "diagnostics": [
      "PIC X/A limité à 65535 caractères DISPLAY",
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
      "IF without imperative statement"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-040/prog.cob",
-    "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     "complete": true,
     "matches_measure": true
@@ -3913,27 +3845,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-040/prog2.cob",
     "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "instruction non prise en charge: NULL"
     ],
     "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-041/prog.cob",
-    "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-042/prog2.cob",
-    "diagnostics": [
-     "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
     "matches_measure": true
    },
    {
@@ -5457,7 +5371,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-041/callee.cob",
     "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "CALL RETURNING/GIVING non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5466,7 +5380,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-041/caller.cob",
     "diagnostics": [
-     "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+     "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge"
     ],
     "complete": false,
     "matches_measure": true
@@ -5475,7 +5389,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-042/prog.cob",
     "diagnostics": [
-     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
      "CALL USING requiert au moins un argument"
     ],
     "complete": true,
@@ -6599,9 +6512,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T13:10:37+00:00",
-  "git_head": "10014e8592f8a24342215f96727599b64c044cb3",
-  "implementation_sha256": "099c350891833d3b0062a52dea1910cc76dc46506f33cf1710199671df8d7ab1",
+  "measured_at": "2026-10-31T13:33:58+00:00",
+  "git_head": "f7426dbd3029193841b71c9d36fab1ea4046e9c8",
+  "implementation_sha256": "ffead05aefc63164cfd951a426f5b14a24a533486cbdfdbac1550f1df623346a",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

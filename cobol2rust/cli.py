@@ -221,7 +221,7 @@ def run_unit(source: Path, fmt, includes, call_paths):
     while pruned:
         pruned = False
         for name in [name for name in units if name not in targets]:
-            from .system_calls import CATALOG
+            from .system_calls import SYSTEM_ROUTINES as CATALOG
             if any(callee not in CATALOG and callee not in units and callee != main.entry_name and not surely_absent(callee, present)
                    for callee in call_targets(units[name][1])[0]):
                 del units[name]
@@ -307,7 +307,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     (output / "src" / "runtime.rs").write_text(Path(__file__).with_name("runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "system_runtime.rs").write_text(Path(__file__).with_name("system_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    if program.files or any(sub.files for _, sub, _, _ in subprograms):
+    if "mod file_runtime;" in rust:
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     # One character per source byte: expanded.cob keeps the original bytes.
     (output / "expanded.cob").write_text(expanded + "\n", encoding="latin-1")

@@ -1,5 +1,24 @@
 # Validation — 30 octobre 2026
 
+## Routines de fichiers d'octets et littéraux de CALL — 31 octobre 2026
+
+- Littéraux de CALL : C généré par cobc lu (`content_N.dataint`,
+  `dataull`) ; sous-programme COBOL recevant 7, 12345678901, -3, 2147483647,
+  1.5 (u64 15), 2147483648, -2147483648 et -12345678901 identique au natif.
+- Routines : `tests/fixtures/byte_stream_routines.cob` identique au natif
+  (stdout, stderr dont l'avertissement « call to CBL_OPEN_FILE with wrong
+  access mode: 9 », fichiers, code de sortie 128) : création, écriture,
+  lecture, taille (drapeau 0x80), fin de fichier (10), fichier absent (35,
+  descripteur FFFFFFFF), copie, existence, renommage, C$FILEINFO,
+  suppression (128 au second essai), répertoires, `CBL_GET_CURRENT_DIR`
+  (0, 129, 128). Sources débloquées identiques au natif : run_file-038,
+  -040, -041, -042/prog2, run_extensions-058.
+- Mesure : **1272 → 1277/3593**, écart **345 → 340**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; suite
+  **549 tests**, 0 échec après retrait du cas `call "x" using by content 1`
+  de `test_real_forms` (cobc l'accepte ; c'était notre ancien refus) ;
+  `tests/test_byte_stream_routines.py` : quatre tests.
+
 ## COMP-X et COMP-N — 31 octobre 2026
 
 - Sondes natives : VALUE au-delà des chiffres (warning de cobc, valeur

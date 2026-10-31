@@ -313,6 +313,20 @@ reste dans l'allocation adressée et dans la limite de l'argument LINKAGE.
 Une longueur nulle ou négative ne lit ni n'écrit les données, même si leur
 adresse est OMITTED. Ces routines renvoient zéro dans RETURN-CODE.
 
+Les routines de fichiers d'octets et de répertoires de `fileio.c` sont portées
+avec de vrais descripteurs du système : `CBL_OPEN_FILE`, `CBL_CREATE_FILE`,
+`CBL_READ_FILE` (dont la taille par le drapeau 0x80 et la fin de fichier 10),
+`CBL_WRITE_FILE`, `CBL_CLOSE_FILE`, `CBL_FLUSH_FILE`, `CBL_DELETE_FILE`,
+`CBL_COPY_FILE`, `CBL_RENAME_FILE`, `CBL_CHECK_FILE_EXIST`,
+`CBL_GET_CURRENT_DIR` (entiers C BY VALUE), `CBL_CREATE_DIR`, `CBL_CHANGE_DIR`,
+`CBL_DELETE_DIR`, `C$MAKEDIR`, `C$COPY`, `C$FILEINFO` et `C$DELETE`, avec
+`cob_str_from_fld`, `cob_chk_file_mapping`, `errno_cob_sts` et les
+avertissements de libcob. `C$CHDIR` (statut par `cob_set_int`) et un argument
+absent (adresse indéterminée, sans `COB_PARAM_CHECK`) sont des arrêts nommés.
+Un littéral numérique en argument de CALL devient le temporaire `cob_content`
+de cobc : int natif de 4 octets s'il tient dans un int, sinon les 8 octets de
+`cb_get_[u_]long_long` (chiffres sans le point décimal).
+
 Ce contrat scalaire vise **Linux x86_64**, avec la locale C de LC_CTYPE
 initialisée par GnuCOBOL. Les tailles 1, 2, 4 et 8, SIZE AUTO, SIZE DEFAULT
 et UNSIGNED conservent les casts et promotions observés dans le C natif ;

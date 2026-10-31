@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T13:10:37+00:00 (commit `10014e8592`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T13:33:58+00:00 (commit `f7426dbd30`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T13:10:37+00:00 (commit `10014e8592`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 548 | 879 | 331 | 0 |
-| **Total** | | **3593** | **1272** | **1617** | **345** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 553 | 879 | 326 | 0 |
+| **Total** | | **3593** | **1277** | **1617** | **340** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T13:10:37+00:00, commit `10014e8592`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T13:33:58+00:00, commit `f7426dbd30`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -128,24 +128,24 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 7. 7 × USAGE/clause non pris en charge: DEPENDING
 8. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 9. 7 × USAGE/clause non pris en charge: IS
-10. 6 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc)
+10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 345 sources, 345 au premier diagnostic identique à la mesure, 187 à inventaire complet, 213 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 340 sources, 340 au premier diagnostic identique à la mesure, 184 à inventaire complet, 210 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1 | CALL BY VALUE : ABI hors des routines système d'octets non prise en charge | 6 | 6 | 6 | 7 |
-| 2 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 5 | 11 | 6 | 9 |
-| 3 | USAGE/clause non pris en charge: DEPENDING | 4 | 15 | 7 | 7 |
-| 4 | NO attendu | 4 | 19 | 6 | 6 |
-| 5 | CALL USING requiert au moins un argument | 4 | 23 | 3 | 5 |
-| 6 | SCREEN SECTION non prise en charge à cet endroit | 3 | 26 | 36 | 38 |
-| 7 | CALL RETURNING/GIVING non pris en charge | 3 | 29 | 3 | 4 |
-| 8 | USAGE/clause non pris en charge: IS | 2 | 31 | 7 | 7 |
-| 9 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 33 | 1 | 5 |
-| 10 | donnée subordonnée sans groupe parent | 2 | 35 | 0 | 7 |
-| 11 | 78 VALUE LENGTH OF non pris en charge | 2 | 37 | 3 | 4 |
-| 12 | UNSTRING d'un littéral non pris en charge | 2 | 39 | 2 | 2 |
+| 2 | USAGE/clause non pris en charge: DEPENDING | 4 | 10 | 7 | 7 |
+| 3 | NO attendu | 4 | 14 | 6 | 6 |
+| 4 | CALL RETURNING/GIVING non pris en charge | 4 | 18 | 4 | 5 |
+| 5 | CALL USING requiert au moins un argument | 4 | 22 | 4 | 5 |
+| 6 | SCREEN SECTION non prise en charge à cet endroit | 3 | 25 | 36 | 38 |
+| 7 | USAGE/clause non pris en charge: IS | 2 | 27 | 7 | 7 |
+| 8 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 29 | 1 | 5 |
+| 9 | donnée subordonnée sans groupe parent | 2 | 31 | 0 | 7 |
+| 10 | 78 VALUE LENGTH OF non pris en charge | 2 | 33 | 3 | 4 |
+| 11 | UNSTRING d'un littéral non pris en charge | 2 | 35 | 2 | 2 |
+| 12 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 37 | 2 | 2 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -158,9 +158,9 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 12 × clause SELECT non prise en charge (1er : 12, seul : 0)
 - 11 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire (1er : 7, seul : 1)
 - 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
-- 9 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc) (1er : 6, seul : 5)
 - 9 × . attendu (1er : 8, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
+- 8 × expression attendue (1er : 1, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -695,3 +695,16 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   natif. Total inchangé **1272/3593**, écart **345** ; l'inventaire montre
   désormais run_file-040/041 bloquées par le seul CALL USING littéral et
   run_misc-122/123 par le seul FLOAT-DECIMAL.
+- 2026-10-31 — Routines de fichiers d'octets et de répertoires (fileio.c)
+  et littéraux numériques en argument de CALL : le temporaire `cob_content`
+  de codegen.c (int natif de 4 octets si `cb_fits_int`, sinon les 8 octets de
+  `cb_get_[u_]long_long`, sans le point décimal), BY REFERENCE comme BY
+  CONTENT ; `CBL_OPEN/CREATE/READ/WRITE/CLOSE/FLUSH/DELETE/COPY/RENAME_FILE`,
+  `CBL_CHECK_FILE_EXIST`, `CBL_GET_CURRENT_DIR`, `CBL_CREATE/CHANGE/DELETE_DIR`,
+  `C$MAKEDIR`, `C$COPY`, `C$FILEINFO`, `C$DELETE` avec de vrais descripteurs,
+  `cob_str_from_fld`, `cob_chk_file_mapping`, `errno_cob_sts` et les
+  avertissements de libcob ; `C$CHDIR` et un argument absent (pas de
+  `COB_PARAM_CHECK`) sont des arrêts nommés. Cinq sources débloquées, toutes
+  identiques au natif (run_file-038, -040, -041, -042/prog2,
+  run_extensions-058). Testsuite **548 → 553/1135**, total **1272 →
+  1277/3593**, écart **345 → 340**. NIST statique 451/458.

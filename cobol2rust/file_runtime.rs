@@ -2743,3 +2743,294 @@ impl Report {
         lines[index].flags & kind != 0 || Self::find(lines, lines[index].child, kind) || Self::find(lines, lines[index].sister, kind)
     }
 }
+
+/// fileio.c library routines on byte-stream files and directories
+/// (CBL_OPEN_FILE ... C$DELETE). Their parameters are data addresses; a
+/// numeric literal comes as its cob_content int or u64. COB_PARAM_CHECK is
+/// not defined in GnuCOBOL 3.2: a missing argument is a NULL address.
+pub mod routines {
+    use crate::runtime::{fail, Value};
+    use crate::storage_runtime::{parameter_bytes, store_parameter};
+    use std::ffi::{c_char, c_int, c_long, c_void, CString};
+
+    extern "C" {
+        fn open(path: *const c_char, flags: c_int, ...) -> c_int;
+        fn read(fd: c_int, buf: *mut c_void, count: usize) -> isize;
+        fn write(fd: c_int, buf: *const c_void, count: usize) -> isize;
+        fn lseek(fd: c_int, offset: i64, whence: c_int) -> i64;
+        fn close(fd: c_int) -> c_int;
+        fn fdatasync(fd: c_int) -> c_int;
+        fn localtime_r(time: *const c_long, result: *mut c_int) -> *mut c_int;
+    }
+    const O_RDONLY: c_int = 0;
+    const O_WRONLY: c_int = 1;
+    const O_RDWR: c_int = 2;
+    const O_CREAT: c_int = 0o100;
+    const O_TRUNC: c_int = 0o1000;
+    const COB_FILE_MODE: c_int = 0o644;
+
+    pub fn known(name: &str) -> bool {
+        matches!(name, "CBL_OPEN_FILE" | "CBL_CREATE_FILE" | "CBL_READ_FILE" | "CBL_WRITE_FILE" | "CBL_CLOSE_FILE"
+            | "CBL_FLUSH_FILE" | "CBL_DELETE_FILE" | "CBL_COPY_FILE" | "CBL_CHECK_FILE_EXIST" | "CBL_RENAME_FILE"
+            | "CBL_GET_CURRENT_DIR" | "CBL_CREATE_DIR" | "CBL_CHANGE_DIR" | "CBL_DELETE_DIR" | "C$MAKEDIR"
+            | "C$CHDIR" | "C$COPY" | "C$FILEINFO" | "C$DELETE")
+    }
+
+    fn unsupported(name: &str, reason: &str) -> ! {
+        fail(&format!("routine système {name}: {reason}"))
+    }
+
+    /// The address passed as parameter `index`: None for OMITTED.
+    fn data(name: &str, arguments: &[Value], index: usize) -> Option<Vec<u8>> {
+        let Some(argument) = arguments.get(index) else {
+            unsupported(name, "argument absent : adresse indéterminée (pas de COB_PARAM_CHECK)")
+        };
+        parameter_bytes(argument)
+    }
+
+    fn bytes_at(name: &str, arguments: &[Value], index: usize, count: usize) -> Vec<u8> {
+        let bytes = data(name, arguments, index).unwrap_or_else(|| unsupported(name, "lecture d'une adresse NULL (SIGSEGV)"));
+        if bytes.len() < count { unsupported(name, "lecture au-delà du paramètre non modélisée"); }
+        bytes
+    }
+
+    fn store(name: &str, arguments: &[Value], index: usize, offset: usize, bytes: &[u8]) {
+        let Some(argument) = arguments.get(index) else { unsupported(name, "argument absent") };
+        store_parameter(argument, offset, bytes);
+    }
+
+    fn int(name: &str, arguments: &[Value], index: usize) -> i32 {
+        if let Some(Value::Num(..)) = arguments.get(index) {
+            // An int passed BY VALUE.
+            return arguments[index].integer("C int BY VALUE") as i32;
+        }
+        i32::from_le_bytes(bytes_at(name, arguments, index, 4)[..4].try_into().unwrap())
+    }
+
+    /// cob_str_from_fld: trailing spaces and NULs dropped, every quote removed.
+    fn str_from_fld(field: &[u8]) -> Vec<u8> {
+        let mut end = field.len();
+        while end > 1 && matches!(field[end - 1], b' ' | 0) { end -= 1; }
+        if end == 0 || matches!(field[end - 1], b' ' | 0) { return Vec::new(); }
+        field[..end].iter().copied().filter(|&b| b != b'"').collect()
+    }
+
+    /// cob_str_from_fld of parameter `index`, then cob_chk_file_mapping.
+    fn file_name(name: &str, arguments: &[Value], index: usize, mapping: bool) -> Option<CString> {
+        let field = data(name, arguments, index)?;
+        let mut text = str_from_fld(&field);
+        if text.len() > 4095 { unsupported(name, "nom de fichier au-delà de COB_FILE_MAX"); }
+        if mapping && !text.is_empty() { text = super::file_mapping(&text); }
+        Some(CString::new(text).unwrap_or_else(|_| unsupported(name, "nom de fichier avec NUL interne")))
+    }
+
+    fn os_path(path: &CString) -> &std::ffi::OsStr {
+        use std::os::unix::ffi::OsStrExt;
+        std::ffi::OsStr::from_bytes(path.as_bytes())
+    }
+
+    fn errno() -> i32 { std::io::Error::last_os_error().raw_os_error().unwrap_or(0) }
+
+    /// errno_cob_sts.
+    fn errno_status(default: i32) -> i32 {
+        match errno() {
+            28 | 122 => 34,       // ENOSPC, EDQUOT
+            1 | 13 | 21 => 37,    // EPERM, EACCES, EISDIR
+            2 => 35,              // ENOENT
+            _ => default,
+        }
+    }
+
+    fn warning(message: String) {
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        eprintln!("libcob: warning: {message}");
+    }
+
+    fn open_cbl_file(name: &str, arguments: &[Value], flags: c_int) -> i32 {
+        let failed = [0xFFu8; 4];
+        let Some(path) = file_name(name, arguments, 0, true) else {
+            store(name, arguments, 4, 0, &failed);
+            return -1;
+        };
+        let access = bytes_at(name, arguments, 1, 1)[0] & 0x3F;
+        let mode = match access {
+            1 => O_RDONLY,
+            2 => O_CREAT | O_TRUNC | O_WRONLY,
+            3 => O_RDWR,
+            _ => {
+                warning(format!("call to CBL_OPEN_FILE with wrong access mode: {access}"));
+                store(name, arguments, 4, 0, &failed);
+                return -1;
+            }
+        };
+        let fd = unsafe { open(path.as_ptr(), flags | mode, COB_FILE_MODE) };
+        if fd == -1 {
+            let status = errno_status(35);
+            store(name, arguments, 4, 0, &failed);
+            return status;
+        }
+        store(name, arguments, 4, 0, &fd.to_le_bytes());
+        0
+    }
+
+    fn file_time(name: &str, path: &CString) -> Option<(u64, [c_int; 6])> {
+        let metadata = std::fs::metadata(os_path(&path)).ok()?;
+        use std::os::unix::fs::MetadataExt;
+        let mtime = metadata.mtime() as c_long;
+        let mut tm = [0 as c_int; 16];
+        if unsafe { localtime_r(&mtime, tm.as_mut_ptr()) }.is_null() { unsupported(name, "localtime impossible"); }
+        // struct tm: sec, min, hour, mday, mon, year.
+        Some((metadata.len(), [tm[0], tm[1], tm[2], tm[3], tm[4], tm[5]]))
+    }
+
+    pub fn call(name: &str, arguments: &[Value], modes: &[&str]) -> Option<i32> {
+        if !known(name) { return None; }
+        if name == "CBL_GET_CURRENT_DIR" && modes.get(..2) != Some(&["VALUE", "VALUE"][..]) {
+            unsupported(name, "flags et longueur requis BY VALUE (int C)");
+        }
+        if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            unsupported(name, "profil Linux x86_64 requis (descripteurs et ABI natifs)");
+        }
+        Some(match name {
+            "CBL_OPEN_FILE" => open_cbl_file(name, arguments, 0),
+            "CBL_CREATE_FILE" => {
+                let lock = bytes_at(name, arguments, 2, 1)[0];
+                if lock != 0 { warning(format!("call to CBL_CREATE_FILE with wrong file_lock: {lock}")); }
+                let device = bytes_at(name, arguments, 3, 1)[0];
+                if device != 0 { warning(format!("call to CBL_CREATE_FILE with wrong file_dev: {device}")); }
+                open_cbl_file(name, arguments, O_CREAT | O_TRUNC)
+            },
+            "CBL_READ_FILE" | "CBL_WRITE_FILE" => {
+                let fd = int(name, arguments, 0);
+                let flags = bytes_at(name, arguments, 3, 1)[0];
+                if name == "CBL_READ_FILE" && flags & 0x80 != 0 {
+                    // fstat (the file position is kept): the size, big-endian.
+                    use std::os::fd::FromRawFd;
+                    let file = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd) });
+                    let Ok(metadata) = file.metadata() else { return Some(-1) };
+                    store(name, arguments, 1, 0, &(metadata.len() as i64).to_be_bytes());
+                    return Some(0);
+                }
+                let offset = i64::from_be_bytes(bytes_at(name, arguments, 1, 8)[..8].try_into().unwrap());
+                let length = i32::from_be_bytes(bytes_at(name, arguments, 2, 4)[..4].try_into().unwrap());
+                if unsafe { lseek(fd, offset, 0) } == -1 { return Some(-1); }
+                let Some(Value::View(buffer)) = arguments.get(4) else { unsupported(name, "tampon absent") };
+                if name == "CBL_READ_FILE" {
+                    if length <= 0 { return Some(0); }
+                    if length as usize > buffer.size { unsupported(name, "lecture au-delà du tampon non modélisée"); }
+                    let mut bytes = vec![0u8; length as usize];
+                    let count = unsafe { read(fd, bytes.as_mut_ptr().cast(), bytes.len()) };
+                    if count < 0 { return Some(-1); }
+                    if count == 0 { return Some(10); }
+                    store(name, arguments, 4, 0, &bytes[..count as usize]);
+                    0
+                } else {
+                    if length < 0 || length as usize > buffer.size { unsupported(name, "écriture au-delà du tampon non modélisée"); }
+                    let bytes = bytes_at(name, arguments, 4, length as usize);
+                    let count = unsafe { write(fd, bytes.as_ptr().cast(), length as usize) };
+                    if count != length as isize { 30 } else { 0 }
+                }
+            },
+            "CBL_CLOSE_FILE" => unsafe { close(int(name, arguments, 0)) },
+            "CBL_FLUSH_FILE" => unsafe { fdatasync(int(name, arguments, 0)) },
+            "CBL_DELETE_FILE" | "C$DELETE" => {
+                if name == "C$DELETE" && arguments.len() < 2 { return Some(128); }
+                let Some(path) = file_name(name, arguments, 0, true) else { return Some(if name == "C$DELETE" { 128 } else { -1 }) };
+                if std::fs::remove_file(os_path(&path)).is_err() { 128 } else { 0 }
+            },
+            "CBL_COPY_FILE" | "C$COPY" => {
+                if name == "C$COPY" && arguments.len() < 3 { return Some(128); }
+                let status = copy_file(name, arguments);
+                if name == "C$COPY" && status < 0 { 128 } else { status }
+            },
+            "CBL_RENAME_FILE" => {
+                let (Some(from), Some(to)) = (file_name(name, arguments, 0, true), file_name(name, arguments, 1, true))
+                    else { return Some(-1) };
+                if std::fs::rename(os_path(&from), os_path(&to)).is_err() { 128 } else { 0 }
+            },
+            "CBL_CHECK_FILE_EXIST" | "C$FILEINFO" => {
+                let info_area = data(name, arguments, 1);
+                let fileinfo = name == "C$FILEINFO";
+                let Some(info_area) = info_area else { return Some(if fileinfo { 128 } else { -1 }) };
+                let Some(path) = file_name(name, arguments, 0, !fileinfo) else { return Some(if fileinfo { 128 } else { -1 }) };
+                if info_area.len() < 16 {
+                    eprintln!("libcob: error: '{name}' - File detail area is too short");
+                    return Some(if fileinfo { 128 } else { -1 });
+                }
+                let Some((size, [sec, min, hour, day, month, year])) = file_time(name, &path) else { return Some(35) };
+                let (year, month, second) = (year + 1900, month + 1, if sec >= 60 { 59 } else { sec });
+                let mut info = size.to_be_bytes().to_vec();
+                if fileinfo {
+                    info.extend(((year * 10000 + month * 100 + day) as u32).to_be_bytes());
+                    info.extend(((hour * 1_000_000 + min * 10000 + second * 100) as u32).to_be_bytes());
+                } else {
+                    info.extend([day as u8, month as u8]);
+                    info.extend((year as i16).to_be_bytes());
+                    info.extend([hour as u8, min as u8, second as u8, 0]);
+                }
+                store(name, arguments, 1, 0, &info);
+                0
+            },
+            "CBL_GET_CURRENT_DIR" => {
+                let flags = int(name, arguments, 0);
+                let length = int(name, arguments, 1);
+                if length < 1 { return Some(128); }
+                if flags != 0 { return Some(129); }
+                let Some(Value::View(area)) = arguments.get(2) else { unsupported(name, "zone absente") };
+                if length as usize > area.size { unsupported(name, "écriture au-delà du paramètre non modélisée"); }
+                store(name, arguments, 2, 0, &vec![b' '; length as usize]);
+                let Ok(directory) = std::env::current_dir() else { return Some(128) };
+                let directory = directory.into_os_string().into_encoded_bytes();
+                let quoted = directory.contains(&b' ');
+                if directory.len() + if quoted { 2 } else { 0 } > length as usize { return Some(128); }
+                let text = if quoted { [&b"\""[..], &directory, b"\""].concat() } else { directory };
+                store(name, arguments, 2, 0, &text);
+                0
+            },
+            "CBL_CREATE_DIR" | "CBL_CHANGE_DIR" | "CBL_DELETE_DIR" | "C$MAKEDIR" | "C$CHDIR" => {
+                let Some(path) = file_name(name, arguments, 0, false) else {
+                    return Some(if name.starts_with("C$") { 128 } else { -1 });
+                };
+                let os = os_path(&path);
+                let ok = match name {
+                    "CBL_CREATE_DIR" | "C$MAKEDIR" => {
+                        use std::os::unix::fs::DirBuilderExt;
+                        std::fs::DirBuilder::new().mode(0o770).create(os).is_ok()
+                    },
+                    "CBL_DELETE_DIR" => std::fs::remove_dir(os).is_ok(),
+                    _ => std::env::set_current_dir(os).is_ok(),
+                };
+                let status = if ok { 0 } else { 128 };
+                if name == "C$CHDIR" {
+                    let Some(Value::View(_)) = arguments.get(1) else { unsupported(name, "statut absent") };
+                    unsupported(name, "cob_set_int du statut non modélisé");
+                }
+                status
+            },
+            _ => unreachable!(),
+        })
+    }
+
+    fn copy_file(name: &str, arguments: &[Value]) -> i32 {
+        let Some(from) = file_name(name, arguments, 0, true) else { return -1 };
+        let Some(to) = file_name(name, arguments, 1, true) else { return -1 };
+        let source = unsafe { open(from.as_ptr(), O_RDONLY, 0) };
+        if source == -1 { return errno_status(35); }
+        let target = unsafe { open(to.as_ptr(), O_CREAT | O_TRUNC | O_WRONLY, COB_FILE_MODE) };
+        if target == -1 {
+            let status = errno_status(35);
+            unsafe { close(source) };
+            return status;
+        }
+        let mut buffer = vec![0u8; 8192];
+        let mut status = 0;
+        loop {
+            let count = unsafe { read(source, buffer.as_mut_ptr().cast(), buffer.len()) };
+            if count <= 0 { break; }
+            if unsafe { write(target, buffer.as_ptr().cast(), count as usize) } != count { status = -1; break; }
+        }
+        unsafe { close(source); close(target); }
+        status
+    }
+}

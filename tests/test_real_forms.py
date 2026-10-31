@@ -50,7 +50,6 @@ class RealFormsFrontendTests(unittest.TestCase):
             "is not defined": program("01 n pic 9.", "stop run\nnext-para. stop run."),
             "invalid PROGRAM-ID": "identification division. program-id. cob_x.\nprocedure division. stop run.",
             "literal length": program("01 n pic 9.", 'display "' + "x" * 8192 + '". stop run.'),
-            "littéral numérique": program("01 n pic 9.", 'call "x" using by content 1. stop run.'),
             "binary field cannot be larger than 18 digits": program("01 n pic 9(19) comp.", "stop run."),
             "cannot be larger than 38 digits": program("01 n pic 9(39).", "stop run."),
         }

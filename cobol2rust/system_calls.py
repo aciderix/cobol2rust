@@ -27,6 +27,16 @@ CATALOG = {
 }
 
 
+# fileio.c byte-stream file and directory routines (file_runtime::routines).
+FILE_ROUTINES = {"CBL_OPEN_FILE", "CBL_CREATE_FILE", "CBL_READ_FILE", "CBL_WRITE_FILE", "CBL_CLOSE_FILE",
+                 "CBL_FLUSH_FILE", "CBL_DELETE_FILE", "CBL_COPY_FILE", "CBL_CHECK_FILE_EXIST", "CBL_RENAME_FILE",
+                 "CBL_GET_CURRENT_DIR", "CBL_CREATE_DIR", "CBL_CHANGE_DIR", "CBL_DELETE_DIR", "C$MAKEDIR",
+                 "C$CHDIR", "C$COPY", "C$FILEINFO", "C$DELETE"}
+# Routines whose C parameters are ints passed BY VALUE.
+VALUE_ROUTINES = {"CBL_GET_CURRENT_DIR"}
+SYSTEM_ROUTINES = set(CATALOG) | FILE_ROUTINES
+
+
 @dataclass(frozen=True)
 class Scalar:
     operand: Expr
