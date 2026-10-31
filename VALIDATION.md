@@ -1,5 +1,29 @@
 # Validation — 30 octobre 2026
 
+## EXTERNAL AS — 31 octobre 2026
+
+- `external_clause` : `EXTERNAL AS littéral` (01/77) ; `cb_to_cname` donne le
+  nom de tout article EXTERNAL (majuscules, `-` et espace en `_`), si bien que
+  `EXT-VAR`, `"ext-var"` et `EXT_VAR` désignent le même article.
+- `cob_external_addr` : l'article est alloué par sa première déclaration ;
+  plus court, `libcob: warning: EXTERNAL item 'X' previously allocated with
+  size N, requested size is M` et le préfixe de l'article est partagé ; plus
+  long, l'erreur `libcob: error: …` (code 1). Le cas spécial `ERRNO` de 4
+  octets (l'`errno` du C) est refusé à la conversion.
+- Preuves : `tests/fixtures/external_as.cob` (deux programmes : littéral en
+  minuscules, collision `other_b`/`other-b`, avertissement de taille)
+  identique au natif, stderr compris ; `tests/test_external_as.py` : quatre
+  tests, dont l'erreur de taille. Suite complète : **514 découverts, 513
+  validés, un PE Windows ignoré**.
+
+Mesure : **1250 → 1255/3593**, testsuite **526 → 531/1135**, écart **367 →
+362**. Quatre sources débloquées identiques avec codes zéro (run_misc-013
+caller/callee, run_misc-014 bigger/callee) ; run_misc-014/smaller s'arrête
+des deux côtés sur l'erreur de taille, mais la pile « Last statement of …
+Started by <chemin> » que libcob ajoute aux erreurs fatales n'est pas
+reproduite. Exécution globale renouvelée : **74/84**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-external-as-20261031.json`).
+
 ## INITIALIZE VALUE et DEFAULT — 30 octobre 2026
 
 - Grammaire de parser.y : `_initialize_filler`, `_initialize_value` (ALL ou

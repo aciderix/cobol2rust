@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-30T23:16:25+00:00",
- "git_head": "e1103066ba5d7079e2809fe3b1a024734c325824",
- "implementation_sha256": "0a35a9cf8cbf2f231267b1ba76dd51b556d6421ffb987d4fcd7b849c0bdd8186",
+ "measured_at": "2026-10-31T06:41:42+00:00",
+ "git_head": "aa8263e7ae60a9cdd67bff340f3af0ab12bf78ca",
+ "implementation_sha256": "f1b69e495a2f61b843f9ddcffd590c94a9bb3371aed58efd2dc57c1aa694f243",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1250,
+  "accepted": 1255,
   "cobc_accepted": 1617,
-  "gap": 367,
+  "gap": 362,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 526,
+   "accepted": 531,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 353,
+   "gap": 348,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -638,7 +638,7 @@
     ],
     [
      "run_extensions-073/prog.cob",
-     "EXTERNAL AS non pris en charge"
+     "USAGE POINTER de groupe non pris en charge"
     ],
     [
      "run_extensions-074/prog.cob",
@@ -1317,26 +1317,6 @@
      "USAGE/clause non pris en charge: is"
     ],
     [
-     "run_misc-013/callee.cob",
-     "EXTERNAL AS non pris en charge"
-    ],
-    [
-     "run_misc-013/caller.cob",
-     "EXTERNAL AS non pris en charge"
-    ],
-    [
-     "run_misc-014/bigger.cob",
-     "EXTERNAL AS non pris en charge"
-    ],
-    [
-     "run_misc-014/callee.cob",
-     "EXTERNAL AS non pris en charge"
-    ],
-    [
-     "run_misc-014/smaller.cob",
-     "EXTERNAL AS non pris en charge"
-    ],
-    [
      "run_misc-020/prog.cob",
      "CALL dump: programme non converti ou routine système non pris en charge"
     ],
@@ -1947,20 +1927,20 @@
      6
     ],
     [
-     "EXTERNAL AS non pris en charge",
+     "NO attendu",
      6
     ],
     [
-     "NO attendu",
+     "COLUMN PLUS non pris en charge",
      6
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-30T23:16:25+00:00",
-  "git_head": "e1103066ba5d7079e2809fe3b1a024734c325824",
-  "implementation_sha256": "0a35a9cf8cbf2f231267b1ba76dd51b556d6421ffb987d4fcd7b849c0bdd8186",
+  "measured_at": "2026-10-31T06:41:42+00:00",
+  "git_head": "aa8263e7ae60a9cdd67bff340f3af0ab12bf78ca",
+  "implementation_sha256": "f1b69e495a2f61b843f9ddcffd590c94a9bb3371aed58efd2dc57c1aa694f243",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

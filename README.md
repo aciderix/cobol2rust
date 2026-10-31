@@ -353,8 +353,12 @@ directement et, s'ils sont `COMMON`, par les autres programmes qu'il contient ;
 tout autre CALL de leur nom est refusé (cobc le résoudrait dynamiquement sans
 les trouver). Un article 01/77 `GLOBAL` d'un programme contenant est vu par ses
 descendants (un nom local le masque) et partage leur stockage ; un article
-`EXTERNAL` est un bloc de l'unité d'exécution désigné par son nom, comme
-`cob_external_addr` (alloué à zéro, sans VALUE, même taille exigée).
+`EXTERNAL [AS littéral]` est un bloc de l'unité d'exécution désigné par son
+nom C (`cb_to_cname` du nom de donnée ou du littéral : majuscules, `-` et
+espace en `_`), comme `cob_external_addr` : alloué à zéro par sa première
+déclaration, sans VALUE ; une déclaration plus courte est un avertissement
+libcob, une plus longue l'erreur `EXTERNAL item … previously allocated`.
+Le nom `ERRNO` de 4 octets (l'`errno` du C) est refusé.
 
 Un FD `EXTERNAL` partage le fichier et sa zone d'enregistrement
 (`<fichier>_Record`) dans l'unité d'exécution, comme `cob_file_external_addr` :
@@ -378,7 +382,7 @@ sa procédure, FD
 EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
 GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
 GLOBAL, plusieurs programmes dans un source appelé,
-EXTERNAL AS et VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
+VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
 BASED, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
 

@@ -585,6 +585,7 @@ def declaration(p, file_record=False):
     synchronized = False
     search_keys = []
     external = is_global = based = False
+    external_as = None
     any_length = False
     if p.accept("REDEFINES"):
         target = p.name()
@@ -711,8 +712,11 @@ def declaration(p, file_record=False):
                     p.error("EXTERNAL not allowed here")
                 if redefines:
                     p.error("EXTERNAL and REDEFINES are mutually exclusive")
-                if p.at("AS"):
-                    p.error("EXTERNAL AS non pris en charge")
+                if p.accept("AS"):
+                    # external_clause: AS literal names the item for the run unit.
+                    if not p.t.string:
+                        p.error("literal expected after EXTERNAL AS")
+                    external_as = p.take().text
                 external = True
             else:
                 is_global = True
@@ -955,6 +959,8 @@ def declaration(p, file_record=False):
     descriptor.sign_separate = bool(sign_clause and sign_clause[1])
     descriptor.justified = justified
     descriptor.external, descriptor.is_global = external, is_global
+    # cb_to_cname: the name cob_external_addr looks up.
+    descriptor.external_name = (external_as or label).upper().replace("-", "_").replace(" ", "_") if external else None
     descriptor.based = based
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size

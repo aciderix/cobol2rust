@@ -349,7 +349,10 @@ class Emitter:
                 # cob_external_addr ("<file>_Record", record_max).
                 return field.name, f"{field.fd_file.replace('-', '_')}_Record", False
         if field.external:
-            return field.name, field.label, False
+            if getattr(field, "external_name", None) == "ERRNO" and field.size == 4:
+                # cob_external_addr: the C library's errno.
+                raise CobolError(f"EXTERNAL {field.label} : errno de la bibliothèque C non pris en charge")
+            return field.name, getattr(field, "external_name", None) or field.label, False
         owner = getattr(field, "global_owner", None)
         if owner:
             return field.name, f"GLOBAL {owner} {field.label}", False

@@ -17,8 +17,8 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1250/3593 sources acceptées** (cobc 1617,
-écart 367, à examiner 0) ; testsuite GnuCOBOL 526/1135, six corpus d'origine
+Mesure des corpus réels : **1255/3593 sources acceptées** (cobc 1617,
+écart 362, à examiner 0) ; testsuite GnuCOBOL 531/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
 deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
@@ -45,7 +45,18 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : INITIALIZE VALUE et DEFAULT.
+Dernière étape (31 octobre) : EXTERNAL AS. `data_parser.declaration` lit
+`AS littéral` et pose `external_name` (`cb_to_cname`) ; `Emitter.shared_block`
+l'utilise et refuse `ERRNO` de 4 octets ; `storage_runtime::external` porte
+`cob_external_addr` (avertissement, erreur fatale). Acceptation **1250 →
+1255/3593**, écart **367 → 362**. La pile « Last statement of … Started by »
+de libcob après une erreur fatale n'est toujours pas reproduite (chemin de
+l'exécutable) : run_misc-014/smaller et run_misc-040/callee2 n'en diffèrent
+que par elle. NIST statique **451/458**
+(`build/coverage-nist-external-as-20261031.json`). Suite complète : **514
+découverts, 513 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : INITIALIZE VALUE et DEFAULT.
 `Stmt("initialize")` porte `(cibles, with_filler, replacing, value, default)`.
 `Emitter.initialize_statement` porte `deduce_initialize_type`,
 `output_initialize_one` et `output_initialize_compound` pour les formes avec

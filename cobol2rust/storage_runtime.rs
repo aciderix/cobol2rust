@@ -22,13 +22,15 @@ pub fn owned_block(name: &str, size: usize) -> Memory {
 /// cob_external_addr: the run unit's storage of an EXTERNAL item, created
 /// zero-filled by its first program; a different size is not modelled
 /// (libcob stops on a larger one and warns on a smaller one).
+/// cob_external_addr: the item allocated by its first declaration; a larger
+/// one is a runtime error, a smaller one a warning.
 pub fn external(name: &str, size: usize) -> Memory {
-    EXTERNALS.with(|externals| {
-        let mut externals = externals.borrow_mut();
-        let block = externals.entry(name.to_string()).or_insert_with(|| memory(size)).clone();
-        if block.borrow().len() != size { crate::runtime::fail(&format!("EXTERNAL item {name} declared with another size")); }
-        block
-    })
+    let block = EXTERNALS.with(|externals| externals.borrow_mut().entry(name.to_string()).or_insert_with(|| memory(size)).clone());
+    let stored = block.borrow().len();
+    let message = format!("EXTERNAL item '{name}' previously allocated with size {stored}, requested size is {size}");
+    if size > stored { crate::runtime::fatal_error(message.as_bytes()); }
+    if size < stored { eprintln!("libcob: warning: {message}"); }
+    block
 }
 
 #[derive(Clone, Copy, Debug)]

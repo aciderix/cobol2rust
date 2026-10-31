@@ -1037,3 +1037,14 @@ initialisé dans sa première occurrence, recopiée sur les autres
 526/1135**, écart **372 → 367** ; les cinq sources débloquées s'exécutent à
 l'identique avec des codes zéro. Exécution globale **74/84**, inchangée ;
 NIST statique **451/458**. Fixture `initialize_value.cob` identique au natif.
+
+## Progression : EXTERNAL AS — 31 octobre 2026
+
+`EXTERNAL [AS littéral]` désigne le bloc de l'unité d'exécution par le nom C de
+`cb_to_cname` ; `cob_external_addr` est porté (première déclaration,
+avertissement pour une plus courte, erreur pour une plus longue). Acceptation
+**1250 → 1255/3593**, testsuite **526 → 531/1135**, écart **367 → 362** ;
+quatre des cinq sources débloquées s'exécutent à l'identique avec des codes
+zéro, la cinquième s'arrête des deux côtés sur l'erreur de taille. Exécution
+globale **74/84**, inchangée ; NIST statique **451/458**. Fixture
+`external_as.cob` identique au natif.
