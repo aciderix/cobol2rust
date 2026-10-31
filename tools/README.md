@@ -68,7 +68,7 @@ son propre processus, et le rapport garde l'ordre des entrées.
 | `python3 tools/run_tests.py` | suite Python, un processus par module, plus longs d'abord (`build/test-durations.json`) | ~3 min |
 | `python3 tools/real_corpora.py --cobc --execute --record` | boussole : 3593 sources, cobc, exécution comparée | ~3,5 min |
 | `python3 tools/coverage.py … --report …` | NIST statique (451/458) | ~10 s |
-| `python3 tools/nist_verify.py --accepted-from …` | NIST complet | voir VALIDATION.md |
+| `python3 tools/nist_verify.py --accepted-from …` | NIST complet : 427 programmes | ~6 min (1 h 15 avec `-j 1`) |
 
 Trois garanties rendent ce parallélisme sûr :
 

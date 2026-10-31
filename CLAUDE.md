@@ -39,7 +39,7 @@ python3 tools/coverage.py .tools/nist-ccvs85/extracted --format fixed --include-
   --report build/coverage-nist.json             # non-régression : 451/458
 ```
 
-Vérification NIST complète (environ 1 h 15) : dernière section de
+Vérification NIST complète (environ 6 min en parallèle sur 4 CPU, 1 h 15 avec `-j 1`) : dernière section de
 VALIDATION.md, avec `CARGO_INCREMENTAL=0` (sinon plus de 20 Go de cache).
 Lancer les commandes longues en tâche de fond de l'outil, jamais avec `&` :
 un processus détaché ignore SIGINT et `test_runtime_registers` échoue.

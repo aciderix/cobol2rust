@@ -607,4 +607,5 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   comparée identique programme par programme, NIST statique identique
   (451/458), NIST ciblé 20/20 en 16 s. Durées : mesure complète avec
   exécution **~8 min 30 → 202 s**, suite **480 s → 162 s**, NIST statique
-  ~60 s → 9 s. Total inchangé : **1262/3593**, écart **355**.
+  ~60 s → 9 s, NIST complet **1 h 15 → 375 s** (427/427, 9610 PASS,
+  0 FAIL). Total inchangé : **1262/3593**, écart **355**.

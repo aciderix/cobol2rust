@@ -19,6 +19,9 @@ change. Preuves d'identité :
 - NIST ciblé (20 programmes à OPEN multiple) avec `--jobs` : **20/20
   conformes**, 124 PASS, 0 FAIL, 1 INSPECT, en 16 s
   (`build/nist-verify-pipeline.json`).
+- NIST complet avec `--jobs` : **427/427 conformes, 9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT**, comme la référence, en **375 s** au lieu
+  d'environ 1 h 15 (`build/nist-verify-pipeline-full.json`).
 - Suite Python avec `tools/run_tests.py` (4 processus) : **525 tests en
   162 s** (somme des modules 603 s), un test PE Windows ignoré ; six
   nouveaux tests dans `tests/test_pipeline.py` (cache d'analyse, portée des
