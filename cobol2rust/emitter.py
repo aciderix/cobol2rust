@@ -667,7 +667,7 @@ class Emitter:
             literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
             return f"Value::text({quoted(literal)})"
         if (e.op == "var" and e.args[0].start is None
-                and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display"}):
+                and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display", "Float", "Double"}):
             # cob_print_realbin reads the stored integer of the item
             # itself; an invalid DISPLAY item is shown as it is stored.
             return f"{self.reference(e.args[0])}.clone()"
@@ -823,6 +823,19 @@ class Emitter:
         cb_check_num_cond, cb_build_optim_cond, cob_numeric_cmp): they agree
         on valid data but read invalid DISPLAY data as a decimal or as an
         integer."""
+        def zero_adjusted(e):
+            return e.op in {"+", "-"} and e.args[1].op == "number" and not e.args[1].figurative_zero \
+                and e.args[1].args[0].strip("0") == ""
+
+        def floats(e):
+            if e.op == "var":
+                return self.program.fields[e.args[0].name].usage in {"COMP-1", "COMP-2"}
+            return any(floats(a) for a in e.args if isinstance(a, Expr))
+        if (any(zero_adjusted(e) for e in (left, right)) and (floats(left) or floats(right))):
+            # cb_build_binary_op folds x + 0 / x - 0 unless the previous
+            # binary operation was a relation (static rel_bin_op): the
+            # comparison then is cob_cmp_float or cob_decimal_cmp.
+            raise CobolError("x + 0 ou x - 0 comparé à un flottant : pliage de cobc dépendant de rel_bin_op non modélisé")
         def field(e):
             if e.op == "var" and e.args[0].start is None:
                 f = self.program.fields[e.args[0].name]
@@ -879,6 +892,10 @@ class Emitter:
                 if not lf.sign_leading and not lf.sign_separate and fits_long_long(left, lf):
                     return compare(True, True)  # cob_cmp_numdisp
                 return compare(False, True)
+        if any(f is not None and f.usage in {"COMP-1", "COMP-2"} for f in (lf, rf)):
+            # cob_numeric_cmp -> cob_cmp_float: both sides as doubles.
+            return (f"runtime::float::order(({self.expression(left)}).float_operand(), "
+                    f"({self.expression(right)}).float_operand())")
         shapes = shape(left, lf), shape(right, rf)
         integer = (None not in shapes and shapes[0][1] == shapes[1][1]
                    and shapes[0][0] < 19 and shapes[1][0] < 19)
@@ -926,6 +943,8 @@ class Emitter:
             descriptor = self.program.fields[ref.name]
             if descriptor.usage == "INDEX":
                 raise CobolError("comparaison mixte d'index non prise en charge")
+            if descriptor.usage in {"COMP-1", "COMP-2"}:
+                raise CobolError(f"comparaison alphanumérique d'un article {descriptor.usage} non prise en charge")
             # cob_cmp: cob_cmp_alnum of the item's digits (COB_FIELD_DATA, an
             # overpunched sign removed) with the literal, unless
             # compare_field_literal folded the condition (folded_comparison).
@@ -967,6 +986,16 @@ class Emitter:
             destination = "text" if ref.start is not None else field.kind
             if ref.start is None and self.is_alphabetic(field) and source_kind in {"number", "edited"}:
                 raise CobolError("MOVE numérique vers alphabétique (PIC A) invalide, comme pour GnuCOBOL")
+            floats = {"COMP-1", "COMP-2"}
+            source_float = expr.op == "var" and self.program.fields[expr.args[0].name].usage in floats
+            if source_float and destination == "text" and not field.children:
+                raise CobolError("MOVE d'un flottant vers un alphanumérique invalide, comme pour GnuCOBOL")
+            if (destination == "number" and field.usage in floats and source_kind == "text"
+                    and not (expr.op == "var" and self.program.fields[expr.args[0].name].children)
+                    and not (expr.op == "all" and expr.memset) and not expr.figurative_zero):
+                # cob_move of alphanumeric data to a float reads its bytes as
+                # digits ("12  " gives 1200): not modelled.
+                raise CobolError("MOVE alphanumérique vers un flottant non pris en charge")
             if move and self.move_copy(expr, ref):
                 conversions[-1] = "copy"
                 continue
@@ -2321,6 +2350,8 @@ class Emitter:
             return "Register" if getattr(f, "register", False) else "Native"
         if f.usage == "COMP-6":
             return "PackedNoSign"
+        if f.usage in {"COMP-1", "COMP-2"}:
+            return "Float" if f.usage == "COMP-1" else "Double"
         return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
 
     def storage_kind(self, f):

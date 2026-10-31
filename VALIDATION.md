@@ -1,5 +1,30 @@
 # Validation — 30 octobre 2026
 
+## Virgule flottante binaire — 31 octobre 2026
+
+- Conversions validées hors COBOL : `float::to_f64` (troncature vers zéro) et
+  `float::from_f64` (décimal minimal exact) face à un oracle exact Python
+  (40 000 cas, 0 écart) ; `float::display` face à `%.8G`/`%.16G` (120 028 cas,
+  0 écart) ; arrondi de `mpf_get_str` à 96 chiffres vérifié sur libgmp par
+  ctypes (14 594 entiers, au plus près ; les fractions divergent selon
+  l'approximation de GMP : arrêt nommé).
+- Sondes natives (VALUE, MOVE vers DISPLAY/édité/COMP-3/COMP, arithmétique,
+  comparaisons, dépassement avec et sans SIZE ERROR, -0.0, 2^24 + 1,
+  INITIALIZE, HIGH-VALUE, MOVE de groupe) puis fixture
+  `tests/fixtures/float_binary.cob` identique au natif, dont les sept règles
+  de comparaison (tolérance, x * 1 plié, x * 2 décimal, littéral entier
+  exact, 6.0 avec tolérance, champ entier à droite exact, à gauche avec
+  tolérance).
+- Sources débloquées identiques au natif : run_fundamental-013, -067, -068,
+  -096, run_misc-060, -168, -169 ; run_misc-167 identique jusqu'à l'arrêt
+  nommé (dénormaux, ligne 127). NUMVAL-F/TEST-NUMVAL/TEST-NUMVAL-F de `1 + 2`
+  (plié en 3) identiques au natif ; TEST-NUMVAL-C(1 + 2) refusé comme cobc.
+- Mesure : **1264 → 1272/3593**, écart **353 → 345**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427, 9610 PASS, 0 FAIL** (`build/nist-verify-float.json`) ;
+  suite **542 tests, 0 échec, un PE Windows ignoré** ;
+  `tests/test_float_binary.py` : neuf tests.
+
 ## Littéraux B et H — 31 octobre 2026
 
 - `scan_b` / `scan_h` : B"…" et H"…" donnent un littéral numérique ; cinq

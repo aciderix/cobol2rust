@@ -25,6 +25,47 @@ class Token:
 
 
 @dataclass(frozen=True)
+class FloatLiteralToken(Token):
+    """A floating-point literal (scan_floating_numeric): its text is the
+    exact value with cobc's digits and scale, a negative scale written as
+    trailing zeros."""
+
+
+def floating_literal(text: str, line: int, decimal_comma: bool) -> str:
+    """scan_floating_numeric: the value of [sign]int.decE[sign]exp."""
+    point = "," if decimal_comma else "."
+    significand, exponent_text = re.split("[Ee]", text, maxsplit=1)
+    sign = significand[0] if significand[:1] in {"+", "-"} else ""
+    integer, decimals = significand.lstrip("+-").split(point)
+    exponent_sign = exponent_text[0] if exponent_text[:1] in {"+", "-"} else ""
+    exponent_digits = exponent_text.lstrip("+-")
+    fail = lambda message: CobolError(f"ligne {line}: invalid literal: '{text}' ({message})")
+    if len(integer) + len(decimals) > 36:
+        raise fail("significand has more than 36 digits")
+    if point in exponent_digits:
+        raise fail("exponent has decimal point")
+    if len(exponent_digits) > 4:
+        raise fail("exponent has more than 4 digits")
+    exponent = int(exponent_digits) * (-1 if exponent_sign == "-" else 1)
+    if not -6143 <= exponent <= 6144:
+        raise fail("exponent not between -6143 and 6144")
+    if not (integer + decimals).strip("0"):
+        if sign == "-":
+            raise fail("significand of 0 must be positive")
+        if exponent != 0:
+            raise fail("exponent of 0 must be 0")
+        if exponent_sign == "-":
+            raise fail("exponent of 0 must be positive")
+    digits, scale = integer + decimals, len(decimals) - exponent
+    if scale <= 0:
+        value = (digits + "0" * -scale).lstrip("0") or "0"
+    else:
+        digits = digits.rjust(scale, "0")
+        value = (digits[:-scale].lstrip("0") or "0") + "." + digits[-scale:]
+    return sign + value
+
+
+@dataclass(frozen=True)
 class ConstantToken(Token):
     """The value of a level 78 constant where its name was used (scanner.l)."""
     constant: str = field(default="", compare=False)
@@ -487,6 +528,13 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             if c == "_":
                 # scanner.l: a word cannot begin with an underscore.
                 raise CobolError(f"ligne {line}: invalid symbol '_' - skipping word")
+            floating = re.match(rf"{'[+-]' if signed else ''}\d*{dp}\d*[Ee][+-]?\d*(?:{dp})?\d+",
+                                source[i:]) if (c.isdigit() or c == dp[-1] or signed) else None
+            if floating and re.match(rf"[+-]?\d*{dp}\d*[Ee]", floating[0]):
+                text = floating_literal(floating[0], line, decimal_comma)
+                tokens.append(FloatLiteralToken(text, line, False, i, i + len(floating[0])))
+                i += len(floating[0])
+                continue
             match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
@@ -682,6 +730,12 @@ class Expr:
     # cb_norm_low): a MOVE to any numeric item is a memset.
     memset: bool = False
     signed_literal: bool = False
+    # A floating-point literal (FloatLiteralToken): valid where only its
+    # value counts; elsewhere cobc shows its digits with a negative scale.
+    floating_literal: bool = False
+    # The data size of a literal folded by cb_build_binary_op (its digits
+    # without the leading zeros of the written form), else None.
+    literal_size: int | None = None
 
 
 @dataclass
@@ -854,6 +908,89 @@ CALL_FIGURATIVES = {
 
 RECOVERY_LIMIT = 40
 RESUMED = object()
+
+
+def numeric_literal(e):
+    """(coefficient, scale, size) of a numeric literal: cobc's data digits
+    (leading zeros included, or those of a folded result) and their scale."""
+    sign = 1
+    if e.op in {"unary+", "unary-"} and e.signed_literal:
+        sign, e = (-1 if e.op == "unary-" else 1), e.args[0]
+    if e.op != "number" or e.figurative_zero:
+        return None   # ZERO is cb_zero, a figurative constant
+    integer, _, decimals = e.args[0].partition(".")
+    size = e.literal_size if e.literal_size is not None else len(integer + decimals)
+    return sign * int(integer + decimals or "0"), len(decimals), size
+
+
+def literal_expr(value, scale):
+    """cb_build_numeric_literal of sprintf ("%lld") at `scale`."""
+    digits = str(abs(value)).rjust(scale + 1, "0")
+    text = digits[:-scale] + "." + digits[-scale:] if scale else digits
+    number = Expr("number", (text,), literal_size=len(str(abs(value))))
+    return Expr("unary-", (number,), signed_literal=True) if value < 0 else number
+
+
+def fold_binary(op, left, right):
+    """cb_build_binary_op with cb_constant_folding (tree.c): two literals
+    whose data are at least as long as their scale are computed in signed 64
+    bits; otherwise, as an ELSE of that branch, x * 1 and x / 1 are x and
+    x * 0 is ZERO. x + 0 / x - 0 also depend on the static rel_bin_op and are
+    left unfolded (the emitter refuses them where that changes a result)."""
+    def fail(reason):
+        raise CobolError(f"pliage constant de cobc non modélisé: {reason}")
+
+    def signed64(value):
+        if not -(1 << 63) <= value < (1 << 63):
+            fail("dépassement entier signé 64 bits")
+        return value
+
+    def quotient(a, b):
+        return (abs(a) // abs(b)) * (-1 if (a < 0) != (b < 0) else 1)
+    x, y = numeric_literal(left), numeric_literal(right)
+    if x is not None and y is not None:
+        if x[2] >= x[1] and y[2] >= y[1]:
+            if abs(x[0]) >= (1 << 63) or abs(y[0]) >= (1 << 63):
+                fail("littéral hors de la plage atoll 64 bits")
+            (xv, xs, _), (yv, ys, _) = x, y
+            scale, result, folded = 0, 0, False
+            if op in {"+", "-"}:
+                while xs < ys:
+                    xv, xs = signed64(xv * 10), xs + 1
+                while ys < xs:
+                    yv, ys = signed64(yv * 10), ys + 1
+                scale, result, folded = xs, signed64(xv + yv if op == "+" else xv - yv), True
+            elif op == "*":
+                scale, result, folded = xs + ys, signed64(xv * yv), True
+            elif op == "/" and yv:
+                while ys > 0:
+                    xv, ys = signed64(xv * 10), ys - 1
+                scale = xs
+                q = signed64(quotient(xv, yv))
+                if xv == q * yv:
+                    result, folded = q, q != 0 or (x[1] == 0 and y[1] == 0)
+            elif op == "**" and xs == 0 and ys == 0 and yv >= 0:
+                if yv == 0 or xv == 1:
+                    result = 1
+                elif xv in {0, -1}:
+                    result = 0 if xv == 0 else (-1 if yv % 2 else 1)
+                else:
+                    if yv > 63:
+                        fail("dépassement entier signé 64 bits")
+                    result = xv
+                    for _ in range(yv - 1):
+                        result = signed64(result * xv)
+                folded = True
+            if folded:
+                while scale > 0 and result != 0 and result % 10 == 0:
+                    result, scale = quotient(result, 10), scale - 1
+                return literal_expr(result, scale)
+    elif y is not None and y[1] == 0:
+        if op in {"*", "/"} and y[0] == 1:
+            return left
+        if op == "*" and y[0] == 0:
+            return literal_expr(0, 0)   # cb_zero_lit
+    return Expr(op, (left, right))
 
 
 class TokenList(list):
@@ -1751,7 +1888,43 @@ class Parser:
             following.siblings = []
             if any(other.entry_name == entry_name for other in program.siblings):
                 raise CobolError(f"PROGRAM-ID dupliqué dans le source: {entry_name}")
+        self.check_floating_literals(program)
         return program
+
+    # Statements in which a floating-point literal only gives its value.
+    FLOATING_LITERAL_STATEMENTS = {"compute", "arithmetic", "if", "evaluate", "loop", "search", "search_all",
+                                   "sequence", "sentence_end"}
+
+    def check_floating_literals(self, program):
+        """cobc keeps a floating-point literal as digits with a possibly
+        negative scale: DISPLAY 1.5E3 shows 00 and MOVE 1.5E3 to an
+        alphanumeric item 15. Only its numeric uses are converted."""
+        def expressions(node, found):
+            if isinstance(node, Expr):
+                if node.floating_literal:
+                    found.append(node)
+                for arg in node.args:
+                    expressions(arg, found)
+            elif isinstance(node, (tuple, list)):
+                for item in node:
+                    expressions(item, found)
+            elif isinstance(node, Stmt):
+                check(node)
+            return found
+
+        def check(stmt):
+            found = expressions(stmt.args, [])
+            if not found or stmt.op in self.FLOATING_LITERAL_STATEMENTS:
+                return
+            if stmt.op == "move" and not expressions(stmt.args[1], []):
+                targets = [ref for ref in stmt.args[1] if isinstance(ref, DataRef)]
+                if targets and all(program.fields[ref.name].kind == "number" for ref in targets):
+                    return
+            raise CobolError(f"ligne {stmt.line}: littéral flottant hors d'un emploi numérique "
+                             f"({stmt.op}) non pris en charge")
+        for block in program.blocks:
+            for stmt in block.body:
+                check(stmt)
 
     def communication_section(self):
         """_communication_section: cobc parses the CD entries but implements
@@ -2988,7 +3161,7 @@ class Parser:
         if t.string:
             left = Expr("text", (t.text,))
         elif re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", t.text):
-            left = Expr("number", (t.text,))
+            left = Expr("number", (t.text,), floating_literal=isinstance(t, FloatLiteralToken))
         elif t.key in {"ZERO", "ZEROS", "ZEROES"}:
             left = Expr("number", ("0",), figurative_zero=True)
         elif t.key in {"SPACE", "SPACES"}:
@@ -3013,7 +3186,9 @@ class Parser:
             left = Expr("unary" + t.key, (self.expr(50),), signed_literal=signed_literal)
         elif re.fullmatch(r"[+-](?:\d+(?:\.\d+)?|\.\d+)", t.text):
             # A signed literal token (see lex): the same as a unary sign.
-            left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],)),), signed_literal=True)
+            left = Expr("unary" + t.text[0], (Expr("number", (t.text[1:],),
+                                                   floating_literal=isinstance(t, FloatLiteralToken)),),
+                        signed_literal=True)
         elif t.key == "(":
             left = self.expr()
             self.expect(")")
@@ -3053,7 +3228,7 @@ class Parser:
                 break
             self.take()
             # exp_factor: exponentiation is right associative.
-            left = Expr(op, (left, self.expr(precedence if op == "**" else precedence + 1)))
+            left = fold_binary(op, left, self.expr(precedence if op == "**" else precedence + 1))
         return left
 
     def pointer_ahead(self):
@@ -3389,7 +3564,14 @@ class Parser:
                         self.error("cannot specify offset and SYSTEM-OFFSET at the same time")
                     system_offset = True
                     break
-                args.append(self.expr())
+                if name.key in {"NUMVAL-C", "TEST-NUMVAL-C"}:
+                    # numvalc_args: expr_x, without arithmetic (and so
+                    # before any constant folding).
+                    args.append(self.expr(primary=True))
+                    if not self.t.string and self.t.key in {"+", "-", "*", "/", "**"}:
+                        self.error(f"syntax error, unexpected {self.t.text}")
+                else:
+                    args.append(self.expr())
                 ahead = self.tokens[self.i + self.at(",")]
                 if name.key == "TRIM" and len(args) == 1 and not ahead.string and ahead.key in {"LEADING", "TRAILING"}:
                     # parser.y trim_args: the direction is a second argument.
@@ -3584,7 +3766,8 @@ class Parser:
                     and re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", following.text):
                 # The scanner reads a sign touching digits as a signed literal.
                 self.take(); self.take()
-                tokens.append(("x", Expr("unary" + k, (Expr("number", (following.text,)),))))
+                tokens.append(("x", Expr("unary" + k, (Expr("number", (following.text,),
+                                                             floating_literal=isinstance(following, FloatLiteralToken)),))))
             elif t.string or (k not in {"+", "-"} and self.operand_start()):
                 tokens.append(("x", self.expr(primary=True)))
             elif k == "IS":

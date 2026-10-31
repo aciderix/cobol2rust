@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T09:50:11+00:00",
- "git_head": "14536d710a599de0aec5e517a068cf334712cc8f",
- "implementation_sha256": "769711a703eeddb5d8754e1e6f1c075495c673b30233353d885a39723171d31b",
+ "measured_at": "2026-10-31T12:39:39+00:00",
+ "git_head": "f2ab700e8064c00028b2d4fd08c8ea049a15fc5a",
+ "implementation_sha256": "1b1d6f711f8f5ca6cec338d4682bc92e99c0b63187ad7d3a8ccaf68f99abe589",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1264,
+  "accepted": 1272,
   "cobc_accepted": 1617,
-  "gap": 353,
+  "gap": 345,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 540,
+   "accepted": 548,
    "internal_errors": 0,
    "blockers": [
     [
@@ -463,6 +463,10 @@
      10
     ],
     [
+     "USAGE/clause non pris en charge: DEPENDING",
+     10
+    ],
+    [
      "USAGE/clause non pris en charge: IS",
      10
     ],
@@ -471,26 +475,22 @@
      10
     ],
     [
-     "USAGE/clause non pris en charge: DEPENDING",
-     8
-    ],
-    [
      "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      7
     ],
     [
-     "USAGE/clause non pris en charge: COMP-1",
-     7
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     6
     ],
     [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
      6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 339,
+   "gap": 331,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -934,7 +934,7 @@
     ],
     [
      "run_functions-091/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-LONG"
+     "FUNCTION SIGN non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -950,11 +950,11 @@
     ],
     [
      "run_fundamental-001/prog.cob",
-     "expression non prise en charge: E0"
+     "expression non prise en charge: BX"
     ],
     [
      "run_fundamental-002/prog.cob",
-     "expression non prise en charge: E0"
+     "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
     [
      "run_fundamental-003/prog.cob",
@@ -962,11 +962,7 @@
     ],
     [
      "run_fundamental-012/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
-     "run_fundamental-013/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-LONG"
+     "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
     [
      "run_fundamental-021/prog.cob",
@@ -1025,14 +1021,6 @@
      "CALL dump: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_fundamental-067/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
-    ],
-    [
-     "run_fundamental-068/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
-    ],
-    [
      "run_fundamental-069/prog.cob",
      "invalid IF directive"
     ],
@@ -1047,10 +1035,6 @@
     [
      "run_fundamental-086/prog.cob",
      "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
-    ],
-    [
-     "run_fundamental-096/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
     ],
     [
      "run_fundamental-097/callee.cob",
@@ -1377,10 +1361,6 @@
      "opérande INSPECT attendu"
     ],
     [
-     "run_misc-060/prog.cob",
-     "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    [
      "run_misc-074/prog.cob",
      "UNSTRING d'un littéral non pris en charge"
     ],
@@ -1434,11 +1414,11 @@
     ],
     [
      "run_misc-122/prog.cob",
-     "USAGE/clause non pris en charge: COMP-1"
+     "USAGE/clause non pris en charge: COMP-N"
     ],
     [
      "run_misc-123/prog.cob",
-     "USAGE/clause non pris en charge: COMP-1"
+     "USAGE/clause non pris en charge: COMP-N"
     ],
     [
      "run_misc-129/prog.cob",
@@ -1487,18 +1467,6 @@
     [
      "run_misc-166/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
-    ],
-    [
-     "run_misc-167/prog.cob",
-     "USAGE/clause non pris en charge: COMP-1"
-    ],
-    [
-     "run_misc-168/prog.cob",
-     "USAGE/clause non pris en charge: COMP-1"
-    ],
-    [
-     "run_misc-169/prog.cob",
-     "USAGE/clause non pris en charge: COMP-2"
     ],
     [
      "run_misc-176/prog.cob",
@@ -1903,10 +1871,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 353,
-  "matching": 353,
-  "complete": 196,
-  "distinct": 223,
+  "sources": 345,
+  "matching": 345,
+  "complete": 187,
+  "distinct": 215,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1975,28 +1943,10 @@
     "alone": 0
    },
    {
-    "diagnostic": "USAGE/clause non pris en charge: COMP-1",
-    "first": 4,
-    "present": 9,
-    "alone": 0
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: COMP-X",
     "first": 5,
     "present": 9,
     "alone": 0
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: FLOAT-LONG",
-    "first": 4,
-    "present": 9,
-    "alone": 1
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: FLOAT-SHORT",
-    "first": 3,
-    "present": 9,
-    "alone": 1
    },
    {
     "diagnostic": "PROCEDURE attendu",
@@ -2026,7 +1976,7 @@
     "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
     "first": 7,
     "present": 7,
-    "alone": 3
+    "alone": 4
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
@@ -2073,12 +2023,6 @@
    {
     "diagnostic": "clé INDEXED composée (SOURCE IS) non prise en charge",
     "first": 5,
-    "present": 5,
-    "alone": 0
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: COMP-2",
-    "first": 1,
     "present": 5,
     "alone": 0
    },
@@ -2155,12 +2099,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "END-PERFORM attendu",
-    "first": 0,
-    "present": 4,
-    "alone": 0
-   },
-   {
     "diagnostic": "IDENTIFICATION DIVISION attendue",
     "first": 3,
     "present": 3,
@@ -2169,6 +2107,12 @@
    {
     "diagnostic": "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge",
     "first": 3,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "littéral flottant hors d'un emploi numérique (display) non pris en charge",
+    "first": 2,
     "present": 3,
     "alone": 0
    },
@@ -2187,12 +2131,6 @@
    {
     "diagnostic": "paragraphe CONFIGURATION non pris en charge",
     "first": 3,
-    "present": 3,
-    "alone": 0
-   },
-   {
-    "diagnostic": "EXIT PERFORM is only valid with inline PERFORM",
-    "first": 0,
     "present": 3,
     "alone": 0
    },
@@ -2281,12 +2219,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "expression non prise en charge: E0",
-    "first": 2,
-    "present": 2,
-    "alone": 1
-   },
-   {
     "diagnostic": "nom ambigu: X; qualifier avec OF/IN si nécessaire",
     "first": 2,
     "present": 2,
@@ -2317,6 +2249,12 @@
     "alone": 0
    },
    {
+    "diagnostic": "END-PERFORM attendu",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
     "diagnostic": "OCCURS DEPENDING ON limité à une table subordonnée",
     "first": 2,
     "present": 2,
@@ -2342,7 +2280,7 @@
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: COMP-N",
-    "first": 0,
+    "first": 2,
     "present": 2,
     "alone": 0
    },
@@ -2786,25 +2724,13 @@
    },
    {
     "diagnostic": "FUNCTION SIGN non prise en charge",
-    "first": 0,
+    "first": 1,
     "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "expression non prise en charge: E-2",
-    "first": 0,
-    "present": 1,
-    "alone": 0
+    "alone": 1
    },
    {
     "diagnostic": "expression non prise en charge: BX",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "TO attendu",
-    "first": 0,
+    "first": 1,
     "present": 1,
     "alone": 0
    },
@@ -2823,18 +2749,6 @@
    {
     "diagnostic": "CALL prog2 depuis prog: programme contenu non visible (non modélisé)",
     "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "groupe vide: GROUP-1.INNER-GROUP",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "groupe vide: GROUP-2.INNER-GROUP",
-    "first": 0,
     "present": 1,
     "alone": 0
    },
@@ -2859,6 +2773,12 @@
    {
     "diagnostic": "zone de données trop grande: T01-ALL.T01-REC",
     "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "EXIT PERFORM is only valid with inline PERFORM",
+    "first": 0,
     "present": 1,
     "alone": 0
    },
@@ -3256,79 +3176,79 @@
     "present": 7
    },
    {
-    "diagnostic": "NO attendu",
+    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
     "unlocked": 4,
     "cumulative": 10,
+    "first": 7,
+    "present": 7
+   },
+   {
+    "diagnostic": "NO attendu",
+    "unlocked": 4,
+    "cumulative": 14,
     "first": 6,
     "present": 6
    },
    {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 13,
+    "cumulative": 17,
     "first": 36,
     "present": 38
    },
    {
-    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
-    "unlocked": 3,
-    "cumulative": 16,
-    "first": 7,
-    "present": 7
-   },
-   {
     "diagnostic": "CALL USING requiert au moins un argument",
     "unlocked": 3,
-    "cumulative": 19,
+    "cumulative": 20,
     "first": 3,
     "present": 5
    },
    {
     "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
     "unlocked": 3,
-    "cumulative": 22,
+    "cumulative": 23,
     "first": 3,
     "present": 9
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: COMP-X",
     "unlocked": 3,
-    "cumulative": 25,
+    "cumulative": 26,
     "first": 5,
     "present": 9
    },
    {
     "diagnostic": "CALL RETURNING/GIVING non pris en charge",
     "unlocked": 3,
-    "cumulative": 28,
+    "cumulative": 29,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 30,
+    "cumulative": 31,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 32,
+    "cumulative": 33,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 34,
+    "cumulative": 35,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 36,
+    "cumulative": 37,
     "first": 3,
     "present": 4
    }
@@ -3857,7 +3777,6 @@
     "source": "run_extensions-097/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: DEPENDING",
-     "USAGE/clause non pris en charge: COMP-1",
      "groupe vide: W-DATA"
     ],
     "complete": false,
@@ -3885,8 +3804,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-099/corr.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING",
-     "USAGE/clause non pris en charge: COMP-1"
+     "USAGE/clause non pris en charge: DEPENDING"
     ],
     "complete": true,
     "matches_measure": true
@@ -3896,7 +3814,6 @@
     "source": "run_extensions-100/nested.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: DEPENDING",
-     "USAGE/clause non pris en charge: COMP-1",
      "groupe vide: W-DATA"
     ],
     "complete": false,
@@ -3907,8 +3824,7 @@
     "source": "run_extensions-101/redefines.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: DEPENDING",
-     "REDEFINES requiert un champ précédent au même niveau",
-     "USAGE/clause non pris en charge: COMP-1"
+     "REDEFINES requiert un champ précédent au même niveau"
     ],
     "complete": true,
     "matches_measure": true
@@ -4512,7 +4428,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_functions-091/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-LONG",
      "FUNCTION SIGN non prise en charge"
     ],
     "complete": true,
@@ -4549,20 +4464,19 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-001/prog.cob",
     "diagnostics": [
-     "expression non prise en charge: E0",
-     "expression non prise en charge: E-2",
-     "expression non prise en charge: BX"
+     "expression non prise en charge: BX",
+     "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-002/prog.cob",
     "diagnostics": [
-     "expression non prise en charge: E0"
+     "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -4578,20 +4492,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-012/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-LONG",
-     "TO attendu"
+     "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-013/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-LONG",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
-    ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -4723,26 +4626,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-067/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-SHORT",
-     "groupe vide: GROUP-1.INNER-GROUP"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-068/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-SHORT",
-     "groupe vide: GROUP-2.INNER-GROUP"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-069/prog.cob",
     "diagnostics": [
      "invalid IF directive"
@@ -4779,15 +4662,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-096/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-097/callee.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: IS"
@@ -4810,10 +4684,6 @@
     "diagnostics": [
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
-     "USAGE/clause non pris en charge: FLOAT-LONG",
-     "USAGE/clause non pris en charge: FLOAT-SHORT",
-     "USAGE/clause non pris en charge: COMP-1",
-     "USAGE/clause non pris en charge: COMP-2",
      "USAGE/clause non pris en charge: COMP-X"
     ],
     "complete": true,
@@ -5666,15 +5536,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-060/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: FLOAT-LONG"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-074/prog.cob",
     "diagnostics": [
      "UNSTRING d'un littéral non pris en charge"
@@ -5797,14 +5658,10 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-122/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-1",
-     "USAGE/clause non pris en charge: COMP-2",
      "USAGE/clause non pris en charge: COMP-N",
      "USAGE/clause non pris en charge: COMP-X",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
-     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
-     "USAGE/clause non pris en charge: FLOAT-LONG",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
     "complete": true,
     "matches_measure": true
@@ -5813,14 +5670,10 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-123/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-1",
-     "USAGE/clause non pris en charge: COMP-2",
      "USAGE/clause non pris en charge: COMP-N",
      "USAGE/clause non pris en charge: COMP-X",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
-     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
-     "USAGE/clause non pris en charge: FLOAT-LONG",
-     "USAGE/clause non pris en charge: FLOAT-SHORT"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
     "complete": true,
     "matches_measure": true
@@ -5941,38 +5794,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-167/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-1",
-     "USAGE/clause non pris en charge: COMP-2"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-168/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-1",
-     "END-PERFORM attendu",
-     "EXIT PERFORM is only valid with inline PERFORM"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-169/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-2",
-     "END-PERFORM attendu",
-     "EXIT PERFORM is only valid with inline PERFORM"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-176/prog.cob",
     "diagnostics": [
      "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
@@ -6017,8 +5838,6 @@
     "source": "run_ml-005/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: COMP-X",
-     "USAGE/clause non pris en charge: FLOAT-SHORT",
-     "USAGE/clause non pris en charge: FLOAT-LONG",
      "instruction non prise en charge: XML",
      "GENERATE requiert un nom de rapport ou de groupe DETAIL"
     ],
@@ -6082,8 +5901,6 @@
     "source": "run_ml-012/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: COMP-X",
-     "USAGE/clause non pris en charge: FLOAT-SHORT",
-     "USAGE/clause non pris en charge: FLOAT-LONG",
      "instruction non prise en charge: JSON",
      "GENERATE requiert un nom de rapport ou de groupe DETAIL"
     ],
@@ -6805,9 +6622,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T09:50:11+00:00",
-  "git_head": "14536d710a599de0aec5e517a068cf334712cc8f",
-  "implementation_sha256": "769711a703eeddb5d8754e1e6f1c075495c673b30233353d885a39723171d31b",
+  "measured_at": "2026-10-31T12:39:39+00:00",
+  "git_head": "f2ab700e8064c00028b2d4fd08c8ea049a15fc5a",
+  "implementation_sha256": "1b1d6f711f8f5ca6cec338d4682bc92e99c0b63187ad7d3a8ccaf68f99abe589",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

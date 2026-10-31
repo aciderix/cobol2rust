@@ -7,6 +7,9 @@
 > L'inventaire de l'écart (table « Chantier » de CAP.md) liste tous les
 > blocages de chaque source refusée, pour viser les chantiers qui débloquent
 > des sources entières ; ses diagnostics suivants sont indicatifs.
+> Virgule flottante binaire (COMP-1/COMP-2) portée depuis libcob, avec arrêts
+> nommés là où GMP ou le système décident (fractions de plus de 96 chiffres,
+> sous-normaux, -0.0) ; FLOAT-DECIMAL et FLOAT-EXTENDED restent refusés.
 
 L'objectif demandé est une **garantie universelle de conversion COBOL vers
 Rust**, couvrant tout le COBOL existant, au-delà du sous-ensemble de la version

@@ -1172,7 +1172,14 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
    Cas de régression : `tests/fixtures/aliasing.cob`.
 3. **Arithmétique décimale.** Coefficients BigInt et échelles explicites,
    sans flottants. La division reproduit le décalage de 38 chiffres GnuCOBOL 3.2.
-   Ne pas simplifier `(1 / 3) * 3` en 1.
+   Ne pas simplifier `(1 / 3) * 3` en 1. Les COMP-1/COMP-2 ne calculent pas en
+   flottant : ils sont lus en décimal exact (`runtime::float::from_f64`,
+   `cob_decimal_set_double`) et stockés par troncature vers zéro
+   (`to_f64`, `mpf_get_d`), puis arrondi au plus près pour un float ; seuls
+   DISPLAY (`%.8G`/`%.16G`) et `cob_cmp_float` (tolérance relative 1e-7) lisent
+   les octets natifs. `cob_cmp_llint` (opérande droit entier) reste exact.
+   Le pliage constant de cobc (`fold_binary`, `cb_build_binary_op`) change le
+   chemin de comparaison ; garder sa garde de taille (`literal_size`).
 4. **SIZE ERROR.** Division par zéro et dépassement de PICTURE sont récupérables
    par le chemin contrôlé. L'arrondi précède le contrôle, et une erreur laisse
    la destination intacte. Un résultat négatif non signé perd son signe dans ce

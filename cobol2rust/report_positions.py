@@ -102,7 +102,8 @@ def normalize(p, expr):
             text = node.args[0]
             scale = len(text.partition(".")[2])
             digits = text.replace(".", "").lstrip("+-")
-            return _Literal(int(text.replace(".", "")), scale, len(digits))
+            size = node.literal_size if node.literal_size is not None else len(digits)
+            return _Literal(int(text.replace(".", "")), scale, size)
         if node.op in {"unary+", "unary-"}:
             child = prepare(node.args[0])
             if node.op == "unary+":

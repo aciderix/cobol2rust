@@ -117,6 +117,104 @@ pub(crate) fn power(scale: u32) -> BigInt {
 pub(crate) fn absolute(n: &BigInt) -> BigInt {
     if n.sign() == Sign::Minus { -n } else { n.clone() }
 }
+/// Binary floating point (USAGE COMP-1 / COMP-2) as libcob 3.2 handles it:
+/// numeric.c cob_decimal_set_double / cob_decimal_get_double, termio.c
+/// cob_display_common, numeric.c cob_cmp_float.
+pub mod float {
+    use super::{fail, Number};
+    use num_bigint::{BigInt, BigUint, Sign};
+
+    /// cob_decimal_set_double: zero, all spaces and non-finite values read as
+    /// 0; otherwise mpf_get_str's 96 digits, exact for this range.
+    pub fn from_f64(v: f64) -> Number {
+        let bits = v.to_bits();
+        if bits == 0 || bits == 0x2020_2020_2020_2020 || !v.is_finite() { return Number::new(BigInt::from(0), 0); }
+        if v == 0.0 {
+            // mpf_get_str of -0.0 is empty and mpz_set_str keeps the previous decimal.
+            fail("lecture d'un flottant -0.0 (cob_decimal_set_double) non modélisée");
+        }
+        let exponent = ((bits >> 52) & 0x7ff) as i64;
+        let fraction = bits & ((1u64 << 52) - 1);
+        let (mantissa, e) = if exponent == 0 { (fraction, -1074) } else { (fraction | (1u64 << 52), exponent - 1075) };
+        let mut n = BigUint::from(mantissa);
+        let mut scale = 0u32;
+        if e >= 0 { n <<= e as usize; } else { n *= BigUint::from(5u32).pow((-e) as u32); scale = (-e) as u32; }
+        let ten = BigUint::from(10u32);
+        while scale > 0 && (&n % &ten) == BigUint::from(0u32) { n /= &ten; scale -= 1; }
+        let digits = n.to_str_radix(10);
+        if digits.trim_end_matches('0').len() > 96 {
+            // mpf_get_str keeps COB_MAX_INTERMEDIATE_FLOATING_SIZE digits. For
+            // an integer GMP rounds to nearest (checked against libgmp on
+            // 14594 doubles); for a fraction its approximation differs.
+            if scale > 0 { fail("flottant fractionnaire de plus de 96 chiffres significatifs (mpf_get_str) non modélisé"); }
+            let dropped = digits.len() - 96;
+            let unit = BigUint::from(10u32).pow(dropped as u32);
+            let (head, rest) = (&n / &unit, &n % &unit);
+            let twice = &rest * 2u32;
+            if twice == unit { fail("arrondi ex aequo de mpf_get_str à 96 chiffres non modélisé"); }
+            n = if twice > unit { head + 1u32 } else { head } * unit;
+        }
+        Number::new(BigInt::from_biguint(if v < 0.0 { Sign::Minus } else { Sign::Plus }, n), scale)
+    }
+
+    /// cob_decimal_get_double: the exact value truncated toward zero
+    /// (mpf_div, then mpf_get_d); None when not finite (cob_not_finite).
+    pub fn to_f64(number: &Number) -> Option<f64> {
+        if number.n.sign() == Sign::NoSign { return Some(0.0); }
+        let a = number.n.magnitude().clone();
+        let b = BigUint::from(10u32).pow(number.scale);
+        let quotient = |e: i64| -> BigUint { if e >= 0 { &a / (&b << e as usize) } else { (&a << (-e) as usize) / &b } };
+        let mut e = a.bits() as i64 - b.bits() as i64 - 53;
+        let mut q = quotient(e);
+        while q.bits() > 53 { e += 1; q = quotient(e); }
+        while q.bits() < 53 { e -= 1; q = quotient(e); }
+        if e + 52 > 1023 { return None; }
+        if e + 52 < -1022 {
+            fail("résultat flottant sous-normal (mpf_get_d, dépendant du système) non modélisé");
+        }
+        let value = q.to_u64_digits()[0] as f64 * 2f64.powi(e as i32);
+        Some(if number.n.sign() == Sign::Minus { -value } else { value })
+    }
+
+    /// sprintf "%-.<precision>G" then clean_double.
+    pub fn display(value: f64, precision: usize) -> String {
+        let mut text = if value.is_nan() {
+            if value.is_sign_negative() { "-NAN".to_string() } else { "NAN".to_string() }
+        } else if value.is_infinite() {
+            if value < 0.0 { "-INF".to_string() } else { "INF".to_string() }
+        } else if value == 0.0 {
+            if value.is_sign_negative() { "-0".to_string() } else { "0".to_string() }
+        } else {
+            let scientific = format!("{:.*e}", precision - 1, value);
+            let (mantissa, exponent) = scientific.split_once('e').unwrap();
+            let exponent: i32 = exponent.parse().unwrap();
+            let trim = |s: &str| -> String {
+                if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s.to_string() }
+            };
+            if exponent < -4 || exponent >= precision as i32 {
+                format!("{}E{}{:02}", trim(mantissa), if exponent < 0 { '-' } else { '+' }, exponent.abs())
+            } else {
+                trim(&format!("{:.*}", (precision as i32 - 1 - exponent) as usize, value))
+            }
+        };
+        if let Some(position) = text.rfind('E') {
+            if text.as_bytes().get(position + 2) == Some(&b'0') { text.remove(position + 2); }
+        } else if text == "-NAN" || text == "NAN" {
+            text = "NaN".to_string();
+        }
+        text
+    }
+
+    /// cob_cmp_float: equal within a relative TOLERANCE of 1e-7 of d1.
+    pub fn order(d1: f64, d2: f64) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        if d1 == d2 || (d1 != 0.0 && ((d1 - d2) / d1).abs() < 0.000_000_1) {
+            return Ordering::Equal;
+        }
+        if d1 < d2 { Ordering::Less } else { Ordering::Greater }
+    }
+}
+
 impl Number {
     pub(crate) fn new(n: BigInt, scale: u32) -> Self {
         if scale > 1024 || n.to_str_radix(10).len() > 4096 { fail("intermediate decimal capacity exceeded"); }
@@ -310,6 +408,14 @@ impl Value {
     }
     pub fn slice(&self, start: &Value, length: Option<&Value>) -> Self {
         match self { Self::View(view) => Self::View(view.slice(start, length)), _ => fail("reference modification requires storage view") }
+    }
+    /// cob_cmp_float: a COMP-1 / COMP-2 item's stored value, any other
+    /// number through cob_decimal_get_double (0.0 when not finite).
+    pub fn float_operand(&self) -> f64 {
+        if let Self::View(view) = self {
+            if let Some(value) = view.float_value() { return value; }
+        }
+        float::to_f64(&self.num()).unwrap_or(0.0)
     }
     pub fn bytes(&self) -> Vec<u8> {
         match self {

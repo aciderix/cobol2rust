@@ -1,12 +1,18 @@
 """Data division parsing, with explicit storage hierarchy and condition names."""
 import re
 
-from .frontend import Condition, ConstantToken, Field, Token, VERBS
+from .frontend import Condition, ConstantToken, Field, FloatLiteralToken, Token, VERBS
 
 USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL", "COMP-4", "COMPUTATIONAL-4",
           "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
           "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
-          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6", "POINTER"}
+          "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6", "POINTER",
+          "COMP-1", "COMPUTATIONAL-1", "FLOAT-SHORT", "COMP-2", "COMPUTATIONAL-2", "FLOAT-LONG"}
+# Binary floating point: C float and double (field.c, CB_USAGE_FLOAT/DOUBLE),
+# with the attribute digits and scale of codegen.c (15/8 and 34/17).
+FLOAT_USAGES = {"COMP-1": "COMP-1", "COMPUTATIONAL-1": "COMP-1", "FLOAT-SHORT": "COMP-1",
+                "COMP-2": "COMP-2", "COMPUTATIONAL-2": "COMP-2", "FLOAT-LONG": "COMP-2"}
+FLOAT_PICTURES = {"COMP-1": "S9(7)V9(8)", "COMP-2": "S9(17)V9(17)"}
 # field.c validate_field_1: BINARY-CHAR/SHORT/LONG/DOUBLE are COMP-5 with the
 # digits of cb_build_binary_picture, SIGNED unless UNSIGNED follows.
 FIXED_BINARY_DIGITS = {"BINARY-CHAR": 2, "BINARY-SHORT": 4, "BINARY-LONG": 9, "BINARY-DOUBLE": 18,
@@ -761,6 +767,8 @@ def declaration(p, file_record=False):
                 usage = "COMP-5"
             elif usage == "COMPUTATIONAL-6":
                 usage = "COMP-6"
+            elif usage in FLOAT_USAGES:
+                usage = FLOAT_USAGES[usage]
     p.expect(".")
     if fixed_binary:
         if picture:
@@ -789,6 +797,15 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 65536)
 
+    if usage in FLOAT_PICTURES and not has_children:
+        if picture:
+            p.error(f"'{label}' cannot have PICTURE clause")
+        if justified or blank_zero or sign_clause is not None:
+            p.error(f"JUSTIFIED, BLANK WHEN ZERO ou SIGN sur USAGE {usage} non pris en charge")
+        if initial is not None and (initial.string or figurative not in {None, "0"}):
+            # cobc only warns and copies the literal's bytes into the item.
+            p.error(f"VALUE non numérique d'un article USAGE {usage} non pris en charge")
+        picture = FLOAT_PICTURES[usage]
     if usage == "POINTER":
         # USAGE POINTER: a native data pointer (void *), 8 bytes on x86_64.
         if picture:
@@ -938,6 +955,9 @@ def declaration(p, file_record=False):
     under_based = based or any(getattr(a, "based", False) for a in ancestors)
     if linkage and not under_based and (explicit_value or group_value is not None):
         p.error("VALUE en LINKAGE SECTION non pris en charge")
+    if isinstance(initial, FloatLiteralToken) and kind != "number":
+        # Its digits with a negative scale, not its value (see check_floating_literals).
+        p.error("VALUE littéral flottant d'un article non numérique non pris en charge")
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
     descriptor.linkage = linkage

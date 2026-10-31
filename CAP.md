@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T09:50:11+00:00 (commit `14536d710a`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T12:39:39+00:00 (commit `f2ab700e80`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T09:50:11+00:00 (commit `14536d710a`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 540 | 879 | 339 | 0 |
-| **Total** | | **3593** | **1264** | **1617** | **353** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 548 | 879 | 331 | 0 |
+| **Total** | | **3593** | **1272** | **1617** | **345** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:50:11+00:00, commit `14536d710a`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T12:39:39+00:00, commit `f2ab700e80`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,22 +130,22 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 7 × USAGE/clause non pris en charge: IS
 10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 353 sources, 353 au premier diagnostic identique à la mesure, 196 à inventaire complet, 223 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 345 sources, 345 au premier diagnostic identique à la mesure, 187 à inventaire complet, 215 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1 | CALL BY VALUE : ABI hors des routines système d'octets non prise en charge | 6 | 6 | 6 | 7 |
-| 2 | NO attendu | 4 | 10 | 6 | 6 |
-| 3 | SCREEN SECTION non prise en charge à cet endroit | 3 | 13 | 36 | 38 |
-| 4 | USAGE/clause non pris en charge: DEPENDING | 3 | 16 | 7 | 7 |
-| 5 | CALL USING requiert au moins un argument | 3 | 19 | 3 | 5 |
-| 6 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 3 | 22 | 3 | 9 |
-| 7 | USAGE/clause non pris en charge: COMP-X | 3 | 25 | 5 | 9 |
-| 8 | CALL RETURNING/GIVING non pris en charge | 3 | 28 | 3 | 4 |
-| 9 | USAGE/clause non pris en charge: IS | 2 | 30 | 7 | 7 |
-| 10 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 32 | 1 | 5 |
-| 11 | donnée subordonnée sans groupe parent | 2 | 34 | 0 | 7 |
-| 12 | 78 VALUE LENGTH OF non pris en charge | 2 | 36 | 3 | 4 |
+| 2 | USAGE/clause non pris en charge: DEPENDING | 4 | 10 | 7 | 7 |
+| 3 | NO attendu | 4 | 14 | 6 | 6 |
+| 4 | SCREEN SECTION non prise en charge à cet endroit | 3 | 17 | 36 | 38 |
+| 5 | CALL USING requiert au moins un argument | 3 | 20 | 3 | 5 |
+| 6 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 3 | 23 | 3 | 9 |
+| 7 | USAGE/clause non pris en charge: COMP-X | 3 | 26 | 5 | 9 |
+| 8 | CALL RETURNING/GIVING non pris en charge | 3 | 29 | 3 | 4 |
+| 9 | USAGE/clause non pris en charge: IS | 2 | 31 | 7 | 7 |
+| 10 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 33 | 1 | 5 |
+| 11 | donnée subordonnée sans groupe parent | 2 | 35 | 0 | 7 |
+| 12 | 78 VALUE LENGTH OF non pris en charge | 2 | 37 | 3 | 4 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -160,7 +160,7 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 9 × instruction non prise en charge: XML (1er : 7, seul : 0)
 - 9 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc) (1er : 3, seul : 2)
 - 9 × . attendu (1er : 8, seul : 0)
-- 9 × USAGE/clause non pris en charge: COMP-1 (1er : 4, seul : 0)
+- 9 × USAGE/clause non pris en charge: COMP-X (1er : 5, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -664,3 +664,20 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   débloquées (run_extensions-002/005) s'exécutent à l'identique.
   Testsuite **538 → 540/1135**, total **1262 → 1264/3593**, écart
   **355 → 353**. NIST statique 451/458.
+- 2026-10-31 — Virgule flottante binaire COMP-1/COMP-2 (FLOAT-SHORT/LONG) :
+  famille choisie dans l'inventaire (20 sources la citent). Port de
+  `cob_decimal_set_double` (lecture en décimal exact ; au-delà de 96 chiffres
+  arrondi de `mpf_get_str` vérifié sur libgmp pour un entier, arrêt nommé pour
+  une fraction), `cob_decimal_get_double` (troncature vers zéro, non fini à
+  0.0, float arrondi au plus près), DISPLAY `%.8G`/`%.16G` + `clean_double`
+  (120 028 valeurs identiques à printf), `cob_cmp_float` (tolérance 1e-7)
+  face à `cob_cmp_llint` et `cob_decimal_cmp` selon `cb_build_optim_cond`,
+  SIZE ERROR de `COB_STORE_KEEP_ON_OVERFLOW`, littéraux à exposant
+  (`scan_floating_numeric`, refusés hors emploi numérique) et pliage constant
+  de `cb_build_binary_op` (garde de taille, x * 1, x / 1, x * 0 ; x ± 0
+  dépend de `rel_bin_op` : refusé là où il change une comparaison de
+  flottant). Refus nommés : MOVE flottant ↔ alphanumérique, -0.0 lu, valeur
+  sous-normale. Huit sources débloquées, sept identiques au natif ;
+  run_misc-167 s'arrête sur l'arrêt nommé des dénormaux. Testsuite
+  **540 → 548/1135**, total **1264 → 1272/3593**, écart **353 → 345**.
+  NIST statique 451/458, NIST complet 427/427 (9610 PASS, 0 FAIL).
