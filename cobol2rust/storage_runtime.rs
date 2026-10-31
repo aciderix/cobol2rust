@@ -1125,9 +1125,13 @@ impl View {
     }
     pub fn initialize(&mut self, with_filler: bool) {
         self.resolved();
+        // cb_emit_initialize: an item of OCCURS DEPENDING is initialized up
+        // to its current length (the occurrences within the view).
+        let end = self.offset + self.size;
         for initializer in &self.initializers {
             if initializer.filler && !with_filler { continue; }
             offsets(&initializer.dimensions, self.offset + initializer.offset, &mut |offset| {
+                if offset + initializer.size > end { return; }
                 let mut leaf = Self { memory: self.memory.clone(), offset, size: initializer.size,
                                       kind: initializer.kind, dimensions: vec![], initializers: vec![], limit: self.limit };
                 let value = match initializer.kind { Kind::Text | Kind::Justified | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };

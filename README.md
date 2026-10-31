@@ -859,7 +859,25 @@ usages, et WRITE/REWRITE de l'enregistrement, prennent la longueur courante.
 L'initialisation d'une occurrence variable précise, par exemple
 `INITIALIZE ligne(index)`, est prise en charge. L'initialisation du groupe
 variable entier est limitée au cas vérifié de champs texte uniformes avec
-table variable élémentaire ; elle remet alors toute la capacité à espaces.
+table variable élémentaire ; comme `cb_emit_initialize`, elle remet à espaces
+la longueur courante quand une OCCURS DEPENDING se trouve sur la descente par
+premiers fils (`odo_level`), toute la capacité sinon. Le contrôleur DEPENDING
+peut être toute donnée numérique scalaire, lue par `cob_get_int` (troncature,
+COMP-1 compris) ; sans contrôles d'exécution, un compteur sous le minimum
+donne un article plus court, comme dans cobc, et seul un compteur négatif ou
+au-delà du maximum est un arrêt nommé.
+
+`PICTURE Lc… DEPENDING ON n` (extension GCOS, `picture-l: ok` dans le
+dialecte par défaut, refusée en `cobol85`) suit parser.y : l'article devient
+un groupe dont le FILLER implicite est `PIC c OCCURS 1 TO taille DEPENDING
+n`, sans `flag_filler`. Sa longueur courante vaut n (MOVE, comparaisons,
+DISPLAY, FUNCTION LENGTH, INITIALIZE, STRING, INSPECT, sous-chaînes), avec la
+sémantique de groupe (un MOVE numérique copie les octets) ; `LENGTH OF` donne
+la taille de sa PICTURE, les groupes qui le contiennent gardent une taille
+fixe, il peut être sous OCCURS, redéfinir ou être redéfini, et MOVE
+CORRESPONDING le prend à sa taille entière. VALUE, JUSTIFIED, BLANK WHEN
+ZERO, une PICTURE non alphanumérique ou une DEPENDING absente sont les
+erreurs de cobc ; USAGE, SIGN, SYNCHRONIZED et des sous-niveaux sont refusés.
 Les autres INITIALIZE de groupes variables sont refusés car GnuCOBOL 3.2 utilise
 plusieurs stratégies de génération dont les effets ne sont pas encore reproduits.
 

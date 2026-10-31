@@ -182,7 +182,10 @@ par un temporaire, LENGTH OF par `cob_content`. Les routines de common.c
 `RunUnit`), ainsi que `CBL_GC_GETOPT` (getopt GNU de cobgetopt.c, état
 statique et permutation d'argv dans `system_runtime::getopt`, `*flag` écrit
 par `storage_runtime::store_at_address` ; `verify --arg` donne les mêmes
-arguments et le même argv[0] aux deux programmes). Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+arguments et le même argv[0] aux deux programmes). PICTURE L est un groupe à
+FILLER ODO implicite (`Field.picture_l`, data_parser) ; `variable_groups`
+s'arrête à l'article PIC L, layout ne demande pas à son ODO de terminer les
+groupes englobants. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
 RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
 FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs

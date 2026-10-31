@@ -1,5 +1,28 @@
 # Validation — 30 octobre 2026
 
+## PICTURE L — 31 octobre 2026
+
+- Fixture `tests/fixtures/picture_l.cob` identique au natif : PIC LX et LA
+  dans un groupe (taille fixe du groupe, longueur courante de l'article),
+  MOVE de littéraux et d'un numérique signé (copie d'octets de groupe :
+  « 1r »), comparaisons, compteur 0 (article vide), `LENGTH OF` (taille de la
+  PICTURE) et FUNCTION LENGTH (longueur courante), INITIALIZE de l'article
+  (longueur courante) et du groupe (capacité), REDEFINES, table OCCURS 3 de
+  PIC L avec contrôleur COMP-1, contrôleur 9V9 (3,7 → 3), MOVE CORRESPONDING
+  dans les deux sens, INSPECT, STRING, sous-chaîne.
+- Sources débloquées : run_extensions-097, -098/under, -099, -100, -101 et
+  syn_misc-147 identiques au natif ; -098/over (compteur au-delà du maximum,
+  le natif lit au-delà de l'article) s'arrête par « OCCURS DEPENDING ON
+  count out of bounds ».
+- Essais natifs du cas général : INITIALIZE d'un groupe ODO à premier fils
+  ODO (longueur courante) et à premier fils fixe (capacité) ; contrôleurs
+  9V9 et COMP-1 acceptés par cobc, résultats identiques.
+- Mesure : **1298 → 1305/3593**, écart **319 → 312**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-picl.json`) ;
+  suite **563 tests**, 0 échec, après retrait du cas `depending on n` (9V9) de
+  `test_structures` (cobc l'accepte).
+
 ## CBL_GC_GETOPT — 31 octobre 2026
 
 - Fixture `tests/fixtures/getopt/getopt.cob` (chaîne d'options et long-only

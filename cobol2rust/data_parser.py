@@ -554,7 +554,11 @@ def declaration(p, file_record=False):
         return key
     if level not in {1, 77} and not 2 <= level <= 49:
         p.error("niveaux pris en charge: 01-49, 66, 77 et 88")
-    if level in {1, 77}:
+    # The implicit FILLER of a PICTURE L item (parser.y picture_clause).
+    implicit_child, p.picture_l_child = getattr(p, "picture_l_child", None), None
+    if implicit_child:
+        pass
+    elif level in {1, 77}:
         p.data_stack = []
     else:
         while p.data_stack and p.fields[p.data_stack[-1]].level >= level:
@@ -562,6 +566,8 @@ def declaration(p, file_record=False):
         if not p.data_stack or p.fields[p.data_stack[-1]].level == 77:
             p.error("donnée subordonnée sans groupe parent")
     parent = p.data_stack[-1] if p.data_stack else None
+    if parent and p.fields[parent].picture_l and not implicit_child:
+        p.error("donnée subordonnée à une PICTURE L non prise en charge")
     if parent and p.fields[parent].picture:
         p.error("un champ élémentaire ne peut pas contenir de sous-champs")
     filler = label == "FILLER"
@@ -594,6 +600,7 @@ def declaration(p, file_record=False):
     external = is_global = based = False
     external_as = None
     any_length = False
+    variable_picture = depending_tokens = None
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -612,12 +619,33 @@ def declaration(p, file_record=False):
             p.error("REDEFINES d'un article ANY LENGTH invalide")
     while not p.at("."):
         if p.accept("PIC") or p.accept("PICTURE"):
-            if picture:
+            if picture or variable_picture:
                 p.error("PICTURE dupliquée")
             p.accept("IS")
             if p.t.string or p.t.key in {".", "<EOF>", "VALUE", "USAGE", "OCCURS", "INDEXED"} | USAGES:
                 p.error("mot PICTURE contigu attendu")
             picture = p.picture_symbols(picture_constants(p, p.take().key))
+            if picture.startswith("L"):
+                # tree.c cb_build_picture 'L' and parser.y picture_clause:
+                # PIC Lc... DEPENDING n is a group whose FILLER is PIC c
+                # OCCURS 1 TO size - 1 DEPENDING n.
+                from . import frontend
+                if frontend.STD == "cobol85":
+                    p.error("PICTURE string with 'L' character does not conform to COBOL 85")
+                variable_picture, picture = picture[1:], ""
+                if not p.accept("DEPENDING"):
+                    p.error("variable-length PICTURE requires DEPENDING clause")
+                p.accept("ON")
+                start = p.i
+                p.name()
+                while p.accept("OF") or p.accept("IN"):
+                    p.name()
+                depending_tokens = list(p.tokens[start:p.i])
+                written = re.sub(r"([XA9])\((\d+)\)", lambda m: m[1] * min(int(m[2]), 10001), variable_picture)
+                if not re.fullmatch(r"[XA9]+", written) or set(written) == {"9"}:
+                    p.error("only USAGE DISPLAY may specify a variable-length PICTURE")
+                if len(written) > 10000:
+                    p.error("OCCURS limité à 1..10000, minimum variable 0..maximum")
         elif p.accept("ANY"):
             if any_length:
                 p.error("ANY LENGTH dupliqué")
@@ -777,6 +805,16 @@ def declaration(p, file_record=False):
             elif usage in {"COMPUTATIONAL-X", "COMPUTATIONAL-N"}:
                 usage = usage.replace("COMPUTATIONAL", "COMP")
     p.expect(".")
+    if variable_picture is not None:
+        # field.c validate_group / validate_field_value for flag_picture_l.
+        if initial is not None:
+            p.error("variable-length PICTURE and VALUE are mutually exclusive")
+        if justified:
+            p.error(f"'{label}' cannot have JUSTIFIED RIGHT clause")
+        if blank_zero:
+            p.error(f"'{label}' cannot have BLANK WHEN ZERO clause")
+        if has_usage or sign_clause is not None or synchronized or fixed_binary:
+            p.error("USAGE, SIGN ou SYNCHRONIZED sur une PICTURE L non pris en charge")
     if fixed_binary:
         if picture:
             p.error("PICTURE incompatible avec USAGE BINARY-CHAR/SHORT/LONG/DOUBLE et les types C")
@@ -1008,9 +1046,24 @@ def declaration(p, file_record=False):
     if kind == "edited":
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero
+    descriptor.picture_l = variable_picture is not None
+    if implicit_child:
+        # cb_build_field (cb_build_filler ()) without flag_filler: INITIALIZE
+        # treats it as a named item.
+        descriptor.filler = False
     p.fields[key] = descriptor
     if parent:
         p.fields[parent].children.append(key)
     p.data_stack.append(key)
     p.last_data = key
+    if variable_picture is not None:
+        if has_children:
+            p.error("donnée subordonnée à une PICTURE L non prise en charge")
+        line = depending_tokens[0].line
+        written = re.sub(r"([XA9])\((\d+)\)", lambda m: m[1] * int(m[2]), variable_picture)
+        implicit = [Token(str(min(level + 1, 49)), line), Token("PIC", line), Token(variable_picture[0], line),
+                    Token("OCCURS", line), Token("1", line), Token("TO", line), Token(str(len(written)), line),
+                    Token("DEPENDING", line), Token("ON", line), *depending_tokens, Token(".", line)]
+        p.tokens[p.i:p.i] = implicit
+        p.picture_l_child = key
     return key

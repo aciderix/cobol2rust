@@ -675,6 +675,9 @@ class Field:
     dimensions: list[tuple[int, int]] = field(default_factory=list)
     occurs_min: int = 1
     depending: str | None = None
+    # PICTURE L ... DEPENDING: a group whose implicit FILLER is the ODO
+    # table; its size is fixed for the enclosing groups (flag_picture_l).
+    picture_l: bool = False
     index_for: str | None = None
     editing: str = ""
     # Numeric-edited: cobc's symbol groups and storage size.
@@ -706,6 +709,9 @@ class DataRef:
     indices: tuple = ()
     start: object | None = None
     length: object | None = None
+    # typeck.c emit_move_corresponding: a PICTURE L item at the size of its
+    # PICTURE (the reference's length), whatever its DEPENDING item holds.
+    whole: bool = False
 
 
 @dataclass
@@ -3629,10 +3635,10 @@ class Parser:
                 return Expr("number", (str(len(arg.args[0])),))
             if arg.op == "var" and arg.args[0].start is None:
                 f = self.fields[arg.args[0].name]
-                if not f.any_length and not f.depending and not any(self.fields[k].depending for k in self.fields
-                                                if k.startswith(arg.args[0].name + ".")):
+                if not f.any_length and not self.variable_size(f):
                     return Expr("number", (str(getattr(f, "parse_size", f.size)),))
-            if arg.op != "function" and not (arg.op == "var" and self.fields[arg.args[0].name].any_length):
+            if arg.op != "function" and not (arg.op == "var" and (arg.args[0].start is None
+                                                                  or self.fields[arg.args[0].name].any_length)):
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"}:
             args.append(Expr("number", ("1" if system_offset else "0",)))
@@ -3711,6 +3717,12 @@ class Parser:
             return Expr("function", ("LENGTH", (Expr("var", (ref,)),)))
         return self.field_length(ref.name)
 
+    def variable_size(self, item):
+        """tree.c cb_field_variable_size: a subordinate ODO table, a
+        PICTURE L item counting as fixed."""
+        return any(not self.fields[c].picture_l and (self.fields[c].depending or self.variable_size(self.fields[c]))
+                   for c in item.children)
+
     def field_length(self, name):
         """cb_build_length_1: the size of a fixed item; the sizes of the
         children of a variable one, an ODO table counted by its object."""
@@ -3718,9 +3730,9 @@ class Parser:
         if f.any_length:
             return Expr("function", ("LENGTH", (Expr("var", (DataRef(name),)),)))
 
-        def variable(item):  # cb_field_variable_size
-            return any(self.fields[c].depending or variable(self.fields[c]) for c in item.children)
-        if not variable(f):
+        # typeck.c cb_build_length: a PICTURE L item has the length of its
+        # PICTURE, whatever its DEPENDING item holds.
+        if f.picture_l or not self.variable_size(f):
             return Expr("number", (str(getattr(f, "parse_size", f.size)),))
         total = None
         for child in f.children:
@@ -5032,8 +5044,9 @@ class Parser:
                 f2 = self.fields[c2]
                 if f2.redefines or f2.table or f2.filler or f1.label != f2.label:
                     continue
-                r1, r2 = DataRef(c1, first.indices), DataRef(c2, second.indices)
-                if f1.children and f2.children:
+                r1 = DataRef(c1, first.indices, whole=f1.picture_l)
+                r2 = DataRef(c2, second.indices, whole=f2.picture_l)
+                if f1.children and f2.children and not f1.picture_l and not f2.picture_l:
                     pairs += self.corresponding_pairs(r1, r2, arithmetic)
                 elif not arithmetic or (not f1.children and not f2.children
                                         and f1.kind == "number" and f2.kind == "number"):

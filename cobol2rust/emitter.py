@@ -81,10 +81,28 @@ class Emitter:
             for leaf in program.fields.values():
                 if leaf.name == field.name or leaf.name.startswith(field.name + "."):
                     self.variable_dimensions[leaf.name] = (field, dim)
+            # chk_field_variable_size: a PICTURE L item has a variable size
+            # of its own, a fixed one for the groups above it.
             parent = field.parent
             while parent:
                 self.variable_groups[parent] = field
+                if program.fields[parent].picture_l:
+                    break
                 parent = program.fields[parent].parent
+
+    def odo_level(self, name):
+        """cb_emit_initialize's odo_level: the OCCURS DEPENDING items from
+        the leaf reached by first children up to `name`."""
+        fields = self.program.fields
+        cursor = fields[name]
+        while cursor.children:
+            cursor = fields[cursor.children[0]]
+        level = 0
+        while True:
+            level += bool(cursor.depending)
+            if cursor.name == name:
+                return level
+            cursor = fields[cursor.parent]
 
     def write(self, text=""):
         self.lines.append("    " * self.indent + text)
@@ -169,10 +187,6 @@ class Emitter:
         if isinstance(ref, str):
             ref = DataRef(ref)
         result = f"self.{self.names[ref.name]}"
-        if ref.name in self.variable_groups and active:
-            f = self.variable_groups[ref.name]
-            prefix = self.program.fields[ref.name].size - f.size * f.occurs
-            result += f".active_size(&self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs}, {prefix}, {f.size})"
         if ref.name in self.variable_dimensions:
             f, dim = self.variable_dimensions[ref.name]
             method = "subscript_count" if ref.indices else "active_count"
@@ -181,6 +195,11 @@ class Emitter:
             if any(self.kind(index) != "number" for index in ref.indices):
                 raise CobolError("sous-script numérique requis")
             result += f".at(&[{', '.join(self.expression(i) for i in ref.indices)}])"
+        if ref.name in self.variable_groups and active and not ref.whole:
+            # After the subscripts: a PICTURE L item may be a table element.
+            f = self.variable_groups[ref.name]
+            prefix = self.program.fields[ref.name].size - f.size * f.occurs
+            result += f".active_size(&self.{self.names[f.depending]}, {f.occurs_min}, {f.occurs}, {prefix}, {f.size})"
         if ref.start is not None:
             if self.kind(ref.start) != "number" or (ref.length is not None and self.kind(ref.length) != "number"):
                 raise CobolError("position et longueur numériques requises")
@@ -568,8 +587,9 @@ class Emitter:
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
         if name.startswith("EXCEPTION-"):
             return f"runtime::exception::{name[len('EXCEPTION-'):].lower()}()"
-        if name == "LENGTH" and args[0].op == "var" \
-                and self.program.fields[args[0].args[0].name].any_length:
+        if name == "LENGTH" and args[0].op == "var" and (
+                args[0].args[0].start is None or self.program.fields[args[0].args[0].name].any_length):
+            # cob_intr_length: the field's current size (ANY LENGTH, ODO).
             return f"Value::number(&storage_runtime::descriptor_size(&{self.reference(args[0].args[0])}).to_string())"
         if name in {"NUMVAL-F", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F"}:
             values = [self.numval_argument(name, a) for a in args]
@@ -1628,7 +1648,11 @@ class Emitter:
                     fields = leaves(self.program.fields, ref.name)
                     if self.variable_groups[ref.name].children or any(f.kind != "text" or (f.filler and not a[1]) for f in fields):
                         raise CobolError("INITIALIZE de groupe variable limité aux champs texte uniformes; initialiser les occurrences explicitement")
-                self.write(f"{self.reference(ref)}.initialize_with_filler({str(a[1]).lower()});")
+                # cb_emit_initialize: with an ODO on its first descendants
+                # (odo_level), the item is initialized up to its current
+                # length; otherwise over its whole capacity.
+                active = ref.indices or ref.start is not None or self.odo_level(ref.name) > 0
+                self.write(f"{self.reference(ref, active=active)}.initialize_with_filler({str(a[1]).lower()});")
         elif op == "release":
             name, record, value = a
             if value is not None:

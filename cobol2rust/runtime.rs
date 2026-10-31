@@ -401,9 +401,15 @@ impl Value {
             _ => fail("OCCURS DEPENDING ON requires group view"),
         }
     }
+    /// cob_get_int of the controller (truncated toward zero, any numeric
+    /// usage). Without EC-BOUND checks cobc uses the value as it is: a count
+    /// below the minimum is a shorter item; beyond the maximum or negative it
+    /// addresses storage outside the item, a named stop. cob_check_odo's
+    /// [minimum, maximum] with the checks.
     fn occurrences(&self, minimum: usize, maximum: usize) -> usize {
-        let count = self.integer("OCCURS DEPENDING ON");
-        if count < minimum as i128 || count > maximum as i128 { fail("OCCURS DEPENDING ON count out of bounds"); }
+        let count = self.num().units(0, false).to_string().parse::<i128>().unwrap_or_else(|_| fail("OCCURS DEPENDING ON count out of bounds"));
+        let low = if crate::storage_runtime::runtime_checks() { minimum as i128 } else { 0 };
+        if count < low || count > maximum as i128 { fail("OCCURS DEPENDING ON count out of bounds"); }
         count as usize
     }
     pub fn slice(&self, start: &Value, length: Option<&Value>) -> Self {

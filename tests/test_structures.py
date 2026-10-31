@@ -70,7 +70,6 @@ class LayoutTests(unittest.TestCase):
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 05 tail-a pic x.",
             "01 n pic 9. 01 a. 05 row-a occurs 2. 10 cell-a occurs 0 to 3 depending on n pic x.",
             "01 a. 05 cell-a occurs 0 to 3 depending on n. 10 n pic 9.",
-            "01 n pic 9v9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x.",
             "01 n pic 9. 01 a. 05 cell-a occurs 0 to 3 depending on n pic x. 01 alias-a redefines a pic x.",
             "01 n pic 9. 01 a. 05 alias-a redefines n pic x.",
             "01 n pic 9. 01 a. 05 cell-a occurs 3 indexed by n pic x.",

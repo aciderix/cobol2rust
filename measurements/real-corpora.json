@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T17:23:15+00:00",
- "git_head": "c00a5e478196bf4c57cba9d6ce487e493f67e4bb",
- "implementation_sha256": "8f97642fa419a24e6efd0f9df114dcb86df1623265927e5003de3f44026f5465",
+ "measured_at": "2026-10-31T18:05:04+00:00",
+ "git_head": "0ee799ce2caf135a521d63cfed1a4aa94a12eaf3",
+ "implementation_sha256": "74826b63956804c1383eefb5bee963affbd3b1d1a432e4692ba315aad1fd83dc",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1298,
+  "accepted": 1305,
   "cobc_accepted": 1617,
-  "gap": 319,
+  "gap": 312,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 574,
+   "accepted": 581,
    "internal_errors": 0,
    "blockers": [
     [
@@ -463,10 +463,6 @@
      10
     ],
     [
-     "USAGE/clause non pris en charge: DEPENDING",
-     10
-    ],
-    [
      "USAGE/clause non pris en charge: IS",
      10
     ],
@@ -485,12 +481,16 @@
     [
      "NO attendu",
      6
+    ],
+    [
+     "instruction non prise en charge: AT",
+     6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 305,
+   "gap": 298,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -579,30 +579,6 @@
     [
      "run_extensions-087/prog.cob",
      "indicateur fixe 'I' non pris en charge"
-    ],
-    [
-     "run_extensions-097/prog.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_extensions-098/over.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_extensions-098/under.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_extensions-099/corr.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_extensions-100/nested.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
-     "run_extensions-101/redefines.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
     ],
     [
      "run_file-021/prog.cob",
@@ -1641,10 +1617,6 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "syn_misc-147/prog.cob",
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    [
      "syn_misc-150/prog.cob",
      ". attendu"
     ],
@@ -1735,10 +1707,6 @@
      8
     ],
     [
-     "USAGE/clause non pris en charge: DEPENDING",
-     7
-    ],
-    [
      "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
      7
     ],
@@ -1761,16 +1729,20 @@
     [
      "clé INDEXED composée (SOURCE IS) non prise en charge",
      5
+    ],
+    [
+     "instruction non prise en charge: AT",
+     5
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 319,
-  "matching": 319,
-  "complete": 173,
-  "distinct": 204,
+  "sources": 312,
+  "matching": 312,
+  "complete": 168,
+  "distinct": 201,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1851,12 +1823,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
-    "first": 7,
-    "present": 7,
-    "alone": 4
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "first": 7,
     "present": 7,
@@ -1919,12 +1885,6 @@
    {
     "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
     "first": 4,
-    "present": 4,
-    "alone": 0
-   },
-   {
-    "diagnostic": "REDEFINES requiert un champ précédent au même niveau",
-    "first": 0,
     "present": 4,
     "alone": 0
    },
@@ -2001,6 +1961,12 @@
     "alone": 1
    },
    {
+    "diagnostic": "REDEFINES requiert un champ précédent au même niveau",
+    "first": 0,
+    "present": 3,
+    "alone": 0
+   },
+   {
     "diagnostic": "groupe vide: Z-MESSAGE-T3",
     "first": 0,
     "present": 3,
@@ -2059,12 +2025,6 @@
     "first": 1,
     "present": 2,
     "alone": 1
-   },
-   {
-    "diagnostic": "groupe vide: W-DATA",
-    "first": 0,
-    "present": 2,
-    "alone": 0
    },
    {
     "diagnostic": "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
@@ -2263,12 +2223,6 @@
     "first": 1,
     "present": 1,
     "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION LENGTH d'un élément variable non prise en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
    },
    {
     "diagnostic": "VALUE en LINKAGE SECTION non pris en charge",
@@ -2999,88 +2953,88 @@
   ],
   "greedy": [
    {
-    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
-    "unlocked": 4,
-    "cumulative": 4,
-    "first": 7,
-    "present": 7
-   },
-   {
     "diagnostic": "NO attendu",
     "unlocked": 4,
-    "cumulative": 8,
+    "cumulative": 4,
     "first": 6,
     "present": 6
    },
    {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 11,
+    "cumulative": 7,
     "first": 36,
     "present": 38
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 13,
+    "cumulative": 9,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 15,
+    "cumulative": 11,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 17,
+    "cumulative": 13,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 19,
+    "cumulative": 15,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 21,
+    "cumulative": 17,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 23,
+    "cumulative": 19,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nombre OCCURS attendu",
     "unlocked": 2,
-    "cumulative": 25,
+    "cumulative": 21,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "opérande INSPECT attendu",
     "unlocked": 2,
-    "cumulative": 27,
+    "cumulative": 23,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
     "unlocked": 1,
-    "cumulative": 28,
+    "cumulative": 24,
     "first": 7,
     "present": 11
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: is",
+    "unlocked": 2,
+    "cumulative": 26,
+    "first": 4,
+    "present": 4
    }
   ],
   "sources_detail": [
@@ -3276,7 +3230,6 @@
     "source": "run_extensions-017/prog.cob",
     "diagnostics": [
      "borne maximale OCCURS attendue",
-     "FUNCTION LENGTH d'un élément variable non prise en charge",
      "COL2 requiert 0 sous-script(s), reçu 1"
     ],
     "complete": true,
@@ -3435,63 +3388,6 @@
      "indicateur fixe 'I' non pris en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-097/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING",
-     "groupe vide: W-DATA"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-098/over.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-098/under.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-099/corr.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-100/nested.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING",
-     "groupe vide: W-DATA"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-101/redefines.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING",
-     "REDEFINES requiert un champ précédent au même niveau"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -6035,15 +5931,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_misc-147/prog.cob",
-    "diagnostics": [
-     "USAGE/clause non pris en charge: DEPENDING"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_misc-150/prog.cob",
     "diagnostics": [
      ". attendu"
@@ -6202,9 +6089,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T17:23:15+00:00",
-  "git_head": "c00a5e478196bf4c57cba9d6ce487e493f67e4bb",
-  "implementation_sha256": "8f97642fa419a24e6efd0f9df114dcb86df1623265927e5003de3f44026f5465",
+  "measured_at": "2026-10-31T18:05:04+00:00",
+  "git_head": "0ee799ce2caf135a521d63cfed1a4aa94a12eaf3",
+  "implementation_sha256": "74826b63956804c1383eefb5bee963affbd3b1d1a432e4692ba315aad1fd83dc",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
