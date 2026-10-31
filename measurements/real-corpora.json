@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T09:27:08+00:00",
- "git_head": "9ea1be56301f39d709f94136073bc94d6bf7bb0f",
- "implementation_sha256": "92eaacae64162110b0c464dad26ca85c4d5febf9f849b4c3d43e01feb1eb0412",
+ "measured_at": "2026-10-31T09:50:11+00:00",
+ "git_head": "14536d710a599de0aec5e517a068cf334712cc8f",
+ "implementation_sha256": "769711a703eeddb5d8754e1e6f1c075495c673b30233353d885a39723171d31b",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1262,
+  "accepted": 1264,
   "cobc_accepted": 1617,
-  "gap": 355,
+  "gap": 353,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 538,
+   "accepted": 540,
    "internal_errors": 0,
    "blockers": [
     [
@@ -483,14 +483,14 @@
      7
     ],
     [
-     "littéral attendu",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
      6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 341,
+   "gap": 339,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -507,14 +507,6 @@
     [
      "run_extensions-001/prog.cob",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    [
-     "run_extensions-002/prog.cob",
-     "littéral attendu"
-    ],
-    [
-     "run_extensions-005/prog.cob",
-     "littéral attendu"
     ],
     [
      "run_extensions-010/prog.cob",
@@ -1911,10 +1903,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 355,
-  "matching": 355,
-  "complete": 198,
-  "distinct": 224,
+  "sources": 353,
+  "matching": 353,
+  "complete": 196,
+  "distinct": 223,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -2167,12 +2159,6 @@
     "first": 0,
     "present": 4,
     "alone": 0
-   },
-   {
-    "diagnostic": "littéral attendu",
-    "first": 3,
-    "present": 3,
-    "alone": 2
    },
    {
     "diagnostic": "IDENTIFICATION DIVISION attendue",
@@ -2811,12 +2797,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "expression non prise en charge: B",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "expression non prise en charge: BX",
     "first": 0,
     "present": 1,
@@ -2999,6 +2979,12 @@
    {
     "diagnostic": "78 VALUE START OF / NEXT non pris en charge",
     "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "littéral attendu",
+    "first": 1,
     "present": 1,
     "alone": 0
    },
@@ -3522,24 +3508,6 @@
     "source": "run_extensions-001/prog.cob",
     "diagnostics": [
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-002/prog.cob",
-    "diagnostics": [
-     "littéral attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-005/prog.cob",
-    "diagnostics": [
-     "littéral attendu"
     ],
     "complete": true,
     "matches_measure": true
@@ -4583,7 +4551,6 @@
     "diagnostics": [
      "expression non prise en charge: E0",
      "expression non prise en charge: E-2",
-     "expression non prise en charge: B",
      "expression non prise en charge: BX"
     ],
     "complete": true,
@@ -6838,9 +6805,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T09:27:08+00:00",
-  "git_head": "9ea1be56301f39d709f94136073bc94d6bf7bb0f",
-  "implementation_sha256": "92eaacae64162110b0c464dad26ca85c4d5febf9f849b4c3d43e01feb1eb0412",
+  "measured_at": "2026-10-31T09:50:11+00:00",
+  "git_head": "14536d710a599de0aec5e517a068cf334712cc8f",
+  "implementation_sha256": "769711a703eeddb5d8754e1e6f1c075495c673b30233353d885a39723171d31b",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

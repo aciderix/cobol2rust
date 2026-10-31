@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T09:27:08+00:00 (commit `9ea1be5630`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T09:50:11+00:00 (commit `14536d710a`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T09:27:08+00:00 (commit `9ea1be5630`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 538 | 879 | 341 | 0 |
-| **Total** | | **3593** | **1262** | **1617** | **355** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 540 | 879 | 339 | 0 |
+| **Total** | | **3593** | **1264** | **1617** | **353** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:27:08+00:00, commit `9ea1be5630`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:50:11+00:00, commit `14536d710a`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,7 +130,7 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 7 × USAGE/clause non pris en charge: IS
 10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 355 sources, 355 au premier diagnostic identique à la mesure, 198 à inventaire complet, 224 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 353 sources, 353 au premier diagnostic identique à la mesure, 196 à inventaire complet, 223 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -656,3 +656,11 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   elle seule 16 sources (plafond) ; GOBACK RETURNING est présent dans 53
   sources sans être jamais le premier blocage. Total inchangé :
   **1262/3593**, écart **355**.
+- 2026-10-31 — Littéraux B"…" et H"…" (`scan_b`, `scan_h` de scanner.l) :
+  littéraux numériques de la valeur binaire ou hexadécimale, avec les
+  erreurs de cobc (caractère invalide, plus de 64 ou 16 chiffres, H vide,
+  B refusé en cobol85 par numeric-boolean) ; B"" (avertissement de cobc,
+  valeur 0) reste refusé par un diagnostic nommé. Les deux sources
+  débloquées (run_extensions-002/005) s'exécutent à l'identique.
+  Testsuite **538 → 540/1135**, total **1262 → 1264/3593**, écart
+  **355 → 353**. NIST statique 451/458.

@@ -432,6 +432,32 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 raise CobolError(f"ligne {start}: Z literals must contain at least one character")
             i = end + 1
             tokens.append(Token(source[token_start + 2:end] + "\x00", start, True, token_start, i))
+        elif c in "bBhH" and i + 1 < len(source) and source[i + 1] in "\"'":
+            # scan_b / scan_h: B"binary" and H"hex" are numeric literals.
+            quote, start = source[i + 1], line
+            end = source.find(quote, i + 2)
+            newline = source.find("\n", i + 2)
+            if end < 0 or (0 <= newline < end):
+                raise CobolError(f"ligne {start}: littéral {c.upper()} non terminé")
+            digits, kind = source[i + 2:end], c.upper()
+            if kind == "B":
+                if STD == "cobol85":
+                    raise CobolError(f"ligne {start}: numeric boolean literal does not conform to COBOL 85")
+                if not digits:
+                    raise CobolError(f"ligne {start}: littéral booléen de longueur nulle (avertissement de cobc) "
+                                     "non pris en charge")
+                limit, base, valid = 64, 2, "01"
+            else:
+                if not digits:
+                    raise CobolError(f"ligne {start}: H literals must contain at least one character")
+                limit, base, valid = 16, 16, "0123456789abcdefABCDEF"
+            if len(digits) > limit:
+                raise CobolError(f"ligne {start}: literal length {len(digits)} exceeds {limit} characters")
+            wrong = next((d for d in digits if d not in valid), None)
+            if wrong is not None:
+                raise CobolError(f"ligne {start}: literal contains invalid character '{wrong}'")
+            i = end + 1
+            tokens.append(Token(str(int(digits, base)), start, False, token_start, i))
         elif c in "xX" and i + 1 < len(source) and source[i + 1] in "\"'":
             # X"hex": two hexadecimal digits per byte (scanner.l).
             quote, start = source[i + 1], line

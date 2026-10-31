@@ -1,5 +1,17 @@
 # Validation — 30 octobre 2026
 
+## Littéraux B et H — 31 octobre 2026
+
+- `scan_b` / `scan_h` : B"…" et H"…" donnent un littéral numérique ; cinq
+  cas de refus confrontés à `cobc -fsyntax-only` (caractère invalide, H de
+  17 chiffres, B"012", B en `-std=cobol85`) et B"0101" accepté par les deux.
+- Preuves : `tests/fixtures/boolean_hex_literals.cob` identique au natif
+  (VALUE, MOVE, COMPUTE, comparaison) ; run_extensions-002 et -005
+  identiques au natif ; `tests/test_boolean_hex_literals.py` : quatre tests.
+- Mesure : **1262 → 1264/3593**, écart **355 → 353** ; exécution comparée
+  inchangée (74/84) ; NIST statique **451/458** ; suite **533 tests, 0 échec,
+  un PE Windows ignoré** (`tools/run_tests.py`).
+
 ## Inventaire de l'écart — 31 octobre 2026
 
 - Mesure (`real_corpora.py --cobc --execute --record`) : total inchangé

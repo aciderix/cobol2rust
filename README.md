@@ -111,7 +111,7 @@ Ces résultats portent sur les entrées testées.
 
 | Domaine | Pris en charge |
 | --- | --- |
-| Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"` ; concaténation `&`, `Z"…"`, `N"…"` refusés |
+| Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"`, numériques `B"…"` et `H"…"` (`scan_b`/`scan_h`, B refusé en cobol85) ; concaténation `&`, `Z"…"`, `N"…"` refusés |
 | Sources | Lecture en octets comme cobc (colonnes d'octets, BOM UTF-8 ignoré), en-tête IDENTIFICATION et PROCEDURE DIVISION facultatifs, INPUT-OUTPUT SECTION sans FILE-CONTROL si aucun SELECT ; détection du format comme cobc (colonne 7 de la première ligne, format fixe avec `-std=cobol85`), format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
 | Options IBM | Lignes `CBL …` / `PROCESS …` d'options du compilateur ignorées jusqu'à la fin de ligne, comme pplex.l |
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
