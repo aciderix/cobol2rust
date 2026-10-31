@@ -419,6 +419,8 @@ def picture_constants(p, picture):
 
 def declaration(p, file_record=False):
     if p.t.string or not p.t.key.isdigit():
+        if not p.t.string and p.tokens[p.i + 1].key == "SECTION":
+            p.error(f"{p.t.key} SECTION non prise en charge à cet endroit")
         p.error("niveau de donnée attendu")
     level = int(p.take().key)
     if isinstance(p.t, ConstantToken):

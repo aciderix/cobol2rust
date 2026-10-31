@@ -117,6 +117,24 @@ def execute_corpus(name: str, report: dict, jobs: int = 1) -> dict:
             "results": results}
 
 
+def gap_inventory(reports: dict, accepted_by_cobc: dict, jobs: int) -> dict:
+    """Every blocker of each gap source (tools/gap_inventory.py), and the
+    greedy order of the work that unblocks the most sources."""
+    from gap_inventory import inventory, plan
+    entries = []
+    for name, report in reports.items():
+        settings, includes = CORPORA[name], copy_dirs(CORPORA_DIR / name)
+        rows = [(row["source"], settings["format"], includes, row.get("diagnostic", row["status"]))
+                for row in report["results"]
+                if row["status"] != "emission_accepted" and accepted_by_cobc[name].get(row["source"])]
+        for row, result in zip(rows, inventory(rows, (settings["std"], False, False, False), jobs)):
+            entries.append({"corpus": name, "source": Path(row[0]).relative_to(CORPORA_DIR / name).as_posix(),
+                            **result})
+    return {"scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, "
+                     "inventaires complets seulement, l'émission peut encore refuser",
+            **plan(entries), "sources_detail": entries}
+
+
 def implementation_sha256() -> str:
     digest = hashlib.sha256()
     for path in sorted([*(ROOT / "cobol2rust").glob("*.py"), *(ROOT / "cobol2rust").glob("*.rs")]):
@@ -232,6 +250,9 @@ def cap_table(summary: dict) -> str:
             gap[diagnostic] += count
     lines += ["", "Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :", ""]
     lines += [f"{rank}. {count} × {diagnostic}" for rank, (diagnostic, count) in enumerate(gap.most_common(10), 1)]
+    if "gap_inventory" in summary:
+        from gap_inventory import table
+        lines += [""] + table(summary["gap_inventory"])
     return "\n".join(lines)
 
 
@@ -291,7 +312,7 @@ def main(argv=None) -> int:
     reports = {name: measure_corpus(name, args.jobs) for name in args.only}
     output = ROOT / "build" / "real-corpora"
     output.mkdir(parents=True, exist_ok=True)
-    corpora = {}
+    corpora, accepted_by_cobc = {}, {}
     for name in args.only:
         (output / f"{name}.json").write_text(json.dumps(reports[name], indent=1, ensure_ascii=False) + "\n",
                                              encoding="utf-8")
@@ -302,6 +323,7 @@ def main(argv=None) -> int:
             with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
                 cobc = dict(zip(sources, pool.map(lambda source: cobc_accepts(source, CORPORA[name], includes), sources)))
         corpora[name] = summarize(name, reports[name], cobc, pins.get(name))
+        accepted_by_cobc[name] = cobc
     totals = {key: sum(entry[key] for entry in corpora.values()) for key in ("sources", "accepted")}
     if args.cobc:
         totals.update({key: sum(entry[key] for entry in corpora.values()) for key in ("cobc_accepted", "gap", "accepted_where_cobc_refuses")})
@@ -311,6 +333,8 @@ def main(argv=None) -> int:
                "cobc": cobc_version() if args.cobc else None,
                "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
                "totals": totals, "corpora": corpora}
+    if args.cobc:
+        summary["gap_inventory"] = gap_inventory(reports, accepted_by_cobc, args.jobs)
     if args.execute:
         executed = {name: execute_corpus(name, reports[name], args.jobs) for name in args.only if name in EXECUTED}
         summary["execution"] = {"measured_at": measured_at, "git_head": summary["git_head"],

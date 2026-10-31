@@ -826,6 +826,10 @@ CALL_FIGURATIVES = {
 }
 
 
+RECOVERY_LIMIT = 40
+RESUMED = object()
+
+
 class TokenList(list):
     """The parser's tokens, with the positions of each word built on demand.
     Any change but `substitute` drops the index: the cb_add_78 substitution
@@ -909,6 +913,11 @@ class Parser:
         self.i = 0
         self.fields = {}
         self.constants = {}
+        # Inventory mode (tools/gap_inventory.py): a list of the refusals met
+        # while parsing resumes after each one. Never set to convert.
+        self.recovered = None
+        self.skipped_names = set()
+        self.refused_verbs = []
         self.files = {}
         self.conditions = {}
         self.data_stack = []
@@ -957,6 +966,73 @@ class Parser:
     @property
     def t(self):
         return self.tokens[self.i]
+
+    def recover(self, parse, resume):
+        """parse(), or in inventory mode the refusal is recorded and parsing
+        resumes after resume(start); RESUMED then stands for the item."""
+        if self.recovered is None:
+            return parse()
+        start = self.i
+        try:
+            return parse()
+        except CobolError as error:
+            # A use of a skipped declaration only repeats that refusal.
+            words = set(re.findall(r"[A-Z0-9][A-Z0-9-]*", str(error).upper()))
+            if not words & self.skipped_names or not self.recovered:
+                self.recovered.append(str(error))
+            if not self.tokens[start].string and self.tokens[start].key in VERBS:
+                self.refused_verbs.append(self.tokens[start].key)
+            if len(self.recovered) > RECOVERY_LIMIT:
+                raise
+            resume(start)
+            return RESUMED
+
+    def advance_past(self, start):
+        """At least one token past `start`, never past the end."""
+        self.i = max(self.i, start)
+        if self.i == start and not self.at("<EOF>"):
+            self.take()
+
+    def skip_statement(self, start):
+        """Inventory resumption: the next verb, period or scope end (END-x,
+        ELSE, WHEN), which the enclosing statement consumes."""
+        self.advance_past(start)
+        while not self.at("<EOF>") and not self.at(".") and (
+                self.t.string or (self.t.key not in VERBS and not self.t.key.startswith("END-")
+                                  and self.t.key not in {"ELSE", "WHEN"})):
+            self.take()
+
+    def orphan_after_refusal(self, stops=frozenset()):
+        """Inventory mode, after a refusal: the END-x of the refused statement,
+        or a phrase or scope word it left (ELSE, NOT ON...) and that does not
+        end the enclosing statement (`stops`), is passed over."""
+        if not self.recovered or self.t.string:
+            return False
+        key = self.t.key
+        if self.refused_verbs and key == "END-" + self.refused_verbs[-1]:
+            self.refused_verbs.pop()
+            self.take()
+            return True
+        if key in VERBS or key in stops or key in {".", "<EOF>"} or not (key in BOUNDARIES or key.startswith("END-")):
+            return False
+        self.skip_statement(self.i)
+        return True
+
+    def skip_entry(self, start):
+        """Inventory resumption: after the period ending the data entry, or at
+        the next section or division header for an unsupported section."""
+        section = not self.tokens[start].string and self.tokens[start + 1].key == "SECTION"
+        if self.tokens[start].key.isdigit() and not self.tokens[start + 1].string:
+            self.skipped_names.add(self.tokens[start + 1].key)
+        self.advance_past(start)
+        while not self.at("<EOF>") and not self.program_end():
+            if section and self.t.key.isdigit() and not self.t.string and not self.tokens[self.i + 1].string:
+                self.skipped_names.add(self.tokens[self.i + 1].key)
+            if section and not self.t.string and self.tokens[self.i + 1].key in {"SECTION", "DIVISION"}:
+                return
+            if not section and self.accept("."):
+                return
+            self.take()
 
     def error(self, message):
         raise CobolError(f"ligne {self.t.line}: {message} (près de {self.t.text!r})")
@@ -1343,7 +1419,7 @@ class Parser:
                 self.data_stack = []
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
                         and not self.at("COMMUNICATION") and not self.at("LOCAL-STORAGE") and not self.program_end():
-                    self.declaration()
+                    self.recover(self.declaration, self.skip_entry)
             if self.accept("LOCAL-STORAGE"):
                 if STD == "cobol85":
                     self.error("LOCAL-STORAGE non reconnu dans le profil cobol85 de GnuCOBOL 3.2")
@@ -1355,7 +1431,7 @@ class Parser:
                 before = set(self.fields)
                 while not self.at("PROCEDURE") and not self.at("LINKAGE") and not self.at("REPORT") \
                         and not self.at("COMMUNICATION") and not self.program_end():
-                    self.declaration()
+                    self.recover(self.declaration, self.skip_entry)
                 for key in set(self.fields) - before:
                     if self.fields[key].external:
                         self.error("EXTERNAL invalide en LOCAL-STORAGE")
@@ -1367,7 +1443,7 @@ class Parser:
                 self.in_linkage = True
                 while not self.at("PROCEDURE") and not self.at("REPORT") and not self.at("COMMUNICATION") \
                         and not self.program_end():
-                    self.declaration()
+                    self.recover(self.declaration, self.skip_entry)
                 self.in_linkage = False
             if self.accept("COMMUNICATION"):
                 self.communication_section()
@@ -1472,6 +1548,8 @@ class Parser:
         self.in_debugging = False
         nested_start = ended = False
         while not self.at("<EOF>"):
+            if self.orphan_after_refusal():
+                continue
             if self.at("."):
                 # The separator period ends a sentence: the target of NEXT SENTENCE.
                 line = self.take().line
@@ -1553,7 +1631,9 @@ class Parser:
             else:
                 if declaratives and current_section is None:
                     self.error("section USE attendue après DECLARATIVES")
-                current_body.append(self.statement())
+                statement = self.recover(self.statement, self.skip_statement)
+                if statement is not RESUMED:
+                    current_body.append(statement)
         if declaratives:
             self.error("END DECLARATIVES attendu")
         if current_section is not None:
@@ -3596,8 +3676,14 @@ class Parser:
         # ELSE and WHEN end them too, for the IF or EVALUATE around them.
         stops = stops | {key for key in BOUNDARIES if key.startswith("END-")} | {"ELSE", "WHEN"}
         result = []
-        while self.t.string or self.t.key not in stops | {".", "<EOF>"}:
-            result.append(self.statement())
+        while True:
+            if self.orphan_after_refusal(stops):
+                continue
+            if not self.t.string and self.t.key in stops | {".", "<EOF>"}:
+                break
+            statement = self.recover(self.statement, self.skip_statement)
+            if statement is not RESUMED:
+                result.append(statement)
         return result
 
     # parser.y turns field debugging off while these statements are parsed
@@ -4405,6 +4491,8 @@ class Parser:
                 self.error(f"'{self.t.text}' is not defined")
             return Stmt("stop", (status,), line)
         if verb == "GOBACK":
+            if self.at("RETURNING"):
+                self.error("GOBACK RETURNING non pris en charge")
             return Stmt("goback", (), line)
         if verb == "CALL":
             if self.t.string:
@@ -4586,6 +4674,8 @@ class Parser:
             if self.accept("SECTION"):
                 return Stmt("exit_section", (), line)
             if self.accept("PROGRAM"):
+                if self.at("RETURNING") or self.at("GIVING"):
+                    self.error(f"EXIT PROGRAM {self.t.key} non pris en charge")
                 return Stmt("exit_program", (), line)
             if self.accept("PERFORM"):
                 cycle = self.accept("CYCLE")

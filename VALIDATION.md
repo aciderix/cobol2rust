@@ -1,5 +1,26 @@
 # Validation — 30 octobre 2026
 
+## Inventaire de l'écart — 31 octobre 2026
+
+- Mesure (`real_corpora.py --cobc --execute --record`) : total inchangé
+  **1262/3593**, écart **355**, à examiner 0 ; exécution comparée inchangée
+  (74/84). Seuls changent des libellés de refus : `SCREEN SECTION non prise
+  en charge à cet endroit` (36 sources, auparavant « niveau de donnée
+  attendu »), `GOBACK RETURNING` et `EXIT PROGRAM RETURNING/GIVING non pris
+  en charge` (auparavant « instruction non prise en charge: RETURNING »).
+- Inventaire : **355/355** sources au premier diagnostic identique à la
+  mesure, **198** à inventaire complet, 224 diagnostics distincts ; ordre
+  glouton enregistré dans CAP.md et `measurements/real-corpora.json`.
+- Le mode reprise est inactif hors inventaire (`Parser.recovered = None`) ;
+  la boucle de `block()` réécrite reste équivalente (mêmes arrêts). NIST
+  statique **451/458** (`build/coverage-nist-inventory.json`).
+- Quatre nouveaux tests dans `tests/test_pipeline.py` : diagnostics suivants
+  et premier conservé, usages d'une déclaration sautée, terminateur de
+  l'instruction refusée, plan limité aux inventaires complets.
+- Suite (`tools/run_tests.py`, 4 processus) : **529 tests, 0 échec, un PE
+  Windows ignoré**, en 255 s (somme 1018 s, après redémarrage du conteneur :
+  caches Cargo des emplacements à reconstruire).
+
 ## Pipeline de validation parallèle — 31 octobre 2026
 
 Étape d'outillage : rien de ce que le convertisseur accepte ou produit ne

@@ -87,6 +87,24 @@ Trois garanties rendent ce parallélisme sûr :
   la première. Vérifié une fois sur les 1198 unités acceptées : Rust émis
   identique octet pour octet avec et sans cache.
 
+## Inventaire de l'écart
+
+`real_corpora.py --cobc` relit chaque source de l'écart (« cobc accepte,
+cobol2rust refuse ») avec le parseur en mode reprise (`tools/gap_inventory.py`,
+`Parser.recovered`) : une instruction ou une déclaration refusée est notée, puis
+l'analyse reprend au verbe, au point ou à la fin de portée suivants (le END-x de
+l'instruction refusée est consommé ; une section refusée est sautée jusqu'à la
+suivante). Les usages d'une déclaration sautée ne répètent pas son refus. Le
+résultat va dans `measurements/real-corpora.json` (`gap_inventory`, détail par
+source) et dans la table « Chantier » de CAP.md : ordre glouton des
+diagnostics qui débloquent le plus de sources entières.
+
+Garde-fous : le premier diagnostic de l'inventaire doit être celui de la mesure
+(sinon la source est écartée) ; les suivants sont indicatifs ; seule une source
+dont l'analyse est allée jusqu'au bout compte comme débloquable, et c'est un
+plafond, l'émission Rust pouvant encore refuser. Le mode reprise ne sert jamais
+à convertir : `Parser.recovered` vaut `None` hors inventaire.
+
 ## Mesure d'un corpus externe
 
 `coverage.py` mesure séparément le prétraitement, l'analyse et l'émission Rust.

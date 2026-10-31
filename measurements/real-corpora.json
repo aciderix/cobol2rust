@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T09:06:06+00:00",
- "git_head": "da5705ff33beee9cfc32fd0b12d6446b1288ebf7",
- "implementation_sha256": "bc62114710d5722f3d4b3660e454646aca74fac7c9e8789c315c676a97350ab9",
+ "measured_at": "2026-10-31T09:27:08+00:00",
+ "git_head": "9ea1be56301f39d709f94136073bc94d6bf7bb0f",
+ "implementation_sha256": "92eaacae64162110b0c464dad26ca85c4d5febf9f849b4c3d43e01feb1eb0412",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
@@ -357,11 +357,11 @@
      11
     ],
     [
-     "niveau de donnée attendu",
+     "instruction non prise en charge: FIND",
      10
     ],
     [
-     "instruction non prise en charge: FIND",
+     "copybook introuvable: LGCMAREA",
      10
     ]
    ],
@@ -439,8 +439,8 @@
    "internal_errors": 0,
    "blockers": [
     [
-     "niveau de donnée attendu",
-     43
+     "SCREEN SECTION non prise en charge à cet endroit",
+     42
     ],
     [
      "PROGRAM-ID attendu",
@@ -1082,67 +1082,67 @@
     ],
     [
      "run_manual_screen-001/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-002/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-003/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-004/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-005/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-006/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-007/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-008/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-009/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-014/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-015/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-016/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-017/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-018/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-019/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-020/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-021/prog.cob",
@@ -1158,67 +1158,67 @@
     ],
     [
      "run_manual_screen-024/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-025/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-026/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-027/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-028/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-029/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-030/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-031/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-032/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-033/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-034/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-035/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-036/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-037/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-038/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-039/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-040/prog.cob",
@@ -1230,7 +1230,7 @@
     ],
     [
      "run_manual_screen-043/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "run_manual_screen-044/prog.cob",
@@ -1818,11 +1818,11 @@
     ],
     [
      "syn_screen-005/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "syn_screen-008/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "syn_screen-009/prog.cob",
@@ -1834,7 +1834,7 @@
     ],
     [
      "syn_screen-015/prog.cob",
-     "niveau de donnée attendu"
+     "SCREEN SECTION non prise en charge à cet endroit"
     ],
     [
      "syn_screen-019/prog.cob",
@@ -1859,8 +1859,8 @@
    ],
    "gap_blockers": [
     [
-     "niveau de donnée attendu",
-     37
+     "SCREEN SECTION non prise en charge à cet endroit",
+     36
     ],
     [
      "clause SELECT non prise en charge",
@@ -1909,10 +1909,4938 @@
    ]
   }
  },
+ "gap_inventory": {
+  "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
+  "sources": 355,
+  "matching": 355,
+  "complete": 198,
+  "distinct": 224,
+  "diagnostics": [
+   {
+    "diagnostic": "GOBACK RETURNING non pris en charge",
+    "first": 0,
+    "present": 53,
+    "alone": 0
+   },
+   {
+    "diagnostic": "invalid expression: unfinished expression",
+    "first": 0,
+    "present": 50,
+    "alone": 0
+   },
+   {
+    "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
+    "first": 36,
+    "present": 38,
+    "alone": 3
+   },
+   {
+    "diagnostic": "expression non prise en charge: LINE",
+    "first": 9,
+    "present": 17,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: LINE",
+    "first": 0,
+    "present": 16,
+    "alone": 0
+   },
+   {
+    "diagnostic": "GENERATE requiert un nom de rapport ou de groupe DETAIL",
+    "first": 0,
+    "present": 12,
+    "alone": 0
+   },
+   {
+    "diagnostic": "clause SELECT non prise en charge",
+    "first": 12,
+    "present": 12,
+    "alone": 0
+   },
+   {
+    "diagnostic": "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+    "first": 7,
+    "present": 11,
+    "alone": 1
+   },
+   {
+    "diagnostic": "instruction non prise en charge: XML",
+    "first": 7,
+    "present": 9,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "first": 3,
+    "present": 9,
+    "alone": 2
+   },
+   {
+    "diagnostic": ". attendu",
+    "first": 8,
+    "present": 9,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: COMP-1",
+    "first": 4,
+    "present": 9,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: COMP-X",
+    "first": 5,
+    "present": 9,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: FLOAT-LONG",
+    "first": 4,
+    "present": 9,
+    "alone": 1
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: FLOAT-SHORT",
+    "first": 3,
+    "present": 9,
+    "alone": 1
+   },
+   {
+    "diagnostic": "PROCEDURE attendu",
+    "first": 8,
+    "present": 8,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression attendue",
+    "first": 1,
+    "present": 8,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PROGRAM-ID attendu",
+    "first": 8,
+    "present": 8,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+    "first": 6,
+    "present": 7,
+    "alone": 6
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
+    "first": 7,
+    "present": 7,
+    "alone": 3
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: IS",
+    "first": 7,
+    "present": 7,
+    "alone": 2
+   },
+   {
+    "diagnostic": "donnée subordonnée sans groupe parent",
+    "first": 0,
+    "present": 7,
+    "alone": 0
+   },
+   {
+    "diagnostic": "IF without imperative statement",
+    "first": 0,
+    "present": 6,
+    "alone": 0
+   },
+   {
+    "diagnostic": "NO attendu",
+    "first": 6,
+    "present": 6,
+    "alone": 4
+   },
+   {
+    "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
+    "first": 1,
+    "present": 5,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL USING requiert au moins un argument",
+    "first": 3,
+    "present": 5,
+    "alone": 3
+   },
+   {
+    "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+    "first": 5,
+    "present": 5,
+    "alone": 0
+   },
+   {
+    "diagnostic": "clé INDEXED composée (SOURCE IS) non prise en charge",
+    "first": 5,
+    "present": 5,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: COMP-2",
+    "first": 1,
+    "present": 5,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: AT",
+    "first": 5,
+    "present": 5,
+    "alone": 1
+   },
+   {
+    "diagnostic": "instruction non prise en charge: JSON",
+    "first": 4,
+    "present": 5,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: XML-CODE",
+    "first": 0,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$NARG: programme non converti ou routine système non pris en charge",
+    "first": 4,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
+    "first": 3,
+    "present": 4,
+    "alone": 1
+   },
+   {
+    "diagnostic": "REDEFINES requiert un champ précédent au même niveau",
+    "first": 0,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM ENVIRONMENT non pris en charge",
+    "first": 2,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "78 VALUE LENGTH OF non pris en charge",
+    "first": 3,
+    "present": 4,
+    "alone": 2
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+    "first": 2,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
+    "first": 0,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "entrée SPECIAL-NAMES non prise en charge: CURSOR",
+    "first": 4,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: is",
+    "first": 4,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "END-PERFORM attendu",
+    "first": 0,
+    "present": 4,
+    "alone": 0
+   },
+   {
+    "diagnostic": "littéral attendu",
+    "first": 3,
+    "present": 3,
+    "alone": 2
+   },
+   {
+    "diagnostic": "IDENTIFICATION DIVISION attendue",
+    "first": 3,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge",
+    "first": 3,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
+    "first": 3,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: PROGRAM-POINTER",
+    "first": 2,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "paragraphe CONFIGURATION non pris en charge",
+    "first": 3,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "EXIT PERFORM is only valid with inline PERFORM",
+    "first": 0,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "niveau de donnée attendu",
+    "first": 1,
+    "present": 3,
+    "alone": 1
+   },
+   {
+    "diagnostic": "groupe vide: Z-MESSAGE-T3",
+    "first": 0,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "COMMUNICATION SECTION non conforme hors -std=cobol85",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: END-XML",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: XML-EVENT",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "borne maximale OCCURS attendue",
+    "first": 1,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "COL2 requiert 0 sous-script(s), reçu 1",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "groupe vide: W-DATA",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
+    "first": 1,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PICTURE non prise en charge: N(4)",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: E0",
+    "first": 2,
+    "present": 2,
+    "alone": 1
+   },
+   {
+    "diagnostic": "nom ambigu: X; qualifier avec OF/IN si nécessaire",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY UPON CRT non pris en charge",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "entrée SPECIAL-NAMES non prise en charge: CRT",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY WITH blank (écran) non pris en charge",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: line",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "OCCURS DEPENDING ON limité à une table subordonnée",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "opérande INSPECT attendu",
+    "first": 2,
+    "present": 2,
+    "alone": 2
+   },
+   {
+    "diagnostic": "UNSTRING d'un littéral non pris en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 2
+   },
+   {
+    "diagnostic": "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: COMP-N",
+    "first": 0,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "END PROGRAM ne correspond pas au PROGRAM-ID",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
+    "first": 2,
+    "present": 2,
+    "alone": 2
+   },
+   {
+    "diagnostic": "option $SET DPC-IN-DATA non prise en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "SOURCE, VALUE et COLUMN limités aux articles élémentaires",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: DISCOUNT-IX",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "enregistrement dans un FD avec REPORT non pris en charge",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: WITH",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "nombre OCCURS attendu",
+    "first": 2,
+    "present": 2,
+    "alone": 2
+   },
+   {
+    "diagnostic": "VALUE incompatible avec la PICTURE",
+    "first": 2,
+    "present": 2,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: OF",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL identifiant requiert un champ alphanumérique",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "expression non prise en charge: XML-TEXT",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: NATIONAL",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: xml",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: xml-event",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "nom inconnu: XML-CODE; qualifier avec OF/IN si nécessaire",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM MICROSECOND-TIME non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "expression non prise en charge: WHEN-COMPILED",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION LENGTH d'un élément variable non prise en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "VALUE en LINKAGE SECTION non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "length of 'A-TABLE' out of bounds: 10",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ASSIGN TO KEYBOARD (périphérique spécial) non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY UPON ENVIRONMENT-NAME non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM ENVIRONMENT-VALUE non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY UPON ENVIRONMENT-VALUE non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM ARGUMENT-VALUE non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM ARGUMENT-NUMBER non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL C$GETPID: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE POINTER de groupe non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "indicateur fixe 'I' non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: UNLOCK",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "nom inconnu: FILE; qualifier avec OF/IN si nécessaire",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PIC X/A limité à 65535 caractères DISPLAY",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "READ direct requiert INVALID KEY, pas AT END",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "copybook introuvable: xfhfcd.cpy",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "copybook introuvable: xfhfcd3.cpy",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "LINE SEQUENTIAL requiert des colonnes DISPLAY",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USING limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "USE GLOBAL sur un fichier non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FUNCTION BYTE-LENGTH non prise en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: TEST-FLD",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FUNCTION COMBINED-DATETIME non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION BIT-OF non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FUNCTION BIT-TO-CHAR non prise en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FUNCTION CONTENT-LENGTH non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION CONTENT-OF non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION CURRENCY-SYMBOL non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION LOCALE-COMPARE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION LOCALE-DATE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION LOCALE-TIME non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-CALLER-ID non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-DATE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-FORMATTED-DATE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-ID non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-PATH non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-SOURCE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-TIME non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MONETARY-DECIMAL-POINT non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION SIGN non prise en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: E-2",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: B",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: BX",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "TO attendu",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL module: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL prog3 depuis prog2: programme contenu non visible (non modélisé)",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL prog2 depuis prog: programme contenu non visible (non modélisé)",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "groupe vide: GROUP-1.INNER-GROUP",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "groupe vide: GROUP-2.INNER-GROUP",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "invalid IF directive",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "REMAINDER avec un quotient recouvrant un opérande non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "DISPLAY UPON STDOUT non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "zone de données trop grande: T01-ALL.T01-REC",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY accepte uniquement champs et littéraux simples",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "indicateur fixe 'A' non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "directive >>TURN non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL callee1: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "alphabet inconnu pour SORT COLLATING SEQUENCE: EBCDIC",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PROGRAM COLLATING SEQUENCE avec alphabet non natif non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL callee2: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL ent3: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'subprogram' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "identifiant attendu",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL callee: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "SYMBOLIC CHARACTERS IN avec alphabet non natif non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "programme appelé prog.cob: ligne 34: REPOSITORY PROGRAM non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "REPOSITORY PROGRAM non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: >=",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL DIR/SUB: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "78 VALUE START OF / NEXT non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "01 CONSTANT FROM non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: JSON-CODE",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "AFTER attendu",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "NEXT GROUP entier attendu",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "plusieurs rapports dans un FD non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "clause de groupe de rapport non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "options multiples de LINE non prises en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "groupe de rapport 01 sans TYPE non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "clause RD non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "option $SET BOUND non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "COPY REPLACING d'un copybook contenant COPY non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "condition dupliquée ou réservée",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: SAME",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "niveau 88 de groupe limité aux littéraux alphanumériques",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: TYPE",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "RECORD attendu",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: N",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: NC",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CURRENCY ... PICTURE SYMBOL non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM COMMAND-LINE non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY UPON COMMAND-LINE non pris en charge",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: LOWER",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: UPPER",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: SIZE",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: PROTECTED",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ACCEPT FROM ESCAPE non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression non prise en charge: OMITTED",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "CALL stuff: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "directive >>CALL-CONVENTION non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "CALL prog3: programme non converti ou routine système non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "RUN attendu",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "ordinal requiert un entier littéral non signé",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "caractère non pris en charge '@'",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "option $SET ODOSLIDE non prise en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "VALUE sur FD/REDEFINES non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "nom inconnu: G; qualifier avec OF/IN si nécessaire",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "LINE PLUS 0 non pris en charge par cobc",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: ON",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "instruction non prise en charge: ESCAPE",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "DISPLAY WITH CONVERSION (écran) non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "groupe vide: IMPHEAD.IMPPIC",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   }
+  ],
+  "greedy": [
+   {
+    "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+    "unlocked": 6,
+    "cumulative": 6,
+    "first": 6,
+    "present": 7
+   },
+   {
+    "diagnostic": "NO attendu",
+    "unlocked": 4,
+    "cumulative": 10,
+    "first": 6,
+    "present": 6
+   },
+   {
+    "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
+    "unlocked": 3,
+    "cumulative": 13,
+    "first": 36,
+    "present": 38
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
+    "unlocked": 3,
+    "cumulative": 16,
+    "first": 7,
+    "present": 7
+   },
+   {
+    "diagnostic": "CALL USING requiert au moins un argument",
+    "unlocked": 3,
+    "cumulative": 19,
+    "first": 3,
+    "present": 5
+   },
+   {
+    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "unlocked": 3,
+    "cumulative": 22,
+    "first": 3,
+    "present": 9
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: COMP-X",
+    "unlocked": 3,
+    "cumulative": 25,
+    "first": 5,
+    "present": 9
+   },
+   {
+    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
+    "unlocked": 3,
+    "cumulative": 28,
+    "first": 3,
+    "present": 4
+   },
+   {
+    "diagnostic": "USAGE/clause non pris en charge: IS",
+    "unlocked": 2,
+    "cumulative": 30,
+    "first": 7,
+    "present": 7
+   },
+   {
+    "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
+    "unlocked": 2,
+    "cumulative": 32,
+    "first": 1,
+    "present": 5
+   },
+   {
+    "diagnostic": "donnée subordonnée sans groupe parent",
+    "unlocked": 2,
+    "cumulative": 34,
+    "first": 0,
+    "present": 7
+   },
+   {
+    "diagnostic": "78 VALUE LENGTH OF non pris en charge",
+    "unlocked": 2,
+    "cumulative": 36,
+    "first": 3,
+    "present": 4
+   }
+  ],
+  "sources_detail": [
+   {
+    "corpus": "beg-cobol-for-programmers",
+    "source": "978-1-4302-6253-4_Coughlan_Ch16/Listing16-2.cbl",
+    "diagnostics": [
+     "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "proleap-cobol-parser",
+    "source": "src/test/resources/gov/nist/CM303M.CBL",
+    "diagnostics": [
+     "COMMUNICATION SECTION non conforme hors -std=cobol85"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "proleap-cobol-parser",
+    "source": "src/test/resources/gov/nist/DB304M.CBL",
+    "diagnostics": [
+     "COMMUNICATION SECTION non conforme hors -std=cobol85"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "proleap-cobol-parser",
+    "source": "src/test/resources/gov/nist/IC114A.CBL",
+    "diagnostics": [
+     "programme appelé IC115A.CBL: ligne 56: indicateur fixe 'C' non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "proleap-cobol-parser",
+    "source": "src/test/resources/io/proleap/cobol/asg/data/screen/Screen.cbl",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "proleap-cobol-parser",
+    "source": "src/test/resources/io/proleap/cobol/asg/data/screen/ScreenFiller.cbl",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
+    "diagnostics": [
+     "instruction non prise en charge: OF"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/HELLO-WORLD.cbl",
+    "diagnostics": [
+     "CALL identifiant requiert un champ alphanumérique"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/TEST10.CBL",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/TEST14.CBL",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
+     "expression non prise en charge: XML-CODE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/TEST15.CBL",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/XML2.cbl",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "expression non prise en charge: XML-CODE",
+     "expression non prise en charge: END-XML",
+     "expression attendue",
+     "expression non prise en charge: XML-EVENT",
+     "expression non prise en charge: XML-TEXT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/xmls1.cbl",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: NATIONAL",
+     "instruction non prise en charge: XML",
+     "expression non prise en charge: XML-CODE",
+     "expression non prise en charge: END-XML",
+     "expression non prise en charge: XML-EVENT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "che4z-lsp-for-cobol",
+    "source": "tests/test_files/project/xmlup.cbl",
+    "diagnostics": [
+     "expression non prise en charge: xml",
+     "expression attendue",
+     "expression non prise en charge: xml-event",
+     "nom inconnu: XML-CODE; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_accept-001/prog.cob",
+    "diagnostics": [
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_accept-003/prog.cob",
+    "diagnostics": [
+     "ACCEPT FROM MICROSECOND-TIME non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_accept-006/prog.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-001/prog.cob",
+    "diagnostics": [
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-002/prog.cob",
+    "diagnostics": [
+     "littéral attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-005/prog.cob",
+    "diagnostics": [
+     "littéral attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-010/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: WHEN-COMPILED"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-017/prog.cob",
+    "diagnostics": [
+     "borne maximale OCCURS attendue",
+     "FUNCTION LENGTH d'un élément variable non prise en charge",
+     "COL2 requiert 0 sous-script(s), reçu 1"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-019/prog.cob",
+    "diagnostics": [
+     "VALUE en LINKAGE SECTION non pris en charge",
+     "borne maximale OCCURS attendue",
+     "COL2 requiert 0 sous-script(s), reçu 1",
+     "length of 'A-TABLE' out of bounds: 10"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-025/prog.cob",
+    "diagnostics": [
+     "CALL USING requiert au moins un argument"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-028/prog.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-034/callee.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-034/caller.cob",
+    "diagnostics": [
+     "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-037/callee.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-037/caller.cob",
+    "diagnostics": [
+     "programme appelé callee.cob: ligne 9: PROCEDURE DIVISION USING limité à BY REFERENCE"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-042/prog.cob",
+    "diagnostics": [
+     "ASSIGN TO KEYBOARD (périphérique spécial) non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-044/prog.cob",
+    "diagnostics": [
+     "DISPLAY UPON ENVIRONMENT-NAME non pris en charge",
+     "ACCEPT FROM ENVIRONMENT-VALUE non pris en charge",
+     "DISPLAY UPON ENVIRONMENT-VALUE non pris en charge",
+     "ACCEPT FROM ARGUMENT-VALUE non pris en charge",
+     "ACCEPT FROM ARGUMENT-NUMBER non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-052/prog.cob",
+    "diagnostics": [
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-053/callee.cob",
+    "diagnostics": [
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-053/caller.cob",
+    "diagnostics": [
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-053/prog.cob",
+    "diagnostics": [
+     "CALL C$NARG: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-054/callee.cob",
+    "diagnostics": [
+     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-054/caller.cob",
+    "diagnostics": [
+     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-055/callee.cob",
+    "diagnostics": [
+     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-055/caller.cob",
+    "diagnostics": [
+     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-056/prog.cob",
+    "diagnostics": [
+     "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-057/prog.cob",
+    "diagnostics": [
+     "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-058/prog.cob",
+    "diagnostics": [
+     "CALL C$MAKEDIR: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-059/prog.cob",
+    "diagnostics": [
+     "CALL C$GETPID: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-070/prog.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-070/prog2.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-070/prog3.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-070/prog4.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-070/prog5.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-071/prog.cob",
+    "diagnostics": [
+     "CALL RETURNING/GIVING non pris en charge",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-072/prog.cob",
+    "diagnostics": [
+     "CALL RETURNING/GIVING non pris en charge",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-073/prog.cob",
+    "diagnostics": [
+     "USAGE POINTER de groupe non pris en charge",
+     "CALL USING requiert au moins un argument",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "CALL RETURNING/GIVING non pris en charge",
+     "expression attendue",
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-074/prog.cob",
+    "diagnostics": [
+     "CALL USING requiert au moins un argument"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-075/prog.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-076/prog.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-086/prog.cob",
+    "diagnostics": [
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-087/prog.cob",
+    "diagnostics": [
+     "indicateur fixe 'I' non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-097/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING",
+     "USAGE/clause non pris en charge: COMP-1",
+     "groupe vide: W-DATA"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-098/over.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-098/under.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-099/corr.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-100/nested.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING",
+     "USAGE/clause non pris en charge: COMP-1",
+     "groupe vide: W-DATA"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_extensions-101/redefines.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING",
+     "REDEFINES requiert un champ précédent au même niveau",
+     "USAGE/clause non pris en charge: COMP-1"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-021/prog.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-021/prog2.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-024/prog.cob",
+    "diagnostics": [
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-025/prog.cob",
+    "diagnostics": [
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-026/prog.cob",
+    "diagnostics": [
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-028/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: UNLOCK"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-029/prog.cob",
+    "diagnostics": [
+     "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-038/prog.cob",
+    "diagnostics": [
+     "CALL CBL_DELETE_DIR: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-039/prog.cob",
+    "diagnostics": [
+     "PIC X/A limité à 65535 caractères DISPLAY",
+     "USAGE/clause non pris en charge: COMP-X",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+     "IF without imperative statement"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-040/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-X",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-040/prog2.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-X",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-041/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-X",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-042/prog2.cob",
+    "diagnostics": [
+     "CALL CBL_COPY_FILE: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-043/prog.cob",
+    "diagnostics": [
+     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-055/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-056/prog1.cob",
+    "diagnostics": [
+     "NO attendu",
+     "ACCEPT FROM ENVIRONMENT non pris en charge",
+     "IF without imperative statement"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-057/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-058/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-059/prog1.cob",
+    "diagnostics": [
+     "ACCEPT FROM ENVIRONMENT non pris en charge",
+     "IF without imperative statement"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-059/prog2.cob",
+    "diagnostics": [
+     "NO attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-064/prog.cob",
+    "diagnostics": [
+     "READ direct requiert INVALID KEY, pas AT END"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-065/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-066/prog1.cob",
+    "diagnostics": [
+     "NO attendu",
+     "ACCEPT FROM ENVIRONMENT non pris en charge",
+     "IF without imperative statement"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-067/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-068/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-069/prog1.cob",
+    "diagnostics": [
+     "ACCEPT FROM ENVIRONMENT non pris en charge",
+     "IF without imperative statement"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-069/prog2.cob",
+    "diagnostics": [
+     "NO attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-070/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-070/prog2.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-071/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-072/prog1.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-078/prog.cob",
+    "diagnostics": [
+     "copybook introuvable: xfhfcd.cpy"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-087/prog.cob",
+    "diagnostics": [
+     "copybook introuvable: xfhfcd3.cpy"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-090/prog.cob",
+    "diagnostics": [
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-092/prog.cob",
+    "diagnostics": [
+     "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
+     "REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-093/prog.cob",
+    "diagnostics": [
+     "LINE SEQUENTIAL requiert des colonnes DISPLAY"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-094/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
+     "REWRITE limité aux fichiers SEQUENTIAL/RELATIVE/INDEXED; réécriture LINE SEQUENTIAL non modélisée"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-096/prog.cob",
+    "diagnostics": [
+     "USING limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-105/prog.cob",
+    "diagnostics": [
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_file-105/prog2.cob",
+    "diagnostics": [
+     "USE GLOBAL sur un fichier non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-006/prog.cob",
+    "diagnostics": [
+     "PICTURE non prise en charge: N(4)",
+     "FUNCTION BYTE-LENGTH non prise en charge",
+     "expression attendue",
+     "expression non prise en charge: TEST-FLD"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-008/prog.cob",
+    "diagnostics": [
+     "FUNCTION COMBINED-DATETIME non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-011/prog.cob",
+    "diagnostics": [
+     "FUNCTION BIT-OF non prise en charge",
+     "FUNCTION BIT-TO-CHAR non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-013/prog.cob",
+    "diagnostics": [
+     "FUNCTION CONTENT-LENGTH non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-014/prog.cob",
+    "diagnostics": [
+     "FUNCTION CONTENT-OF non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-015/prog.cob",
+    "diagnostics": [
+     "CALL USING requiert au moins un argument"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-017/prog.cob",
+    "diagnostics": [
+     "FUNCTION CURRENCY-SYMBOL non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-047/prog.cob",
+    "diagnostics": [
+     "FUNCTION LOCALE-COMPARE non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-048/prog.cob",
+    "diagnostics": [
+     "FUNCTION LOCALE-DATE non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-049/prog.cob",
+    "diagnostics": [
+     "FUNCTION LOCALE-TIME non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-050/prog.cob",
+    "diagnostics": [
+     "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-063/prog.cob",
+    "diagnostics": [
+     "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-063/prog2.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-CALLER-ID non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-064/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-DATE non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-065/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-FORMATTED-DATE non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-066/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-ID non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-067/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-PATH non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-068/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-SOURCE non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-069/prog.cob",
+    "diagnostics": [
+     "FUNCTION MODULE-TIME non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-070/prog.cob",
+    "diagnostics": [
+     "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-071/prog.cob",
+    "diagnostics": [
+     "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-072/prog.cob",
+    "diagnostics": [
+     "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-073/prog.cob",
+    "diagnostics": [
+     "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-090/prog.cob",
+    "diagnostics": [
+     "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-091/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "FUNCTION SIGN non prise en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-123/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-124/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_functions-126/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-001/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: E0",
+     "expression non prise en charge: E-2",
+     "expression non prise en charge: B",
+     "expression non prise en charge: BX"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-002/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: E0"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-003/prog.cob",
+    "diagnostics": [
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-012/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "TO attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-013/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-021/prog.cob",
+    "diagnostics": [
+     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-022/prog.cob",
+    "diagnostics": [
+     "expression attendue"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-023/prog.cob",
+    "diagnostics": [
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-025/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-027/prog.cob",
+    "diagnostics": [
+     "CALL module: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-028/prog.cob",
+    "diagnostics": [
+     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-029/prog.cob",
+    "diagnostics": [
+     "CALL prog3 depuis prog2: programme contenu non visible (non modélisé)"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-031/prog.cob",
+    "diagnostics": [
+     "CALL prog2 depuis prog: programme contenu non visible (non modélisé)"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-033/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: PROGRAM-POINTER",
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-035/prog.cob",
+    "diagnostics": [
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-037/prog.cob",
+    "diagnostics": [
+     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-044/prog.cob",
+    "diagnostics": [
+     "78 VALUE LENGTH OF non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-048/prog.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-064/prog.cob",
+    "diagnostics": [
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-067/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-SHORT",
+     "groupe vide: GROUP-1.INNER-GROUP"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-068/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-SHORT",
+     "groupe vide: GROUP-2.INNER-GROUP"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-069/prog.cob",
+    "diagnostics": [
+     "invalid IF directive"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-075/prog.cob",
+    "diagnostics": [
+     "REMAINDER avec un quotient recouvrant un opérande non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-079/prog.cob",
+    "diagnostics": [
+     "DISPLAY UPON STDOUT non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-086/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-096/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-097/callee.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-097/caller.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-112/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "USAGE/clause non pris en charge: FLOAT-SHORT",
+     "USAGE/clause non pris en charge: COMP-1",
+     "USAGE/clause non pris en charge: COMP-2",
+     "USAGE/clause non pris en charge: COMP-X"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_fundamental-114/prog.cob",
+    "diagnostics": [
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_initialize-013/prog.cob",
+    "diagnostics": [
+     "zone de données trop grande: T01-ALL.T01-REC"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-001/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-002/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-003/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-004/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-005/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-006/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-007/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-008/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-009/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "DISPLAY UPON CRT non pris en charge",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-014/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-015/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-016/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-017/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-018/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-019/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-020/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-021/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: AT",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge",
+     "expression non prise en charge: LINE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-022/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: AT",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge",
+     "expression non prise en charge: LINE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-023/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: AT",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge",
+     "expression non prise en charge: LINE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-024/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge",
+     "DISPLAY UPON CRT non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-025/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-026/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-027/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-028/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-029/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-030/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-031/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-032/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-033/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-034/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-035/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-036/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-037/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-038/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-039/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-040/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-041/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-043/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-044/prog.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-045/prog.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-046/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-047/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-048/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-049/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-050/prog.cob",
+    "diagnostics": [
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "expression attendue",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-051/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-052/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-053/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-054/prog.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-055/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-056/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-057/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-058/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: LINE",
+     "instruction non prise en charge: LINE",
+     "invalid expression: unfinished expression",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-059/prog1.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CURSOR"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-059/prog2.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: is",
+     "donnée subordonnée sans groupe parent",
+     "SCREEN SECTION non prise en charge à cet endroit"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-060/prog1.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CRT"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-060/prog2.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: is",
+     "SCREEN SECTION non prise en charge à cet endroit",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-061/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: is",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "DISPLAY WITH blank (écran) non pris en charge",
+     "expression non prise en charge: line",
+     "instruction non prise en charge: LINE",
+     "END-PERFORM attendu",
+     "EXIT PERFORM is only valid with inline PERFORM",
+     "IF without imperative statement",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_manual_screen-062/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: is",
+     "donnée subordonnée sans groupe parent",
+     "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+     "DISPLAY WITH blank (écran) non pris en charge",
+     "expression non prise en charge: line",
+     "instruction non prise en charge: LINE",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-020/prog.cob",
+    "diagnostics": [
+     "CALL dump: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-022/prog.cob",
+    "diagnostics": [
+     "DISPLAY accepte uniquement champs et littéraux simples"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-025/prog.cob",
+    "diagnostics": [
+     "indicateur fixe 'A' non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-026/prog.cob",
+    "diagnostics": [
+     "directive >>TURN non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-027/prog2.cob",
+    "diagnostics": [
+     "OCCURS DEPENDING ON limité à une table subordonnée"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-027/prog3.cob",
+    "diagnostics": [
+     "OCCURS DEPENDING ON limité à une table subordonnée"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-034/caller.cob",
+    "diagnostics": [
+     "CALL callee1: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-037/callee.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-037/callee2.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-037/caller.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-041/callee.cob",
+    "diagnostics": [
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-041/caller.cob",
+    "diagnostics": [
+     "programme appelé callee.cob: ligne 12: CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-042/prog.cob",
+    "diagnostics": [
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+     "CALL USING requiert au moins un argument"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-045/prog.cob",
+    "diagnostics": [
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-046/prog.cob",
+    "diagnostics": [
+     "paragraphe CONFIGURATION non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-048/prog.cob",
+    "diagnostics": [
+     "opérande INSPECT attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-049/prog.cob",
+    "diagnostics": [
+     "opérande INSPECT attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-060/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-LONG"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-074/prog.cob",
+    "diagnostics": [
+     "UNSTRING d'un littéral non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-080/prog.cob",
+    "diagnostics": [
+     "UNSTRING d'un littéral non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-085/prog.cob",
+    "diagnostics": [
+     "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge",
+     "alphabet inconnu pour SORT COLLATING SEQUENCE: EBCDIC"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-085/prog2.cob",
+    "diagnostics": [
+     "PROGRAM COLLATING SEQUENCE avec alphabet non natif non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-093/caller.cob",
+    "diagnostics": [
+     "CALL callee2: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-094/main-prog.cob",
+    "diagnostics": [
+     "CALL ent3: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-095/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: PROGRAM-POINTER",
+     "ENTRY 'subprogram' duplicated",
+     "identifiant attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-096/caller.cob",
+    "diagnostics": [
+     "CALL callee: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-101/callee.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-101/caller.cob",
+    "diagnostics": [
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-116/callee.cob",
+    "diagnostics": [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-116/caller.cob",
+    "diagnostics": [
+     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-120/prog.cob",
+    "diagnostics": [
+     "SYMBOLIC CHARACTERS IN avec alphabet non natif non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-122/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-1",
+     "USAGE/clause non pris en charge: COMP-2",
+     "USAGE/clause non pris en charge: COMP-N",
+     "USAGE/clause non pris en charge: COMP-X",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-123/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-1",
+     "USAGE/clause non pris en charge: COMP-2",
+     "USAGE/clause non pris en charge: COMP-N",
+     "USAGE/clause non pris en charge: COMP-X",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "USAGE/clause non pris en charge: FLOAT-SHORT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-129/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: AT",
+     "GOBACK RETURNING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-130/prog.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-133/caller.cob",
+    "diagnostics": [
+     "CALL RETURNING/GIVING non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-142/caller.cob",
+    "diagnostics": [
+     "programme appelé prog.cob: ligne 34: REPOSITORY PROGRAM non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-142/prog.cob",
+    "diagnostics": [
+     "REPOSITORY PROGRAM non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-146/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: >="
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-148/prog.cob",
+    "diagnostics": [
+     "END PROGRAM ne correspond pas au PROGRAM-ID"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-149/prog.cob",
+    "diagnostics": [
+     "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-150/prog.cob",
+    "diagnostics": [
+     "CALL DIR/SUB: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-163/prog.cob",
+    "diagnostics": [
+     "78 VALUE LENGTH OF non pris en charge",
+     "78 VALUE START OF / NEXT non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-164/prog.cob",
+    "diagnostics": [
+     "littéral attendu",
+     "78 VALUE LENGTH OF non pris en charge",
+     "01 CONSTANT FROM non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-166/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
+     "END-PERFORM attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-167/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-1",
+     "USAGE/clause non pris en charge: COMP-2"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-168/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-1",
+     "END-PERFORM attendu",
+     "EXIT PERFORM is only valid with inline PERFORM"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-169/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-2",
+     "END-PERFORM attendu",
+     "EXIT PERFORM is only valid with inline PERFORM"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_misc-176/prog.cob",
+    "diagnostics": [
+     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-002/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-003/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
+     "expression attendue",
+     "expression non prise en charge: XML-CODE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-004/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-005/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-X",
+     "USAGE/clause non pris en charge: FLOAT-SHORT",
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "instruction non prise en charge: XML",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-006/prog.cob",
+    "diagnostics": [
+     "option $SET DPC-IN-DATA non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-008/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: JSON",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-009/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: JSON",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-010/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: JSON",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
+     "invalid expression: unfinished expression",
+     "expression non prise en charge: JSON-CODE",
+     "expression attendue"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-011/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: JSON",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-012/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: COMP-X",
+     "USAGE/clause non pris en charge: FLOAT-SHORT",
+     "USAGE/clause non pris en charge: FLOAT-LONG",
+     "instruction non prise en charge: JSON",
+     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_ml-013/prog.cob",
+    "diagnostics": [
+     "option $SET DPC-IN-DATA non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-001/prog.cob",
+    "diagnostics": [
+     "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-004/prog.cob",
+    "diagnostics": [
+     "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-008/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: DISCOUNT-IX"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-009/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: DISCOUNT-IX"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-011/prog.cob",
+    "diagnostics": [
+     "AFTER attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-012/prog.cob",
+    "diagnostics": [
+     "NEXT GROUP entier attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-014/prog.cob",
+    "diagnostics": [
+     "plusieurs rapports dans un FD non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-016/prog.cob",
+    "diagnostics": [
+     "clause de groupe de rapport non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-017/prog.cob",
+    "diagnostics": [
+     "options multiples de LINE non prises en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-019/prog.cob",
+    "diagnostics": [
+     "groupe de rapport 01 sans TYPE non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-026/prog.cob",
+    "diagnostics": [
+     "enregistrement dans un FD avec REPORT non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_reportwriter-028/prog.cob",
+    "diagnostics": [
+     "clause RD non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "run_subscripts-011/prog.cob",
+    "diagnostics": [
+     "option $SET BOUND non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_copy-013/prog.cob",
+    "diagnostics": [
+     "COPY REPLACING d'un copybook contenant COPY non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-005/containing-prog.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-019/prog.cob",
+    "diagnostics": [
+     "condition dupliquée ou réservée"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-025/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-026/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-040/prog.cob",
+    "diagnostics": [
+     "PICTURE non prise en charge: N(4)",
+     "niveau de donnée attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-047/prog.cob",
+    "diagnostics": [
+     "END PROGRAM ne correspond pas au PROGRAM-ID"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-049/prog.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-056/prog3.cob",
+    "diagnostics": [
+     "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-059/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: SAME",
+     "REDEFINES requiert un champ précédent au même niveau",
+     "groupe vide: Z-MESSAGE-T3"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-060/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS",
+     "donnée subordonnée sans groupe parent",
+     "REDEFINES requiert un champ précédent au même niveau",
+     "niveau 88 de groupe limité aux littéraux alphanumériques",
+     "USAGE/clause non pris en charge: PROGRAM-POINTER",
+     "groupe vide: Z-MESSAGE-T3"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_definition-060/progstd.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS",
+     "donnée subordonnée sans groupe parent",
+     "USAGE/clause non pris en charge: TYPE",
+     "REDEFINES requiert un champ précédent au même niveau",
+     "groupe vide: Z-MESSAGE-T3"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_file-011/prog.cob",
+    "diagnostics": [
+     "NO attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_file-012/prog.cob",
+    "diagnostics": [
+     "NO attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_file-013/prog.cob",
+    "diagnostics": [
+     "RECORD attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_file-040/prog.cob",
+    "diagnostics": [
+     "clé INDEXED composée (SOURCE IS) non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_file-043/prog.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_functions-003/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_functions-005/prog.cob",
+    "diagnostics": [
+     "PROGRAM-ID attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_literals-006/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: N",
+     "expression non prise en charge: NC"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-023/prog2.cob",
+    "diagnostics": [
+     "entrée SPECIAL-NAMES non prise en charge: CRT"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-024/prog3.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS",
+     "donnée subordonnée sans groupe parent",
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-024/prog4.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS",
+     "donnée subordonnée sans groupe parent",
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-024/prog6.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: IS",
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-025/prog3.cob",
+    "diagnostics": [
+     "CURRENCY ... PICTURE SYMBOL non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-030/prog.cob",
+    "diagnostics": [
+     "ACCEPT FROM COMMAND-LINE non pris en charge",
+     "DISPLAY UPON COMMAND-LINE non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-033/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: WITH",
+     "instruction non prise en charge: LOWER",
+     "instruction non prise en charge: UPPER"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-034/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: WITH",
+     "instruction non prise en charge: SIZE",
+     "instruction non prise en charge: PROTECTED"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-035/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: AT"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-043/prog.cob",
+    "diagnostics": [
+     "ACCEPT FROM ESCAPE non pris en charge",
+     "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-049/prog.cob",
+    "diagnostics": [
+     "expression non prise en charge: OMITTED"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-059/prog.cob",
+    "diagnostics": [
+     "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-059/prog2.cob",
+    "diagnostics": [
+     "CALL stuff: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-059/prog3.cob",
+    "diagnostics": [
+     "directive >>CALL-CONVENTION non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-062/prog.cob",
+    "diagnostics": [
+     "niveau de donnée attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-080/prog.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-080/prog2.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-084/prog.cob",
+    "diagnostics": [
+     "CALL prog3: programme non converti ou routine système non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-093/prog.cob",
+    "diagnostics": [
+     "RUN attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-097/prog.cob",
+    "diagnostics": [
+     "ordinal requiert un entier littéral non signé"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-105/prog.cob",
+    "diagnostics": [
+     "78 VALUE LENGTH OF non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-112/valid.cob",
+    "diagnostics": [
+     "caractère non pris en charge '@'"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-114/valid.cob",
+    "diagnostics": [
+     "IDENTIFICATION DIVISION attendue"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-122/prog.cob",
+    "diagnostics": [
+     "clause SELECT non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-147/prog.cob",
+    "diagnostics": [
+     "USAGE/clause non pris en charge: DEPENDING"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_misc-150/prog.cob",
+    "diagnostics": [
+     ". attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_occurs-005/prog3.cob",
+    "diagnostics": [
+     "option $SET ODOSLIDE non prise en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_occurs-006/prog.cob",
+    "diagnostics": [
+     "nombre OCCURS attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_occurs-006/prog2.cob",
+    "diagnostics": [
+     "nombre OCCURS attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_redefines-013/prog.cob",
+    "diagnostics": [
+     "VALUE sur FD/REDEFINES non pris en charge",
+     "donnée subordonnée sans groupe parent",
+     "nom inconnu: G; qualifier avec OF/IN si nécessaire"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_reportwriter-005/prog.cob",
+    "diagnostics": [
+     "LINE PLUS 0 non pris en charge par cobc"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_reportwriter-010/prog.cob",
+    "diagnostics": [
+     "enregistrement dans un FD avec REPORT non pris en charge"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-005/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-008/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-009/prog.cob",
+    "diagnostics": [
+     "instruction non prise en charge: ON",
+     "instruction non prise en charge: ESCAPE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-013/prog3.cob",
+    "diagnostics": [
+     "PROCEDURE attendu"
+    ],
+    "complete": false,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-015/prog.cob",
+    "diagnostics": [
+     "SCREEN SECTION non prise en charge à cet endroit"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_screen-019/prog.cob",
+    "diagnostics": [
+     "DISPLAY WITH CONVERSION (écran) non pris en charge"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_value-008/prog.cob",
+    "diagnostics": [
+     "VALUE incompatible avec la PICTURE",
+     "niveau de donnée attendu"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_value-009/prog.cob",
+    "diagnostics": [
+     "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_value-012/prog.cob",
+    "diagnostics": [
+     "VALUE incompatible avec la PICTURE"
+    ],
+    "complete": true,
+    "matches_measure": true
+   },
+   {
+    "corpus": "gnucobol-testsuite",
+    "source": "syn_value-013/prog.cob",
+    "diagnostics": [
+     "groupe vide: IMPHEAD.IMPPIC"
+    ],
+    "complete": false,
+    "matches_measure": true
+   }
+  ]
+ },
  "execution": {
-  "measured_at": "2026-10-31T09:06:06+00:00",
-  "git_head": "da5705ff33beee9cfc32fd0b12d6446b1288ebf7",
-  "implementation_sha256": "bc62114710d5722f3d4b3660e454646aca74fac7c9e8789c315c676a97350ab9",
+  "measured_at": "2026-10-31T09:27:08+00:00",
+  "git_head": "9ea1be56301f39d709f94136073bc94d6bf7bb0f",
+  "implementation_sha256": "92eaacae64162110b0c464dad26ca85c4d5febf9f849b4c3d43e01feb1eb0412",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

@@ -40,8 +40,9 @@ emplacement verrouillé ni `cargo clean -p` (empreinte Cargo indépendante du
 chemin). Le cache d'analyse (`cli.analysis_cache`) ne sert qu'aux mesures,
 sur corpus en lecture seule.
 
-Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
-blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
+Méthode suivie à chaque étape (voir CAP.md) : choisir dans la table
+« Chantier » de CAP.md (inventaire de l'écart, `tools/gap_inventory.py`)
+ou dans « Premiers blocages » ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
 quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des
 formes, y compris les cas limites ; fixture native dans
 `tests/fixtures/` vérifiée dans la suite Python ; exécuter

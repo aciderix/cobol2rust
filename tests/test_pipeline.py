@@ -3,13 +3,17 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 from cobol2rust.cli import analysis_cache, convert, parse_cached
 from cobol2rust.emitter import Emitter
 from cobol2rust.frontend import CobolError, Parser, TokenList, lex
-from cobol2rust.toolchain import build_rust, find_tool
+from cobol2rust.toolchain import ROOT, build_rust, find_tool
+
+sys.path.insert(0, str(ROOT / "tools"))
+from gap_inventory import inventory_source, plan  # noqa: E402
 
 
 SOURCE = ("identification division.\nprogram-id. outer.\ndata division.\nworking-storage section.\n"
@@ -58,6 +62,48 @@ class ConstantScopeTests(unittest.TestCase):
         tokens.substitute("A", 2, tokens.scope_end(2, False), lambda token: lex("'q'")[0])
         self.assertEqual(tokens.positions("A"), [1])
         self.assertEqual([token.text for token in tokens][:6], ["z", "a", "b", "q", ".", "q"])
+
+
+def inventory(body, storage="01 x pic 9.\n"):
+    source = ("identification division.\nprogram-id. inventory-case.\ndata division.\nworking-storage section.\n"
+              f"{storage}procedure division.\n{body}\nstop run.\n")
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "case.cob"
+        path.write_text(source, encoding="utf-8")
+        try:
+            Parser(source).parse()
+        except CobolError as error:
+            first = str(error)
+        else:
+            first = None
+        return first, inventory_source(str(path), "free", [], first or "")
+
+
+class GapInventoryTests(unittest.TestCase):
+    def test_recovery_lists_later_refusals_and_keeps_the_first(self):
+        first, result = inventory("move zz-undefined to x.\ndisplay x.\ngoback returning 0.")
+        self.assertIn("zz-undefined", first)
+        self.assertTrue(result["matches_measure"] and result["complete"])
+        self.assertEqual(result["diagnostics"], ["expression non prise en charge: zz-undefined",
+                                                 "GOBACK RETURNING non pris en charge"])
+
+    def test_uses_of_a_skipped_declaration_are_not_repeated(self):
+        first, result = inventory("display bad.\nmove 1 to bad.", "01 x pic 9.\n01 bad pic x(4) usage comp-x.\n")
+        self.assertEqual(result["diagnostics"], ["USAGE/clause non pris en charge: comp-x"])
+
+    def test_the_terminator_of_a_refused_statement_is_consumed(self):
+        first, result = inventory("perform 2 times\n call 'sub' using by value 1 end-call\n end-perform.\ndisplay x.")
+        self.assertEqual(len(result["diagnostics"]), 1, result)
+        self.assertTrue(result["complete"])
+
+    def test_plan_counts_only_complete_inventories(self):
+        entries = [{"diagnostics": ["a"], "complete": True, "matches_measure": True},
+                   {"diagnostics": ["a", "b"], "complete": True, "matches_measure": True},
+                   {"diagnostics": ["b"], "complete": False, "matches_measure": True},
+                   {"diagnostics": ["c"], "complete": True, "matches_measure": False}]
+        summary = plan(entries)
+        self.assertEqual((summary["matching"], summary["complete"]), (3, 2))
+        self.assertEqual([(step["diagnostic"], step["cumulative"]) for step in summary["greedy"]], [("a", 1), ("b", 2)])
 
 
 @unittest.skipUnless(find_tool("cargo"), "Cargo required")

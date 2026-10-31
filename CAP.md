@@ -12,8 +12,12 @@ et comparés et 14 autres seulement compilés).
 
 Règles à chaque étape :
 1. Choisir le chantier dans le tableau : d'abord l'écart « cobc accepte,
-   cobol2rust refuse », par nombre de sources débloquées. Justifier dans le
-   journal tout autre choix (profil IBM, CICS/SQL, limites, preuve).
+   cobol2rust refuse », par nombre de sources débloquées. L'inventaire de
+   l'écart (table « Chantier ») donne, pour chaque diagnostic, les sources
+   qu'il débloque à lui seul ou avec les précédents ; préférer un groupe de
+   chantiers d'une même construction qui débloque des sources entières.
+   Justifier dans le journal tout autre choix (profil IBM, CICS/SQL,
+   limites, preuve).
 2. Porter fidèlement cobc/libcob 3.2, vérifier sur un essai natif, refuser
    par un diagnostic nommé ce qui n'est pas reproduit. Implémenter la
    construction en entier, pas seulement la forme qu'un corpus exige.
@@ -91,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T09:06:06+00:00 (commit `da5705ff33`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T09:27:08+00:00 (commit `9ea1be5630`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -104,7 +108,7 @@ Dernière mesure : 2026-10-31T09:06:06+00:00 (commit `da5705ff33`, cobc (GnuCOBO
 | gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 538 | 879 | 341 | 0 |
 | **Total** | | **3593** | **1262** | **1617** | **355** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:06:06+00:00, commit `da5705ff33`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:27:08+00:00, commit `9ea1be5630`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -115,7 +119,7 @@ Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T09:06:06+00:00, commit `
 
 Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par source) :
 
-1. 37 × niveau de donnée attendu
+1. 36 × SCREEN SECTION non prise en charge à cet endroit
 2. 12 × clause SELECT non prise en charge
 3. 9 × expression non prise en charge: LINE
 4. 8 × PROCEDURE attendu
@@ -125,6 +129,38 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 8. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 9. 7 × USAGE/clause non pris en charge: IS
 10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
+
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 355 sources, 355 au premier diagnostic identique à la mesure, 198 à inventaire complet, 224 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+
+| Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1 | CALL BY VALUE : ABI hors des routines système d'octets non prise en charge | 6 | 6 | 6 | 7 |
+| 2 | NO attendu | 4 | 10 | 6 | 6 |
+| 3 | SCREEN SECTION non prise en charge à cet endroit | 3 | 13 | 36 | 38 |
+| 4 | USAGE/clause non pris en charge: DEPENDING | 3 | 16 | 7 | 7 |
+| 5 | CALL USING requiert au moins un argument | 3 | 19 | 3 | 5 |
+| 6 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 3 | 22 | 3 | 9 |
+| 7 | USAGE/clause non pris en charge: COMP-X | 3 | 25 | 5 | 9 |
+| 8 | CALL RETURNING/GIVING non pris en charge | 3 | 28 | 3 | 4 |
+| 9 | USAGE/clause non pris en charge: IS | 2 | 30 | 7 | 7 |
+| 10 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 32 | 1 | 5 |
+| 11 | donnée subordonnée sans groupe parent | 2 | 34 | 0 | 7 |
+| 12 | 78 VALUE LENGTH OF non pris en charge | 2 | 36 | 3 | 4 |
+
+Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
+
+- 53 × GOBACK RETURNING non pris en charge (1er : 0, seul : 0)
+- 50 × invalid expression: unfinished expression (1er : 0, seul : 0)
+- 38 × SCREEN SECTION non prise en charge à cet endroit (1er : 36, seul : 3)
+- 17 × expression non prise en charge: LINE (1er : 9, seul : 0)
+- 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
+- 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
+- 12 × clause SELECT non prise en charge (1er : 12, seul : 0)
+- 11 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire (1er : 7, seul : 1)
+- 9 × instruction non prise en charge: XML (1er : 7, seul : 0)
+- 9 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc) (1er : 3, seul : 2)
+- 9 × . attendu (1er : 8, seul : 0)
+- 9 × USAGE/clause non pris en charge: COMP-1 (1er : 4, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -609,3 +645,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   exécution **~8 min 30 → 202 s**, suite **480 s → 162 s**, NIST statique
   ~60 s → 9 s, NIST complet **1 h 15 → 375 s** (427/427, 9610 PASS,
   0 FAIL). Total inchangé : **1262/3593**, écart **355**.
+- 2026-10-31 — Inventaire de l'écart (outillage) : la mesure ne voyait que le
+  premier blocage de chaque source. `real_corpora.py --cobc` relit désormais
+  les 355 sources de l'écart avec le parseur en mode reprise et publie la
+  table « Chantier » (ordre glouton des diagnostics qui débloquent des
+  sources entières) : 355/355 au premier diagnostic identique, 198
+  inventaires complets. Constats : 36 des 37 « niveau de donnée attendu »
+  étaient des SCREEN SECTION (diagnostic désormais nommé) ; la famille
+  CALL (BY VALUE, USING d'un littéral, sans argument, RETURNING) débloque à
+  elle seule 16 sources (plafond) ; GOBACK RETURNING est présent dans 53
+  sources sans être jamais le premier blocage. Total inchangé :
+  **1262/3593**, écart **355**.

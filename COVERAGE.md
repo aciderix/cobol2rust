@@ -4,6 +4,9 @@
 > (tableau de [CAP.md](CAP.md), `tools/real_corpora.py`). Les sections NIST
 > ci-dessous décrivent la première partie ; NIST est désormais un test de
 > non-régression, pas une mesure de la couverture du COBOL existant.
+> L'inventaire de l'écart (table « Chantier » de CAP.md) liste tous les
+> blocages de chaque source refusée, pour viser les chantiers qui débloquent
+> des sources entières ; ses diagnostics suivants sont indicatifs.
 
 L'objectif demandé est une **garantie universelle de conversion COBOL vers
 Rust**, couvrant tout le COBOL existant, au-delà du sous-ensemble de la version
