@@ -10,6 +10,8 @@ def layout_fields(fields):
                 f.size = f.edit_size
             elif f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
                 f.size = (f.digits + 2) // 2
+            elif f.usage in {"COMP-X", "COMP-N"}:
+                f.size = f.comp_x_size
             elif f.usage in {"COMP-1", "COMP-2"}:
                 # C float and double.
                 f.size = 4 if f.usage == "COMP-1" else 8

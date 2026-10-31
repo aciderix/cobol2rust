@@ -1,8 +1,8 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T12:39:39+00:00",
- "git_head": "f2ab700e8064c00028b2d4fd08c8ea049a15fc5a",
- "implementation_sha256": "1b1d6f711f8f5ca6cec338d4682bc92e99c0b63187ad7d3a8ccaf68f99abe589",
+ "measured_at": "2026-10-31T13:10:37+00:00",
+ "git_head": "10014e8592f8a24342215f96727599b64c044cb3",
+ "implementation_sha256": "099c350891833d3b0062a52dea1910cc76dc46506f33cf1710199671df8d7ab1",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
@@ -479,11 +479,11 @@
      7
     ],
     [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
      6
     ],
     [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
      6
     ]
    ],
@@ -714,15 +714,15 @@
     ],
     [
      "run_file-040/prog.cob",
-     "USAGE/clause non pris en charge: COMP-X"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_file-040/prog2.cob",
-     "USAGE/clause non pris en charge: COMP-X"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_file-041/prog.cob",
-     "USAGE/clause non pris en charge: COMP-X"
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     [
      "run_file-042/prog2.cob",
@@ -1414,11 +1414,11 @@
     ],
     [
      "run_misc-122/prog.cob",
-     "USAGE/clause non pris en charge: COMP-N"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
     ],
     [
      "run_misc-123/prog.cob",
-     "USAGE/clause non pris en charge: COMP-N"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
     ],
     [
      "run_misc-129/prog.cob",
@@ -1486,7 +1486,7 @@
     ],
     [
      "run_ml-005/prog.cob",
-     "USAGE/clause non pris en charge: COMP-X"
+     "instruction non prise en charge: XML"
     ],
     [
      "run_ml-006/prog.cob",
@@ -1510,7 +1510,7 @@
     ],
     [
      "run_ml-012/prog.cob",
-     "USAGE/clause non pris en charge: COMP-X"
+     "instruction non prise en charge: JSON"
     ],
     [
      "run_ml-013/prog.cob",
@@ -1855,16 +1855,16 @@
      6
     ],
     [
+     "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+     6
+    ],
+    [
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
      6
     ],
     [
      "NO attendu",
      6
-    ],
-    [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-     5
     ]
    ]
   }
@@ -1874,7 +1874,7 @@
   "sources": 345,
   "matching": 345,
   "complete": 187,
-  "distinct": 215,
+  "distinct": 213,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1926,25 +1926,19 @@
    },
    {
     "diagnostic": "instruction non prise en charge: XML",
-    "first": 7,
-    "present": 9,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
-    "first": 3,
-    "present": 9,
-    "alone": 2
-   },
-   {
-    "diagnostic": ". attendu",
     "first": 8,
     "present": 9,
     "alone": 0
    },
    {
-    "diagnostic": "USAGE/clause non pris en charge: COMP-X",
-    "first": 5,
+    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "first": 6,
+    "present": 9,
+    "alone": 5
+   },
+   {
+    "diagnostic": ". attendu",
+    "first": 8,
     "present": 9,
     "alone": 0
    },
@@ -2034,7 +2028,7 @@
    },
    {
     "diagnostic": "instruction non prise en charge: JSON",
-    "first": 4,
+    "first": 5,
     "present": 5,
     "alone": 0
    },
@@ -2076,7 +2070,7 @@
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
-    "first": 2,
+    "first": 4,
     "present": 4,
     "alone": 0
    },
@@ -2274,12 +2268,6 @@
    },
    {
     "diagnostic": "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-    "first": 2,
-    "present": 2,
-    "alone": 0
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: COMP-N",
     "first": 2,
     "present": 2,
     "alone": 0
@@ -3176,46 +3164,39 @@
     "present": 7
    },
    {
+    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
+    "unlocked": 5,
+    "cumulative": 11,
+    "first": 6,
+    "present": 9
+   },
+   {
     "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
     "unlocked": 4,
-    "cumulative": 10,
+    "cumulative": 15,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "NO attendu",
     "unlocked": 4,
-    "cumulative": 14,
+    "cumulative": 19,
     "first": 6,
     "present": 6
    },
    {
-    "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
-    "unlocked": 3,
-    "cumulative": 17,
-    "first": 36,
-    "present": 38
-   },
-   {
     "diagnostic": "CALL USING requiert au moins un argument",
-    "unlocked": 3,
-    "cumulative": 20,
+    "unlocked": 4,
+    "cumulative": 23,
     "first": 3,
     "present": 5
    },
    {
-    "diagnostic": "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
-    "unlocked": 3,
-    "cumulative": 23,
-    "first": 3,
-    "present": 9
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: COMP-X",
+    "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
     "cumulative": 26,
-    "first": 5,
-    "present": 9
+    "first": 36,
+    "present": 38
    },
    {
     "diagnostic": "CALL RETURNING/GIVING non pris en charge",
@@ -3251,6 +3232,13 @@
     "cumulative": 37,
     "first": 3,
     "present": 4
+   },
+   {
+    "diagnostic": "UNSTRING d'un littéral non pris en charge",
+    "unlocked": 2,
+    "cumulative": 39,
+    "first": 2,
+    "present": 2
    }
   ],
   "sources_detail": [
@@ -3906,7 +3894,6 @@
     "source": "run_file-039/prog.cob",
     "diagnostics": [
      "PIC X/A limité à 65535 caractères DISPLAY",
-     "USAGE/clause non pris en charge: COMP-X",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)",
      "IF without imperative statement"
     ],
@@ -3917,7 +3904,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-040/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-X",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     "complete": true,
@@ -3927,7 +3913,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-040/prog2.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-X",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     "complete": true,
@@ -3937,7 +3922,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_file-041/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-X",
      "CALL USING d'un littéral numérique non pris en charge (entier C de cobc)"
     ],
     "complete": true,
@@ -4683,8 +4667,7 @@
     "source": "run_fundamental-112/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
-     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34",
-     "USAGE/clause non pris en charge: COMP-X"
+     "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
     "complete": true,
     "matches_measure": true
@@ -5658,8 +5641,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-122/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-N",
-     "USAGE/clause non pris en charge: COMP-X",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
@@ -5670,8 +5651,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-123/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-N",
-     "USAGE/clause non pris en charge: COMP-X",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
@@ -5837,7 +5816,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_ml-005/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-X",
      "instruction non prise en charge: XML",
      "GENERATE requiert un nom de rapport ou de groupe DETAIL"
     ],
@@ -5900,7 +5878,6 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_ml-012/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: COMP-X",
      "instruction non prise en charge: JSON",
      "GENERATE requiert un nom de rapport ou de groupe DETAIL"
     ],
@@ -6622,9 +6599,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T12:39:39+00:00",
-  "git_head": "f2ab700e8064c00028b2d4fd08c8ea049a15fc5a",
-  "implementation_sha256": "1b1d6f711f8f5ca6cec338d4682bc92e99c0b63187ad7d3a8ccaf68f99abe589",
+  "measured_at": "2026-10-31T13:10:37+00:00",
+  "git_head": "10014e8592f8a24342215f96727599b64c044cb3",
+  "implementation_sha256": "099c350891833d3b0062a52dea1910cc76dc46506f33cf1710199671df8d7ab1",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

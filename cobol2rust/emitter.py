@@ -667,7 +667,7 @@ class Emitter:
             literal = e.args[0].replace(".", ",") if getattr(self.program, "decimal_comma", False) else e.args[0]
             return f"Value::text({quoted(literal)})"
         if (e.op == "var" and e.args[0].start is None
-                and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display", "Float", "Double"}):
+                and self.storage_usage(self.program.fields[e.args[0].name]) in {"Native", "Register", "Display", "Float", "Double", "Swapped"}):
             # cob_print_realbin reads the stored integer of the item
             # itself; an invalid DISPLAY item is shown as it is stored.
             return f"{self.reference(e.args[0])}.clone()"
@@ -726,7 +726,7 @@ class Emitter:
                 text = ("-" if arg.op == "unary-" else "+" if arg.op == "unary+" else "") + literal.args[0]
                 return f"runtime::intrinsic::abs_field(runtime::intrinsic::literal_field({quoted(text)}))"
             if (arg.op != "var" or arg.args[0].start is not None
-                    or self.storage_usage(self.program.fields[arg.args[0].name]) in {"Native", "Register"}):
+                    or self.storage_usage(self.program.fields[arg.args[0].name]) in {"Native", "Register", "Swapped"}):
                 raise CobolError("DISPLAY de FUNCTION ABS de cet argument non pris en charge")
             return f"runtime::intrinsic::abs_field({self.reference(arg.args[0])}.snapshot())"
         if name in {"ORD", "ORD-MAX", "ORD-MIN", "LENGTH", "INTEGER-OF-DATE", "INTEGER-OF-DAY",
@@ -851,7 +851,7 @@ class Emitter:
                 usage = self.storage_usage(f)
                 if f.usage == "INDEX":
                     return True
-                if usage in {"Binary", "Native", "Register"}:
+                if usage in {"Binary", "Native", "Register", "Swapped"}:
                     return f.scale <= 0 and f.size <= 8
                 if usage in {"Packed", "PackedNoSign"}:
                     return f.scale <= 0 and f.digits < 19
@@ -1125,7 +1125,7 @@ class Emitter:
                     if self.storage_usage(field) in {"Packed", "PackedNoSign"}:
                         self.check_packed_literal_move(expr, field)
                         if (expr.op == "var" and
-                                self.storage_usage(self.program.fields[expr.args[0].name]) in {"Binary", "Native", "Register"}):
+                                self.storage_usage(self.program.fields[expr.args[0].name]) in {"Binary", "Native", "Register", "Swapped"}):
                             method = "move_binary_to_packed"
                     self.write(f"{self.receiver(ref)}.{method}(&{value});")
                 elif isinstance(rounded, str):
@@ -2303,7 +2303,7 @@ class Emitter:
             if any(ref.start is not None or self.program.fields[ref.name].kind not in {"number", "edited"} for ref, _, _ in items):
                 raise CobolError("destination numérique requise pour SIZE ERROR")
             if (node.stmt is not None and not node.stmt.args[2]
-                    and any(self.storage_usage(self.program.fields[ref.name]) in {"Native", "Register"} for ref, _, _ in items)):
+                    and any(self.storage_usage(self.program.fields[ref.name]) in {"Native", "Register", "Swapped"} for ref, _, _ in items)):
                 # cobc keeps a COMP-5 receiver only with ON SIZE ERROR
                 # (ex_handler); NOT ON SIZE ERROR alone stores the residue.
                 raise CobolError("NOT ON SIZE ERROR sans ON SIZE ERROR vers COMP-5 non modélisé")
@@ -2352,6 +2352,8 @@ class Emitter:
             return "PackedNoSign"
         if f.usage in {"COMP-1", "COMP-2"}:
             return "Float" if f.usage == "COMP-1" else "Double"
+        if f.usage in {"COMP-X", "COMP-N"}:
+            return "Swapped"
         return "Packed" if f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"} else "Binary"
 
     def storage_kind(self, f):

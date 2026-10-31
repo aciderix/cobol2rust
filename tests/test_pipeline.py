@@ -88,8 +88,8 @@ class GapInventoryTests(unittest.TestCase):
                                                  "GOBACK RETURNING non pris en charge"])
 
     def test_uses_of_a_skipped_declaration_are_not_repeated(self):
-        first, result = inventory("display bad.\nmove 1 to bad.", "01 x pic 9.\n01 bad pic x(4) usage comp-x.\n")
-        self.assertEqual(result["diagnostics"], ["USAGE/clause non pris en charge: comp-x"])
+        first, result = inventory("display bad.\nmove 1 to bad.", "01 x pic 9.\n01 bad usage float-decimal-16.\n")
+        self.assertEqual(result["diagnostics"], ["USAGE/clause non pris en charge: float-decimal-16"])
 
     def test_the_terminator_of_a_refused_statement_is_consumed(self):
         first, result = inventory("perform 2 times\n call 'sub' using by value 1 end-call\n end-perform.\ndisplay x.")

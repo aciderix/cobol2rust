@@ -1,5 +1,21 @@
 # Validation — 30 octobre 2026
 
+## COMP-X et COMP-N — 31 octobre 2026
+
+- Sondes natives : VALUE au-delà des chiffres (warning de cobc, valeur
+  conservée), MOVE 300 vers un octet (44), MOVE 65536 vers deux octets (0),
+  ADD au-delà de la PICTURE (stocké), SIZE ERROR sur 2^24 en 3 octets,
+  MULTIPLY replié modulo 2^16, signé replié (200 en S99 COMP-N : -56),
+  octets gros-boutistes (COMP-X, COMP-N et COMP : 0102, -2 : FFFE), MOVE
+  vers PIC X(4) (« 0258 »), comparaisons, INITIALIZE, PIC 9V9 COMP-X (1.5).
+- Preuve : `tests/fixtures/comp_x.cob` identique au natif ;
+  `tests/test_comp_x.py` : trois tests (tables de field.c, refus de cobc,
+  natif).
+- Mesure inchangée **1272/3593**, écart 345 ; exécution comparée inchangée
+  (74/84) ; NIST statique **451/458** ; suite **545 tests**, 0 échec après
+  remplacement de COMP-X par FLOAT-DECIMAL-16 comme exemple de clause
+  refusée dans `test_pipeline`.
+
 ## Virgule flottante binaire — 31 octobre 2026
 
 - Conversions validées hors COBOL : `float::to_f64` (troncature vers zéro) et

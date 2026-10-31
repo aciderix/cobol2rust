@@ -7,7 +7,12 @@ USAGES = {"DISPLAY", "COMP", "COMPUTATIONAL", "BINARY", "COMP-3", "COMPUTATIONAL
           "INDEX", "COMP-5", "COMPUTATIONAL-5", "BINARY-CHAR", "BINARY-SHORT", "BINARY-LONG", "BINARY-DOUBLE",
           "BINARY-C-LONG", "SIGNED-SHORT", "UNSIGNED-SHORT", "SIGNED-INT", "UNSIGNED-INT", "SIGNED-LONG",
           "UNSIGNED-LONG", "COMP-6", "COMPUTATIONAL-6", "POINTER",
-          "COMP-1", "COMPUTATIONAL-1", "FLOAT-SHORT", "COMP-2", "COMPUTATIONAL-2", "FLOAT-LONG"}
+          "COMP-1", "COMPUTATIONAL-1", "FLOAT-SHORT", "COMP-2", "COMPUTATIONAL-2", "FLOAT-LONG",
+          "COMP-X", "COMPUTATIONAL-X", "COMP-N", "COMPUTATIONAL-N"}
+# field.c: a PIC X(n) COMP-X / COMP-N item has PIC 9(pic_digits[n - 1]) on n
+# bytes; a numeric PICTURE gets the bytes of compute_size's table.
+PIC_DIGITS = [2, 4, 7, 9, 12, 14, 16, 18]
+COMP_X_BYTES = [(2, 1), (4, 2), (7, 3), (9, 4), (12, 5), (14, 6), (16, 7), (19, 8)]
 # Binary floating point: C float and double (field.c, CB_USAGE_FLOAT/DOUBLE),
 # with the attribute digits and scale of codegen.c (15/8 and 34/17).
 FLOAT_USAGES = {"COMP-1": "COMP-1", "COMPUTATIONAL-1": "COMP-1", "FLOAT-SHORT": "COMP-1",
@@ -769,6 +774,8 @@ def declaration(p, file_record=False):
                 usage = "COMP-6"
             elif usage in FLOAT_USAGES:
                 usage = FLOAT_USAGES[usage]
+            elif usage in {"COMPUTATIONAL-X", "COMPUTATIONAL-N"}:
+                usage = usage.replace("COMPUTATIONAL", "COMP")
     p.expect(".")
     if fixed_binary:
         if picture:
@@ -797,6 +804,24 @@ def declaration(p, file_record=False):
             p.error("répétition PICTURE strictement positive requise")
         return match[1] * min(count, 65536)
 
+    comp_x_size = None
+    if usage in {"COMP-X", "COMP-N"} and not has_children:
+        if not picture:
+            p.error(f"PICTURE clause required for '{label}'")
+        written = re.sub(r"([9XAVSP])\((\d+)\)", repeat, picture.upper())
+        if re.fullmatch(r"X+", written):
+            comp_x_size = len(written)
+            picture = f"9({PIC_DIGITS[comp_x_size - 1] if comp_x_size <= 8 else 36})"
+            if comp_x_size > 8:
+                comp_x_size = 15
+        elif re.fullmatch(r"S?9*V?9*", written) and "9" in written:
+            digits_written = written.count("9")
+            comp_x_size = next((size for limit, size in COMP_X_BYTES if digits_written <= limit), 9)
+        else:
+            p.error(f"PICTURE clause not compatible with USAGE {usage}")
+        if comp_x_size > 8:
+            # libcob overflows its 8-byte binary buffers (native crash).
+            p.error(f"USAGE {usage} de plus de 8 octets non pris en charge")
     if usage in FLOAT_PICTURES and not has_children:
         if picture:
             p.error(f"'{label}' cannot have PICTURE clause")
@@ -960,6 +985,8 @@ def declaration(p, file_record=False):
         p.error("VALUE littéral flottant d'un article non numérique non pris en charge")
     descriptor = Field(key, picture, kind, digits, scale, signed, initial, usage,
                        label, level, parent, [], count, table, redefines, filler, file_record)
+    if comp_x_size is not None:
+        descriptor.comp_x_size = comp_x_size
     descriptor.linkage = linkage
     descriptor.any_length = any_length
     descriptor.explicit_value = explicit_value

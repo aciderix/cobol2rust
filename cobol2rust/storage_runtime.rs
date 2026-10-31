@@ -49,6 +49,10 @@ pub enum Usage {
     /// COMP-1 / COMP-2: a native C float or double (COB_TYPE_NUMERIC_FLOAT,
     /// COB_TYPE_NUMERIC_DOUBLE), read and stored through runtime::float.
     Float, Double,
+    /// COMP-X / COMP-N: a real binary item bounded by its size, like
+    /// COMP-5, but stored big-endian (flag_binary_swap) and displayed on the
+    /// digits of its PICTURE.
+    Swapped,
 }
 impl Usage {
     pub fn is_display(self) -> bool {
@@ -123,12 +127,12 @@ fn system_integer_impl(value: &Value, optimized_display: bool) -> i128 {
     if bytes.is_empty() { fail("argument entier BY VALUE sans stockage"); }
     match usage {
         Usage::Float | Usage::Double => fail("argument entier BY VALUE d'un flottant non pris en charge"),
-        Usage::Binary | Usage::Native | Usage::Register | Usage::Index => {
+        Usage::Binary | Usage::Native | Usage::Register | Usage::Index | Usage::Swapped => {
             if !matches!(bytes.len(), 1 | 2 | 4 | 8) {
                 fail("taille binaire BY VALUE non prise en charge");
             }
             let signed = signed || matches!(usage, Usage::Index);
-            let number = if matches!(usage, Usage::Binary) {
+            let number = if matches!(usage, Usage::Binary | Usage::Swapped) {
                 if signed { BigInt::from_signed_bytes_be(&bytes) } else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             } else if signed {
                 BigInt::from_signed_bytes_le(&bytes)
@@ -568,6 +572,10 @@ impl View {
                 if signed { BigInt::from_signed_bytes_le(&bytes) }
                 else { BigInt::from_bytes_le(Sign::Plus, &bytes) }
             },
+            Usage::Swapped => {
+                if signed { BigInt::from_signed_bytes_be(&bytes) }
+                else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
+            },
             Usage::Binary => {
                 if signed { BigInt::from_signed_bytes_be(&bytes) }
                 else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
@@ -594,11 +602,22 @@ impl View {
             return Some(crate::runtime::float::display(value, if matches!(usage, Usage::Float) { 8 } else { 16 }));
         }
         let (digits, signed, usage) = match self.kind {
-            Kind::Numeric { digits, signed, usage: usage @ (Usage::Native | Usage::Register), .. } => (digits, signed, usage),
+            Kind::Numeric { digits, signed, usage: usage @ (Usage::Native | Usage::Register | Usage::Swapped), .. } => (digits, signed, usage),
             _ => return None,
         };
         self.resolved();
         let bytes = self.raw();
+        if matches!(usage, Usage::Swapped) {
+            // cob_display of a binary item: a DISPLAY copy of its PICTURE
+            // digits, so the high-order digits of the stored value are lost.
+            let integer = if signed { BigInt::from_signed_bytes_be(&bytes) } else { BigInt::from_bytes_be(Sign::Plus, &bytes) };
+            let mut text = format!("{:0>width$}", (absolute(&integer) % power(digits)).to_string(), width = digits as usize);
+            if let Kind::Numeric { scale, .. } = self.kind {
+                if scale > 0 && (scale as u32) <= digits { text.insert(text.len() - scale as usize, '.'); }
+                else if scale != 0 { fail("DISPLAY d'un COMP-X à échelle P non modélisé"); }
+            }
+            return Some(if signed { format!("{}{text}", if integer.sign() == Sign::Minus { '-' } else { '+' }) } else { text });
+        }
         let integer = if signed { BigInt::from_signed_bytes_le(&bytes) } else { BigInt::from_bytes_le(Sign::Plus, &bytes) };
         const BIN_DIGITS: [usize; 9] = [1, 3, 5, 8, 10, 13, 15, 17, 20];
         let width = if matches!(usage, Usage::Register) { digits as usize } else { BIN_DIGITS[self.size.min(8)] };
@@ -748,7 +767,8 @@ impl View {
                 bytes
             },
             Usage::Float | Usage::Double => unreachable!(),
-            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
+            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register
+            | Usage::Swapped => {
                 let number = self.number().unwrap_or_else(|error| fail(error));
                 let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
                 format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
@@ -763,7 +783,7 @@ impl View {
         if matches!(self.kind, Kind::Numeric { usage: Usage::Index, .. }) {
             fail("MOVE of text to an index requires native index semantics");
         }
-        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register, .. }) && !raw_group {
+        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register | Usage::Swapped, .. }) && !raw_group {
             fail("MOVE of text to a COMP-5 item not modelled");
         }
         if raw_group {
@@ -830,7 +850,7 @@ impl View {
         let (digits, scale, signed, usage) = match self.kind {
             // cob_move_display_to_binary on a real binary receiver keeps the
             // low-order bytes of the value, not its PICTURE digits.
-            Kind::Numeric { usage: Usage::Native | Usage::Register, .. } => return self.assign(source, false),
+            Kind::Numeric { usage: Usage::Native | Usage::Register | Usage::Swapped, .. } => return self.assign(source, false),
             // cob_move to a float: cob_decimal_get_field of the whole value.
             Kind::Numeric { usage: Usage::Float | Usage::Double, .. } => return self.assign(source, false),
             Kind::Numeric { digits, scale, signed, usage } if !matches!(usage, Usage::Index) => (digits, scale, signed, usage),
@@ -882,7 +902,7 @@ impl View {
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
             Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::PackedNoSign
-            | Usage::Float | Usage::Double => return,
+            | Usage::Float | Usage::Double | Usage::Swapped => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
@@ -929,10 +949,12 @@ impl View {
                 float_bytes(source, usage).unwrap_or_else(|| if matches!(usage, Usage::Float) { 0f32.to_le_bytes().to_vec() }
                                                          else { 0f64.to_le_bytes().to_vec() })
             },
-            Kind::Numeric { scale, signed, usage: Usage::Native | Usage::Register, .. } => {
+            Kind::Numeric { scale, signed, usage: usage @ (Usage::Native | Usage::Register | Usage::Swapped), .. } => {
                 let mut units = source.num().units(scale, rounded);
                 if !signed { units = absolute(&units); }
-                native_bytes(&units, self.size)
+                let mut bytes = native_bytes(&units, self.size);
+                if matches!(usage, Usage::Swapped) { bytes.reverse(); }
+                bytes
             },
             Kind::Numeric { digits, scale, signed, usage } => {
                 let mut units = source.num().units(scale, rounded);
@@ -985,7 +1007,7 @@ impl View {
                         padded
                     },
                     // Stored by the real binary and float arms above.
-                    Usage::Native | Usage::Register | Usage::Float | Usage::Double => unreachable!(),
+                    Usage::Native | Usage::Register | Usage::Float | Usage::Double | Usage::Swapped => unreachable!(),
                 }
             },
         };
@@ -1088,7 +1110,7 @@ impl View {
             return Ok(());
         }
         let mut units = source.num().units(scale, rounded);
-        if matches!(usage, Usage::Native | Usage::Register) {
+        if matches!(usage, Usage::Native | Usage::Register | Usage::Swapped) {
             // cob_decimal_get_binary: SIZE ERROR beyond size * 8 - sign bits.
             if !signed { units = absolute(&units); }
             if absolute(&units).bits() > (self.size * 8 - signed as usize) as u64 { return Err(SizeError); }
@@ -1404,7 +1426,7 @@ impl Inspect {
                 Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
                 _ => fail("INSPECT of a binary or packed item not modelled"),
             }
-        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::Swapped, .. } = view.kind {
             fail("INSPECT of a binary or packed item not modelled");
         }
         // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.

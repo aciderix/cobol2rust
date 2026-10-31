@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T12:39:39+00:00 (commit `f2ab700e80`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T13:10:37+00:00 (commit `10014e8592`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -108,7 +108,7 @@ Dernière mesure : 2026-10-31T12:39:39+00:00 (commit `f2ab700e80`, cobc (GnuCOBO
 | gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 548 | 879 | 331 | 0 |
 | **Total** | | **3593** | **1272** | **1617** | **345** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T12:39:39+00:00, commit `f2ab700e80`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T13:10:37+00:00, commit `10014e8592`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -128,24 +128,24 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 7. 7 × USAGE/clause non pris en charge: DEPENDING
 8. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 9. 7 × USAGE/clause non pris en charge: IS
-10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
+10. 6 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc)
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 345 sources, 345 au premier diagnostic identique à la mesure, 187 à inventaire complet, 215 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 345 sources, 345 au premier diagnostic identique à la mesure, 187 à inventaire complet, 213 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1 | CALL BY VALUE : ABI hors des routines système d'octets non prise en charge | 6 | 6 | 6 | 7 |
-| 2 | USAGE/clause non pris en charge: DEPENDING | 4 | 10 | 7 | 7 |
-| 3 | NO attendu | 4 | 14 | 6 | 6 |
-| 4 | SCREEN SECTION non prise en charge à cet endroit | 3 | 17 | 36 | 38 |
-| 5 | CALL USING requiert au moins un argument | 3 | 20 | 3 | 5 |
-| 6 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 3 | 23 | 3 | 9 |
-| 7 | USAGE/clause non pris en charge: COMP-X | 3 | 26 | 5 | 9 |
-| 8 | CALL RETURNING/GIVING non pris en charge | 3 | 29 | 3 | 4 |
-| 9 | USAGE/clause non pris en charge: IS | 2 | 31 | 7 | 7 |
-| 10 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 33 | 1 | 5 |
-| 11 | donnée subordonnée sans groupe parent | 2 | 35 | 0 | 7 |
-| 12 | 78 VALUE LENGTH OF non pris en charge | 2 | 37 | 3 | 4 |
+| 2 | CALL USING d'un littéral numérique non pris en charge (entier C de cobc) | 5 | 11 | 6 | 9 |
+| 3 | USAGE/clause non pris en charge: DEPENDING | 4 | 15 | 7 | 7 |
+| 4 | NO attendu | 4 | 19 | 6 | 6 |
+| 5 | CALL USING requiert au moins un argument | 4 | 23 | 3 | 5 |
+| 6 | SCREEN SECTION non prise en charge à cet endroit | 3 | 26 | 36 | 38 |
+| 7 | CALL RETURNING/GIVING non pris en charge | 3 | 29 | 3 | 4 |
+| 8 | USAGE/clause non pris en charge: IS | 2 | 31 | 7 | 7 |
+| 9 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 33 | 1 | 5 |
+| 10 | donnée subordonnée sans groupe parent | 2 | 35 | 0 | 7 |
+| 11 | 78 VALUE LENGTH OF non pris en charge | 2 | 37 | 3 | 4 |
+| 12 | UNSTRING d'un littéral non pris en charge | 2 | 39 | 2 | 2 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -157,10 +157,10 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
 - 12 × clause SELECT non prise en charge (1er : 12, seul : 0)
 - 11 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire (1er : 7, seul : 1)
-- 9 × instruction non prise en charge: XML (1er : 7, seul : 0)
-- 9 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc) (1er : 3, seul : 2)
+- 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
+- 9 × CALL USING d'un littéral numérique non pris en charge (entier C de cobc) (1er : 6, seul : 5)
 - 9 × . attendu (1er : 8, seul : 0)
-- 9 × USAGE/clause non pris en charge: COMP-X (1er : 5, seul : 0)
+- 8 × PROCEDURE attendu (1er : 8, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -681,3 +681,17 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   run_misc-167 s'arrête sur l'arrêt nommé des dénormaux. Testsuite
   **540 → 548/1135**, total **1264 → 1272/3593**, écart **353 → 345**.
   NIST statique 451/458, NIST complet 427/427 (9610 PASS, 0 FAIL).
+- 2026-10-31 — COMP-X / COMP-N : choix hors du seul compte de sources
+  débloquées, justifié par l'inventaire (préalable de 9 sources : routines
+  de fichiers CBL_*, FLOAT-DECIMAL, XML/JSON) et par son poids dans le code
+  Micro Focus. Port de field.c (PIC X(n) en 9(pic_digits[n - 1]) sur n
+  octets, table de `compute_size` pour PIC 9(n), PICTURE requise, X(9) et
+  au-delà en 15 octets) et du comportement observé : binaire réel borné par
+  la taille comme COMP-5 (repli modulo 2^(8 × taille), SIZE ERROR sur la
+  capacité en bits, valeur absolue si non signé), gros-boutiste
+  (`flag_binary_swap`, COMP-N compris), DISPLAY et MOVE alphanumérique sur
+  les chiffres de la PICTURE. Plus de 8 octets : refus nommé (le natif
+  plante, « buffer overflow detected »). Fixture `comp_x.cob` identique au
+  natif. Total inchangé **1272/3593**, écart **345** ; l'inventaire montre
+  désormais run_file-040/041 bloquées par le seul CALL USING littéral et
+  run_misc-122/123 par le seul FLOAT-DECIMAL.
