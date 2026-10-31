@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T19:10:50+00:00",
- "git_head": "c0f6abf0744873fcf287713e10f2acfba7c590f5",
- "implementation_sha256": "31435d336f22c8dc0315014e780b7819487030cf0c5a386b48058213e769fd37",
+ "measured_at": "2026-10-31T20:27:15+00:00",
+ "git_head": "1fb28f955f2c73f1f40e5c335a348af1d1b579f8",
+ "implementation_sha256": "e8cb4ccc702c1dd0afdc4b9f94a7c57e7e064b0ffcaeadf5be8eb7bda4388e35",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1327,
+  "accepted": 1331,
   "cobc_accepted": 1617,
-  "gap": 290,
+  "gap": 286,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 603,
+   "accepted": 607,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 276,
+   "gap": 272,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -819,10 +819,6 @@
     [
      "run_fundamental-037/prog.cob",
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    [
-     "run_fundamental-044/prog.cob",
-     "78 VALUE LENGTH OF non pris en charge"
     ],
     [
      "run_fundamental-048/prog.cob",
@@ -1253,14 +1249,6 @@
      "CALL DIR/SUB: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-163/prog.cob",
-     "78 VALUE LENGTH OF non pris en charge"
-    ],
-    [
-     "run_misc-164/prog.cob",
-     "littéral attendu"
-    ],
-    [
      "run_misc-166/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
     ],
@@ -1513,10 +1501,6 @@
      "ordinal requiert un entier littéral non signé"
     ],
     [
-     "syn_misc-105/prog.cob",
-     "78 VALUE LENGTH OF non pris en charge"
-    ],
-    [
      "syn_misc-112/valid.cob",
      "caractère non pris en charge '@'"
     ],
@@ -1651,10 +1635,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 290,
-  "matching": 290,
-  "complete": 156,
-  "distinct": 190,
+  "sources": 286,
+  "matching": 286,
+  "complete": 152,
+  "distinct": 186,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1775,12 +1759,6 @@
     "first": 4,
     "present": 4,
     "alone": 0
-   },
-   {
-    "diagnostic": "78 VALUE LENGTH OF non pris en charge",
-    "first": 3,
-    "present": 4,
-    "alone": 2
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
@@ -2539,24 +2517,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "78 VALUE START OF / NEXT non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "littéral attendu",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "01 CONSTANT FROM non pris en charge",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "expression non prise en charge: JSON-CODE",
     "first": 0,
     "present": 1,
@@ -2827,60 +2787,60 @@
     "present": 7
    },
    {
-    "diagnostic": "78 VALUE LENGTH OF non pris en charge",
-    "unlocked": 2,
-    "cumulative": 11,
-    "first": 3,
-    "present": 4
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: is",
     "unlocked": 2,
-    "cumulative": 13,
+    "cumulative": 11,
     "first": 4,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 15,
+    "cumulative": 13,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 17,
+    "cumulative": 15,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nombre OCCURS attendu",
     "unlocked": 2,
-    "cumulative": 19,
+    "cumulative": 17,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "opérande INSPECT attendu",
     "unlocked": 2,
-    "cumulative": 21,
+    "cumulative": 19,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "instruction non prise en charge: AT",
     "unlocked": 1,
-    "cumulative": 22,
+    "cumulative": 20,
     "first": 5,
     "present": 5
    },
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
     "unlocked": 1,
-    "cumulative": 23,
+    "cumulative": 21,
     "first": 0,
     "present": 53
+   },
+   {
+    "diagnostic": "invalid expression: unfinished expression",
+    "unlocked": 31,
+    "cumulative": 52,
+    "first": 0,
+    "present": 50
    }
   ],
   "sources_detail": [
@@ -3778,15 +3738,6 @@
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-044/prog.cob",
-    "diagnostics": [
-     "78 VALUE LENGTH OF non pris en charge"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -4895,27 +4846,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-163/prog.cob",
-    "diagnostics": [
-     "78 VALUE LENGTH OF non pris en charge",
-     "78 VALUE START OF / NEXT non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-164/prog.cob",
-    "diagnostics": [
-     "littéral attendu",
-     "78 VALUE LENGTH OF non pris en charge",
-     "01 CONSTANT FROM non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-166/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
@@ -5522,15 +5452,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_misc-105/prog.cob",
-    "diagnostics": [
-     "78 VALUE LENGTH OF non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_misc-112/valid.cob",
     "diagnostics": [
      "caractère non pris en charge '@'"
@@ -5716,9 +5637,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T19:10:50+00:00",
-  "git_head": "c0f6abf0744873fcf287713e10f2acfba7c590f5",
-  "implementation_sha256": "31435d336f22c8dc0315014e780b7819487030cf0c5a386b48058213e769fd37",
+  "measured_at": "2026-10-31T20:27:15+00:00",
+  "git_head": "1fb28f955f2c73f1f40e5c335a348af1d1b579f8",
+  "implementation_sha256": "e8cb4ccc702c1dd0afdc4b9f94a7c57e7e064b0ffcaeadf5be8eb7bda4388e35",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

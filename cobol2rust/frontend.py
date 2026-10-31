@@ -242,11 +242,14 @@ class Directives:
             name, value = d[2].upper(), d[3]
             if value.upper() == "OFF":
                 self.defines.pop(name, None)
+                CHANGED_DEFINES.add(name)
                 return True
             if value.upper() == "PARAMETER":
                 raise CobolError(f"ligne {number}: >>DEFINE ... PARAMETER non pris en charge")
             if name in self.defines and not d[4]:
                 raise CobolError(f"ligne {number}: duplicate DEFINE directive '{d[2]}'")
+            if name in self.defines:
+                CHANGED_DEFINES.add(name)
             self.defines[name] = self.value(value)
             return True
         if verb == "DISPLAY" and re.search(r"[=<>]", re.sub(r"\"[^\"]*\"|'[^']*'", "", rest)):
@@ -264,6 +267,9 @@ class Directives:
 STANDARD_DEFINES = {"PERFORM-TYPE": ("L", "MF"), "SIGN": ("L", "ASCII"), "ENDIAN": ("L", "LITTLE"),
                     "CHARSET": ("L", "ASCII")}
 DEFINES = dict(STANDARD_DEFINES)
+# Names a >>DEFINE OVERRIDE or OFF changed: their value at a given line is
+# not kept, so CONSTANT FROM refuses them.
+CHANGED_DEFINES: set[str] = set()
 
 
 def normalize(source: str, fmt: str = "auto") -> str:
@@ -577,6 +583,7 @@ def load_source(path: Path, include_dirs: list[Path], fmt="auto", stack=()) -> t
     if not stack:
         DEFINES.clear()
         DEFINES.update(STANDARD_DEFINES)
+        CHANGED_DEFINES.clear()
     # The format detected on the main source also applies to its copybooks.
     fmt = source_format(source, fmt)
     text = normalize(source, fmt)

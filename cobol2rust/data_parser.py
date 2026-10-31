@@ -318,6 +318,138 @@ def evaluate_constant(p, items, line, normal_prec):
     return [Token(str(value), line)]
 
 
+# A figurative constant as one character of a concatenated literal.
+FIGURATIVE_CHARACTERS = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ", "QUOTE": '"', "QUOTES": '"'}
+
+# con_source usage words (parser.y): their size in bytes on Linux x86_64.
+CONSTANT_USAGE_SIZES = {"BINARY-CHAR": 1, "BINARY-SHORT": 2, "BINARY-LONG": 4, "BINARY-DOUBLE": 8, "BINARY-C-LONG": 8,
+                        "POINTER": 8, "PROGRAM-POINTER": 8, "COMP-1": 4, "COMPUTATIONAL-1": 4, "FLOAT-SHORT": 4,
+                        "COMP-2": 8, "COMPUTATIONAL-2": 8, "FLOAT-LONG": 8, "FLOAT-EXTENDED": 16,
+                        "FLOAT-DECIMAL-16": 8, "FLOAT-DECIMAL-34": 16}
+# reserved.c: reserved words without a token in GnuCOBOL 3.2.
+UNSUPPORTED_RESERVED = {"FLOAT-BINARY-32", "FLOAT-BINARY-64", "FLOAT-BINARY-128"}
+
+
+def partial_layout(p, root, single=None):
+    """cb_validate_field on what is declared so far: a copy of the record
+    `root` laid out alone (`single`: an item counted with one occurrence)."""
+    import copy
+    from .layout import layout_fields
+    copies = {key: copy.copy(f) for key, f in p.fields.items() if key == root or key.startswith(root + ".")}
+    for f in copies.values():
+        f.children = list(f.children)
+    copies[root].redefines = None
+    copies[root].parent = None
+    if single is not None:
+        copies[single].occurs = 1
+    try:
+        layout_fields(copies)
+    except CobolError as error:
+        p.error(str(error))
+    return copies
+
+
+def remember_sizes(p, copies, top):
+    """compute_size leaves the size of `top` and its subordinates in their
+    cb_field, read back by a later NEXT after an 01 item."""
+    sizes = p.__dict__.setdefault("constant_sizes", {})
+    for key, f in copies.items():
+        if key == top or key.startswith(top + "."):
+            sizes[key] = f.size
+
+
+def constant_field(p, what):
+    """The data item of LENGTH OF / START OF in a constant
+    (cb_build_const_length, cb_build_const_start)."""
+    label, qualifiers = p.name(), []
+    while p.accept("OF") or p.accept("IN"):
+        qualifiers.append(p.name())
+    if p.at("("):
+        p.error(f"{what} d'un article indicé ou d'une sous-chaîne dans une constante non pris en charge")
+    if p.candidates(label, True) and not p.candidates(label):
+        p.error("88 level item not allowed here")
+    f = p.fields[p.resolve(label, tuple(qualifiers))]
+    if f.any_length:
+        p.error("ANY LENGTH item not allowed here")
+    if f.depending or p.variable_size(f):
+        p.error("variable length item not allowed here")
+    return f
+
+
+def ancestors(p, f):
+    result = []
+    while f.parent:
+        f = p.fields[f.parent]
+        result.append(f)
+    return result
+
+
+def founder(p, f):
+    while f.parent:
+        f = p.fields[f.parent]
+    return f
+
+
+def constant_length(p):
+    """lit_or_length: LENGTH [OF] / BYTE-LENGTH [OF] con_source."""
+    p.take()
+    p.accept("OF")
+    if p.t.string:
+        return str(len(p.take().text))
+    if p.t.key in UNSUPPORTED_RESERVED:
+        p.error(f"'{p.t.text}' is a reserved word, but isn't supported")
+    if p.t.key in CONSTANT_USAGE_SIZES and not p.candidates(p.t.key):
+        return str(CONSTANT_USAGE_SIZES[p.take().key])
+    f = constant_field(p, "LENGTH OF")
+    root = founder(p, f)
+    copies = partial_layout(p, root.name)
+    remember_sizes(p, copies, f.name)
+    item = copies[f.name]
+    if f.redefines:
+        return str(item.size)
+    # memory_size of cb_validate_field: the size by the occurrences (a later
+    # larger 01 REDEFINES only updates it when that item is validated).
+    return str(item.size * item.occurs)
+
+
+def constant_position(p, name):
+    """constant_78_source START OF identifier (cb_build_const_start) and
+    NEXT (cb_build_const_next): FILE, LINKAGE or EXTERNAL storage only."""
+    def storage_check(f, what, target):
+        root = founder(p, f)
+        if not (root.external or root.file_record or getattr(root, "linkage", False)):
+            p.error(f"VALUE of '{name}': {what} target{target} is invalid; target must be in FILE SECTION "
+                    "or LINKAGE SECTION or have the EXTERNAL clause")
+        return root
+    if p.accept("START"):
+        p.accept("OF")
+        f = constant_field(p, "START OF")
+        # identifier: an item of a table needs its subscripts.
+        tables = sum(1 for item in [f, *ancestors(p, f)] if item.table)
+        if tables:
+            p.error(f"'{f.label}' requires {tables} subscript{'s' if tables > 1 else ''}" if tables > 1
+                    else f"'{f.label}' requires one subscript")
+        root = storage_check(f, "START OF", f" '{f.label}'")
+        copies = partial_layout(p, root.name)
+        remember_sizes(p, copies, root.name)
+        return str(copies[f.name].offset)
+    p.expect("NEXT")
+    if not p.last_data:
+        p.error(f"VALUE of '{name}': NEXT target is invalid; no previous data-item found")
+    previous = p.fields[p.last_data]
+    root = storage_check(previous, "NEXT", "")
+    if previous.depending or p.variable_size(previous):
+        p.error("variable length item not allowed here")
+    if previous.level == 1:
+        # p->size: 0 until something computed it.
+        return str(p.__dict__.get("constant_sizes", {}).get(previous.name, 0))
+    copies = partial_layout(p, root.name, single=previous.name)
+    sizes = p.__dict__.setdefault("constant_sizes", {})
+    for key, f in copies.items():
+        sizes[key] = f.size if key != previous.name else copies[key].size
+    return str(copies[root.name].size)
+
+
 def constant_entry(p, level):
     """SEVENTY_EIGHT user_entry_name _global_clause VALUE _is constant_78_source,
     or level_number user_entry_name CONSTANT _const_global constant_source:
@@ -337,21 +469,53 @@ def constant_entry(p, level):
         is_global = True
     else:
         is_global = bool(p.accept("GLOBAL"))
+    items, tokens = [], []
     if level != 78:
-        if p.at("FROM"):
-            p.error("01 CONSTANT FROM non pris en charge")
-        p.accept("AS")
+        if p.accept("FROM"):
+            # cb_build_const_from: the value of a >>DEFINE (or -D).
+            from . import frontend
+            word = p.take()
+            define = frontend.DEFINES.get(word.key) if not word.string else None
+            if define is None:
+                p.error(f"'{word.text}' has not been DEFINEd")
+            if word.key in frontend.CHANGED_DEFINES:
+                p.error(f"CONSTANT FROM '{word.text}' redéfini par >>DEFINE OVERRIDE/OFF non pris en charge")
+            kind, value = define
+            items.append(("literal", value) if kind == "L" else ("number", str(value)))
+            tokens = [Token(value, line, True) if kind == "L" else Token(str(value), line)]
+        else:
+            p.accept("AS")
     elif not p.accept("VALUE"):
         p.error("VALUE is required for level 78 item")
     else:
         p.accept("IS")
-    if p.at("START") or p.at("NEXT"):
-        p.error("78 VALUE START OF / NEXT non pris en charge")
-    items, tokens = [], []
-    while not p.at(".") and not p.at("<EOF>"):
+        if p.at("START") or p.at("NEXT"):
+            value = constant_position(p, name)
+            items.append(("number", value))
+            tokens = [Token(value, line)]
+    # START OF, NEXT and FROM are whole constant sources.
+    whole = bool(items)
+    # lookup_reserved_word: CONSTANT sets CB_CS_CONSTANT, the first
+    # BYTE-LENGTH found in it resets it; elsewhere BYTE-LENGTH is a name.
+    byte_length = level != 78
+    while not whole and not p.at(".") and not p.at("<EOF>"):
         t = p.t
-        if not t.string and t.key in {"LENGTH", "BYTE-LENGTH"}:
-            p.error("78 VALUE LENGTH OF non pris en charge")
+        if not t.string and (t.key == "LENGTH" and not p.candidates(t.key) or t.key == "BYTE-LENGTH" and byte_length):
+            byte_length = byte_length and t.key != "BYTE-LENGTH"
+            value = constant_length(p)
+            tokens = [Token(value, t.line)]
+            items.append(("number", value))
+            continue
+        if not t.string and t.key == "&" and items and items[-1][0] == "literal" and tokens and tokens[-1].string:
+            # basic_literal TOK_AMPER basic_value: cb_concat_literals.
+            p.take()
+            if not p.t.string and p.t.key not in FIGURATIVES:
+                p.error("littéral attendu")
+            right = p.take()
+            text = tokens[-1].text + (right.text if right.string else FIGURATIVE_CHARACTERS.get(right.key, right.text))
+            tokens = [Token(text, tokens[-1].line, True)]
+            items[-1] = ("literal", text)
+            continue
         if not t.string and t.key in CONSTANT_OPERATORS:
             p.take()
             if t.key in "+-" and p.t.text[:1].isdigit() and (not items or items[-1][0] == "operator"

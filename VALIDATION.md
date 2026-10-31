@@ -1,5 +1,24 @@
 # Validation — 30 octobre 2026
 
+## Expressions de constantes — 31 octobre 2026
+
+- Fixture `tests/fixtures/constant_lengths.cob` identique au natif :
+  LENGTH OF d'un article sous OCCURS (taille × occurrences), d'un
+  enregistrement, d'un REDEFINES, d'un 01 redéfini ensuite par un plus
+  grand, BYTE-LENGTH, littéral, mots d'usage, NEXT après un COMP-3 et après
+  une table (premier élément), NEXT après un 01 (0, puis 6 une fois sa
+  taille calculée par LENGTH OF), START OF en FILE SECTION, expression d'un
+  01 CONSTANT.
+- Essais natifs des refus : START OF en WORKING-STORAGE, START OF d'une
+  table sans indice, BYTE-LENGTH en niveau 78 ou au second emploi,
+  FLOAT-BINARY-n (mot réservé non pris en charge).
+- Sources débloquées identiques au natif : run_fundamental-044,
+  run_misc-163, run_misc-164 (>>DEFINE et CONSTANT FROM), syn_misc-105.
+- Mesure : **1327 → 1331/3593**, écart **290 → 286**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-const.json`) ;
+  suite **574 tests**, 0 échec.
+
 ## Partage et verrouillage de fichiers — 31 octobre 2026
 
 - Fixture `tests/fixtures/file_locks/` (lock-main et son compagnon

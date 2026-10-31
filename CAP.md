@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T19:10:50+00:00 (commit `c0f6abf074`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T20:27:15+00:00 (commit `1fb28f955f`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T19:10:50+00:00 (commit `c0f6abf074`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 603 | 879 | 276 | 0 |
-| **Total** | | **3593** | **1327** | **1617** | **290** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 607 | 879 | 272 | 0 |
+| **Total** | | **3593** | **1331** | **1617** | **286** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T19:10:50+00:00, commit `c0f6abf074`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T20:27:15+00:00, commit `1fb28f955f`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,7 +130,7 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 5 × instruction non prise en charge: AT
 10. 5 × instruction non prise en charge: JSON
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 290 sources, 290 au premier diagnostic identique à la mesure, 156 à inventaire complet, 190 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 286 sources, 286 au premier diagnostic identique à la mesure, 152 à inventaire complet, 186 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -138,14 +138,14 @@ Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) :
 | 2 | USAGE/clause non pris en charge: IS | 2 | 5 | 7 | 7 |
 | 3 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 7 | 1 | 5 |
 | 4 | donnée subordonnée sans groupe parent | 2 | 9 | 0 | 7 |
-| 5 | 78 VALUE LENGTH OF non pris en charge | 2 | 11 | 3 | 4 |
-| 6 | USAGE/clause non pris en charge: is | 2 | 13 | 4 | 4 |
-| 7 | UNSTRING d'un littéral non pris en charge | 2 | 15 | 2 | 2 |
-| 8 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 17 | 2 | 2 |
-| 9 | nombre OCCURS attendu | 2 | 19 | 2 | 2 |
-| 10 | opérande INSPECT attendu | 2 | 21 | 2 | 2 |
-| 11 | instruction non prise en charge: AT | 1 | 22 | 5 | 5 |
-| 12 | GOBACK RETURNING non pris en charge | 1 | 23 | 0 | 53 |
+| 5 | USAGE/clause non pris en charge: is | 2 | 11 | 4 | 4 |
+| 6 | UNSTRING d'un littéral non pris en charge | 2 | 13 | 2 | 2 |
+| 7 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 15 | 2 | 2 |
+| 8 | nombre OCCURS attendu | 2 | 17 | 2 | 2 |
+| 9 | opérande INSPECT attendu | 2 | 19 | 2 | 2 |
+| 10 | instruction non prise en charge: AT | 1 | 20 | 5 | 5 |
+| 11 | GOBACK RETURNING non pris en charge | 1 | 21 | 0 | 53 |
+| 12 | invalid expression: unfinished expression | 31 | 52 | 0 | 50 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -776,3 +776,15 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   toutes identiques au natif (avec leur prog2 comme compagnon), y compris
   les XFAIL de 3.2 (deux lecteurs compatibles). Testsuite **586 →
   603/1135**, total **1310 → 1327/3593**, écart **307 → 290**.
+- 2026-10-31 — Expressions de constantes (chantier « 78 VALUE LENGTH OF »
+  et voisins) : `LENGTH [OF]` / `BYTE-LENGTH [OF]` d'un article déclaré, d'un
+  littéral ou d'un mot d'usage (`cb_build_const_length`, `memory_size`),
+  `78 VALUE START OF` et `NEXT` (`cb_build_const_start`/`next` sur
+  l'enregistrement partiel), `01 CONSTANT FROM` d'un `>>DEFINE`,
+  concaténation `&` de littéraux de constantes ; règles observées au natif :
+  BYTE-LENGTH réservé une seule fois après CONSTANT, START OF d'une table
+  sans indice refusé, taille d'un 01 nulle tant qu'elle n'est pas calculée,
+  01 REDEFINES plus grand déclaré ensuite sans effet. Quatre sources
+  débloquées (run_fundamental-044, run_misc-163, -164, syn_misc-105),
+  toutes identiques au natif. Testsuite **603 → 607/1135**, total **1327 →
+  1331/3593**, écart **290 → 286**.
