@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T14:03:58+00:00 (commit `ab485230ad`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T17:23:15+00:00 (commit `c00a5e4781`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T14:03:58+00:00 (commit `ab485230ad`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 569 | 879 | 310 | 0 |
-| **Total** | | **3593** | **1293** | **1617** | **324** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 574 | 879 | 305 | 0 |
+| **Total** | | **3593** | **1298** | **1617** | **319** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T14:03:58+00:00, commit `ab485230ad`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T17:23:15+00:00, commit `c00a5e4781`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -128,24 +128,24 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 7. 7 × USAGE/clause non pris en charge: DEPENDING
 8. 7 × nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire
 9. 7 × USAGE/clause non pris en charge: IS
-10. 6 × CALL BY VALUE : ABI hors des routines système d'octets non prise en charge
+10. 6 × NO attendu
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 324 sources, 324 au premier diagnostic identique à la mesure, 178 à inventaire complet, 204 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 319 sources, 319 au premier diagnostic identique à la mesure, 173 à inventaire complet, 204 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 1 | CALL BY VALUE : ABI hors des routines système d'octets non prise en charge | 6 | 6 | 6 | 7 |
-| 2 | USAGE/clause non pris en charge: DEPENDING | 4 | 10 | 7 | 7 |
-| 3 | NO attendu | 4 | 14 | 6 | 6 |
-| 4 | SCREEN SECTION non prise en charge à cet endroit | 3 | 17 | 36 | 38 |
-| 5 | USAGE/clause non pris en charge: IS | 2 | 19 | 7 | 7 |
-| 6 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 21 | 1 | 5 |
-| 7 | donnée subordonnée sans groupe parent | 2 | 23 | 0 | 7 |
-| 8 | 78 VALUE LENGTH OF non pris en charge | 2 | 25 | 3 | 4 |
-| 9 | UNSTRING d'un littéral non pris en charge | 2 | 27 | 2 | 2 |
-| 10 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 29 | 2 | 2 |
-| 11 | nombre OCCURS attendu | 2 | 31 | 2 | 2 |
-| 12 | opérande INSPECT attendu | 2 | 33 | 2 | 2 |
+| 1 | USAGE/clause non pris en charge: DEPENDING | 4 | 4 | 7 | 7 |
+| 2 | NO attendu | 4 | 8 | 6 | 6 |
+| 3 | SCREEN SECTION non prise en charge à cet endroit | 3 | 11 | 36 | 38 |
+| 4 | USAGE/clause non pris en charge: IS | 2 | 13 | 7 | 7 |
+| 5 | nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire | 2 | 15 | 1 | 5 |
+| 6 | donnée subordonnée sans groupe parent | 2 | 17 | 0 | 7 |
+| 7 | 78 VALUE LENGTH OF non pris en charge | 2 | 19 | 3 | 4 |
+| 8 | UNSTRING d'un littéral non pris en charge | 2 | 21 | 2 | 2 |
+| 9 | nom inconnu: STATIC; qualifier avec OF/IN si nécessaire | 2 | 23 | 2 | 2 |
+| 10 | nombre OCCURS attendu | 2 | 25 | 2 | 2 |
+| 11 | opérande INSPECT attendu | 2 | 27 | 2 | 2 |
+| 12 | nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire | 1 | 28 | 7 | 11 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -722,3 +722,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   programmes principaux sont identiques au natif. Testsuite **553 →
   569/1135**, total **1277 → 1293/3593**, écart **340 → 324**. NIST statique
   451/458, NIST complet 427/427.
+- 2026-10-31 — `CBL_GC_GETOPT` (premier chantier de l'inventaire, « CALL BY
+  VALUE hors des routines d'octets ») : `cob_sys_getopt_long_long` et le
+  getopt GNU de cobgetopt.c portés en entier (options courtes, longues,
+  abréviations et ambiguïtés, permutation d'argv gardée entre les appels,
+  ordres `+`/`-`/`POSIXLY_CORRECT`, `:` en tête, `-W`, long-only, `*flag`
+  écrit par le modèle d'adresses, messages de getopt et erreurs de libcob).
+  `verify --arg` passe les mêmes arguments et le même argv[0] aux deux
+  programmes. Les cinq sources de run_extensions-070 sont identiques au natif
+  avec les arguments de la testsuite ; run_file-043 (fonction C externe)
+  reste refusée à juste titre. Testsuite **569 → 574/1135**, total **1293 →
+  1298/3593**, écart **324 → 319**.

@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T14:03:58+00:00",
- "git_head": "ab485230ad69bfc2a2aafb52d27a6c6142917b25",
- "implementation_sha256": "a8c4305f1674494a531c345f26265e2ba265faf2d3a3d8b58780de6b99d91d40",
+ "measured_at": "2026-10-31T17:23:15+00:00",
+ "git_head": "c00a5e478196bf4c57cba9d6ce487e493f67e4bb",
+ "implementation_sha256": "8f97642fa419a24e6efd0f9df114dcb86df1623265927e5003de3f44026f5465",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1293,
+  "accepted": 1298,
   "cobc_accepted": 1617,
-  "gap": 324,
+  "gap": 319,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 569,
+   "accepted": 574,
    "internal_errors": 0,
    "blockers": [
     [
@@ -483,14 +483,14 @@
      6
     ],
     [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+     "NO attendu",
      6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 310,
+   "gap": 305,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -551,26 +551,6 @@
     [
      "run_extensions-044/prog.cob",
      "DISPLAY UPON ENVIRONMENT-NAME non pris en charge"
-    ],
-    [
-     "run_extensions-070/prog.cob",
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    [
-     "run_extensions-070/prog2.cob",
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    [
-     "run_extensions-070/prog3.cob",
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    [
-     "run_extensions-070/prog4.cob",
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    [
-     "run_extensions-070/prog5.cob",
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     [
      "run_extensions-071/prog.cob",
@@ -1771,15 +1751,15 @@
      6
     ],
     [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
-     6
-    ],
-    [
      "NO attendu",
      6
     ],
     [
      "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     5
+    ],
+    [
+     "clé INDEXED composée (SOURCE IS) non prise en charge",
      5
     ]
    ]
@@ -1787,9 +1767,9 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 324,
-  "matching": 324,
-  "complete": 178,
+  "sources": 319,
+  "matching": 319,
+  "complete": 173,
   "distinct": 204,
   "diagnostics": [
    {
@@ -1869,12 +1849,6 @@
     "first": 8,
     "present": 8,
     "alone": 0
-   },
-   {
-    "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
-    "first": 6,
-    "present": 7,
-    "alone": 6
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
@@ -2079,6 +2053,12 @@
     "first": 2,
     "present": 2,
     "alone": 0
+   },
+   {
+    "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+    "first": 1,
+    "present": 2,
+    "alone": 1
    },
    {
     "diagnostic": "groupe vide: W-DATA",
@@ -3019,88 +2999,88 @@
   ],
   "greedy": [
    {
-    "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
-    "unlocked": 6,
-    "cumulative": 6,
-    "first": 6,
-    "present": 7
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: DEPENDING",
     "unlocked": 4,
-    "cumulative": 10,
+    "cumulative": 4,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "NO attendu",
     "unlocked": 4,
-    "cumulative": 14,
+    "cumulative": 8,
     "first": 6,
     "present": 6
    },
    {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 17,
+    "cumulative": 11,
     "first": 36,
     "present": 38
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 19,
+    "cumulative": 13,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 21,
+    "cumulative": 15,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 23,
+    "cumulative": 17,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 25,
+    "cumulative": 19,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 27,
+    "cumulative": 21,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 29,
+    "cumulative": 23,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nombre OCCURS attendu",
     "unlocked": 2,
-    "cumulative": 31,
+    "cumulative": 25,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "opérande INSPECT attendu",
     "unlocked": 2,
-    "cumulative": 33,
+    "cumulative": 27,
     "first": 2,
     "present": 2
+   },
+   {
+    "diagnostic": "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
+    "unlocked": 1,
+    "cumulative": 28,
+    "first": 7,
+    "present": 11
    }
   ],
   "sources_detail": [
@@ -3386,51 +3366,6 @@
      "DISPLAY UPON ENVIRONMENT-VALUE non pris en charge",
      "ACCEPT FROM ARGUMENT-VALUE non pris en charge",
      "ACCEPT FROM ARGUMENT-NUMBER non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-070/prog.cob",
-    "diagnostics": [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-070/prog2.cob",
-    "diagnostics": [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-070/prog3.cob",
-    "diagnostics": [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-070/prog4.cob",
-    "diagnostics": [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-070/prog5.cob",
-    "diagnostics": [
-     "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -6267,9 +6202,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T14:03:58+00:00",
-  "git_head": "ab485230ad69bfc2a2aafb52d27a6c6142917b25",
-  "implementation_sha256": "a8c4305f1674494a531c345f26265e2ba265faf2d3a3d8b58780de6b99d91d40",
+  "measured_at": "2026-10-31T17:23:15+00:00",
+  "git_head": "c00a5e478196bf4c57cba9d6ce487e493f67e4bb",
+  "implementation_sha256": "8f97642fa419a24e6efd0f9df114dcb86df1623265927e5003de3f44026f5465",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

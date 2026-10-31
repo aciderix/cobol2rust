@@ -25,7 +25,7 @@ fn operation(name: &str) -> Option<(Operation, usize)> {
 
 pub fn known(name: &str) -> bool {
     operation(name).is_some() || matches!(name.rsplit(['/', '\\']).next().unwrap_or(name),
-        "SYSTEM" | "C$SLEEP" | "C$GETPID" | "C$JUSTIFY" | "C$PRINTABLE")
+        "SYSTEM" | "C$SLEEP" | "C$GETPID" | "C$JUSTIFY" | "C$PRINTABLE" | "CBL_GC_GETOPT")
 }
 
 fn unsupported(name: &str, reason: &str) -> ! {
@@ -188,6 +188,7 @@ fn printable_table() -> &'static [bool; 256] {
 /// System routines receive raw addresses, not COBOL field descriptions.
 /// The final consumed argument is the C int already prepared by BY VALUE.
 pub fn call(name: &str, arguments: &[Value], modes: &[&str]) -> Option<i32> {
+    if name.rsplit(['/', '\\']).next() == Some("CBL_GC_GETOPT") { return Some(getopt::call(arguments, modes)); }
     if let Some(code) = library_routine(name, arguments) { return Some(code); }
     let (operation, arity) = operation(name)?;
     if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
@@ -245,4 +246,379 @@ pub fn call(name: &str, arguments: &[Value], modes: &[&str]) -> Option<i32> {
         }
     }
     Some(0)
+}
+
+/// common.c cob_sys_getopt_long_long over cobgetopt.c cob_getopt_long_long:
+/// the static scan state (optind, nextchar, the permutation of argv) lives
+/// for the run unit, as in libcob.
+pub mod getopt {
+    use crate::runtime::{fail, fatal_error, Value};
+    use crate::storage_runtime::{descriptor_size, parameter_bytes, store_at_address, store_parameter};
+    use std::cell::RefCell;
+    use std::io::Write;
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum Ordering { Require, Permute, ReturnInOrder }
+
+    struct LongOption { name: Vec<u8>, has_arg: i32, flag: u64, val: i32 }
+
+    /// A `char *` into an argv string: (string, offset). The strings keep
+    /// their identity while `exchange` permutes argv, as the C pointers do.
+    type Pointer = (usize, usize);
+
+    struct State {
+        strings: Vec<Vec<u8>>,
+        argv: Vec<usize>,
+        initialized: bool,
+        nextchar: Option<Pointer>,
+        ordering: Ordering,
+        first_nonopt: usize,
+        last_nonopt: usize,
+        optind: usize,
+        optarg: Option<Pointer>,
+        optopt: i32,
+    }
+
+    thread_local! {
+        static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    }
+
+    fn unsupported(reason: &str) -> ! { fail(&format!("routine système CBL_GC_GETOPT: {reason}")) }
+
+    /// strchr: the terminating NUL is found too.
+    fn strchr(s: &[u8], c: u8) -> Option<usize> { s.iter().position(|&b| b == c || b == 0).filter(|&i| s[i] == c) }
+
+    impl State {
+        fn new() -> Self {
+            use std::os::unix::ffi::OsStringExt;
+            let strings: Vec<Vec<u8>> = std::env::args_os().map(|a| { let mut s = a.into_vec(); s.push(0); s }).collect();
+            let argv = (0..strings.len()).collect();
+            State { strings, argv, initialized: false, nextchar: None, ordering: Ordering::Permute,
+                    first_nonopt: 1, last_nonopt: 1, optind: 1, optarg: None, optopt: b'?' as i32 }
+        }
+        fn byte(&self, p: Pointer) -> u8 { self.strings[p.0][p.1] }
+        fn cstr(&self, p: Pointer) -> Vec<u8> {
+            let s = &self.strings[p.0][p.1..];
+            s[..s.iter().position(|&b| b == 0).unwrap()].to_vec()
+        }
+        fn arg(&self, index: usize) -> &[u8] { &self.strings[self.argv[index]] }
+        fn nonoption(&self) -> bool { let s = self.arg(self.optind); s[0] != b'-' || s[1] == 0 }
+        fn error(&self, text: &[u8]) {
+            let mut err = std::io::stderr().lock();
+            let _ = err.write_all(&self.cstr((self.argv[0], 0)));
+            let _ = err.write_all(b": ");
+            let _ = err.write_all(text);
+            let _ = err.write_all(b"\n");
+        }
+
+        fn exchange(&mut self) {
+            let (mut bottom, middle, mut top) = (self.first_nonopt, self.last_nonopt, self.optind);
+            while top > middle && middle > bottom {
+                if top - middle > middle - bottom {
+                    let len = middle - bottom;
+                    for i in 0..len { self.argv.swap(bottom + i, top - (middle - bottom) + i); }
+                    top -= len;
+                } else {
+                    let len = top - middle;
+                    for i in 0..len { self.argv.swap(bottom + i, middle + i); }
+                    bottom += len;
+                }
+            }
+            self.first_nonopt += self.optind - self.last_nonopt;
+            self.last_nonopt = self.optind;
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn process_long_option(&mut self, optstring: &[u8], longopts: &[LongOption], longind: &mut i32,
+                               long_only: bool, print_errors: bool, prefix: &[u8]) -> i32 {
+            let argc = self.argv.len();
+            let start = self.nextchar.unwrap();
+            let rest = self.cstr(start);
+            let namelen = rest.iter().position(|&b| b == b'=').unwrap_or(rest.len());
+            let name = &rest[..namelen];
+            let mut pfound = longopts.iter().position(|p| p.name == name);
+            let mut option_index = pfound.unwrap_or(0);
+            if pfound.is_none() {
+                let mut ambig_set: Option<Vec<bool>> = None;
+                let mut ambig_fallback = false;
+                let mut indfound = 0;
+                for (index, p) in longopts.iter().enumerate() {
+                    if !p.name.starts_with(name) { continue; }
+                    match pfound {
+                        None => { pfound = Some(index); indfound = index; },
+                        Some(found) => {
+                            let f = &longopts[found];
+                            if (long_only || f.has_arg != p.has_arg || f.flag != p.flag || f.val != p.val) && !ambig_fallback {
+                                if !print_errors {
+                                    ambig_fallback = true;
+                                } else if ambig_set.is_none() {
+                                    let mut set = vec![false; longopts.len()];
+                                    set[indfound] = true;
+                                    ambig_set = Some(set);
+                                }
+                                if let Some(set) = ambig_set.as_mut() { set[index] = true; }
+                            }
+                        },
+                    }
+                }
+                if ambig_set.is_some() || ambig_fallback {
+                    if print_errors {
+                        let mut text = [&b"option '"[..], prefix, &rest, b"' is ambiguous"].concat();
+                        if let Some(set) = &ambig_set {
+                            text.extend_from_slice(b"; possibilities:");
+                            for (index, p) in longopts.iter().enumerate() {
+                                if set[index] { text.extend([&b" '"[..], prefix, &p.name, b"'"].concat()); }
+                            }
+                        }
+                        self.error(&text);
+                    }
+                    self.nextchar = Some((start.0, start.1 + rest.len()));
+                    self.optind += 1;
+                    self.optopt = 0;
+                    return b'?' as i32;
+                }
+                option_index = indfound;
+            }
+            let Some(found) = pfound else {
+                if !long_only || self.arg(self.optind)[1] == b'-' || strchr(optstring, self.byte(start)).is_none() {
+                    if print_errors { self.error(&[&b"unrecognized option '"[..], prefix, &rest, b"'"].concat()); }
+                    self.nextchar = None;
+                    self.optind += 1;
+                    self.optopt = 0;
+                    return b'?' as i32;
+                }
+                return -1;
+            };
+            let p = &longopts[found];
+            self.optind += 1;
+            self.nextchar = None;
+            if namelen < rest.len() {
+                if p.has_arg != 0 {
+                    self.optarg = Some((start.0, start.1 + namelen + 1));
+                } else {
+                    if print_errors { self.error(&[&b"option '"[..], prefix, &p.name, b"' doesn't allow an argument"].concat()); }
+                    self.optopt = p.val;
+                    return b'?' as i32;
+                }
+            } else if p.has_arg == 1 {
+                if self.optind < argc {
+                    self.optarg = Some((self.argv[self.optind], 0));
+                    self.optind += 1;
+                } else {
+                    if print_errors { self.error(&[&b"option '"[..], prefix, &p.name, b"' requires an argument"].concat()); }
+                    self.optopt = p.val;
+                    return if optstring[0] == b':' { b':' as i32 } else { b'?' as i32 };
+                }
+            }
+            *longind = option_index as i32;
+            if p.flag != 0 {
+                store_at_address(p.flag, &p.val.to_le_bytes());
+                return 0;
+            }
+            p.val
+        }
+
+        /// cob_getopt_long_long; `optstring` ends with its NUL.
+        fn getopt(&mut self, mut optstring: &[u8], longopts: &[LongOption], longind: &mut i32, long_only: bool) -> i32 {
+            let argc = self.argv.len();
+            if argc < 1 { return -1; }
+            self.optarg = None;
+            if self.optind == 0 || !self.initialized {
+                // _getopt_initialize
+                if self.optind == 0 { self.optind = 1; }
+                self.first_nonopt = self.optind;
+                self.last_nonopt = self.optind;
+                self.nextchar = None;
+                if optstring[0] == b'-' {
+                    self.ordering = Ordering::ReturnInOrder;
+                    optstring = &optstring[1..];
+                } else if optstring[0] == b'+' {
+                    self.ordering = Ordering::Require;
+                    optstring = &optstring[1..];
+                } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
+                    self.ordering = Ordering::Require;
+                } else {
+                    self.ordering = Ordering::Permute;
+                }
+                self.initialized = true;
+            } else if optstring[0] == b'-' || optstring[0] == b'+' {
+                optstring = &optstring[1..];
+            }
+            let print_errors = optstring[0] != b':';
+            if self.nextchar.is_none_or(|p| self.byte(p) == 0) {
+                if self.last_nonopt > self.optind { self.last_nonopt = self.optind; }
+                if self.first_nonopt > self.optind { self.first_nonopt = self.optind; }
+                if self.ordering == Ordering::Permute {
+                    if self.first_nonopt != self.last_nonopt && self.last_nonopt != self.optind {
+                        self.exchange();
+                    } else if self.last_nonopt != self.optind {
+                        self.first_nonopt = self.optind;
+                    }
+                    while self.optind < argc && self.nonoption() { self.optind += 1; }
+                    self.last_nonopt = self.optind;
+                }
+                if self.optind != argc && self.cstr((self.argv[self.optind], 0)) == b"--" {
+                    self.optind += 1;
+                    if self.first_nonopt != self.last_nonopt && self.last_nonopt != self.optind {
+                        self.exchange();
+                    } else if self.first_nonopt == self.last_nonopt {
+                        self.first_nonopt = self.optind;
+                    }
+                    self.last_nonopt = argc;
+                    self.optind = argc;
+                }
+                if self.optind == argc {
+                    if self.first_nonopt != self.last_nonopt { self.optind = self.first_nonopt; }
+                    return -1;
+                }
+                if self.nonoption() {
+                    if self.ordering == Ordering::Require { return -1; }
+                    self.optarg = Some((self.argv[self.optind], 0));
+                    self.optind += 1;
+                    return 1;
+                }
+                let current = self.argv[self.optind];
+                let (second, third) = (self.strings[current][1], self.strings[current].get(2).copied().unwrap_or(0));
+                if second == b'-' {
+                    self.nextchar = Some((current, 2));
+                    return self.process_long_option(optstring, longopts, longind, long_only, print_errors, b"--");
+                }
+                if long_only && (third != 0 || strchr(optstring, second).is_none()) {
+                    self.nextchar = Some((current, 1));
+                    let code = self.process_long_option(optstring, longopts, longind, long_only, print_errors, b"-");
+                    if code != -1 { return code; }
+                }
+                self.nextchar = Some((current, 1));
+            }
+            let (id, offset) = self.nextchar.unwrap();
+            let c = self.strings[id][offset];
+            let signed = c as i8 as i32;
+            self.nextchar = Some((id, offset + 1));
+            if self.strings[id][offset + 1] == 0 { self.optind += 1; }
+            let temp = strchr(optstring, c);
+            let Some(temp) = temp.filter(|_| c != b':' && c != b';') else {
+                if print_errors { self.error(&[&b"invalid option -- '"[..], &[c], b"'"].concat()); }
+                self.optopt = signed;
+                return b'?' as i32;
+            };
+            let missing = if optstring[0] == b':' { b':' as i32 } else { b'?' as i32 };
+            if optstring[temp] == b'W' && optstring[temp + 1] == b';' {
+                let next = self.nextchar.unwrap();
+                if self.byte(next) != 0 {
+                    self.optarg = Some(next);
+                } else if self.optind == argc {
+                    if print_errors { self.error(&[&b"option requires an argument -- '"[..], &[c], b"'"].concat()); }
+                    self.optopt = signed;
+                    return missing;
+                } else {
+                    self.optarg = Some((self.argv[self.optind], 0));
+                }
+                self.nextchar = self.optarg;
+                self.optarg = None;
+                return self.process_long_option(optstring, longopts, longind, false, print_errors, b"-W ");
+            }
+            if optstring[temp + 1] == b':' {
+                let next = self.nextchar.unwrap();
+                if optstring[temp + 2] == b':' {
+                    if self.byte(next) != 0 {
+                        self.optarg = Some(next);
+                        self.optind += 1;
+                    } else {
+                        self.optarg = None;
+                    }
+                } else if self.byte(next) != 0 {
+                    self.optarg = Some(next);
+                    self.optind += 1;
+                } else if self.optind == argc {
+                    if print_errors { self.error(&[&b"option requires an argument -- '"[..], &[c], b"'"].concat()); }
+                    self.optopt = signed;
+                    self.nextchar = None;
+                    return missing;
+                } else {
+                    self.optarg = Some((self.argv[self.optind], 0));
+                    self.optind += 1;
+                }
+                self.nextchar = None;
+            }
+            signed
+        }
+    }
+
+    /// cob_field_to_string: trailing spaces and NULs dropped (the first
+    /// byte kept), then the C string up to its first NUL.
+    fn field_string(data: &[u8]) -> Vec<u8> {
+        if data.is_empty() { return vec![0]; }
+        let mut end = data.len() - 1;
+        while end > 0 && (data[end] == b' ' || data[end] == 0) { end -= 1; }
+        if data[end] == b' ' || data[end] == 0 { return vec![0]; }
+        let mut s: Vec<u8> = data[..=end].iter().copied().take_while(|&b| b != 0).collect();
+        s.push(0);
+        s
+    }
+
+    /// The bytes behind a parameter: None for a NULL cob_field (OMITTED),
+    /// a stop for a field without storage (its data would be NULL).
+    fn data(argument: &Value) -> Option<Vec<u8>> {
+        let bytes = parameter_bytes(argument);
+        if bytes.is_none() && descriptor_size(argument) != 0 { unsupported("paramètre sans adresse (pointeur NULL)"); }
+        bytes
+    }
+
+    pub fn call(arguments: &[Value], modes: &[&str]) -> i32 {
+        const DEF: usize = 25 + 1 + 8 + 4; // longoption_def
+        if arguments.len() < 6 { unsupported("moins de six arguments (pas de COB_PARAM_CHECK)"); }
+        if modes.len() != arguments.len() { unsupported("modes de passage incohérents avec les arguments"); }
+        if modes[3] != "VALUE" { unsupported("long-only requis BY VALUE (entier C)"); }
+        if [0, 1, 2, 4, 5].iter().any(|&i| modes[i] == "VALUE") { unsupported("argument d'adresse passé BY VALUE"); }
+        let so = data(&arguments[0]);
+        let lo = data(&arguments[1]);
+        let lo_size = lo.as_ref().map_or(0, |bytes| bytes.len());
+        if lo_size % DEF != 0 { fatal_error(b"call to CBL_GC_GETOPT with wrong longoption size"); }
+        if data(&arguments[2]).is_none() { fatal_error(b"call to CBL_GC_GETOPT with missing longind"); }
+        let mut longind = arguments[2].integer("CBL_GC_GETOPT") as i32;
+        let long_only = arguments[3].integer("CBL_GC_GETOPT") as i32 != 0;
+        let shortoptions = so.as_deref().map_or(vec![0], field_string);
+        let mut longoptions = Vec::new();
+        if let Some(mut bytes) = lo {
+            for base in (0..lo_size).step_by(DEF) {
+                let mut j = 24;
+                while bytes[base + j] == b' ' {
+                    bytes[base + j] = 0;
+                    if j == 0 { break; }
+                    j -= 1;
+                }
+                let Some(length) = bytes[base..].iter().position(|&b| b == 0) else {
+                    unsupported("nom d'option longue sans NUL dans la zone des options (lecture au-delà)");
+                };
+                longoptions.push(LongOption {
+                    name: bytes[base..base + length].to_vec(),
+                    has_arg: (bytes[base + 25] & 0x0F) as i32,
+                    flag: u64::from_le_bytes(bytes[base + 26..base + 34].try_into().unwrap()),
+                    val: i32::from_le_bytes(bytes[base + 34..base + 38].try_into().unwrap()),
+                });
+            }
+            store_parameter(&arguments[1], 0, &bytes);
+        }
+        let (return_value, optarg) = STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let state = state.get_or_insert_with(State::new);
+            let value = state.getopt(&shortoptions, &longoptions, &mut longind, long_only);
+            (value, state.optarg.map(|p| state.cstr(p)))
+        });
+        let mut temp = return_value.to_le_bytes();
+        let mut exit_status = if matches!(temp[0], b'?' | b':' | b'W' | 0xFF | 0) { return_value } else { 3 };
+        for i in (1..=3).rev() {
+            if temp[i] == 0 { temp[i] = b' '; } else { break; }
+        }
+        arguments[2].clone().move_number(&Value::number(&longind.to_string()));
+        store_parameter(&arguments[4], 0, &temp);
+        if let Some(optarg) = optarg {
+            let opt_val = data(&arguments[5]);
+            let size = opt_val.as_ref().map_or(0, |bytes| bytes.len());
+            if opt_val.is_some() { store_parameter(&arguments[5], 0, &vec![0; size]); }
+            let length = if optarg.len() > size { exit_status = 2; size } else { optarg.len() };
+            if length > 0 { store_parameter(&arguments[5], 0, &optarg[..length]); }
+        }
+        exit_status
+    }
 }

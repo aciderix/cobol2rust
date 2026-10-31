@@ -94,9 +94,14 @@ def validate_file_paths(conversion, file_env=()):
 
 def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | None = None, runtime_env=None,
            call_paths=(), cobc_flags=(), debugging_lines=False, std="default", rust_data_dir: Path | None = None,
-           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False, runtime_checks=False):
+           no_ec_data_incompatible=False, file_env=None, timeout=15, release=False, runtime_checks=False,
+           arguments=()):
     """`rust_data_dir` seeds the Rust run instead of `data_dir`, for INDEXED
-    files written by converted predecessors in cobol2rust's own format."""
+    files written by converted predecessors in cobol2rust's own format.
+    `arguments` follow argv[0] on both command lines; argv[0] is the same
+    for both programs (`./<source stem>`, or the module name under cobcrun),
+    since libcob's messages (CBL_GC_GETOPT) print it."""
+    arguments = [str(argument) for argument in arguments]
     cobc, rustc = find_tool("cobc"), find_tool("rustc")
     if not cobc or not rustc:
         raise CobolError("GnuCOBOL et rustc requis: python -m cobol2rust doctor")
@@ -181,8 +186,11 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
             environment.update(file_env)
             if name == "cobol":
                 environment["COB_LIBRARY_PATH"] = str(modules)
-            command = [cobcrun, module] if name == "cobol" and module else [str(binary)]
-            result = subprocess.run(command, cwd=directory, env=environment,
+            # cobcrun shifts argv: libcob's argv[0] is the module name.
+            argv0 = module if module else "./" + source.stem
+            command = [cobcrun, module, *arguments] if name == "cobol" and module else [argv0, *arguments]
+            executable = None if name == "cobol" and module else str(binary)
+            result = subprocess.run(command, executable=executable, cwd=directory, env=environment,
                                     input=stdin, capture_output=True, timeout=timeout)
             results.append(result)
             artifacts.append(snapshot(directory))
@@ -193,7 +201,7 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
         return {"schema_version": 1, "source": conversion["source"], "source_sha256": conversion["source_sha256"],
                 "expanded_sha256": conversion["expanded_sha256"], "copybook_sha256": conversion["copybook_sha256"],
                 "storage_profile": conversion["storage_profile"],
-                "stdin_sha256": hashlib.sha256(stdin).hexdigest(),
+                "stdin_sha256": hashlib.sha256(stdin).hexdigest(), "arguments": arguments,
                 "std": std, "cobc_flags": list(cobc_flags),
                 "scope": "original COBOL vs generated Rust: stdout bytes, zero exit codes and final file bytes for these inputs",
                 "runtime_env": runtime_env, "file_env": file_env, "input_files": manifest(seed), "rust_input_files": manifest(rust_seed), "input_directories": seed_directories,

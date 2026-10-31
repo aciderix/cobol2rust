@@ -349,6 +349,8 @@ def main(argv=None):
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
     verification.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution (cobc -debug) des deux côtés")
+    verification.add_argument("--arg", action="append", default=[], dest="arguments", metavar="ARGUMENT",
+                              help="argument de ligne de commande (après argv[0], identique des deux côtés), répétable")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -386,7 +388,7 @@ def main(argv=None):
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
                             args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
                             std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env,
-                            runtime_checks=args.runtime_checks)
+                            runtime_checks=args.runtime_checks, arguments=args.arguments)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():

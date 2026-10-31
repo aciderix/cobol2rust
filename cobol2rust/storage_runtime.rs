@@ -2011,6 +2011,18 @@ thread_local! {
     static STATIC_BASES: RefCell<std::collections::HashMap<String, u64>> = RefCell::new(std::collections::HashMap::new());
 }
 
+/// A system routine writing through an address it was given
+/// (cob_sys_getopt_long_long's `*flag = val`).
+pub fn store_at_address(address: u64, bytes: &[u8]) {
+    let (memory, start, len, offset) = decode(address);
+    if offset.checked_add(bytes.len()).is_none_or(|end| end > len) {
+        fail("écriture d'une routine système au-delà de la zone adressée non modélisée");
+    }
+    check_writable(&memory);
+    define(&memory, start + offset, bytes.len());
+    memory.borrow_mut()[start + offset..start + offset + bytes.len()].copy_from_slice(bytes);
+}
+
 /// The static base pointer of a LINKAGE item of no USING: its address
 /// outlives the program instance (CANCEL).
 pub fn static_base(key: &str) -> u64 { STATIC_BASES.with(|bases| bases.borrow().get(key).copied().unwrap_or(0)) }

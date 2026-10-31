@@ -334,7 +334,16 @@ RETURN-CODE ; `RETURNING OMITTED` l'ignore.
 Routines de common.c : `SYSTEM` (statut brut de `system()`, commande d'un
 octet non exécutée comme dans libcob), `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`,
 `C$PRINTABLE` (isprint de la locale LC_CTYPE de l'utilisateur) et, par l'état
-du module courant, `C$NARG`, `C$PARAMSIZE` et `C$CALLEDBY`.
+du module courant, `C$NARG`, `C$PARAMSIZE` et `C$CALLEDBY`. `CBL_GC_GETOPT`
+porte `cob_sys_getopt_long_long` et le getopt GNU de cobgetopt.c : options
+courtes (`:` et `::`, `-W ;`), longues et abréviations, ambiguïtés, ordre
+PERMUTE (permutation d'argv conservée entre les appels), `+`, `-`,
+`POSIXLY_CORRECT`, `:` en tête, long-only, `*flag = val` écrit à l'adresse
+d'un POINTER, noms complétés de NUL dans la zone des options, messages de
+getopt sur stderr avec argv[0], taille de zone d'options fausse et LONGIND
+absent comme erreurs de libcob. Long-only doit être passé BY VALUE ; moins
+de six arguments, une adresse passée BY VALUE ou un nom long sans NUL dans
+la zone sont des arrêts nommés.
 
 Ce contrat scalaire vise **Linux x86_64**, avec la locale C de LC_CTYPE
 initialisée par GnuCOBOL. Les tailles 1, 2, 4 et 8, SIZE AUTO, SIZE DEFAULT
@@ -912,7 +921,9 @@ python -m cobol2rust verify examples/invoice.cob -o build/controle-facture.json
 `verify` compile et **exécute** le source donné avec GnuCOBOL et Rust. Il compare
 stdout et les fichiers finaux octet pour octet et exige deux codes de retour nuls. Fournir des sources
 de confiance ; `--stdin-file entrees.txt` permet de donner les mêmes entrées aux
-deux programmes. Le rapport décrit uniquement les entrées testées.
+deux programmes et `--arg` (répétable) les mêmes arguments de ligne de
+commande, avec le même argv[0] (`./<nom du source>`, ou le nom du module sous
+cobcrun). Le rapport décrit uniquement les entrées testées.
 
 `tools/verify.py` et le sous-ordre `verify` compilent désormais le **source
 original** côté GnuCOBOL. Cela vérifie indépendamment les formats et les COPY,

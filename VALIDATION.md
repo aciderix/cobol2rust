@@ -1,5 +1,24 @@
 # Validation — 30 octobre 2026
 
+## CBL_GC_GETOPT — 31 octobre 2026
+
+- Fixture `tests/fixtures/getopt/getopt.cob` (chaîne d'options et long-only
+  lus sur stdin) identique au natif, stdout, stderr et code, sur cinq jeux :
+  options courtes `b:` `c::` `W;`, longues exactes, abrégées, `=valeur`,
+  optionnelles, deux options à même `flag` (abréviation non ambiguë,
+  `FLAG-VAL` écrit), ambiguïté avec ses possibilités, permutation de `x1`/`x2`,
+  `--` ; long-only avec `:` en tête (messages muets, `:` pour l'argument
+  manquant) et nom de 25 octets prolongé par HAS-VALUE ; `+` (arrêt au
+  premier non-option) ; `-` (non-options rendues avec le code 1) ; options
+  inconnues, argument refusé ou manquant. Essai isolé : CALL dynamique par
+  un nom en donnée identique au natif.
+- Sources débloquées : run_extensions-070 prog à prog5 identiques au natif
+  avec les arguments de la testsuite (`prog5` : « libcob: error: call to
+  CBL_GC_GETOPT with wrong longoption size », code 1).
+- Mesure : **1293 → 1298/3593**, écart **324 → 319**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; suite
+  **558 tests**, 0 échec (`tests/test_getopt.py` : cinq tests).
+
 ## Formes de CALL et routines de common.c — 31 octobre 2026
 
 - Fixture `tests/fixtures/library_routines/` (programme principal et

@@ -179,7 +179,10 @@ RETURNING OMITTED n'écrit rien ; un argument FUNCTION alphanumérique passe
 par un temporaire, LENGTH OF par `cob_content`. Les routines de common.c
 `SYSTEM`, `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`, `C$PRINTABLE`, `C$NARG`,
 `C$PARAMSIZE` et `C$CALLEDBY` sont portées (pile des paramètres reçus dans
-`RunUnit`). Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+`RunUnit`), ainsi que `CBL_GC_GETOPT` (getopt GNU de cobgetopt.c, état
+statique et permutation d'argv dans `system_runtime::getopt`, `*flag` écrit
+par `storage_runtime::store_at_address` ; `verify --arg` donne les mêmes
+arguments et le même argv[0] aux deux programmes). Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
 RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
 FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs

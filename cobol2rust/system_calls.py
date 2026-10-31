@@ -34,10 +34,10 @@ FILE_ROUTINES = {"CBL_OPEN_FILE", "CBL_CREATE_FILE", "CBL_READ_FILE", "CBL_WRITE
                  "C$CHDIR", "C$COPY", "C$FILEINFO", "C$DELETE"}
 # common.c routines: without module state (system_runtime) or reading the
 # current module (RunUnit::module_routine).
-LIBRARY_ROUTINES = {"SYSTEM", "C$SLEEP", "C$GETPID", "C$JUSTIFY", "C$PRINTABLE", "C$NARG", "C$PARAMSIZE",
+LIBRARY_ROUTINES = {"CBL_GC_GETOPT", "SYSTEM", "C$SLEEP", "C$GETPID", "C$JUSTIFY", "C$PRINTABLE", "C$NARG", "C$PARAMSIZE",
                     "C$CALLEDBY"}
 # Routines whose C parameters are ints passed BY VALUE.
-VALUE_ROUTINES = {"CBL_GET_CURRENT_DIR"}
+VALUE_ROUTINES = {"CBL_GET_CURRENT_DIR", "CBL_GC_GETOPT"}
 SYSTEM_ROUTINES = set(CATALOG) | FILE_ROUTINES | LIBRARY_ROUTINES
 
 
