@@ -32,9 +32,13 @@ FILE_ROUTINES = {"CBL_OPEN_FILE", "CBL_CREATE_FILE", "CBL_READ_FILE", "CBL_WRITE
                  "CBL_FLUSH_FILE", "CBL_DELETE_FILE", "CBL_COPY_FILE", "CBL_CHECK_FILE_EXIST", "CBL_RENAME_FILE",
                  "CBL_GET_CURRENT_DIR", "CBL_CREATE_DIR", "CBL_CHANGE_DIR", "CBL_DELETE_DIR", "C$MAKEDIR",
                  "C$CHDIR", "C$COPY", "C$FILEINFO", "C$DELETE"}
+# common.c routines: without module state (system_runtime) or reading the
+# current module (RunUnit::module_routine).
+LIBRARY_ROUTINES = {"SYSTEM", "C$SLEEP", "C$GETPID", "C$JUSTIFY", "C$PRINTABLE", "C$NARG", "C$PARAMSIZE",
+                    "C$CALLEDBY"}
 # Routines whose C parameters are ints passed BY VALUE.
 VALUE_ROUTINES = {"CBL_GET_CURRENT_DIR"}
-SYSTEM_ROUTINES = set(CATALOG) | FILE_ROUTINES
+SYSTEM_ROUTINES = set(CATALOG) | FILE_ROUTINES | LIBRARY_ROUTINES
 
 
 @dataclass(frozen=True)

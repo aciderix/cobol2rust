@@ -1901,6 +1901,16 @@ class Emitter:
                 if ref is None:
                     values.append("storage_runtime::omitted()")
                     continue
+                if isinstance(ref, Expr) and ref.op == "content":
+                    data, digits, signed = ref.args
+                    values.append(f"storage_runtime::content_number(&{self.byte_vector(data)}, {digits}, {str(signed).lower()})")
+                    continue
+                if isinstance(ref, Expr) and ref.op == "function":
+                    # The intrinsic's own result field, even BY CONTENT.
+                    if self.kind(ref) != "text":
+                        raise CobolError("argument CALL d'une FUNCTION numérique (champ résultat de libcob) non pris en charge")
+                    values.append(f"storage_runtime::temporary(&{self.expression(ref)})")
+                    continue
                 if isinstance(ref, Expr):
                     # BY CONTENT: a fresh copy at each CALL; BY REFERENCE: the
                     # program's constant itself.
@@ -1951,7 +1961,14 @@ class Emitter:
             self.indent += 1
             self.write("Some(runtime::Outcome::Stop) => return runtime::Outcome::Stop,")
             returned = f"if unit.call_exception {{ unit.call_exception = false; {exception} }} else {{ {success} }}" if exception is not None else str(success)
-            if self.register:
+            returning = getattr(node.stmt, "returning", None)
+            if isinstance(returning, DataRef):
+                # CALL RETURNING: cob_set_int of the return value, a MOVE of an int.
+                self.write(f"Some(runtime::Outcome::Return) => {{ if let Some(code) = unit.returned {{ "
+                           f"{self.receiver(returning)}.move_number(&Value::number(&code.to_string())); }} pc = {returned}; }}")
+            elif returning == "omitted":
+                self.write(f"Some(runtime::Outcome::Return) => pc = {returned},")
+            elif self.register:
                 # The callee's return value (its RETURN-CODE) becomes ours.
                 self.write(f"Some(runtime::Outcome::Return) => {{ if let Some(code) = unit.returned {{ "
                            f"{self.register}.assign(&Value::number(&code.to_string()), false); }} pc = {returned}; }}")
@@ -2948,6 +2965,7 @@ def generate_unit(emitters):
     shared = any(emitter.file_registry(name) for emitter in emitters for name in emitter.files)
     unit = ["struct RunUnit {", "    returned: Option<i64>, // return value of the last CALL", "    exit_code: i32, // cob_stop_run status",
             "    callers: Vec<&'static str>, // module names of the active programs, innermost last",
+            "    params: Vec<Vec<Option<usize>>>, // sizes of the parameters each active program received (None: OMITTED)",
             "    stmt_exception: bool, // cob_stmt_exception: the CALL has ON EXCEPTION",
             "    call_exception: bool, // the CALL returned with EC-PROGRAM-RECURSIVE-CALL"]
     for index, emitter in enumerate(subprograms, 1):
@@ -2963,7 +2981,7 @@ def generate_unit(emitters):
         unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
     main_name = quoted(emitters[0].program.entry_name)
     unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {",
-             f"            returned: None, exit_code: 0, callers: vec![{main_name}], stmt_exception: false, call_exception: false,"]
+             f"            returned: None, exit_code: 0, callers: vec![{main_name}], params: vec![vec![]], stmt_exception: false, call_exception: false,"]
     for index, emitter in enumerate(subprograms, 1):
         loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
         unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
@@ -2985,6 +3003,9 @@ def generate_unit(emitters):
             unit.append("            " + " | ".join(quoted(name) for name in entries) + f" if self.p{index}_loaded => true,")
     unit += ["            _ => false,", "        };",
              "        if system_literal || !prefer_program {",
+             "            if let Some(code) = self.module_routine(name, &arguments) {",
+             "                self.returned = Some(code as i64); return Some(runtime::Outcome::Return);",
+             "            }",
              "            if let Some(code) = system_runtime::call(name, &arguments, modes) {",
              "                self.returned = Some(code as i64); return Some(runtime::Outcome::Return);",
              "            }",
@@ -3023,6 +3044,7 @@ def generate_unit(emitters):
                           for n, name in enumerate(any_items(emitter))], "                }"] if any_items(emitter) else []),
                      f"                self.p{index}_active = true;",
                      f"                self.callers.push({quoted(emitter.program.entry_name)});",
+                     "                self.params.push(arguments.iter().map(|a| storage_runtime::parameter_bytes(a).map(|_| storage_runtime::descriptor_size(a))).collect());",
                      *([f"                runtime::exception::module({quoted(emitter.program.entry_name)});"] if exceptions else []),
                      *([f"                self.p{index}_loaded = true;"] if entries else []),
                      f"                let outcome = program.call_entry(self, arguments, {number});",
@@ -3032,6 +3054,7 @@ def generate_unit(emitters):
                      "                self.returned = program.return_code();",
                      f"                self.p{index}_active = false;",
                      "                self.callers.pop();",
+                     "                self.params.pop();",
                      *(["                runtime::exception::module(self.callers.last().copied().unwrap_or(\"\"));"] if exceptions else []),
                      f"                {kept}",
                      "                Some(outcome)",
@@ -3045,6 +3068,32 @@ def generate_unit(emitters):
              "    /// cob_module_global_enter: a program without RECURSIVE called while active",
              "    /// returns -1 with EC-PROGRAM-RECURSIVE-CALL to a CALL with ON EXCEPTION,",
              "    /// otherwise cob_fatal_error (COB_FERROR_RECURSIVE).",
+             "    /// common.c routines that read the current module: C$NARG",
+             "    /// (module_num_params), C$PARAMSIZE (the caller's cob_procedure_params)",
+             "    /// and C$CALLEDBY (COB_MODULE_PTR->next->module_name).",
+             "    fn module_routine(&mut self, name: &str, arguments: &[Value]) -> Option<i32> {",
+             "        let name = name.rsplit(['/', '\\\\']).next().unwrap_or(name);",
+             "        if !matches!(name, \"C$NARG\" | \"C$PARAMSIZE\" | \"C$CALLEDBY\") { return None; }",
+             "        let Some(first) = arguments.first() else { runtime::fail(&format!(\"routine système {name}: argument absent\")) };",
+             "        if storage_runtime::parameter_bytes(first).is_none() { return Some(if name == \"C$CALLEDBY\" { -1 } else { 0 }); }",
+             "        let received = self.params.last().cloned().unwrap_or_default();",
+             "        Some(match name {",
+             "            \"C$NARG\" => { first.clone().move_number(&Value::number(&received.len().to_string())); 0 },",
+             "            \"C$PARAMSIZE\" => {",
+             "                let n = first.integer(\"C$PARAMSIZE\");",
+             "                if n > 0 && n as usize <= received.len() { received[n as usize - 1].map_or(0, |size| size as i32) } else { 0 }",
+             "            },",
+             "            _ => {",
+             "                let size = storage_runtime::descriptor_size(first);",
+             "                storage_runtime::store_parameter(first, 0, &vec![b' '; size]);",
+             "                if self.callers.len() < 2 { 0 } else {",
+             "                    let caller = self.callers[self.callers.len() - 2].as_bytes();",
+             "                    storage_runtime::store_parameter(first, 0, &caller[..caller.len().min(size)]);",
+             "                    1",
+             "                }",
+             "            },",
+             "        })",
+             "    }",
              "    fn recursive(&mut self, callee: &str) -> Option<runtime::Outcome> {",
              "        if self.stmt_exception {",
              "            self.stmt_exception = false;",

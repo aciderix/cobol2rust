@@ -173,9 +173,15 @@ Les noms sont normalisés (espaces/NUL/composant de chemin) ; les appels
 dynamiques gardent leur avertissement et la priorité des programmes
 contenus, tandis qu'un appel système littéral reste direct. Les scalaires
 statiques supplémentaires ne sont pas décodés. Un argument alphanumérique
-BY VALUE est réécrit BY CONTENT, comme dans cobc. Les autres ABI utilisateur,
-paramètres formels BY VALUE, CALL RETURNING, résultats de FUNCTION à
-description conservée et FUNCTION scalaires supplémentaires restent refusés.
+BY VALUE est réécrit BY CONTENT, comme dans cobc. CALL RETURNING/GIVING
+vers une donnée numérique suit `cob_set_int` (RETURN-CODE inchangé),
+RETURNING OMITTED n'écrit rien ; un argument FUNCTION alphanumérique passe
+par un temporaire, LENGTH OF par `cob_content`. Les routines de common.c
+`SYSTEM`, `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`, `C$PRINTABLE`, `C$NARG`,
+`C$PARAMSIZE` et `C$CALLEDBY` sont portées (pile des paramètres reçus dans
+`RunUnit`). Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
+FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs
 restent nommés. Les autres limites de lecture des indices ne changent pas.
 

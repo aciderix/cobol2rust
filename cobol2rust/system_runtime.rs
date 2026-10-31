@@ -23,7 +23,10 @@ fn operation(name: &str) -> Option<(Operation, usize)> {
     })
 }
 
-pub fn known(name: &str) -> bool { operation(name).is_some() }
+pub fn known(name: &str) -> bool {
+    operation(name).is_some() || matches!(name.rsplit(['/', '\\']).next().unwrap_or(name),
+        "SYSTEM" | "C$SLEEP" | "C$GETPID" | "C$JUSTIFY" | "C$PRINTABLE")
+}
 
 fn unsupported(name: &str, reason: &str) -> ! {
     fail(&format!("routine système {name}: {reason}"))
@@ -88,9 +91,104 @@ fn case_table(_upper: bool) -> &'static [u8; 256] {
     fail("routines système de casse: profil LC_CTYPE natif hors Linux non pris en charge")
 }
 
+/// common.c routines without module state: SYSTEM, C$SLEEP, C$GETPID,
+/// C$JUSTIFY and C$PRINTABLE (cob_procedure_params[0]->size is the size).
+fn library_routine(name: &str, arguments: &[Value]) -> Option<i32> {
+    use crate::storage_runtime::{descriptor_size, parameter_bytes, store_parameter};
+    let name = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    if !matches!(name, "SYSTEM" | "C$SLEEP" | "C$GETPID" | "C$JUSTIFY" | "C$PRINTABLE") { return None; }
+    if name == "C$GETPID" { return Some(std::process::id() as i32); }
+    let Some(first) = arguments.first() else { unsupported(name, "argument absent (pas de COB_PARAM_CHECK)") };
+    let Some(mut data) = parameter_bytes(first) else { return Some(0) };
+    let size = descriptor_size(first);
+    Some(match name {
+        "SYSTEM" => {
+            // cob_sys_system: trailing spaces and NULs dropped down to index 1;
+            // a command whose last significant byte is the first is not run.
+            if size == 0 { unsupported(name, "commande vide"); }
+            let mut i = size - 1;
+            loop {
+                if data[i] != b' ' && data[i] != 0 { break; }
+                i -= 1;
+                if i == 0 { break; }
+            }
+            if i == 0 { return Some(1); }
+            if i > 8191 { unsupported(name, "commande au-delà de COB_MEDIUM_MAX"); }
+            let command = std::ffi::CString::new(data[..=i].to_vec()).unwrap_or_else(|_| unsupported(name, "commande avec NUL interne"));
+            extern "C" { fn system(command: *const std::ffi::c_char) -> std::ffi::c_int; }
+            let status = unsafe { system(command.as_ptr()) };
+            if status & 0x7f != 0 && status & 0x7f != 0x7f {
+                unsupported(name, "processus externe terminé par un signal (avertissement de libcob non modélisé)");
+            }
+            status
+        },
+        "C$SLEEP" => {
+            // get_sleep_nanoseconds_from_seconds: cob_get_llint, then the
+            // seconds moved to nanoseconds; one week at most.
+            let seconds = first.integer("C$SLEEP");
+            if seconds < 0 { return Some(-1); }
+            let nanoseconds = if seconds >= 3600 * 24 * 7 { 3600 * 24 * 7 * 1_000_000_000 }
+                              else { first.num().units(9, false).to_string().parse::<i128>().unwrap_or(0) };
+            if nanoseconds > 0 { std::thread::sleep(std::time::Duration::from_nanos(nanoseconds as u64)); }
+            0
+        },
+        "C$JUSTIFY" => {
+            if size < 2 || (data[0] != b' ' && data[size - 1] != b' ') { return Some(0); }
+            let left = data.iter().take_while(|&&b| b == b' ').count();
+            if left == size { return Some(0); }
+            let right = data.iter().rev().take_while(|&&b| b == b' ').count();
+            let movelen = size - left - right;
+            let direction = if arguments.len() > 1 { parameter_bytes(&arguments[1]).and_then(|d| d.first().copied()) } else { None };
+            let word = data[left..left + movelen].to_vec();
+            let mut result = vec![b' '; size];
+            match direction {
+                Some(b'L') => result[..movelen].copy_from_slice(&word),
+                Some(b'C') => { let centre = (left + right) / 2; result[centre..centre + movelen].copy_from_slice(&word); },
+                _ => result[left + right..].copy_from_slice(&word),
+            }
+            store_parameter(first, 0, &result);
+            0
+        },
+        _ => {
+            // C$PRINTABLE: isprint in the user's LC_CTYPE (cob_locale_ctype).
+            let replacement = if arguments.len() > 1 {
+                parameter_bytes(&arguments[1]).and_then(|d| d.first().copied()).unwrap_or_else(|| unsupported(name, "remplacement à une adresse NULL"))
+            } else { b'.' };
+            let table = printable_table();
+            for byte in data.iter_mut() { if !table[*byte as usize] { *byte = replacement; } }
+            store_parameter(first, 0, &data);
+            0
+        },
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn printable_table() -> &'static [bool; 256] {
+    use std::ffi::{c_char, c_int, c_void};
+    extern "C" {
+        fn newlocale(mask: c_int, name: *const c_char, base: *mut c_void) -> *mut c_void;
+        fn isprint_l(byte: c_int, locale: *mut c_void) -> c_int;
+    }
+    static TABLE: std::sync::OnceLock<[bool; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        // cob_init saves setlocale (LC_CTYPE, "") as cob_locale_ctype.
+        let locale = unsafe { newlocale(1, b"\0".as_ptr().cast(), std::ptr::null_mut()) };
+        if locale.is_null() { fail("C$PRINTABLE: locale LC_CTYPE de l'utilisateur indisponible"); }
+        let mut table = [false; 256];
+        for (n, entry) in table.iter_mut().enumerate() { *entry = unsafe { isprint_l(n as c_int, locale) } != 0; }
+        table
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn printable_table() -> &'static [bool; 256] {
+    fail("C$PRINTABLE: profil LC_CTYPE natif hors Linux non pris en charge")
+}
+
 /// System routines receive raw addresses, not COBOL field descriptions.
 /// The final consumed argument is the C int already prepared by BY VALUE.
 pub fn call(name: &str, arguments: &[Value], modes: &[&str]) -> Option<i32> {
+    if let Some(code) = library_routine(name, arguments) { return Some(code); }
     let (operation, arity) = operation(name)?;
     if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         unsupported(name, "profil ABI scalaire Linux x86_64 requis");

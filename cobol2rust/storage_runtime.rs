@@ -1281,6 +1281,12 @@ pub fn store_parameter(item: &Value, offset: usize, bytes: &[u8]) {
     target.assign_text_move(&Value::Bytes(bytes.to_vec()), true);
 }
 
+/// output_call's cob_content of a numeric literal: native binary bytes.
+pub fn content_number(bytes: &[u8], digits: u32, signed: bool) -> Value {
+    Value::View(View { memory: Rc::new(RefCell::new(bytes.to_vec())), offset: 0, size: bytes.len(),
+        kind: Kind::Numeric { digits, scale: 0, signed, usage: Usage::Native }, dimensions: vec![], initializers: vec![], limit: None })
+}
+
 pub fn omitted() -> Value {
     Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
                        dimensions: vec![], initializers: vec![], limit: None })

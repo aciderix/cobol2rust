@@ -28,7 +28,7 @@ class NumericTruncationTests(unittest.TestCase):
     def test_index_sender_keeps_the_strict_assignment(self):
         code = generate("01 table-a. 02 item-a pic x occurs 2 indexed by idx. 01 narrow pic 9.",
                         "move idx to narrow stop run.")
-        self.assertNotIn("move_number(", code)
+        self.assertNotIn("move_number(", code.split("struct Program", 1)[1])
 
     def test_binary_sender_to_packed_uses_the_guarded_native_path(self):
         code = generate("01 b pic s9(4) comp. 01 p pic 99 comp-3. 01 d pic 99.",

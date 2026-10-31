@@ -24,7 +24,7 @@ class CallContentTests(unittest.TestCase):
                  "-12345678901": (-12345678901).to_bytes(8, "little", signed=True)}
         for text, data in cases.items():
             with self.subTest(text=text):
-                self.assertEqual(call_content(text).encode("latin-1"), data)
+                self.assertEqual(call_content(text).args[0].encode("latin-1"), data)
 
     def test_literals_become_content_arguments(self):
         stmt = next(s for s in Parser(program("call 'CBL_OPEN_FILE' using fname 1 0 0 fh.")).parse().entry

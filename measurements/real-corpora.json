@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T13:33:58+00:00",
- "git_head": "f7426dbd3029193841b71c9d36fab1ea4046e9c8",
- "implementation_sha256": "ffead05aefc63164cfd951a426f5b14a24a533486cbdfdbac1550f1df623346a",
+ "measured_at": "2026-10-31T14:03:58+00:00",
+ "git_head": "ab485230ad69bfc2a2aafb52d27a6c6142917b25",
+ "implementation_sha256": "a8c4305f1674494a531c345f26265e2ba265faf2d3a3d8b58780de6b99d91d40",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1277,
+  "accepted": 1293,
   "cobc_accepted": 1617,
-  "gap": 340,
+  "gap": 324,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 553,
+   "accepted": 569,
    "internal_errors": 0,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 326,
+   "gap": 310,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -553,50 +553,6 @@
      "DISPLAY UPON ENVIRONMENT-NAME non pris en charge"
     ],
     [
-     "run_extensions-052/prog.cob",
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-053/callee.cob",
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-053/caller.cob",
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-053/prog.cob",
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-054/callee.cob",
-     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-054/caller.cob",
-     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-055/callee.cob",
-     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-055/caller.cob",
-     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-056/prog.cob",
-     "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-057/prog.cob",
-     "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "run_extensions-059/prog.cob",
-     "CALL C$GETPID: programme non converti ou routine système non pris en charge"
-    ],
-    [
      "run_extensions-070/prog.cob",
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
     ],
@@ -618,19 +574,15 @@
     ],
     [
      "run_extensions-071/prog.cob",
-     "CALL RETURNING/GIVING non pris en charge"
+     "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-072/prog.cob",
-     "CALL RETURNING/GIVING non pris en charge"
+     "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-073/prog.cob",
      "USAGE POINTER de groupe non pris en charge"
-    ],
-    [
-     "run_extensions-074/prog.cob",
-     "CALL USING requiert au moins un argument"
     ],
     [
      "run_extensions-075/prog.cob",
@@ -835,10 +787,6 @@
     [
      "run_functions-014/prog.cob",
      "FUNCTION CONTENT-OF non prise en charge"
-    ],
-    [
-     "run_functions-015/prog.cob",
-     "CALL USING requiert au moins un argument"
     ],
     [
      "run_functions-017/prog.cob",
@@ -1313,16 +1261,8 @@
      ". attendu"
     ],
     [
-     "run_misc-041/callee.cob",
-     "CALL RETURNING/GIVING non pris en charge"
-    ],
-    [
-     "run_misc-041/caller.cob",
-     "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge"
-    ],
-    [
      "run_misc-042/prog.cob",
-     "CALL USING requiert au moins un argument"
+     "argument CALL calculé non pris en charge"
     ],
     [
      "run_misc-045/prog.cob",
@@ -1407,10 +1347,6 @@
     [
      "run_misc-130/prog.cob",
      "PROCEDURE attendu"
-    ],
-    [
-     "run_misc-133/caller.cob",
-     "CALL RETURNING/GIVING non pris en charge"
     ],
     [
      "run_misc-142/caller.cob",
@@ -1851,10 +1787,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 340,
-  "matching": 340,
-  "complete": 184,
-  "distinct": 210,
+  "sources": 324,
+  "matching": 324,
+  "complete": 178,
+  "distinct": 204,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1977,22 +1913,10 @@
     "alone": 1
    },
    {
-    "diagnostic": "CALL USING requiert au moins un argument",
-    "first": 4,
-    "present": 5,
-    "alone": 4
-   },
-   {
     "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
     "first": 5,
     "present": 5,
     "alone": 0
-   },
-   {
-    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
-    "first": 4,
-    "present": 5,
-    "alone": 4
    },
    {
     "diagnostic": "clé INDEXED composée (SOURCE IS) non prise en charge",
@@ -2020,12 +1944,6 @@
    },
    {
     "diagnostic": "CALL dump: programme non converti ou routine système non pris en charge",
-    "first": 4,
-    "present": 4,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL C$NARG: programme non converti ou routine système non pris en charge",
     "first": 4,
     "present": 4,
     "alone": 0
@@ -2145,19 +2063,19 @@
     "alone": 0
    },
    {
+    "diagnostic": "CALL USING requiert au moins un argument",
+    "first": 1,
+    "present": 2,
+    "alone": 1
+   },
+   {
     "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE",
     "first": 2,
     "present": 2,
     "alone": 0
    },
    {
-    "diagnostic": "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge",
-    "first": 2,
-    "present": 2,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge",
+    "diagnostic": "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge",
     "first": 2,
     "present": 2,
     "alone": 0
@@ -2429,24 +2347,6 @@
    {
     "diagnostic": "ACCEPT FROM ARGUMENT-NUMBER non pris en charge",
     "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "CALL C$GETPID: programme non converti ou routine système non pris en charge",
-    "first": 1,
     "present": 1,
     "alone": 0
    },
@@ -2757,10 +2657,10 @@
     "alone": 0
    },
    {
-    "diagnostic": "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge",
+    "diagnostic": "argument CALL calculé non pris en charge",
     "first": 1,
     "present": 1,
-    "alone": 0
+    "alone": 1
    },
    {
     "diagnostic": "SORT COLLATING SEQUENCE avec alphabet non natif non pris en charge",
@@ -3140,65 +3040,65 @@
     "present": 6
    },
    {
-    "diagnostic": "CALL RETURNING/GIVING non pris en charge",
-    "unlocked": 4,
-    "cumulative": 18,
-    "first": 4,
-    "present": 5
-   },
-   {
-    "diagnostic": "CALL USING requiert au moins un argument",
-    "unlocked": 4,
-    "cumulative": 22,
-    "first": 4,
-    "present": 5
-   },
-   {
     "diagnostic": "SCREEN SECTION non prise en charge à cet endroit",
     "unlocked": 3,
-    "cumulative": 25,
+    "cumulative": 17,
     "first": 36,
     "present": 38
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "unlocked": 2,
-    "cumulative": 27,
+    "cumulative": 19,
     "first": 7,
     "present": 7
    },
    {
     "diagnostic": "nom inconnu: OMITTED; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 29,
+    "cumulative": 21,
     "first": 1,
     "present": 5
    },
    {
     "diagnostic": "donnée subordonnée sans groupe parent",
     "unlocked": 2,
-    "cumulative": 31,
+    "cumulative": 23,
     "first": 0,
     "present": 7
    },
    {
     "diagnostic": "78 VALUE LENGTH OF non pris en charge",
     "unlocked": 2,
-    "cumulative": 33,
+    "cumulative": 25,
     "first": 3,
     "present": 4
    },
    {
     "diagnostic": "UNSTRING d'un littéral non pris en charge",
     "unlocked": 2,
-    "cumulative": 35,
+    "cumulative": 27,
     "first": 2,
     "present": 2
    },
    {
     "diagnostic": "nom inconnu: STATIC; qualifier avec OF/IN si nécessaire",
     "unlocked": 2,
-    "cumulative": 37,
+    "cumulative": 29,
+    "first": 2,
+    "present": 2
+   },
+   {
+    "diagnostic": "nombre OCCURS attendu",
+    "unlocked": 2,
+    "cumulative": 31,
+    "first": 2,
+    "present": 2
+   },
+   {
+    "diagnostic": "opérande INSPECT attendu",
+    "unlocked": 2,
+    "cumulative": 33,
     "first": 2,
     "present": 2
    }
@@ -3492,105 +3392,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-052/prog.cob",
-    "diagnostics": [
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-053/callee.cob",
-    "diagnostics": [
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-053/caller.cob",
-    "diagnostics": [
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-053/prog.cob",
-    "diagnostics": [
-     "CALL C$NARG: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-054/callee.cob",
-    "diagnostics": [
-     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-054/caller.cob",
-    "diagnostics": [
-     "CALL C$PARAMSIZE: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-055/callee.cob",
-    "diagnostics": [
-     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-055/caller.cob",
-    "diagnostics": [
-     "CALL C$CALLEDBY: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-056/prog.cob",
-    "diagnostics": [
-     "CALL C$JUSTIFY: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-057/prog.cob",
-    "diagnostics": [
-     "CALL C$PRINTABLE: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-059/prog.cob",
-    "diagnostics": [
-     "CALL C$GETPID: programme non converti ou routine système non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_extensions-070/prog.cob",
     "diagnostics": [
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
@@ -3638,18 +3439,18 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-071/prog.cob",
     "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge"
+     "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-072/prog.cob",
     "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge"
+     "CALL CBL_GC_FORK: programme non converti ou routine système non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -3659,18 +3460,8 @@
      "USAGE POINTER de groupe non pris en charge",
      "CALL USING requiert au moins un argument",
      "nom inconnu: ENVIRONMENT; qualifier avec OF/IN si nécessaire",
-     "CALL RETURNING/GIVING non pris en charge",
      "expression attendue",
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-074/prog.cob",
-    "diagnostics": [
-     "CALL USING requiert au moins un argument"
     ],
     "complete": true,
     "matches_measure": true
@@ -4147,15 +3938,6 @@
     "source": "run_functions-014/prog.cob",
     "diagnostics": [
      "FUNCTION CONTENT-OF non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-015/prog.cob",
-    "diagnostics": [
-     "CALL USING requiert au moins un argument"
     ],
     "complete": true,
     "matches_measure": true
@@ -5369,27 +5151,9 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-041/callee.cob",
-    "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-041/caller.cob",
-    "diagnostics": [
-     "programme appelé callee.cob: ligne 12: CALL RETURNING/GIVING non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-042/prog.cob",
     "diagnostics": [
-     "CALL USING requiert au moins un argument"
+     "argument CALL calculé non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5587,15 +5351,6 @@
      "PROCEDURE attendu"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-133/caller.cob",
-    "diagnostics": [
-     "CALL RETURNING/GIVING non pris en charge"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -6512,9 +6267,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-10-31T13:33:58+00:00",
-  "git_head": "f7426dbd3029193841b71c9d36fab1ea4046e9c8",
-  "implementation_sha256": "ffead05aefc63164cfd951a426f5b14a24a533486cbdfdbac1550f1df623346a",
+  "measured_at": "2026-10-31T14:03:58+00:00",
+  "git_head": "ab485230ad69bfc2a2aafb52d27a6c6142917b25",
+  "implementation_sha256": "a8c4305f1674494a531c345f26265e2ba265faf2d3a3d8b58780de6b99d91d40",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

@@ -160,11 +160,9 @@ class SystemCallFrontendTests(unittest.TestCase):
                 Emitter(Parser(program('01 data-a pic xxxx.',
                                        f'call "C$TOUPPER" using {args} end-call.')).parse()).generate()
 
-    def test_unsupported_user_value_abi_and_returning_are_named_refusals(self):
-        for body in ['call "another-program" using by value 4 end-call.',
-                     'call "C$TOUPPER" using data-a by value 4 returning code-a end-call.']:
-            with self.subTest(body=body), self.assertRaisesRegex(CobolError, 'BY VALUE|RETURNING|ABI'):
-                Emitter(Parser(program('01 data-a pic xxxx. 01 code-a pic s9(9) comp-5.', body)).parse()).generate()
+    def test_unsupported_user_value_abi_is_a_named_refusal(self):
+        with self.assertRaisesRegex(CobolError, 'BY VALUE|ABI'):
+            Emitter(Parser(program('01 data-a pic xxxx.', 'call "another-program" using by value 4 end-call.')).parse()).generate()
 
 
 @unittest.skipUnless(find_tool('cobc') and find_tool('cargo'), 'GnuCOBOL and Cargo required')

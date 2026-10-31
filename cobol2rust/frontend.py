@@ -918,11 +918,13 @@ def call_content(text):
     digits = text.lstrip("+-")
     integer, _, decimals = digits.partition(".")
     value = int(integer + decimals or "0") * (-1 if negative else 1)
+    # Attributes of output_call's content field: a signed binary of 9 digits
+    # for the int, a real binary of 18 digits (signed for datall) otherwise.
     if not decimals and -(1 << 31) <= value < (1 << 31):
-        return value.to_bytes(4, "little", signed=True).decode("latin-1")
+        return Expr("content", (value.to_bytes(4, "little", signed=True).decode("latin-1"), 9, True))
     if not -(1 << 63) <= value < (1 << 64):
         raise CobolError("littéral de CALL au-delà de 64 bits (cb_get_long_long) non pris en charge")
-    return value.to_bytes(8, "little", signed=value < 0).decode("latin-1")
+    return Expr("content", (value.to_bytes(8, "little", signed=value < 0).decode("latin-1"), 18, value < 0))
 
 
 def numeric_literal(e):
@@ -4786,6 +4788,18 @@ class Parser:
                         else:
                             arguments.append((mode, Scalar(value, scalar_size, scalar_unsigned)))
                         continue
+                    if not self.t.string and (self.t.key == "FUNCTION" or (
+                            self.t.key == "LENGTH" and self.tokens[self.i + 1].key == "OF")) and not self.candidates(self.t.key):
+                        # output_call: an intrinsic's result field is passed
+                        # itself, even BY CONTENT; a folded LENGTH is a literal.
+                        value = self.expr(primary=True)
+                        if value.op == "number":
+                            arguments.append(("CONTENT", call_content(value.args[0])))
+                        elif value.op == "function":
+                            arguments.append((mode, value))
+                        else:
+                            self.error("argument CALL calculé non pris en charge")
+                        continue
                     sign = ""
                     if (not self.t.string and self.t.key in {"+", "-"} and not self.tokens[self.i + 1].string
                             and self.tokens[self.i + 1].start == self.t.end
@@ -4794,7 +4808,7 @@ class Parser:
                     if re.fullmatch(r"[+-]?(?:\d+(?:\.\d+)?|\.\d+)", self.t.text) and not self.t.string:
                         # output_call: a cob_content temporary at each CALL,
                         # BY REFERENCE as BY CONTENT.
-                        arguments.append(("CONTENT", Expr("text", (call_content(sign + self.take().text),))))
+                        arguments.append(("CONTENT", call_content(sign + self.take().text)))
                         continue
                     if self.t.string or (self.t.key in CALL_FIGURATIVES and not self.candidates(self.t.key)):
                         # output_call: a literal (or a figurative, one
@@ -4816,8 +4830,15 @@ class Parser:
             if (target[0] == "literal" and target[1] not in CATALOG and target[1] not in VALUE_ROUTINES
                     and any(mode == "VALUE" for mode, _ in arguments)):
                 self.error("CALL BY VALUE : ABI hors des routines système d'octets non prise en charge")
-            if self.at("RETURNING") or self.at("GIVING"):
-                self.error("CALL RETURNING/GIVING non pris en charge")
+            returning = None
+            if self.accept("RETURNING") or self.accept("GIVING"):
+                # cob_set_int (item, ret); RETURN-CODE keeps its value.
+                if self.accept("OMITTED"):
+                    returning = "omitted"
+                else:
+                    returning = self.variable()
+                    if returning.start is not None or self.fields[returning.name].kind != "number":
+                        self.error("CALL RETURNING vers une donnée non numérique non pris en charge")
             exception, success = [], []
             if self.accept("ON") or self.at("EXCEPTION") or self.at("OVERFLOW"):
                 if not (self.accept("EXCEPTION") or self.accept("OVERFLOW")):
@@ -4839,7 +4860,9 @@ class Parser:
                     self.error("NOT ON EXCEPTION attendu")
                 success = self.block({"END-CALL"})
             self.accept("END-CALL")
-            return Stmt("call_program", (target, arguments, exception, success), line)
+            stmt = Stmt("call_program", (target, arguments, exception, success), line)
+            stmt.returning = returning
+            return stmt
         if verb in {"INITIATE", "GENERATE", "TERMINATE"}:
             # cb_emit_initiate/generate/terminate: report names, or for
             # GENERATE one report name or DETAIL report group.

@@ -38,7 +38,7 @@ class CallTests(unittest.TestCase):
         rust = Emitter(Parser(program("01 n pic 9.", 'call "ABSENT" on exception move 1 to n end-call. stop run.')).parse(),
                        called=["MAIN"]).generate()[0]
         self.assertNotIn("unit.call", rust)
-        for name in ("lowercase", "SYSTEM", "C$JUSTIFY"):
+        for name in ("lowercase", "CBL_GC_FORK", "C$LIST-DIRECTORY"):
             with self.subTest(name=name), self.assertRaises(CobolError):
                 Emitter(Parser(program("01 n pic 9.", f'call "{name}". stop run.')).parse()).generate()
 
@@ -48,7 +48,6 @@ class CallTests(unittest.TestCase):
             program("01 n pic 9.", 'call "X" on exception display "A" not on exception display "B" end-call. stop run.'),
             subprogram("S", "01 a pic 9 value 1.", "a", "goback."),
             program("01 n pic 9.", 'call "X" using by value n. stop run.'),
-            program("01 n pic 9.", 'call "X" returning n. stop run.'),
         ]
         for text in cases:
             with self.subTest(text=text), self.assertRaises(CobolError):

@@ -325,7 +325,16 @@ avertissements de libcob. `C$CHDIR` (statut par `cob_set_int`) et un argument
 absent (adresse indéterminée, sans `COB_PARAM_CHECK`) sont des arrêts nommés.
 Un littéral numérique en argument de CALL devient le temporaire `cob_content`
 de cobc : int natif de 4 octets s'il tient dans un int, sinon les 8 octets de
-`cb_get_[u_]long_long` (chiffres sans le point décimal).
+`cb_get_[u_]long_long` (chiffres sans le point décimal), binaire de 9 ou 18
+chiffres. Un argument FUNCTION alphanumérique passe le champ résultat de
+l'intrinsèque, même BY CONTENT ; `LENGTH OF` plié passe un littéral. `CALL …
+RETURNING|GIVING x` range la valeur de retour par `cob_set_int` sans toucher à
+RETURN-CODE ; `RETURNING OMITTED` l'ignore.
+
+Routines de common.c : `SYSTEM` (statut brut de `system()`, commande d'un
+octet non exécutée comme dans libcob), `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`,
+`C$PRINTABLE` (isprint de la locale LC_CTYPE de l'utilisateur) et, par l'état
+du module courant, `C$NARG`, `C$PARAMSIZE` et `C$CALLEDBY`.
 
 Ce contrat scalaire vise **Linux x86_64**, avec la locale C de LC_CTYPE
 initialisée par GnuCOBOL. Les tailles 1, 2, 4 et 8, SIZE AUTO, SIZE DEFAULT

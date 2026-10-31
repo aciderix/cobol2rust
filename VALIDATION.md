@@ -1,5 +1,25 @@
 # Validation — 30 octobre 2026
 
+## Formes de CALL et routines de common.c — 31 octobre 2026
+
+- Fixture `tests/fixtures/library_routines/` (programme principal et
+  sous-programme) identique au natif : RETURNING vers COMP-5 et DISPLAY
+  (RETURN-CODE conservé), RETURNING OMITTED, C$NARG, C$PARAMSIZE (paramètre
+  OMITTED : 0), C$CALLEDBY (nom de l'appelant complété d'espaces, 0 au
+  premier niveau), C$JUSTIFY, C$PRINTABLE, C$SLEEP, SYSTEM (statut 768 de
+  `exit 3`, commande d'un octet : 1 sans exécution). Essai isolé :
+  `C$TOUPPER` BY VALUE avec RETURNING identique au natif.
+- Sources débloquées : les douze programmes principaux (run_extensions-052,
+  -053/prog, -053/caller, -054/caller, -055/caller, -056, -057, -059, -074,
+  run_functions-015, run_misc-041/caller, run_misc-133/caller) identiques au
+  natif par `cobol2rust verify`.
+- Mesure : **1277 → 1293/3593**, écart **340 → 324**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427** conformes ; suite **553 tests**, 0 échec après mise à
+  jour de quatre attentes devenues fausses (CALL RETURNING, SYSTEM et
+  C$JUSTIFY ne sont plus refusés ; `module_routine` contient un
+  `move_number` hors du programme).
+
 ## Routines de fichiers d'octets et littéraux de CALL — 31 octobre 2026
 
 - Littéraux de CALL : C généré par cobc lu (`content_N.dataint`,
