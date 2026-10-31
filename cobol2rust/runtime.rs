@@ -2587,10 +2587,12 @@ pub mod exception {
         file: Result<Option<(u8, String)>, &'static str>,
         /// COB_MODULE_PTR->module_name.
         module: &'static str,
+        /// cob_exception_code, which the error checks of a statement test.
+        current: Option<u32>,
     }
 
     thread_local! {
-        static STATE: RefCell<State> = const { RefCell::new(State { last: Ok(Last { code: 0, module: None }), file: Ok(None), module: "" }) };
+        static STATE: RefCell<State> = const { RefCell::new(State { last: Ok(Last { code: 0, module: None }), file: Ok(None), module: "", current: Some(0) }) };
     }
 
     fn code(name: &str) -> u32 {
@@ -2604,6 +2606,7 @@ pub mod exception {
             let mut state = state.borrow_mut();
             let module = if code != 0 { Some(state.module) } else { None };
             state.last = Ok(Last { code, module });
+            state.current = Some(code);
         });
     }
 
@@ -2625,7 +2628,26 @@ pub mod exception {
     /// raises its exception, an end of page EC-I-O-EOP.
     pub fn save_status(status: u8, eop: bool, select: &str) {
         STATE.with(|state| state.borrow_mut().file = Ok(Some((status, select.to_string()))));
-        if status >= 10 { set(STATUS_EXCEPTION[status as usize / 10]); } else if eop { set("EC-I-O-EOP"); }
+        if status >= 10 { set(STATUS_EXCEPTION[status as usize / 10]); } else if eop { set("EC-I-O-EOP"); } else { clear_current(); }
+    }
+
+    /// cob_error_file: the SELECT name and I-O status of the last save_status.
+    pub fn error_file() -> Option<(String, u8)> {
+        STATE.with(|state| state.borrow().file.clone()).ok().flatten().map(|(status, select)| (select, status))
+    }
+
+    /// cobglobptr->cob_exception_code = 0.
+    pub fn clear_current() { STATE.with(|state| state.borrow_mut().current = Some(0)) }
+
+    /// An operation that may change cob_exception_code without being ported.
+    pub fn unknown_current() { STATE.with(|state| state.borrow_mut().current = None) }
+
+    /// `if (unlikely (cob_glob_ptr->cob_exception_code != 0))` of a deferred
+    /// error check.
+    pub fn pending() -> bool {
+        STATE.with(|state| state.borrow().current).map(|code| code != 0).unwrap_or_else(|| {
+            fail("error check of OPEN after a USE procedure that may change cob_exception_code not modelled")
+        })
     }
 
     fn last(function: &str) -> Last {

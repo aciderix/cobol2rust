@@ -1518,6 +1518,7 @@ class Parser:
             f.kind == "pointer" or f.based for f in self.fields.values())
         # FUNCTION EXCEPTION-*: the run unit follows the last exception.
         program.uses_exceptions = getattr(self, "uses_exceptions", False)
+        program.deferred_open = getattr(self, "deferred_open", False)
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
         program.runtime_checks = RUNTIME_CHECKS
@@ -3053,12 +3054,15 @@ class Parser:
         self.expect("SECTION")
         self.expect(".")
         while self.accept("RD"):
+            written = self.t.text
             name = self.name()
             if name not in self.reports:
                 self.error(f"RD {name} sans clause REPORT dans un FD")
             report = self.reports[name]
             if report.entries:
                 self.error(f"RD dupliqué: {name}")
+            # r->report_name of libcob messages: the RD name as written.
+            report.written = written
             self.current_report = name
             self.deferred_subscripts = []
             try:
@@ -3664,17 +3668,19 @@ class Parser:
                 truth = False
             return Stmt("set_condition", (refs, truth), line)
         if verb == "OPEN":
-            actions, mode = [], None
+            actions, mode, entries = [], None, []
             modes = {"INPUT", "OUTPUT", "EXTEND", "I-O"}
             while self.t.key in modes | self.files.keys():
                 if self.t.key in modes:
                     mode = self.take().key
+                    entries.append([])
                 elif not mode:
                     self.error("mode INPUT, OUTPUT, I-O ou EXTEND attendu avant le fichier")
                 name = self.file_name()
                 if mode == "I-O" and self.files[name].organization == "LINE SEQUENTIAL":
                     self.error("OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée")
                 actions.append((mode, name))
+                entries[-1].append(len(actions) - 1)
                 # cobc parses OPEN ... WITH NO REWIND and REVERSED and ignores
                 # them (CB_PENDING): the file opens as usual.
                 if self.accept("WITH") or self.at("NO"):
@@ -3684,7 +3690,12 @@ class Parser:
                     self.accept("REVERSED")
             if not actions:
                 self.error("OPEN requiert INPUT, OUTPUT, I-O ou EXTEND et un fichier déclaré")
-            return Stmt("open", (actions,), line)
+            stmt = Stmt("open", (actions,), line)
+            # open_file_entry: each mode starts an entry of implicit statements.
+            stmt.entries = entries
+            if len(entries) > 1:
+                self.deferred_open = True
+            return stmt
         if verb == "CLOSE":
             names = []
             while not names or (self.t.key in self.files and not self.t.string):

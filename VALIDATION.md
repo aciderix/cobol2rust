@@ -1,5 +1,47 @@
 # Validation — 30 octobre 2026
 
+## COLUMN PLUS, erreurs de reportio et OPEN de plusieurs fichiers — 31 octobre 2026
+
+- `col_or_plus` et `output_report_data` : COLUMN PLUS n se place à
+  `report_col_pos + n - 1` (la colonne suivant l'article précédent de la
+  ligne) ; sur le premier article d'une LINE, PLUS est ignoré et n est la
+  colonne ; PLUS 0 et un article sans COLUMN prennent `report_col_pos`. Un
+  01, une LINE ou un TYPE remet la position à 1. LEFT/RIGHT/CENTER restent
+  refusés.
+- reportio.c : INITIATE d'un rapport actif affiche `libcob: error: INITIATE
+  r was already done`, lève EC-REPORT-ACTIVE et poursuit ; GENERATE et
+  TERMINATE sans INITIATE lèvent EC-REPORT-INACTIVE puis `cob_hard_failure`.
+  Le nom est celui du RD tel qu'écrit (`r->report_name`).
+- OPEN de plusieurs modes (`open_file_entry`) : d'après le C généré par
+  cobc, chaque mode ouvre un groupe d'instructions implicites, enfants du
+  dernier fichier du groupe précédent (`begin_implicit_statement` avec le
+  `current_statement` d'alors) ; un fichier est contrôlé après son
+  ouverture, le dernier d'un groupe après les groupes suivants, chaque
+  contrôle testant `cob_exception_code`. Dans `OPEN INPUT a OUTPUT b`,
+  l'échec de `a` n'est vu que si `b` échoue aussi, et le gestionnaire par
+  défaut nomme `cob_error_file` (le dernier fichier ouvert). Avec USE, la procédure du
+  dernier fichier peut précéder le gestionnaire par défaut (fatal) d'un
+  autre. Le suivi de `cob_exception_code` (save_status, cob_set_exception,
+  init de STRING/UNSTRING/INSPECT, ALLOCATE/FREE ; fonctions non auditées et
+  CALL : inconnu) n'est généré que pour les unités ayant un tel OPEN et des
+  DECLARATIVES ; une lecture en état inconnu est un arrêt nommé. CLOSE
+  contrôle chaque fichier aussitôt (C généré à l'appui).
+- Preuves : `tests/fixtures/report_column_plus.cob`,
+  `tests/fixtures/open_several.cob` et `tests/fixtures/open_entries.cob`
+  identiques au natif (stdout, stderr, fichiers, codes), ainsi que
+  `declaratives.cob` (deux fichiers d'un même mode, contrôlés chacun) ;
+  `tests/test_open_several_column_plus.py` : cinq tests.
+  Re-vérification NIST des 20 programmes à OPEN multiple : **20/20
+  conformes**, 124 PASS, 0 FAIL, 1 INSPECT (`build/nist-verify-open-20261031.json`).
+
+Mesure : **1255 → 1262/3593**, testsuite **531 → 538/1135**, écart **362 →
+355**. Les sept sources débloquées (run_reportwriter-002/005/006/010/022/023/
+024) s'exécutent à l'identique, cinq avec codes zéro et deux sur l'erreur
+fatale (codes 1/1). Exécution globale renouvelée : **74/84**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-column-plus-20261031.json`).
+Suite Python complète : **519 tests découverts, 518 validés et un test PE
+Windows ignoré**.
+
 ## EXTERNAL AS — 31 octobre 2026
 
 - `external_clause` : `EXTERNAL AS littéral` (01/77) ; `cb_to_cname` donne le

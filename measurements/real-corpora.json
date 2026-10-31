@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-10-31T06:41:42+00:00",
- "git_head": "aa8263e7ae60a9cdd67bff340f3af0ab12bf78ca",
- "implementation_sha256": "f1b69e495a2f61b843f9ddcffd590c94a9bb3371aed58efd2dc57c1aa694f243",
+ "measured_at": "2026-10-31T07:45:54+00:00",
+ "git_head": "99b8008de59be0e6a5218b51cd0742402522392b",
+ "implementation_sha256": "908ed21b2ff8e1df19105e25006e9cae17e6c40906b35098c66ded636916467f",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1255,
+  "accepted": 1262,
   "cobc_accepted": 1617,
-  "gap": 362,
+  "gap": 355,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 531,
+   "accepted": 538,
    "internal_errors": 0,
    "blockers": [
     [
@@ -483,14 +483,14 @@
      7
     ],
     [
-     "COLUMN PLUS non pris en charge",
-     7
+     "littéral attendu",
+     6
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 348,
+   "gap": 341,
    "gap_sources": [
     [
      "run_accept-001/prog.cob",
@@ -1561,20 +1561,8 @@
      "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
     ],
     [
-     "run_reportwriter-002/prog.cob",
-     "COLUMN PLUS non pris en charge"
-    ],
-    [
      "run_reportwriter-004/prog.cob",
      "SOURCE, VALUE et COLUMN limités aux articles élémentaires"
-    ],
-    [
-     "run_reportwriter-005/prog.cob",
-     "COLUMN PLUS non pris en charge"
-    ],
-    [
-     "run_reportwriter-006/prog.cob",
-     "article de rapport sans COLUMN non pris en charge"
     ],
     [
      "run_reportwriter-008/prog.cob",
@@ -1583,10 +1571,6 @@
     [
      "run_reportwriter-009/prog.cob",
      "expression non prise en charge: DISCOUNT-IX"
-    ],
-    [
-     "run_reportwriter-010/prog.cob",
-     "COLUMN PLUS non pris en charge"
     ],
     [
      "run_reportwriter-011/prog.cob",
@@ -1611,18 +1595,6 @@
     [
      "run_reportwriter-019/prog.cob",
      "groupe de rapport 01 sans TYPE non pris en charge"
-    ],
-    [
-     "run_reportwriter-022/prog.cob",
-     "COLUMN PLUS non pris en charge"
-    ],
-    [
-     "run_reportwriter-023/prog.cob",
-     "COLUMN PLUS non pris en charge"
-    ],
-    [
-     "run_reportwriter-024/prog.cob",
-     "COLUMN PLUS non pris en charge"
     ],
     [
      "run_reportwriter-026/prog.cob",
@@ -1931,16 +1903,16 @@
      6
     ],
     [
-     "COLUMN PLUS non pris en charge",
-     6
+     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
+     5
     ]
    ]
   }
  },
  "execution": {
-  "measured_at": "2026-10-31T06:41:42+00:00",
-  "git_head": "aa8263e7ae60a9cdd67bff340f3af0ab12bf78ca",
-  "implementation_sha256": "f1b69e495a2f61b843f9ddcffd590c94a9bb3371aed58efd2dc57c1aa694f243",
+  "measured_at": "2026-10-31T07:45:54+00:00",
+  "git_head": "99b8008de59be0e6a5218b51cd0742402522392b",
+  "implementation_sha256": "908ed21b2ff8e1df19105e25006e9cae17e6c40906b35098c66ded636916467f",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

@@ -1043,7 +1043,9 @@ HEADING/RH, PAGE HEADING/PH, CONTROL HEADING/CH et CONTROL FOOTING/CF
 [identifiant | FINAL], DETAIL/DE, PAGE FOOTING/PF, REPORT FOOTING/RF avec
 `LINE [NUMBER] [IS] [PLUS] n` au niveau 01 ou sur leurs articles et `NEXT GROUP
 [IS] [PLUS] n | NEXT PAGE` au niveau 01, et des articles élémentaires
-`PICTURE`, `COLUMN [NUMBER] [IS] n`, `GROUP [INDICATE]` et soit `SOURCE`
+`PICTURE`, `COLUMN [NUMBER] [IS] [PLUS] n` (`output_report_data` : PLUS n
+après l'article précédent de la ligne, ignoré sur le premier article d'une
+LINE ; sans COLUMN, juste après le précédent), `GROUP [INDICATE]` et soit `SOURCE`
 (identifiant, indicé compris, LINE-COUNTER ou PAGE-COUNTER), soit `SUM`
 d'identifiants numériques DISPLAY ou d'autres articles SUM (`RESET ON` analysé
 et sans effet, comme dans codegen.c), soit `VALUE [ALL]` alphanumérique. Les
@@ -1093,10 +1095,23 @@ reste refusé sous `--std cobol85`, comme par GnuCOBOL 3.2.
 `LINE-COUNTER`/`PAGE-COUNTER [IN|OF r]` sont lisibles comme des nombres et
 affichés sur 10 chiffres. Restent refusés : PRESENT/ABSENT WHEN, SUPPRESS,
 SUM UPON, SUM d'opérandes non DISPLAY, CF ALL et OR PAGE, OCCURS, COLUMN
-PLUS/LEFT/RIGHT/CENTER, LINE NEXT PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
+LEFT/RIGHT/CENTER, LINE NEXT PAGE, CODE, PAGE ... COLUMNS, limites données par des noms de données, USE
 BEFORE REPORTING, plusieurs rapports par FD, READ/WRITE d'un fichier de
-rapport ; un INITIATE d'un rapport actif ou un GENERATE/TERMINATE sans
-INITIATE est un arrêt nommé.
+rapport. Un INITIATE d'un rapport actif affiche `INITIATE r was already
+done` et poursuit (EC-REPORT-ACTIVE) ; un GENERATE/TERMINATE sans INITIATE
+est l'erreur fatale de libcob (`cob_hard_failure`, code 1), le nom du rapport
+étant écrit comme dans le RD.
+
+Un OPEN de plusieurs modes suit `open_file_entry` : chaque mode ouvre un groupe
+d'instructions implicites, enfants du dernier fichier du groupe précédent ; un
+fichier est contrôlé juste après son ouverture, sauf le dernier d'un groupe,
+contrôlé après les groupes suivants. Chaque contrôle teste le
+`cob_exception_code` laissé par la dernière ouverture : dans `OPEN INPUT a
+OUTPUT b`, l'échec de `a` suivi de l'ouverture réussie de `b` passe inaperçu,
+comme en natif. Le contrôle appelle la procédure USE du fichier, sinon le
+gestionnaire par défaut, fatal si `cob_error_file` (le dernier fichier ouvert)
+n'a pas de FILE STATUS. Les fichiers d'un même mode et CLOSE sont contrôlés
+fichier par fichier.
 
 Les clauses FD `LABEL RECORDS OMITTED/STANDARD`, `BLOCK CONTAINS` (en records
 ou caractères, éventuellement sous forme de plage) et `RECORDING MODE` (F, V,

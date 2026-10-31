@@ -541,9 +541,28 @@ class Emitter:
             return code
         return f"({{ let value = {code}; runtime::exception::unknown({quoted(reason)}); value }})"
 
+    # intrinsic.c functions that never set cob_exception_code to zero.
+    CODE_PRESERVING_FUNCTIONS = {
+        "CHAR", "CONCATENATE", "CONCAT", "CURRENT-DATE", "EXCEPTION-FILE", "EXCEPTION-LOCATION",
+        "EXCEPTION-STATEMENT", "EXCEPTION-STATUS", "HEX-OF", "LENGTH", "LOWER-CASE", "MAX", "MIN", "ORD",
+        "ORD-MAX", "ORD-MIN", "REVERSE", "STORED-CHAR-LENGTH", "SUBSTITUTE", "SUBSTITUTE-CASE",
+        "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F", "TRIM",
+        "UPPER-CASE", "WHEN-COMPILED",
+    }
+
     def function(self, name, args):
         code = self.function_code(name, args)
-        return code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
+        code = code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
+        return self.current_effect(name, code)
+
+    def current_effect(self, name, code):
+        """cob_exception_code after an intrinsic function: unchanged, cleared
+        at its start by the ported functions, otherwise unknown."""
+        if not getattr(self, "track_current", False) or name in self.CODE_PRESERVING_FUNCTIONS:
+            return code
+        if name in self.EXCEPTION_FUNCTIONS:
+            return f"({{ runtime::exception::clear_current(); {code} }})"
+        return f"({{ let value = {code}; runtime::exception::unknown_current(); value }})"
 
     def function_code(self, name, args):
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
@@ -683,7 +702,8 @@ class Emitter:
     def function_field(self, e):
         name = e.args[0]
         code = self.function_field_code(e)
-        return code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
+        code = code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
+        return self.current_effect(name, code)
 
     def function_field_code(self, e):
         """The temporary field libcob returns for a numeric intrinsic, shown
@@ -1224,22 +1244,29 @@ class Emitter:
     def file_status(self, file_name, status, eof_handled=False):
         name = self.program.files[file_name].status
         destination = f"Some(&mut self.{self.names[name]})" if name else "None"
-        # The applicable USE procedure, chosen by file or by its last OPEN mode.
-        handlers = getattr(self, "io_handlers", None)
-        if handlers is None:
-            handler = "None"
-        elif handlers[0] == "file":
-            handler = f"Some({handlers[1]})"
-        else:
-            cases = " ".join(f"{quoted(mode)} => Some({target}),"
-                             for mode, target in sorted(handlers[1].items()))
-            handler = f"match {self.handle(file_name, True)}.last_open_mode() {{ {cases} _ => None }}"
-        self.write(f"let handler: Option<usize> = {handler};")
+        self.write(f"let handler: Option<usize> = {self.handler_expression(file_name)};")
         invalid = str(getattr(self, "io_invalid", False)).lower()
         result = "let eop = " if getattr(self, "io_eop", None) else ""
         name = f"&|| {self.handle(file_name, True)}.error_name()" if self.program.files[file_name].organization != "SORT" else "&|| Vec::new()"
+        if getattr(self, "io_deferred", False):
+            # An implicit statement of OPEN: its check comes after the others.
+            self.write(f"file_runtime::file_status({status}, {destination}, false, false, true, {self.select_name(file_name)}, {name});")
+            self.write(f"self.io_status = {status};")
+            self.write("self.open_use = false;")
+            return
         self.write(f"{result}file_runtime::file_status({status}, {destination}, {str(eof_handled).lower()}, {invalid}, handler.is_some(), "
                    f"{self.select_name(file_name)}, {name});")
+
+    def handler_expression(self, file_name):
+        """The applicable USE procedure, chosen by file or by its last OPEN mode."""
+        handlers = getattr(self, "io_handlers", None)
+        if handlers is None:
+            return "None"
+        if handlers[0] == "file":
+            return f"Some({handlers[1]})"
+        cases = " ".join(f"{quoted(mode)} => Some({target}),"
+                         for mode, target in sorted(handlers[1].items()))
+        return f"match {self.handle(file_name, True)}.last_open_mode() {{ {cases} _ => None }}"
 
     def select_name(self, file_name):
         """select_name of the cob_file: the SELECT name as written."""
@@ -1887,6 +1914,9 @@ class Emitter:
             modes = ", ".join(quoted(mode) for mode, _ in arguments)
             # cob_stmt_exception: a recursive CALL with ON EXCEPTION returns.
             self.write(f"unit.stmt_exception = {str(exception is not None).lower()};")
+            if getattr(self, "track_current", False):
+                # cob_resolve and the called program change cob_exception_code.
+                self.write("runtime::exception::unknown_current();")
             self.write(f"match unit.call({name}, vec![{', '.join(values)}], &[{modes}], {str(system_literal).lower()}) {{")
             self.indent += 1
             self.write("Some(runtime::Outcome::Stop) => return runtime::Outcome::Stop,")
@@ -2061,10 +2091,14 @@ class Emitter:
             # AT END-OF-PAGE / NOT AT END-OF-PAGE hold the INVALID KEY slots.
             self.io_eop = (invalid is not None,) if eop else None
             self.io_invalid = invalid is not None and not eop
+            self.io_deferred = getattr(stmt, "deferred_check", False)
             self.statement(stmt)
+            deferred, self.io_deferred = self.io_deferred, False
             self.io_handlers, self.io_invalid, self.io_eop = None, False, None
             success = continuation if valid is None else valid
-            if eop:
+            if deferred:
+                dispatch = str(continuation)
+            elif eop:
                 # output_ferror_stmt: an exception other than EOP is a file
                 # error; EOP runs AT END-OF-PAGE, no exception NOT AT END-OF-PAGE.
                 exception = continuation if invalid is None else invalid
@@ -2079,6 +2113,26 @@ class Emitter:
                 # The file's debugging section runs before the status handling.
                 self.write(f"debug_resume = {dispatch};")
                 self.write(f"pc = {debug};")
+        elif op == "open_check":
+            # The error check of one file of an OPEN (output_ferror_stmt):
+            # its USE procedure, or the default handler, which stops the run
+            # unless cob_error_file (the last file opened) has a FILE STATUS.
+            name, last, continuation, handlers = a
+            self.write("let pending = if self.open_use { runtime::exception::pending() } else { self.io_status >= 10 };")
+            self.io_handlers = handlers
+            self.write(f"let handler: Option<usize> = {self.handler_expression(name)};")
+            self.io_handlers = None
+            # Without a USE procedure run, cob_error_file is the last file opened.
+            fatal = lambda file, status: (f"file_runtime::file_status({status}, None, false, false, false, {self.select_name(file)}, "
+                                          f"&|| {self.handle(file, True)}.error_name());")
+            arms = " ".join(f"Some((select, status)) if select == {self.select_name(file)} => {{ "
+                            f"{'' if self.program.files[file].status else fatal(file, 'status')} }}"
+                            for file in self.files if self.program.files[file].organization != "SORT")
+            after_use = (f"match runtime::exception::error_file() {{ {arms} "
+                         "_ => runtime::fail(\"cob_error_file of a USE procedure outside this program not modelled\") }")
+            default = (f"if self.open_use {{ {after_use} }} else {{ {'' if self.program.files[last].status else fatal(last, 'self.io_status')} }} ")
+            self.write(f"pc = if !pending {{ {continuation} }} else if let Some(target) = handler {{ self.open_use = true; target }} "
+                       f"else {{ {default}{continuation} }};")
         elif op == "debug_resume":
             self.write("pc = debug_resume;")
         elif op == "debug_gate":
@@ -2214,6 +2268,9 @@ class Emitter:
             self.unstring_node(node.stmt, *a)
         elif op == "arithmetic":
             shared, items, error, success = a
+            if getattr(self, "track_current", False):
+                # A statement with [NOT] ON SIZE ERROR starts from code 0.
+                self.write("runtime::exception::clear_current();")
             if any(ref.start is not None or self.program.fields[ref.name].kind not in {"number", "edited"} for ref, _, _ in items):
                 raise CobolError("destination numérique requise pour SIZE ERROR")
             if (node.stmt is not None and not node.stmt.args[2]
@@ -2311,6 +2368,11 @@ class Emitter:
         # kept between CALLs, cleared by CANCEL with the program instance.
         self.write("alter: Vec<usize>,")
         self.write("alter_saved: Vec<usize>,")
+        if getattr(self.program, "deferred_open", False):
+            # The status of the last cob_open, and whether a USE procedure ran
+            # during the error checks of the same OPEN.
+            self.write("io_status: u8,")
+            self.write("open_use: bool,")
         self.indent -= 1
         self.write("}")
         self.write(f"impl {self.struct} {{")
@@ -2378,6 +2440,9 @@ class Emitter:
         alters = len(self.program.alters)
         self.write(f"alter: vec![0; {alters}],")
         self.write(f"alter_saved: vec![0; {alters}],")
+        if getattr(self.program, "deferred_open", False):
+            self.write("io_status: 0,")
+            self.write("open_use: false,")
         self.indent -= 1
         self.write("};")
         if getattr(self, "register_records", False):
@@ -2476,7 +2541,7 @@ class Emitter:
         self.write("}")
         if uses:
             fields = [*self.names.values(), *self.files.values(), *(f"{rust}_area" for rust in self.files.values()),
-                      "alter", "alter_saved"]
+                      "alter", "alter_saved", *(["io_status", "open_use"] if getattr(self.program, "deferred_open", False) else [])]
             self.write("fn alias(&self) -> Self {")
             self.write("    Self { " + " ".join(f"{name}: self.{name}.clone()," for name in fields) + " }")
             self.write("}")
@@ -2541,7 +2606,7 @@ class Emitter:
                 sums.append(f"file_runtime::ReportSum {{ counter: {ids.index(counter)}, sources: vec![{', '.join(str(ids.index(k)) for k in sources)}], "
                             f"control: {control_index}, control_final: {str(final).lower()}, subtotal: {str(subtotal).lower()} }}")
             checked += f".with_controls(vec![{', '.join(controls)}], vec![{', '.join(sums)}])"
-        return f"file_runtime::Report::new({quoted(report.name)}, {limits}, {report.size}, vec![{', '.join(lines)}]){checked}"
+        return f"file_runtime::Report::new({quoted(getattr(report, 'written', report.name))}, {limits}, {report.size}, vec![{', '.join(lines)}]){checked}"
 
     @staticmethod
     def report_field_ids(report):
@@ -2818,9 +2883,15 @@ def generate_unit(emitters):
     addresses = any(getattr(emitter.program, "uses_addresses", False) for emitter in emitters)
     # The last exception is global to the run unit (cob_set_exception).
     exceptions = any(getattr(emitter.program, "uses_exceptions", False) for emitter in emitters)
+    # A USE procedure run by an error check of an OPEN of several files: the
+    # next checks test cob_exception_code as it then is.
+    current = any(getattr(emitter.program, "deferred_open", False) and (
+        emitter.program.file_declaratives or emitter.program.mode_declaratives
+        or getattr(emitter.program, "inherited_uses", None)) for emitter in emitters)
     for emitter in emitters:
         emitter.register_records = addresses
         emitter.track_exceptions = exceptions
+        emitter.track_current = current
         lines, mapping = emitter.program_lines()
         bodies.append((emitter, lines, mapping))
     head = ["// Generated by cobol2rust. Edit the COBOL input and regenerate.",

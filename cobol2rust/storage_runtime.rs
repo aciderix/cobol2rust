@@ -1330,6 +1330,7 @@ pub struct Inspect {
 }
 impl Inspect {
     fn common(target: &Value) -> Self {
+        crate::runtime::exception::clear_current();
         let view = match target { Value::View(view) => view, _ => fail("INSPECT requires a data item") };
         view.resolved();
         drop(view.mem());
@@ -1599,6 +1600,7 @@ impl StringInto {
         let view = match target { Value::View(view) => view, _ => fail("STRING INTO requires a data item") };
         view.resolved();
         view.check_storage();
+        crate::runtime::exception::clear_current();
         let mut s = StringInto { memory: view.memory.clone(), offset: view.offset, size: view.size, position: 0, overflow: false, delimiter: None };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
@@ -1642,6 +1644,7 @@ impl StringInto {
 pub struct Unstring { source: Value, position: i64, count: i64, exception: bool, delimiters: Vec<(Vec<u8>, bool)> }
 impl Unstring {
     pub fn init(source: &Value, pointer: Option<i128>) -> Self {
+        crate::runtime::exception::clear_current();
         let mut u = Unstring { source: source.clone(), position: 0, count: 0, exception: false, delimiters: vec![] };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("UNSTRING POINTER outside the C int range"); }
@@ -1950,6 +1953,7 @@ pub fn compare_addresses(left: u64, right: u64) -> std::cmp::Ordering {
 /// COB_MAX_ALLOC_SIZE. calloc for INITIALIZED to low-values; otherwise the
 /// malloc area is undetermined until written, and reading it is a named stop.
 pub fn allocate(size: i128, zeroed: bool) -> u64 {
+    crate::runtime::exception::clear_current();
     if size > MAX_ALLOC_SIZE { crate::runtime::exception::set("EC-STORAGE-IMP"); }
     if size <= 0 || size > MAX_ALLOC_SIZE { return 0; }
     let memory = memory(size as usize);
@@ -2012,6 +2016,7 @@ pub fn allocated_area(address: u64) -> Value {
 /// cob_free_alloc: only the address returned by an ALLOCATE is freed (its
 /// storage then has no bytes); any other address leaves EC-STORAGE-NOT-ALLOC.
 pub fn free(address: u64) -> bool {
+    crate::runtime::exception::clear_current();
     if address == 0 { return false; }
     let freed = address.checked_sub(ADDRESS_BASE).filter(|relative| relative % REGION_SPAN == 0).is_some_and(|relative| {
         REGIONS.with(|regions| {

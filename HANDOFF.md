@@ -17,8 +17,8 @@ sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1255/3593 sources acceptées** (cobc 1617,
-écart 362, à examiner 0) ; testsuite GnuCOBOL 531/1135, six corpus d'origine
+Mesure des corpus réels : **1262/3593 sources acceptées** (cobc 1617,
+écart 355, à examiner 0) ; testsuite GnuCOBOL 538/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
 zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
 deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
@@ -45,7 +45,23 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (31 octobre) : EXTERNAL AS. `data_parser.declaration` lit
+Dernière étape (31 octobre) : COLUMN PLUS, erreurs de reportio et OPEN de
+plusieurs fichiers. `report_parser.report_columns` porte `output_report_data`
+(`ReportEntry.column_plus`). `Report::initiate/generate/terminate` portent les
+erreurs de reportio.c ; `ReportSpec.written` garde le nom du RD. Un OPEN de
+plusieurs modes (`Stmt.entries`, un groupe par mode) devient, dans
+`control.py`, la linéarisation de l'arbre des instructions implicites : nœuds
+`io` marqués `deferred_check` et nœuds `open_check`, ce dernier désignant le
+dernier fichier ouvert comme `cob_error_file` ;
+le programme porte `io_status`/`open_use`. `runtime::exception` suit
+`cob_exception_code` (`current`, `clear_current`, `unknown_current`,
+`pending`, `error_file`), avec les émissions de `track_current` limitées aux
+unités ayant un tel OPEN et des DECLARATIVES. Acceptation **1255 →
+1262/3593**, écart **362 → 355**. NIST : 20 programmes à OPEN multiple
+re-vérifiés 20/20 ; statique **451/458**
+(`build/coverage-nist-column-plus-20261031.json`).
+
+Étape précédente (31 octobre) : EXTERNAL AS. `data_parser.declaration` lit
 `AS littéral` et pose `external_name` (`cb_to_cname`) ; `Emitter.shared_block`
 l'utilise et refuse `ERRNO` de 4 octets ; `storage_runtime::external` porte
 `cob_external_addr` (avertissement, erreur fatale). Acceptation **1250 →

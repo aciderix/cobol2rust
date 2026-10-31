@@ -1048,3 +1048,15 @@ quatre des cinq sources débloquées s'exécutent à l'identique avec des codes
 zéro, la cinquième s'arrête des deux côtés sur l'erreur de taille. Exécution
 globale **74/84**, inchangée ; NIST statique **451/458**. Fixture
 `external_as.cob` identique au natif.
+
+## Progression : COLUMN PLUS et OPEN de plusieurs fichiers — 31 octobre 2026
+
+COLUMN PLUS et les articles de rapport sans COLUMN suivent `output_report_data`
+; INITIATE d'un rapport actif et GENERATE/TERMINATE sans INITIATE suivent
+reportio.c. Un OPEN de plusieurs modes imbrique ses instructions implicites
+comme le C généré par cobc : le dernier fichier d'un mode est contrôlé après
+les modes suivants. Acceptation
+**1255 → 1262/3593**, testsuite **531 → 538/1135**, écart **362 → 355** ;
+les sept sources débloquées s'exécutent à l'identique (cinq en code zéro, deux
+sur l'erreur fatale). 20 programmes NIST à OPEN multiple re-vérifiés : 20/20
+conformes. Exécution globale **74/84**, inchangée ; NIST statique **451/458**.

@@ -91,7 +91,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T06:41:42+00:00 (commit `aa8263e7ae`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-10-31T07:45:54+00:00 (commit `99b8008de5`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -101,10 +101,10 @@ Dernière mesure : 2026-10-31T06:41:42+00:00 (commit `aa8263e7ae`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 531 | 879 | 348 | 0 |
-| **Total** | | **3593** | **1255** | **1617** | **362** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 538 | 879 | 341 | 0 |
+| **Total** | | **3593** | **1262** | **1617** | **355** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T06:41:42+00:00, commit `aa8263e7ae`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T07:45:54+00:00, commit `99b8008de5`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -558,3 +558,32 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   renouvelée : **74/84**, inchangée. NIST statique **451/458**. Quatre
   nouveaux tests, dont la fixture `external_as.cob` identique au natif.
   Suite complète : **514 découverts, 513 validés, un PE Windows ignoré**.
+- 2026-10-31 — COLUMN PLUS, erreurs de reportio et OPEN de plusieurs
+  fichiers : six premiers blocages COLUMN PLUS du Report Writer. Port de
+  `col_or_plus` et du placement d'`output_report_data` (PLUS n après
+  l'article précédent de la ligne, ignoré sur le premier article d'une
+  LINE, PLUS 0 et COLUMN absente juste après le précédent), puis des trois
+  erreurs de reportio.c que les sources atteignaient (INITIATE d'un rapport
+  actif : message et EC-REPORT-ACTIVE sans arrêt ; GENERATE/TERMINATE sans
+  INITIATE : `cob_hard_failure`), nom du rapport tel qu'écrit. run_report
+  writer-010 a révélé un écart général : dans un OPEN de plusieurs modes,
+  chaque mode ouvre un groupe d'instructions implicites, enfants du dernier
+  fichier du groupe précédent (C généré par cobc à l'appui) ; un fichier est
+  contrôlé après son ouverture, le dernier d'un groupe après les groupes
+  suivants, chaque contrôle sur le `cob_exception_code` laissé par la
+  dernière ouverture. Dans `OPEN INPUT a OUTPUT b`, l'échec de `a` suivi de
+  l'ouverture réussie de `b` passe inaperçu, et une procédure USE peut
+  précéder le gestionnaire par défaut ; deux fichiers d'un même mode restent
+  contrôlés chacun aussitôt (fixture `declaratives.cob` à l'appui).
+  Porté avec le suivi de `cob_exception_code` (save_status, cob_set_exception,
+  STRING/UNSTRING/INSPECT, ALLOCATE/FREE ; fonctions et CALL le rendent
+  inconnu, arrêt nommé s'il faut alors le lire), restreint aux unités qui en
+  ont besoin ; CLOSE garde son contrôle par fichier, conforme au C généré.
+  Aucun cas spécial par programme. Testsuite **531 → 538/1135**, total
+  **1255 → 1262/3593**, écart **362 → 355**, à examiner zéro. Les sept
+  sources débloquées s'exécutent à l'identique : cinq avec codes zéro,
+  run_reportwriter-023/024 sur l'erreur fatale (codes 1/1). Les 20
+  programmes NIST à OPEN de plusieurs fichiers restent conformes (20/20,
+  124 PASS, 0 FAIL, 1 INSPECT, `build/nist-verify-open-20261031.json`).
+  Exécution globale renouvelée : **74/84**, inchangée. NIST statique
+  **451/458**. Cinq nouveaux tests et trois fixtures identiques au natif.

@@ -2274,7 +2274,12 @@ impl Report {
 
     /// cob_report_initiate; the PAGE LIMIT and LINE checks were made by the translator.
     pub fn initiate(&mut self, events: &mut Events) {
-        if self.initiate_done { fail(&format!("INITIATE {} was already done (COB_EC_REPORT_ACTIVE) not modelled", self.name)); }
+        if self.initiate_done {
+            // cob_report_initiate: an error message, EC-REPORT-ACTIVE, nothing else.
+            eprintln!("libcob: error: INITIATE {} was already done", self.name);
+            crate::runtime::exception::set("EC-REPORT-ACTIVE");
+            return;
+        }
         self.curr_page = 1;
         self.curr_line = 0;
         self.incr_line = true;
@@ -2584,7 +2589,11 @@ impl Report {
 
     /// cob_report_generate of a DETAIL group, or of the report (None).
     pub fn generate(&mut self, group: Option<usize>, events: &mut Events) {
-        if !self.initiate_done { fail(&format!("GENERATE {} but no INITIATE was done", self.name)); }
+        if !self.initiate_done {
+            // cob_report_generate: EC-REPORT-INACTIVE, then cob_hard_failure.
+            crate::runtime::exception::set("EC-REPORT-INACTIVE");
+            crate::runtime::fatal_error(format!("GENERATE {} but no INITIATE was done", self.name).as_bytes());
+        }
         self.foot_next_page = false;
         if self.incr_line {
             self.incr_line = false;
@@ -2700,7 +2709,11 @@ impl Report {
     /// cob_report_terminate: the CONTROL FOOTINGs, CONTROL FOOTING FINAL,
     /// the page footing and the REPORT FOOTING.
     pub fn terminate(&mut self, events: &mut Events) {
-        if !self.initiate_done { fail(&format!("TERMINATE {} but no INITIATE was done", self.name)); }
+        if !self.initiate_done {
+            // cob_report_terminate: EC-REPORT-INACTIVE, then cob_hard_failure.
+            crate::runtime::exception::set("EC-REPORT-INACTIVE");
+            crate::runtime::fatal_error(format!("TERMINATE {} but no INITIATE was done", self.name).as_bytes());
+        }
         if self.first_generate { return; }
         for c in 0..self.controls.len() {
             for r in self.controls[c].refs.clone() {
