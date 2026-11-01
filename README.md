@@ -243,10 +243,25 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   et ferme ses fichiers ouverts ; CANCEL d'un programme actif (le principal
   compris) est l'erreur libcob `attempt to CANCEL active program` (`P_cancel`,
   code 1) ; un CALL d'un programme actif est `recursive CALL from 'A' to 'B'
-  which is NOT RECURSIVE` (`COB_FERROR_RECURSIVE`, code 1 ; RECURSIVE n'est
-  pas pris en charge), sauf sous ON EXCEPTION : `cob_module_global_enter`
-  lève alors EC-PROGRAM-RECURSIVE-CALL, l'appel rend -1 dans RETURN-CODE et
-  ON EXCEPTION s'exécute ;
+  which is NOT RECURSIVE` (`COB_FERROR_RECURSIVE`, code 1), sauf sous ON
+  EXCEPTION : `cob_module_global_enter` lève alors EC-PROGRAM-RECURSIVE-CALL,
+  l'appel rend -1 dans RETURN-CODE et ON EXCEPTION s'exécute ;
+- `PROGRAM-ID nom [IS] RECURSIVE [COMMON] [PROGRAM]` (`_program_type`,
+  absent en `--std cobol85` où RECURSIVE n'est pas un mot réservé ; INITIAL
+  RECURSIVE est l'erreur de syntaxe de cobc), ou un `CALL "nom"` du propre
+  PROGRAM-ID écrit à l'identique (`is_recursive_call`, `self-call-recursive:
+  warning` ; sans effet en cobol85), permet d'appeler le programme actif, le
+  principal et les programmes contenus compris (un programme contenu se
+  voit lui-même). Chaque activation partage la WORKING-STORAGE, les
+  fichiers, EXTERNAL et GLOBAL ; elle a ses propres LOCAL-STORAGE,
+  paramètres USING, pile de PERFORM et NUMBER-OF-CALL-PARAMETERS (variables
+  locales de la fonction C). GOBACK ou EXIT PROGRAM d'une activation
+  appelée du principal rend la main à l'appelant (`if (module->next)`).
+  Restent refusés par un diagnostic nommé les états que cobc garde
+  statiques sous plusieurs activations : BASED, LINKAGE hors de tout USING,
+  ALTER, ANY LENGTH, REPORT SECTION, INITIAL rendu RECURSIVE par un appel de
+  soi ; CANCEL d'un programme RECURSIVE actif (que cobc réinitialise à
+  l'appel suivant, sous les activations en cours) est un arrêt nommé ;
 - un littéral alphanumérique ou une figurative en argument (`output_call`)
   : BY CONTENT, une copie neuve de ses octets (une figurative vaut un
   caractère) ; BY REFERENCE, la constante du programme elle-même, en lecture

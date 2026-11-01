@@ -119,6 +119,12 @@ et `EXCEPTION_FUNCTIONS` (fermeture des appels d'intrinsic.c) ; le reste
 généré seulement si l'unité lit la dernière exception (`uses_exceptions`).
 `RunUnit` porte `stmt_exception`/`call_exception` : un CALL récursif sous ON
 EXCEPTION rend -1 avec EC-PROGRAM-RECURSIVE-CALL (`cob_module_global_enter`).
+Un programme RECURSIVE (ou qui appelle son propre PROGRAM-ID) actif est
+rappelé par une activation : `activation()` est un alias de l'instance
+(WORKING-STORAGE et fichiers partagés, fichiers en `Shared`) dont la
+LOCAL-STORAGE et NUMBER-OF-CALL-PARAMETERS ont une mémoire neuve
+(`storage_runtime::rehome`) ; `p<n>_base` (ou `main_base`) garde l'alias de
+l'activation externe.
 `open_files()` décide si CANCEL ou la fin d'un INITIAL ferme des fichiers.
 Attention : un NOT ON EXCEPTION écrit après le DISPLAY d'un ON EXCEPTION
 appartient à ce DISPLAY (refus nommé existant) ; une sonde native ainsi
@@ -153,7 +159,8 @@ deux côtés sur le statut 31, trois arrêts nommés voulus (DISPLAY d'adresse,
 deux SIGSEGV natifs). NIST statique **451/458**
 (`build/coverage-nist-pointers-20261030.json`). Restent refusés : BY VALUE
 d'un pointeur, PROGRAM-POINTER, CONTENT-OF, VALUE en LINKAGE hors BASED,
-OCCURS UNBOUNDED, TYPEDEF, EXTERNAL AS, RECURSIVE. Suite complète :
+OCCURS UNBOUNDED, TYPEDEF, EXTERNAL AS, RECURSIVE (RECURSIVE et TYPEDEF
+pris en charge depuis le 1er novembre 2026). Suite complète :
 **498 découverts, 497 validés, un PE Windows ignoré**.
 
 Les douze clauses SELECT LOCK MODE/SHARING restent des tests de verrous

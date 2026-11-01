@@ -1,5 +1,29 @@
 # Validation — 30 octobre 2026
 
+## RECURSIVE — 1er novembre 2026
+
+- Fixture `tests/fixtures/recursive_calls.cob` avec l'appelé dynamique
+  `tests/fixtures/recursive_calls/FACTR.cob` identique au natif (stdout et
+  fichier `factr.txt`) : principal RECURSIVE qui s'appelle lui-même (GOBACK
+  de l'activation appelée, LOCAL-STORAGE propre), programme contenu qui
+  appelle son propre PROGRAM-ID sans attribut, factorielle RECURSIVE à cinq
+  niveaux (WORKING-STORAGE partagée, LOCAL-STORAGE, USING, pile de PERFORM
+  et NUMBER-OF-CALL-PARAMETERS propres à chaque activation, fichier ouvert
+  au premier niveau et écrit à tous).
+- Comportements de cobc vérifiés au natif : INITIAL RECURSIVE et `IS` seul
+  en erreur de syntaxe, RECURSIVE inconnu en cobol85, appel de son propre
+  PROGRAM-ID sensible à la casse et en erreur d'exécution en cobol85
+  (message identique), CANCEL d'un programme RECURSIVE actif sans effet
+  avant l'appel suivant (arrêt nommé chez nous,
+  `tests/fixtures/recursive_cancel.cob`), END PROGRAM du programme externe
+  facultatif en fin de source, mais pas celui d'un programme contenu.
+- Sources débloquées identiques au natif : run_fundamental-048,
+  run_misc-037 (caller, callee, callee2), syn_definition-005.
+- Mesure : **1346 → 1351/3593**, écart **271 → 266**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-rec.json`) ;
+  suite **598 tests**, 0 échec.
+
 ## Paramètres facultatifs et omis — 1er novembre 2026
 
 - Fixture `tests/fixtures/optional_params.cob` avec l'appelé dynamique

@@ -63,6 +63,7 @@ class Emitter:
         # with USE GLOBAL (its alias runs the procedure with the same files).
         self.shared_files = {name for name, spec in program.files.items()
                              if spec.external or spec.global_owner or getattr(program, "global_uses", None)
+                             or getattr(program, "recursive", False)
                              or (spec.is_global and getattr(program, "nested", None))}
         self.reports = {name: f"report{i}" for i, name in enumerate(getattr(program, "reports", {}))}
         # The report whose ReportEvent is being answered: its counters are
@@ -1963,10 +1964,33 @@ class Emitter:
             self.indent -= 1
             self.write("}")
 
+    def called_return(self):
+        """A RECURSIVE main program called by one of its activations: GOBACK
+        and EXIT PROGRAM (`if (module->next)`) return to that caller."""
+        if not self.subprogram and getattr(self.program, "recursive", False):
+            self.write("if unit.callers.len() > 1 { return runtime::Outcome::Return; }")
+
+    def recursion_refusals(self):
+        """State cobc keeps static and an activation's alias would copy: named
+        refusals rather than per-activation copies."""
+        if not getattr(self.program, "recursive", False):
+            return
+        program = self.program
+        if getattr(program, "initial", False):
+            # A self-call makes an INITIAL program RECURSIVE too.
+            raise CobolError("programme INITIAL et RECURSIVE (CALL de son propre PROGRAM-ID) non pris en charge")
+        for present, what in [(self.reports, "REPORT SECTION"), (program.alters, "ALTER"),
+                              (self.based_roots(), "article BASED"),
+                              (self.static_bases(), "article LINKAGE hors de tout USING"),
+                              ([f for f in program.fields.values() if f.any_length], "article ANY LENGTH")]:
+            if present:
+                raise CobolError(f"programme RECURSIVE avec {what} non pris en charge")
+
     def control_node(self, index, node):
         op, a = node.op, node.args
         if op == "end":
             # Falling off the end: STOP RUN in a main program, GOBACK in a subprogram.
+            self.called_return()
             if not self.subprogram:
                 self.exit_code()
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
@@ -1989,10 +2013,12 @@ class Emitter:
                 self.write('runtime::exception::unknown("USE GLOBAL procedure");')
             self.write(f"pc = {continuation};")
         elif op == "goback":
+            self.called_return()
             if not self.subprogram:
                 self.exit_code()
             self.write("return runtime::Outcome::Return;" if self.subprogram else "return runtime::Outcome::Stop;")
         elif op == "exit_program":
+            self.called_return()
             if self.module:
                 self.exit_code()
                 self.write("return runtime::Outcome::Stop;")
@@ -2520,6 +2546,7 @@ class Emitter:
     def program_lines(self):
         """Struct and impl of this program; `generate_unit` adds the run unit."""
         graph = ControlGraph(self.program, self.blocks)
+        self.recursion_refusals()
         self.write(f"struct {self.struct} {{")
         self.indent += 1
         for name in self.names:
@@ -2639,7 +2666,7 @@ class Emitter:
         self.write("result")
         self.indent -= 1
         self.write("}")
-        if self.subprogram or self.module:
+        if self.subprogram or self.module or getattr(self.program, "recursive", False):
             self.call_method(graph)
         for name in self.reports:
             self.report_events(self.program.reports[name])
@@ -2711,11 +2738,35 @@ class Emitter:
         self.write("}")
         self.indent -= 1
         self.write("}")
-        if uses:
+        recursive = getattr(self.program, "recursive", False)
+        if uses or recursive:
             fields = [*self.names.values(), *self.files.values(), *(f"{rust}_area" for rust in self.files.values()),
                       "alter", "alter_saved", *(["io_status", "open_use"] if getattr(self.program, "deferred_open", False) else [])]
             self.write("fn alias(&self) -> Self {")
             self.write("    Self { " + " ".join(f"{name}: self.{name}.clone()," for name in fields) + " }")
+            self.write("}")
+        if recursive:
+            # A further activation of a RECURSIVE program: the same static
+            # storage (WORKING-STORAGE, files), its own LOCAL-STORAGE (cob_local_ptr)
+            # and NUMBER-OF-CALL-PARAMETERS (flag_local); call_entry binds its
+            # USING items (parameters of the C function).
+            self.write("fn activation(&self) -> Self {")
+            self.indent += 1
+            self.write("let mut copy = self.alias();")
+            local = [name for name, f in self.program.fields.items() if getattr(f, "local", False)]
+            if local:
+                self.write(f"let local = storage_runtime::memory({self.program.memory_size});")
+                if getattr(self, "register_records", False):
+                    records = [(f.offset, f.size) for f in self.program.fields.values()
+                               if getattr(f, "local", False) and f.parent is None and not f.redefines]
+                    self.write(f"storage_runtime::records(&local, &[{', '.join(f'({o}, {n})' for o, n in records)}]);")
+                for name in local:
+                    self.write(f"copy.{self.names[name]} = storage_runtime::rehome(&self.{self.names[name]}, &local);")
+            for name, f in self.program.fields.items():
+                if getattr(f, "call_parameters", False):
+                    self.write(f"copy.{self.names[name]} = storage_runtime::rehome(&self.{self.names[name]}, &storage_runtime::memory({f.size}));")
+            self.write("copy")
+            self.indent -= 1
             self.write("}")
         opened = [name for name in self.files if self.program.files[name].organization != "SORT"]
         if getattr(self, "track_exceptions", False) and opened:
@@ -3102,6 +3153,9 @@ def generate_unit(emitters):
             "    call_exception: bool, // the CALL returned with EC-PROGRAM-RECURSIVE-CALL"]
     for index, emitter in enumerate(subprograms, 1):
         unit += [f"    p{index}: Option<Box<{emitter.struct}>>, // {emitter.program.entry_name}", f"    p{index}_active: bool,"]
+        if getattr(emitter.program, "recursive", False):
+            # RECURSIVE: the active instance's static storage, for further activations.
+            unit.append(f"    p{index}_base: Option<Box<{emitter.struct}>>,")
         if any_items(emitter):
             # cobc's cached field descriptors survive CANCEL and INITIAL.
             unit.append(f"    p{index}_any_sizes: Option<[usize; {len(any_items(emitter))}]>,")
@@ -3112,15 +3166,21 @@ def generate_unit(emitters):
         # The active programs with USE GLOBAL, innermost last.
         unit.append("    uses: Vec<(&'static str, Option<Box<dyn GlobalUse>>)>,")
     main_name = quoted(emitters[0].program.entry_name)
+    main_recursive = getattr(emitters[0].program, "recursive", False)
+    if main_recursive:
+        unit.append(f"    main_base: Option<Box<{emitters[0].struct}>>,")
     unit += ["}", "impl RunUnit {", "    fn new() -> Self {", "        Self {",
              f"            returned: None, exit_code: 0, callers: vec![{main_name}], params: vec![vec![]], stmt_exception: false, call_exception: false,"]
     for index, emitter in enumerate(subprograms, 1):
         loaded = f" p{index}_loaded: false," if getattr(emitter.program, "entries", None) else ""
-        unit.append(f"            p{index}: None, p{index}_active: false,{loaded}")
+        base = f" p{index}_base: None," if getattr(emitter.program, "recursive", False) else ""
+        unit.append(f"            p{index}: None, p{index}_active: false,{loaded}{base}")
         if any_items(emitter):
             unit.append(f"            p{index}_any_sizes: None,")
     if global_uses:
         unit.append("            uses: Vec::new(),")
+    if main_recursive:
+        unit.append("            main_base: None,")
     unit += ["        }", "    }",
              "    /// None: no such program was converted with this run unit.",
              "    fn call(&mut self, name: &str, arguments: Vec<Value>, modes: &[&str], system_literal: bool) -> Option<runtime::Outcome> {",
@@ -3148,6 +3208,21 @@ def generate_unit(emitters):
              "        if prefer_program && modes.contains(&\"VALUE\") { runtime::fail(\"CALL BY VALUE: ABI of a contained program not modelled\"); }",
              "        let name = if prefer_program { entry } else { name };",
              "        match name {"]
+    def activation_call(emitter, number):
+        """One activation of a RECURSIVE program: the caller chain, its
+        parameters and module around call_entry."""
+        name = quoted(emitter.program.entry_name)
+        return [f"                self.callers.push({name});",
+                "                self.params.push(arguments.iter().map(|a| storage_runtime::parameter_bytes(a).map(|_| storage_runtime::descriptor_size(a))).collect());",
+                *([f"                runtime::exception::module({name});"] if exceptions else []),
+                *([f"                self.p{subprograms.index(emitter) + 1}_loaded = true;"]
+                  if emitter in subprograms and getattr(emitter.program, "entries", None) else []),
+                f"                let outcome = program.call_entry(self, arguments, {number});",
+                "                self.returned = program.return_code();",
+                "                self.callers.pop();",
+                "                self.params.pop();",
+                *(["                runtime::exception::module(self.callers.last().copied().unwrap_or(\"\"));"] if exceptions else [])]
+
     def cancels_files(emitter):
         return bool(emitter.based_roots()) or any(
             emitter.file_registry(name) and not emitter.program.files[name].global_owner for name in emitter.files)
@@ -3167,6 +3242,20 @@ def generate_unit(emitters):
                 # cob_fatal_error (COB_FERROR_CHAINING): a CHAINING program
                 # is a main program only.
                 unit.append(f"            {quoted(name)}{guard} => runtime::fatal_error(b\"CALL of program with CHAINING clause\"),")
+                continue
+            if getattr(emitter.program, "recursive", False):
+                unit += [f"            {quoted(name)}{guard} => {{",
+                         # cob_module_global_enter skips the check: module_active
+                         # is not counted for a RECURSIVE program.
+                         f"                let outer = !self.p{index}_active;",
+                         f"                let mut program = if outer {{ self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new())) }} "
+                         f"else {{ Box::new(self.p{index}_base.as_ref().unwrap().activation()) }};",
+                         f"                if outer {{ self.p{index}_base = Some(Box::new(program.alias())); }}",
+                         f"                self.p{index}_active = true;",
+                         *activation_call(emitter, number),
+                         f"                if outer {{ self.p{index}_active = false; self.p{index}_base = None; {kept} }}",
+                         "                Some(outcome)",
+                         "            }"]
                 continue
             unit += [f"            {quoted(name)}{guard} => {{",
                      f"                if self.p{index}_active {{ return self.recursive({quoted(emitter.program.entry_name)}); }}",
@@ -3192,10 +3281,18 @@ def generate_unit(emitters):
                      "                Some(outcome)",
                      "            }"]
     # The main program is active for the whole run: calling it is recursive.
-    if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
-        unit.append(f"            {main_name} => self.recursive({main_name}),")
-    for name, _ in getattr(emitters[0].program, "entries", []):
-        unit.append(f"            {quoted(name)} => self.recursive({main_name}),")
+    main_entries = [(0, emitters[0].program.entry_name)] if emitters[0].program.entry_name not in {
+        e.program.entry_name for e in subprograms} else []
+    main_entries += [(number, name) for number, (name, _) in enumerate(getattr(emitters[0].program, "entries", []), 1)]
+    for number, name in main_entries:
+        if main_recursive:
+            unit += [f"            {quoted(name)} => {{",
+                     f"                let mut program = Box::new(self.main_base.as_ref().unwrap().activation());",
+                     *activation_call(emitters[0], number),
+                     "                Some(outcome)",
+                     "            }"]
+        else:
+            unit.append(f"            {quoted(name)} => self.recursive({main_name}),")
     unit += ["            _ => None,", "        }", "    }",
              "    /// cob_module_global_enter: a program without RECURSIVE called while active",
              "    /// returns -1 with EC-PROGRAM-RECURSIVE-CALL to a CALL with ON EXCEPTION,",
@@ -3244,7 +3341,8 @@ def generate_unit(emitters):
     # active module, the main program included.
     active = 'runtime::fatal_error(b"attempt to CANCEL active program")'
     if emitters[0].program.entry_name not in {e.program.entry_name for e in subprograms}:
-        unit.append(f"            {quoted(emitters[0].program.entry_name)} => {active},")
+        unit.append(f"            {quoted(emitters[0].program.entry_name)} => "
+                    + ('runtime::fail("CANCEL of an active RECURSIVE program not modelled"),' if main_recursive else f"{active},"))
     for index, emitter in enumerate(subprograms, 1):
         cancel = f"if let Some(program) = self.p{index}.take() {{ program.cancel_entry(); }}" \
             if cancels_files(emitter) else f"self.p{index} = None;"
@@ -3252,7 +3350,12 @@ def generate_unit(emitters):
             # cob_close of its open files (save_status).
             cancel = (f"if self.p{index}.as_ref().is_some_and(|program| program.open_files()) {{ "
                       f'runtime::exception::unknown_file("files closed by CANCEL"); }} ') + cancel
-        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ {active}; }} {cancel} }},")
+        busy = active
+        if getattr(emitter.program, "recursive", False):
+            # P_cancel finds module_active zero: the storage is initialized
+            # again at the next CALL, under the active activations.
+            busy = 'runtime::fail("CANCEL of an active RECURSIVE program not modelled")'
+        unit.append(f"            {quoted(emitter.program.entry_name)} => {{ if self.p{index}_active {{ {busy}; }} {cancel} }},")
     unit += ["            _ => {}", "        }", "    }"]
     if global_uses:
         unit += ["    /// <owner>_ (section label): a GLOBAL USE procedure of an active program.",
@@ -3280,7 +3383,8 @@ def generate_unit(emitters):
         unchecked += f"runtime::exception::module({main_name}); "
     # A module runs as cobcrun calls it: its main entry, no arguments.
     start = "program.call(&mut unit, Vec::new());" if emitters[0].module else "program.run(&mut unit);"
-    run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); {start}"
+    base = "unit.main_base = Some(Box::new(program.alias())); " if main_recursive else ""
+    run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); {base}{start}"
     # cob_terminate_routines: the warnings for files left open, then the files
     # closed (dropped with the program), also after a fatal runtime error.
     files = any(emitter.files for emitter in emitters)

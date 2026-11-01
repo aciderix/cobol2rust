@@ -116,7 +116,9 @@ def check_nested_calls(main, local):
             callee = programs.get(target)
             if callee is None or callee.parent is None:
                 continue
-            visible = callee.parent == caller or (
+            # cb_build_program: a contained program sees itself ("for
+            # possible recursion").
+            visible = callee.parent == caller or target == caller or (
                 callee.common and callee.parent in ancestors(caller)
                 and target not in [caller, *ancestors(caller)])
             if not visible:

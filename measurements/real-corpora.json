@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T07:25:24+00:00",
- "git_head": "20e77f75c302a71304c7e68b16946ccb3d4a92e1",
- "implementation_sha256": "3f08ba7524ddf4399e96b0083c4ecf32a4fd96fba09647765e598e7bebbd0de4",
+ "measured_at": "2026-11-01T08:19:49+00:00",
+ "git_head": "ac7898bd459a5756fcf241bb0d5b5ba16eb406bc",
+ "implementation_sha256": "038fba09b27bacaa50a2263d83008a8c8e11824d4f3a2b5fb59da5e5eafea749",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1346,
+  "accepted": 1351,
   "cobc_accepted": 1617,
-  "gap": 271,
+  "gap": 266,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 622,
+   "accepted": 627,
    "internal_errors": 1,
    "blockers": [
     [
@@ -449,10 +449,6 @@
     [
      "expression non prise en charge: LINE",
      15
-    ],
-    [
-     ". attendu",
-     12
     ],
     [
      "PROCEDURE attendu",
@@ -483,6 +479,10 @@
      5
     ],
     [
+     ". attendu",
+     5
+    ],
+    [
      "RECORD attendu",
      5
     ]
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 257,
+   "gap": 252,
    "gap_sources": [
     [
      "run_accept-003/prog.cob",
@@ -550,11 +550,11 @@
     ],
     [
      "run_extensions-075/prog.cob",
-     ". attendu"
+     "USAGE/clause non pris en charge: PROCEDURE-POINTER"
     ],
     [
      "run_extensions-076/prog.cob",
-     ". attendu"
+     "USAGE/clause non pris en charge: PROGRAM-POINTER"
     ],
     [
      "run_extensions-086/prog.cob",
@@ -799,10 +799,6 @@
     [
      "run_fundamental-037/prog.cob",
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    [
-     "run_fundamental-048/prog.cob",
-     ". attendu"
     ],
     [
      "run_fundamental-064/prog.cob",
@@ -1097,18 +1093,6 @@
      "CALL callee1: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-037/callee.cob",
-     ". attendu"
-    ],
-    [
-     "run_misc-037/callee2.cob",
-     ". attendu"
-    ],
-    [
-     "run_misc-037/caller.cob",
-     ". attendu"
-    ],
-    [
      "run_misc-042/prog.cob",
      "argument CALL calculé non pris en charge"
     ],
@@ -1295,10 +1279,6 @@
     [
      "syn_copy-013/prog.cob",
      "COPY REPLACING d'un copybook contenant COPY non pris en charge"
-    ],
-    [
-     "syn_definition-005/containing-prog.cob",
-     ". attendu"
     ],
     [
      "syn_definition-019/prog.cob",
@@ -1531,10 +1511,6 @@
      14
     ],
     [
-     ". attendu",
-     8
-    ],
-    [
      "PROGRAM-ID attendu",
      8
     ],
@@ -1559,6 +1535,10 @@
      4
     ],
     [
+     "USAGE/clause non pris en charge: PROGRAM-POINTER",
+     4
+    ],
+    [
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
      4
     ],
@@ -1575,10 +1555,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 271,
-  "matching": 271,
-  "complete": 146,
-  "distinct": 179,
+  "sources": 266,
+  "matching": 266,
+  "complete": 147,
+  "distinct": 185,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1618,12 +1598,6 @@
    },
    {
     "diagnostic": "instruction non prise en charge: XML",
-    "first": 8,
-    "present": 9,
-    "alone": 0
-   },
-   {
-    "diagnostic": ". attendu",
     "first": 8,
     "present": 9,
     "alone": 0
@@ -1689,6 +1663,12 @@
     "alone": 2
    },
    {
+    "diagnostic": "USAGE/clause non pris en charge: PROGRAM-POINTER",
+    "first": 4,
+    "present": 4,
+    "alone": 0
+   },
+   {
     "diagnostic": "USAGE/clause non pris en charge: FLOAT-DECIMAL-16",
     "first": 4,
     "present": 4,
@@ -1727,12 +1707,6 @@
    {
     "diagnostic": "littéral flottant hors d'un emploi numérique (display) non pris en charge",
     "first": 2,
-    "present": 3,
-    "alone": 0
-   },
-   {
-    "diagnostic": "USAGE/clause non pris en charge: PROGRAM-POINTER",
-    "first": 3,
     "present": 3,
     "alone": 0
    },
@@ -1798,6 +1772,12 @@
    },
    {
     "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
+    "first": 1,
+    "present": 2,
+    "alone": 1
+   },
+   {
+    "diagnostic": "FUNCTION MODULE-ID non prise en charge",
     "first": 1,
     "present": 2,
     "alone": 1
@@ -2013,6 +1993,42 @@
     "alone": 0
    },
    {
+    "diagnostic": "USAGE/clause non pris en charge: PROCEDURE-POINTER",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'ExtProc' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'ExtProc-internal2' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'ExtProc-internal' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'ErrProc' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "ENTRY 'ErrProc-internal' duplicated",
+    "first": 0,
+    "present": 1,
+    "alone": 0
+   },
+   {
     "diagnostic": "indicateur fixe 'I' non pris en charge",
     "first": 1,
     "present": 1,
@@ -2164,12 +2180,6 @@
    },
    {
     "diagnostic": "FUNCTION MODULE-FORMATTED-DATE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-ID non prise en charge",
     "first": 1,
     "present": 1,
     "alone": 1
@@ -2601,6 +2611,12 @@
     "alone": 0
    },
    {
+    "diagnostic": ". attendu",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
     "diagnostic": "option $SET ODOSLIDE non prise en charge",
     "first": 1,
     "present": 1,
@@ -3021,7 +3037,11 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-075/prog.cob",
     "diagnostics": [
-     ". attendu"
+     "USAGE/clause non pris en charge: PROCEDURE-POINTER",
+     "ENTRY 'ExtProc' duplicated",
+     "ENTRY 'ExtProc-internal2' duplicated",
+     "FUNCTION MODULE-ID non prise en charge",
+     "ENTRY 'ExtProc-internal' duplicated"
     ],
     "complete": false,
     "matches_measure": true
@@ -3030,9 +3050,11 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-076/prog.cob",
     "diagnostics": [
-     ". attendu"
+     "USAGE/clause non pris en charge: PROGRAM-POINTER",
+     "ENTRY 'ErrProc' duplicated",
+     "ENTRY 'ErrProc-internal' duplicated"
     ],
-    "complete": false,
+    "complete": true,
     "matches_measure": true
    },
    {
@@ -3569,8 +3591,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-033/prog.cob",
     "diagnostics": [
-     "USAGE/clause non pris en charge: PROGRAM-POINTER",
-     ". attendu"
+     "USAGE/clause non pris en charge: PROGRAM-POINTER"
     ],
     "complete": false,
     "matches_measure": true
@@ -3589,15 +3610,6 @@
     "source": "run_fundamental-037/prog.cob",
     "diagnostics": [
      "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-048/prog.cob",
-    "diagnostics": [
-     ". attendu"
     ],
     "complete": false,
     "matches_measure": true
@@ -4396,33 +4408,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-037/callee.cob",
-    "diagnostics": [
-     ". attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-037/callee2.cob",
-    "diagnostics": [
-     ". attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-037/caller.cob",
-    "diagnostics": [
-     ". attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-042/prog.cob",
     "diagnostics": [
      "argument CALL calculé non pris en charge"
@@ -4862,15 +4847,6 @@
     "source": "syn_copy-013/prog.cob",
     "diagnostics": [
      "COPY REPLACING d'un copybook contenant COPY non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_definition-005/containing-prog.cob",
-    "diagnostics": [
-     ". attendu"
     ],
     "complete": false,
     "matches_measure": true
@@ -5387,9 +5363,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T07:25:24+00:00",
-  "git_head": "20e77f75c302a71304c7e68b16946ccb3d4a92e1",
-  "implementation_sha256": "3f08ba7524ddf4399e96b0083c4ecf32a4fd96fba09647765e598e7bebbd0de4",
+  "measured_at": "2026-11-01T08:19:49+00:00",
+  "git_head": "ac7898bd459a5756fcf241bb0d5b5ba16eb406bc",
+  "implementation_sha256": "038fba09b27bacaa50a2263d83008a8c8e11824d4f3a2b5fb59da5e5eafea749",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

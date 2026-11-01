@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T07:25:24+00:00 (commit `20e77f75c3`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T08:19:49+00:00 (commit `ac7898bd45`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-11-01T07:25:24+00:00 (commit `20e77f75c3`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 622 | 879 | 257 | 0 |
-| **Total** | | **3593** | **1346** | **1617** | **271** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 627 | 879 | 252 | 0 |
+| **Total** | | **3593** | **1351** | **1617** | **266** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T07:25:24+00:00, commit `20e77f75c3`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T08:19:49+00:00, commit `ac7898bd45`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -122,15 +122,15 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 36 × SCREEN SECTION non prise en charge à cet endroit
 2. 14 × expression non prise en charge: LINE
 3. 8 × PROCEDURE attendu
-4. 8 × . attendu
-5. 8 × PROGRAM-ID attendu
-6. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
-7. 5 × instruction non prise en charge: AT
-8. 5 × instruction non prise en charge: JSON
-9. 4 × instruction non prise en charge: XML
-10. 4 × CALL dump: programme non converti ou routine système non pris en charge
+4. 8 × PROGRAM-ID attendu
+5. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
+6. 5 × instruction non prise en charge: AT
+7. 5 × instruction non prise en charge: JSON
+8. 4 × instruction non prise en charge: XML
+9. 4 × CALL dump: programme non converti ou routine système non pris en charge
+10. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 271 sources, 271 au premier diagnostic identique à la mesure, 146 à inventaire complet, 179 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 266 sources, 266 au premier diagnostic identique à la mesure, 147 à inventaire complet, 185 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -156,11 +156,11 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
 - 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
 - 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
-- 9 × . attendu (1er : 8, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
 - 5 × clé INDEXED composée (SOURCE IS) non prise en charge (1er : 5, seul : 0)
+- 5 × instruction non prise en charge: AT (1er : 5, seul : 1)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -836,3 +836,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   meurt de SIGSEGV chez cobc sans -debug et s'arrête par un arrêt nommé
   chez nous. Testsuite **614 → 622/1135**, total **1338 → 1346/3593**,
   écart **279 → 271**.
+- 2026-11-01 — RECURSIVE (chantier n° 2 du classement, groupe « . attendu »
+  près de RECURSIVE) : `_program_type` complet (COMMON, INITIAL ou
+  RECURSIVE, combinés avec COMMON ; INITIAL RECURSIVE refusé comme cobc ;
+  RECURSIVE inconnu en cobol85), RECURSIVE implicite d'un CALL littéral du
+  propre PROGRAM-ID (`is_recursive_call`, `self-call-recursive`), programme
+  contenu visible de lui-même. Chaque activation partage la WORKING-STORAGE
+  et les fichiers et possède LOCAL-STORAGE, USING, pile de PERFORM et
+  NUMBER-OF-CALL-PARAMETERS ; GOBACK d'une activation appelée du principal
+  rend la main. Refus nommés : BASED, LINKAGE hors USING, ALTER, ANY
+  LENGTH, REPORT SECTION, INITIAL rendu récursif ; arrêt nommé pour CANCEL
+  d'un programme RECURSIVE actif. Au passage, l'END PROGRAM du programme le
+  plus externe devient facultatif en fin de source (`_end_program_list`
+  vide à la profondeur 1), et un programme contenu sans END PROGRAM reste
+  refusé (« multiple PROGRAM-ID's without matching END PROGRAM »). Cinq
+  sources débloquées (run_fundamental-048, run_misc-037 caller, callee et
+  callee2, syn_definition-005), identiques au natif par `cobol2rust
+  verify` ; run_extensions-075/076 restent bloquées sur PROCEDURE-POINTER et
+  PROGRAM-POINTER. Testsuite **622 → 627/1135**, total **1346 →
+  1351/3593**, écart **271 → 266**.

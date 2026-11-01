@@ -1553,14 +1553,21 @@ class Parser:
             entry_name = self.program_name = self.take().text
             self.check_valid_name(entry_name)
         self.chain.append({"name": entry_name, "level": self.level, "uses": self.global_uses})
-        # PROGRAM-ID name [IS] {COMMON | INITIAL} [PROGRAM].
-        common = initial = False
-        if self.accept("IS") or self.at("COMMON") or self.at("INITIAL"):
-            while self.at("COMMON") or self.at("INITIAL"):
-                if self.take().key == "INITIAL":
-                    initial = True
-                else:
-                    common = True
+        # _program_type: [IS] {COMMON | init_or_recurse [COMMON] | COMMON
+        # init_or_recurse} [PROGRAM]; RECURSIVE is no cobol85 word.
+        common = initial = recursive = False
+        self.orig_program_id, self.self_call = internal, False
+        kinds = {"COMMON", "INITIAL"} | ({"RECURSIVE"} if STD != "cobol85" else set())
+        if self.accept("IS") or (not self.t.string and self.t.key in kinds):
+            if self.t.string or self.t.key not in kinds:
+                self.error("syntax error, unexpected Identifier")
+            first = self.take().key
+            if not self.t.string and self.t.key in kinds and (first == "COMMON") != (self.t.key == "COMMON"):
+                self.take()
+                common, other = True, self.tokens[self.i - 1].key if first == "COMMON" else first
+            else:
+                common, other = first == "COMMON", first
+            initial, recursive = other == "INITIAL", other == "RECURSIVE"
             self.accept("PROGRAM")
         if common and not self.level:
             self.error("COMMON may only be used in a contained program")
@@ -1892,6 +1899,12 @@ class Parser:
         program.common, program.parent, program.nested = common, None, []
         # INITIAL: an implicit CANCEL when the program returns (codegen.c).
         program.initial = initial
+        # RECURSIVE (flag_recursive), or assumed for a CALL of the program's
+        # own PROGRAM-ID (self-call-recursive: warning; skip in cobol85).
+        program.recursive = recursive or self.self_call
+        if self.level and not ended and not nested_start and self.at("<EOF>"):
+            # A contained program needs its END PROGRAM (depth > 1 at the end).
+            self.error("multiple PROGRAM-ID's without matching END PROGRAM")
         if nested_start:
             # Nested programs, then END PROGRAM of this one (parser.y nested_list).
             if self.reports:
@@ -1913,13 +1926,17 @@ class Parser:
                     item.parent = entry_name
                     program.nested.append(item)
                 child.siblings = []
-            self.expect("END")
-            self.expect("PROGRAM")
-            if self.t.text != internal or self.name() != name:
-                self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
-            self.expect(".")
-            if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
-                self.expect("<EOF>")
+            # _end_program_list may be empty: at the end of the source only
+            # the outermost program may lack its END PROGRAM ("multiple
+            # PROGRAM-ID's without matching END PROGRAM" past depth 1).
+            if not (self.level == 0 and self.at("<EOF>")):
+                self.expect("END")
+                self.expect("PROGRAM")
+                if self.t.text != internal or self.name() != name:
+                    self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
+                self.expect(".")
+                if not self.at("<EOF>") and not (self.program_start() or self.at("END")):
+                    self.expect("<EOF>")
         if self.program_start():
             # A sibling program after END PROGRAM: same source, separate names.
             sibling = Parser.__new__(Parser)
@@ -4931,6 +4948,9 @@ class Parser:
                 self.error("STATIC CALL convention requires a literal program name")
             if self.t.string:
                 target = ("literal", self.take().text)
+                # is_recursive_call: the literal is the PROGRAM-ID as written.
+                if target[1] == self.orig_program_id and STD != "cobol85":
+                    self.self_call = True
             else:
                 ref = self.variable()
                 if self.fields[ref.name].kind != "text" and ref.start is None:

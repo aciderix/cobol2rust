@@ -1263,6 +1263,15 @@ pub fn chain_setup(item: &Value, parameter: usize) {
     }
 }
 
+/// A further activation of a RECURSIVE program: the item at the same offset
+/// of that activation's storage (LOCAL-STORAGE, flag_local registers).
+pub fn rehome(item: &Value, memory: &Memory) -> Value {
+    match item {
+        Value::View(view) => Value::View(View { memory: memory.clone(), ..view.clone() }),
+        _ => fail("activation of an item without storage"),
+    }
+}
+
 /// cob_is_omitted: the item has no storage (its data is NULL).
 pub fn is_omitted(item: &Value) -> bool {
     matches!(item, Value::View(view) if view.memory.borrow().is_empty())
