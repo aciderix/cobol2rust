@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-10-31T22:38:28+00:00 (commit `10f7b2af8e`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T06:46:36+00:00 (commit `bf632f049e`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-10-31T22:38:28+00:00 (commit `10f7b2af8e`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 612 | 879 | 267 | 0 |
-| **Total** | | **3593** | **1336** | **1617** | **281** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 614 | 879 | 265 | 0 |
+| **Total** | | **3593** | **1338** | **1617** | **279** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-10-31T22:38:28+00:00, commit `10f7b2af8e`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T06:46:36+00:00, commit `bf632f049e`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -124,28 +124,28 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 3. 8 × PROCEDURE attendu
 4. 8 × . attendu
 5. 8 × PROGRAM-ID attendu
-6. 7 × USAGE/clause non pris en charge: IS
-7. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
-8. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
-9. 5 × instruction non prise en charge: AT
-10. 5 × instruction non prise en charge: JSON
+6. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
+7. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
+8. 5 × instruction non prise en charge: AT
+9. 5 × instruction non prise en charge: JSON
+10. 4 × instruction non prise en charge: XML
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 281 sources, 281 au premier diagnostic identique à la mesure, 145 à inventaire complet, 183 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 279 sources, 279 au premier diagnostic identique à la mesure, 146 à inventaire complet, 182 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1 | SCREEN SECTION non prise en charge à cet endroit | 3 | 3 | 36 | 38 |
-| 2 | USAGE/clause non pris en charge: IS | 3 | 6 | 7 | 7 |
-| 3 | donnée subordonnée sans groupe parent | 2 | 8 | 0 | 7 |
-| 4 | OCCURS UNBOUNDED non pris en charge | 2 | 10 | 3 | 4 |
-| 5 | USAGE/clause non pris en charge: is | 2 | 12 | 4 | 4 |
-| 6 | instruction non prise en charge: AT | 1 | 13 | 5 | 5 |
-| 7 | GOBACK RETURNING non pris en charge | 1 | 14 | 0 | 53 |
-| 8 | invalid expression: unfinished expression | 31 | 45 | 0 | 50 |
-| 9 | expression non prise en charge: LINE | 3 | 48 | 14 | 17 |
-| 10 | instruction non prise en charge: LINE | 13 | 61 | 0 | 16 |
-| 11 | DISPLAY UPON CRT non pris en charge | 2 | 63 | 0 | 2 |
-| 12 | expression attendue | 1 | 64 | 1 | 8 |
+| 2 | OCCURS UNBOUNDED non pris en charge | 2 | 5 | 3 | 4 |
+| 3 | instruction non prise en charge: AT | 1 | 6 | 5 | 5 |
+| 4 | GOBACK RETURNING non pris en charge | 1 | 7 | 0 | 53 |
+| 5 | invalid expression: unfinished expression | 31 | 38 | 0 | 50 |
+| 6 | expression non prise en charge: LINE | 3 | 41 | 14 | 17 |
+| 7 | instruction non prise en charge: LINE | 13 | 54 | 0 | 16 |
+| 8 | DISPLAY UPON CRT non pris en charge | 2 | 56 | 0 | 2 |
+| 9 | expression attendue | 1 | 57 | 1 | 8 |
+| 10 | USAGE/clause non pris en charge: is | 1 | 58 | 4 | 4 |
+| 11 | donnée subordonnée sans groupe parent | 1 | 59 | 0 | 5 |
+| 12 | USAGE/clause non pris en charge: IS | 3 | 62 | 3 | 3 |
 
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
@@ -160,7 +160,7 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
-- 7 × USAGE/clause non pris en charge: IS (1er : 7, seul : 3)
+- 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING (1er : 5, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -800,3 +800,14 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   pas lier) et run_misc-176 (CALL d'un module minuscule absent) restent
   refusées à juste titre. Testsuite **607 → 612/1135**, total **1331 →
   1336/3593**, écart **286 → 281**.
+- 2026-11-01 — TYPEDEF, TYPE TO, USAGE nom-de-type et SAME AS (chantier
+  « USAGE/clause : IS ») : `copy_into_field` de field.c (USAGE, PICTURE,
+  VALUE, JUSTIFIED, BLANK, SIGN, SYNC, EXTERNAL et son nom, niveaux 88,
+  subordonnés recopiés avec leurs REDEFINES), type sans stockage, erreurs de
+  cobc vérifiées au natif. Choix au-delà du compte de sources (2) : la
+  construction est de COBOL 2002 et figure dans du code réel ; les autres
+  sources à TYPEDEF de la testsuite bloquent sur d'autres clauses (CRT
+  STATUS en SPECIAL-NAMES, TYPE de rapport). Deux sources débloquées
+  (run_fundamental-097 caller et callee, identiques au natif, EXTERNAL
+  partagé par le type). Testsuite **612 → 614/1135**, total **1336 →
+  1338/3593**, écart **281 → 279**.

@@ -425,6 +425,22 @@ avec l'unité d'exécution est refusé, comme l'échec de l'édition de liens de
 cobc. `STDCALL` est sans effet sous Linux ; `C`, `EXTERN` et `PASCAL` sont
 refusés.
 
+## Types : TYPEDEF, TYPE TO, USAGE nom-de-type et SAME AS
+
+Un article `01`/`77 … IS TYPEDEF [STRONG]` décrit un type sans stockage.
+`TYPE [TO] type`, `USAGE [IS] type` et `SAME AS article` reprennent sa
+description comme `copy_into_field` de field.c : USAGE, PICTURE, VALUE (une
+seconde VALUE est une erreur), JUSTIFIED, BLANK WHEN ZERO, SIGN, SYNC,
+EXTERNAL (et son nom externe) d'un type de niveau 01/77, niveaux 88, puis
+tous les subordonnés recopiés sous la cible (niveaux non supérieurs au sien
+décalés, REDEFINES internes suivis) ; OCCURS, REDEFINES, GLOBAL et VALUE
+restent ceux de la cible. Les erreurs de cobc sont reprises (« illegal
+combination of TYPE TO with other clauses », TYPEDEF hors 01/77, « is not a
+type-name », TYPEDEF en SAME AS, « elementary item expected », entrée
+subordonnée à une cible TYPE TO, auto-référence, source subordonnée à un
+USAGE ou un SIGN) ; ces clauses ne sont pas conformes en `cobol85`. Un type
+COMP-X/COMP-N, PICTURE L ou à table INDEXED BY est refusé par son nom.
+
 ## Adresses : POINTER, ADDRESS OF, BASED, ALLOCATE et FREE
 
 `USAGE POINTER` (8 octets, NULL par défaut, `VALUE NULL`), `ADDRESS OF`

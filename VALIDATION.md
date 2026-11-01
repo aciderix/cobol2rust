@@ -1,5 +1,22 @@
 # Validation — 30 octobre 2026
 
+## TYPEDEF, TYPE TO, USAGE nom-de-type et SAME AS — 1er novembre 2026
+
+- Fixture `tests/fixtures/typedefs.cob` identique au natif : BINARY-LONG
+  par USAGE nom-de-type avec VALUE de la cible, PIC S9(3)V99 SIGN LEADING
+  SEPARATE avec VALUE du type, PIC X JUSTIFIED RIGHT, type de groupe avec
+  VALUE, REDEFINES et niveau 88 copié sous une table OCCURS 2 et sous un 01,
+  SAME AS d'un élémentaire et d'un groupe.
+- Refus de cobc vérifiés au natif : PIC avec TYPE TO, TYPEDEF au niveau 05,
+  TYPE TO d'un article ordinaire, SAME AS d'un TYPEDEF, 77 TYPE TO d'un
+  groupe, entrée subordonnée à une cible TYPE TO.
+- Sources débloquées identiques au natif : run_fundamental-097 (caller avec
+  callee).
+- Mesure : **1336 → 1338/3593**, écart **281 → 279**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-type.json`) ;
+  suite **582 tests**, 0 échec.
+
 ## Lot de constructions générales — 31 octobre 2026
 
 - Fixture `tests/fixtures/small_constructs.cob` identique au natif (avec

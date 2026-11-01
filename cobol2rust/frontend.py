@@ -685,6 +685,8 @@ class Field:
     # PICTURE L ... DEPENDING: a group whose implicit FILLER is the ODO
     # table; its size is fixed for the enclosing groups (flag_picture_l).
     picture_l: bool = False
+    # IS TYPEDEF: a type for TYPE TO / USAGE, removed before the layout.
+    typedef: bool = False
     index_for: str | None = None
     editing: str = ""
     # Numeric-edited: cobc's symbol groups and storage size.
@@ -1649,6 +1651,13 @@ class Parser:
             if self.accept("REPORT"):
                 self.report_section()
         self.report_records()
+        # A TYPEDEF has no storage: only its copies remain.
+        types = [key for key, f in self.fields.items() if f.typedef]
+        for root in types:
+            for key in [k for k in self.fields if k == root or k.startswith(root + ".")]:
+                del self.fields[key]
+            for key in [k for k, c in self.conditions.items() if c.parent == root or c.parent.startswith(root + ".")]:
+                del self.conditions[key]
         for label, owner in self.indexes.items():
             if self.candidates(label) or self.candidates(label, True):
                 self.error(f"index dupliqué avec une donnée: {label}")

@@ -592,6 +592,65 @@ def picture_constants(p, picture):
     return re.sub(r"\(([^()]*)\)", count, picture)
 
 
+def type_reference(p, word, label, level):
+    """setup_external_definition: the TYPEDEF (TYPE TO, USAGE type-name) or
+    the data item (SAME AS) whose description is inherited."""
+    from . import frontend
+    clause = "TYPE TO" if word == "TYPE" else "SAME AS"
+    if frontend.STD == "cobol85":
+        p.error(f"{clause} clause does not conform to COBOL 85")
+    name, qualifiers = p.name(), []
+    while p.accept("OF") or p.accept("IN"):
+        qualifiers.append(p.name())
+    if word == "TYPE":
+        key = getattr(p, "typedefs", {}).get(name.upper())
+        if key is None or qualifiers:
+            p.error(f"'{name}' is not a TYPEDEF name")
+        return key
+    key = p.resolve(name, tuple(qualifiers))
+    source = p.fields[key]
+    if source.typedef:
+        p.error("TYPEDEF item cannot be used here")
+    cursor = source
+    while cursor.parent:
+        cursor = p.fields[cursor.parent]
+        if cursor.group_usage not in {None, "DISPLAY"}:
+            p.error("item may not be subordinate to any item with USAGE clause")
+        if cursor.group_sign:
+            p.error("item may not be subordinate to any item with SIGN clause")
+    if any(key == item or key.startswith(item + ".") for item in p.data_stack):
+        p.error("item may not reference itself")
+    return key
+
+
+def copy_type(p, source_key, target_key, level):
+    """copy_into_field / copy_children: the subordinate entries (with their
+    level 88) of the type, under the target; a level not above the target's
+    becomes the next one (66, 77, 78 and 88 skipped)."""
+    import copy
+    for key, condition in list(p.conditions.items()):
+        if condition.parent == source_key:
+            new = copy.copy(condition)
+            new.name, new.parent = target_key + key[len(source_key):], target_key
+            p.conditions[new.name] = new
+    for child in p.fields[source_key].children:
+        source = p.fields[child]
+        child_level = source.level if source.level > level else level + 1
+        if child_level in {66, 78, 88}:
+            child_level += 1
+        elif child_level == 77:
+            child_level = 79
+        new_key = target_key + child[len(source_key):]
+        new = copy.copy(source)
+        new.name, new.parent, new.level, new.children = new_key, target_key, child_level, []
+        new.dimensions, new.offset, new.size = list(source.dimensions), 0, 0
+        if new.redefines and new.redefines.startswith(source_key + "."):
+            new.redefines = target_key + new.redefines[len(source_key):]
+        p.fields[new_key] = new
+        p.fields[target_key].children.append(new_key)
+        copy_type(p, child, new_key, child_level)
+
+
 def declaration(p, file_record=False):
     if p.t.string or not p.t.key.isdigit():
         if not p.t.string and p.tokens[p.i + 1].key == "SECTION":
@@ -765,6 +824,7 @@ def declaration(p, file_record=False):
     external_as = None
     any_length = False
     variable_picture = depending_tokens = None
+    typedef, type_source, type_kind = False, None, None
     if p.accept("REDEFINES"):
         target = p.name()
         siblings = [f for f in p.fields.values() if f.parent == parent]
@@ -902,6 +962,30 @@ def declaration(p, file_record=False):
             if separate:
                 p.accept("CHARACTER")
             sign_clause = (position, separate)
+        elif p.at("TYPEDEF") or (p.at("IS") and p.tokens[p.i + 1].key == "TYPEDEF"):
+            # typedef_clause: a type, without storage, for TYPE TO / USAGE.
+            p.accept("IS")
+            p.take()
+            if typedef:
+                p.error("duplicate TYPEDEF clause")
+            from . import frontend
+            if frontend.STD == "cobol85":
+                p.error("TYPEDEF does not conform to COBOL 85")
+            typedef = True
+            p.accept("STRONG")  # CB_PENDING ("TYPEDEF STRONG")
+            if level not in {1, 77}:
+                p.error("TYPEDEF only allowed at 01/77 level")
+            if filler:
+                p.error("TYPEDEF requires a data name")
+        elif (p.at("TYPE") and not p.candidates(p.t.key)) or (p.at("SAME") and not p.candidates(p.t.key)):
+            # type_to_clause / same_as_clause (setup_external_definition).
+            word = p.take().key
+            p.accept("TO" if word == "TYPE" else "AS")
+            if type_source is not None:
+                p.error("SAME AS and TYPE TO are mutually exclusive" if type_kind != word
+                        else f"duplicate {'TYPE TO' if word == 'TYPE' else 'SAME AS'} clause")
+            type_kind = word
+            type_source = type_reference(p, word, label, level)
         elif p.at("EXTERNAL") or p.at("GLOBAL") or (p.at("IS") and p.tokens[p.i + 1].key in {"EXTERNAL", "GLOBAL"}):
             # external_clause / global_clause: 01 or 77 data names only.
             p.accept("IS")
@@ -949,6 +1033,14 @@ def declaration(p, file_record=False):
             has_usage = True
             if p.accept("USAGE"):
                 p.accept("IS")
+                if not p.t.string and p.t.key not in USAGES and p.t.key in getattr(p, "typedefs", {}):
+                    # USAGE type-name: the TYPE TO of the type.
+                    if type_source is not None:
+                        p.error("USAGE and SAME AS / TYPE TO are mutually exclusive")
+                    has_usage = False
+                    type_kind = "TYPE"
+                    type_source = type_reference(p, "TYPE", label, level)
+                    continue
             if p.t.string or p.t.key not in USAGES:
                 p.error(f"USAGE/clause non pris en charge: {p.t.text}")
             usage = p.take().key
@@ -971,6 +1063,40 @@ def declaration(p, file_record=False):
             elif usage in {"COMPUTATIONAL-X", "COMPUTATIONAL-N"}:
                 usage = usage.replace("COMPUTATIONAL", "COMP")
     p.expect(".")
+    if type_source is not None:
+        # inherit_external_definition: only REDEFINES, EXTERNAL, GLOBAL,
+        # OCCURS and VALUE go with SAME AS / TYPE TO.
+        clause = "TYPE TO" if type_kind == "TYPE" else "SAME AS"
+        if picture or variable_picture is not None or has_usage or sign_clause is not None or justified \
+                or synchronized or blank_zero or any_length or based:
+            p.error(f"illegal combination of {clause} with other clauses")
+        source = p.fields[type_source]
+        if source.usage in {"COMP-X", "COMP-N"} or source.picture_l or getattr(source, "comp_x_size", None):
+            p.error(f"{clause} d'un article COMP-X/COMP-N ou PICTURE L non pris en charge")
+        if any(owner == source.name or owner.startswith(source.name + ".") for owner in p.indexes.values()):
+            p.error(f"{clause} d'une table INDEXED BY non pris en charge")
+        if level == 77 and source.children:
+            p.error("elementary item expected")
+        usage = source.usage
+        picture = "" if source.children or usage in {"POINTER", "INDEX"} | set(FLOAT_PICTURES) else source.picture
+        # copy_into_field: target->usage = source->usage.
+        has_usage = not source.children or source.group_usage is not None
+        justified = justified or source.justified
+        blank_zero = blank_zero or source.blank_zero
+        synchronized = synchronized or source.synchronized
+        if source.sign_clause:
+            sign_clause = ("LEADING" if source.sign_leading else "TRAILING", source.sign_separate)
+        any_length = source.any_length
+        based = based or source.based
+        if level in {1, 77} and source.external:
+            external = True
+        if source.explicit_value:
+            if initial is not None:
+                p.error("duplicate VALUE clause")
+            initial, figurative = source.initial, None
+        if (not p.t.string and p.t.key.isdigit() and int(p.t.key) not in {66, 77, 78, 88}
+                and level < int(p.t.key) <= 49 and level != 77):
+            p.error(f"entry following {clause} may not be subordinate to it")
     if variable_picture is not None:
         # field.c validate_group / validate_field_value for flag_picture_l.
         if initial is not None:
@@ -1213,6 +1339,15 @@ def declaration(p, file_record=False):
         descriptor.edit_symbols, descriptor.edit_size = symbols, edit_size
         descriptor.blank_zero = blank_zero
     descriptor.picture_l = variable_picture is not None
+    descriptor.typedef = typedef
+    if type_source is not None:
+        source = p.fields[type_source]
+        if source.external and level in {1, 77}:
+            descriptor.external_name = source.external_name
+        if source.children and descriptor.group_value is None:
+            descriptor.group_value = source.group_value
+        if source.children:
+            descriptor.group_usage = source.group_usage
     if implicit_child:
         # cb_build_field (cb_build_filler ()) without flag_filler: INITIALIZE
         # treats it as a named item.
@@ -1222,6 +1357,10 @@ def declaration(p, file_record=False):
         p.fields[parent].children.append(key)
     p.data_stack.append(key)
     p.last_data = key
+    if typedef:
+        p.__dict__.setdefault("typedefs", {})[label.upper()] = key
+    if type_source is not None:
+        copy_type(p, type_source, key, level)
     if variable_picture is not None:
         if has_children:
             p.error("donnée subordonnée à une PICTURE L non prise en charge")
