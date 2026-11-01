@@ -1,5 +1,18 @@
 # Validation — 30 octobre 2026
 
+## FD GLOBAL et articles non GLOBAL — 1er novembre 2026
+
+- Fixture `tests/fixtures/global_file_status.cob` identique au natif : READ
+  d'un fichier RELATIVE GLOBAL par un programme contenu, FILE STATUS (23 puis
+  00) et RELATIVE KEY non GLOBAL relus par le propriétaire ; nommer FS dans le
+  programme contenu reste refusé comme par cobc.
+- Sources débloquées identiques au natif : run_file-105,
+  run_fundamental-035, 037.
+- Mesure : **1392 → 1395/3593**, écart **225 → 222**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-gf.json`) ; suite
+  **619 tests**, 0 échec.
+
 ## Clés INDEXED composées et SUPPRESS — 1er novembre 2026
 
 - Fixture `tests/fixtures/split_keys.cob` identique au natif, fichier compris :

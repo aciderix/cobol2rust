@@ -1385,7 +1385,8 @@ class Parser:
 
     def candidates(self, label, conditions=False):
         registry = self.conditions if conditions else self.fields
-        return [key for key, value in registry.items() if value.label == label and not getattr(value, "filler", False)]
+        return [key for key, value in registry.items() if value.label == label and not getattr(value, "filler", False)
+                and not getattr(value, "hidden", False)]
 
     def validate_assign_name(self, spec):
         """validate_assign_name of typeck.c, on ASSIGN [TO] data-name."""
@@ -2203,7 +2204,7 @@ class Parser:
                 root = self.fields[key]
                 while root.parent:
                     root = self.fields[root.parent]
-                if not root.is_global:
+                if not (root.is_global or getattr(root, "global_file_item", False)):
                     self.error(f"FD GLOBAL dont la clause {attribute} désigne une donnée non GLOBAL non pris en charge")
                 setattr(clone, attribute, prefix + key)
             if spec.record_key:
@@ -2219,11 +2220,24 @@ class Parser:
         inherited = dict(getattr(self, "inherited", {}))
         prefix = f"^{owner}^"
         rename = lambda key: None if key is None else prefix + key
+        # The FILE STATUS, RELATIVE KEY and DEPENDING items of a GLOBAL file:
+        # the contained programs' I/O uses them without seeing their names.
+        for spec in self.files.values():
+            if spec.is_global and not spec.global_owner:
+                for attribute in ("status", "relative_key", "depending"):
+                    key = getattr(spec, attribute)
+                    if key is not None and key in self.fields:
+                        root = self.fields[key]
+                        while root.parent:
+                            root = self.fields[root.parent]
+                        if not root.is_global:
+                            root.global_file_item = True
         for key, item in self.fields.items():
             root = item
             while root.parent:
                 root = self.fields[root.parent]
-            if not root.is_global or getattr(item, "global_owner", None):
+            hidden = not root.is_global and getattr(root, "global_file_item", False)
+            if not (root.is_global or hidden) or getattr(item, "global_owner", None):
                 continue
             # The records of a FD redefine its first one (the record area).
             if not getattr(root, "fd_file", None) and (
@@ -2236,6 +2250,7 @@ class Parser:
             if item.depending and clone.depending is None:
                 self.error("OCCURS DEPENDING d'un article GLOBAL hors de son groupe non pris en charge")
             clone.global_owner, clone.global_root = owner, root.label
+            clone.hidden = hidden or getattr(item, "hidden", False)
             inherited[clone.name] = clone
         return inherited
 

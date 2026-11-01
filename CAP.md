@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T13:40:05+00:00 (commit `03a863dc6c`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T14:07:55+00:00 (commit `2e1307145b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-11-01T13:40:05+00:00 (commit `03a863dc6c`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 324 | 331 | 7 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 667 | 879 | 212 | 0 |
-| **Total** | | **3593** | **1392** | **1617** | **225** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 670 | 879 | 209 | 0 |
+| **Total** | | **3593** | **1395** | **1617** | **222** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T13:40:05+00:00, commit `03a863dc6c`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T14:07:55+00:00, commit `2e1307145b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,7 +130,7 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
 10. 4 × USAGE/clause non pris en charge: FLOAT-DECIMAL-16
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 225 sources, 225 au premier diagnostic identique à la mesure, 116 à inventaire complet, 153 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 222 sources, 222 au premier diagnostic identique à la mesure, 116 à inventaire complet, 152 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -921,3 +921,10 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   débloquées (run_file-024, 025, 026, 090, syn_file-040), identiques au
   natif. Testsuite **662 → 667/1135**, total **1387 → 1392/3593**, écart
   **230 → 225**.
+- 2026-11-01 — FD GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING est un
+  article non GLOBAL (3 sources) : l'article est stocké dans le bloc partagé
+  du propriétaire et passe aux programmes contenus en copie cachée, que leurs
+  entrées-sorties mettent à jour sans qu'ils puissent la nommer (« 'FS' is not
+  defined » comme cobc). Trois sources débloquées (run_file-105,
+  run_fundamental-035 et 037), identiques au natif. Testsuite **667 →
+  670/1135**, total **1392 → 1395/3593**, écart **225 → 222**.

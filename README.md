@@ -425,8 +425,11 @@ Un FD `EXTERNAL` partage le fichier et sa zone d'enregistrement
 le premier programme qui le déclare le crée (son ASSIGN et son OPTIONAL
 comptent), chaque programme garde son propre FILE STATUS, et le CANCEL d'un
 programme ferme le fichier qu'il a laissé ouvert. Un FD `GLOBAL` d'un programme
-contenant est vu par ses descendants avec ses enregistrements ; une nouvelle
-instance du programme (après CANCEL) a un nouveau fichier. `USE GLOBAL AFTER
+contenant est vu par ses descendants avec ses enregistrements ; son FILE
+STATUS, sa RELATIVE KEY ou son DEPENDING peut être un article non GLOBAL : les
+programmes contenus le mettent à jour sans pouvoir le nommer (copie cachée du
+stockage partagé) ; une nouvelle instance du programme (après CANCEL) a un
+nouveau fichier. `USE GLOBAL AFTER
 ERROR` sur un mode d'ouverture sert aux programmes contenus qui n'ont pas de
 USE pour ce mode, selon le parcours de cobc.c (premier programme défini avant,
 de niveau inférieur, jusqu'au niveau 0) ; la procédure s'exécute avec les
@@ -439,9 +442,8 @@ formels USING autres que BY REFERENCE, CALL RETURNING/GIVING, USE GLOBAL sur un 
 fichier, un USE GLOBAL que le parcours de cobc.c prendrait à un programme non
 contenant, ALTER dans un programme à USE GLOBAL et GOBACK ou EXIT PROGRAM dans
 sa procédure, FD
-EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL, FD
-GLOBAL dont FILE STATUS, RELATIVE KEY ou DEPENDING désigne une donnée non
-GLOBAL, plusieurs programmes dans un source appelé,
+EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL,
+plusieurs programmes dans un source appelé,
 VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
 BASED, et `NOT ON EXCEPTION` suivant un
 DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).

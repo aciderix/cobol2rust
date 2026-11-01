@@ -377,7 +377,7 @@ class Emitter:
         owner = getattr(field, "global_owner", None)
         if owner:
             return field.name, f"GLOBAL {owner} {field.label}", False
-        if field.is_global and getattr(self.program, "nested", None):
+        if (field.is_global or getattr(field, "global_file_item", False)) and getattr(self.program, "nested", None):
             return field.name, f"GLOBAL {self.program.entry_name} {field.label}", True
         return None
 

@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T13:40:05+00:00",
- "git_head": "03a863dc6c5e6d7cbb17fad9bd3567e0d2656b68",
- "implementation_sha256": "13e9c4402545b51f7819e31484d47b9f534747d82ac8b8eb14443a97fd56a413",
+ "measured_at": "2026-11-01T14:07:55+00:00",
+ "git_head": "2e1307145bcca0f35b991768601ce7e1f535d5e1",
+ "implementation_sha256": "45d0ce645e51e8d15fdd50a7ec690b71066f6e8e086742cc3ed2266cd4b99241",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1392,
+  "accepted": 1395,
   "cobc_accepted": 1617,
-  "gap": 225,
+  "gap": 222,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -427,7 +427,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 667,
+   "accepted": 670,
    "internal_errors": 1,
    "blockers": [
     [
@@ -482,7 +482,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 212,
+   "gap": 209,
    "gap_sources": [
     [
      "run_accept-006/prog.cob",
@@ -593,10 +593,6 @@
      "USING limité aux fichiers à enregistrements fixes ou SEQUENTIAL variables sans DEPENDING"
     ],
     [
-     "run_file-105/prog.cob",
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    [
      "run_file-105/prog2.cob",
      "USE GLOBAL sur un fichier non pris en charge"
     ],
@@ -667,14 +663,6 @@
     [
      "run_fundamental-033/prog.cob",
      "USAGE/clause non pris en charge: PROGRAM-POINTER"
-    ],
-    [
-     "run_fundamental-035/prog.cob",
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    [
-     "run_fundamental-037/prog.cob",
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
     ],
     [
      "run_fundamental-064/prog.cob",
@@ -1387,10 +1375,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 225,
-  "matching": 225,
+  "sources": 222,
+  "matching": 222,
   "complete": 116,
-  "distinct": 153,
+  "distinct": 152,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1520,12 +1508,6 @@
    },
    {
     "diagnostic": "IDENTIFICATION DIVISION attendue",
-    "first": 3,
-    "present": 3,
-    "alone": 0
-   },
-   {
-    "diagnostic": "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge",
     "first": 3,
     "present": 3,
     "alone": 0
@@ -2791,15 +2773,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_file-105/prog.cob",
-    "diagnostics": [
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_file-105/prog2.cob",
     "diagnostics": [
      "USE GLOBAL sur un fichier non pris en charge"
@@ -2961,24 +2934,6 @@
     "source": "run_fundamental-033/prog.cob",
     "diagnostics": [
      "USAGE/clause non pris en charge: PROGRAM-POINTER"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-035/prog.cob",
-    "diagnostics": [
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-037/prog.cob",
-    "diagnostics": [
-     "FD GLOBAL dont la clause status désigne une donnée non GLOBAL non pris en charge"
     ],
     "complete": false,
     "matches_measure": true
@@ -4632,9 +4587,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T13:40:05+00:00",
-  "git_head": "03a863dc6c5e6d7cbb17fad9bd3567e0d2656b68",
-  "implementation_sha256": "13e9c4402545b51f7819e31484d47b9f534747d82ac8b8eb14443a97fd56a413",
+  "measured_at": "2026-11-01T14:07:55+00:00",
+  "git_head": "2e1307145bcca0f35b991768601ce7e1f535d5e1",
+  "implementation_sha256": "45d0ce645e51e8d15fdd50a7ec690b71066f6e8e086742cc3ed2266cd4b99241",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
