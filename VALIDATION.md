@@ -1,5 +1,42 @@
 # Validation — 30 octobre 2026
 
+## XML GENERATE et JSON GENERATE — 1er novembre 2026
+
+- Fixture `tests/fixtures/ml_generate.cob` identique au natif (52 lignes) :
+  échappements de contenu et d'attribut (guillemet, `<>&`, CR, TAB, LF),
+  UTF-8 en référence de caractère dans un attribut, octet final laissé brut,
+  éléments et attributs `hex.` (XML-CODE 417), nombres DISPLAY, COMP-3,
+  COMP, COMP-5, INDEX, P à gauche et à droite, édité brut, JUSTIFIED, OCCURS
+  (première occurrence), WITH ATTRIBUTES (attributs numériques bruts),
+  NAME OF, TYPE OF, SUPPRESS par identifiant, EVERY et WHEN seul, attributs
+  de racine jamais testés, indicateur collant sur deux passages, dix espaces
+  de noms et cinq préfixes (416, 419), receveurs trop courts avec et sans
+  déclaration (400 et 1, COUNT IN), sortie de 4 520 octets, flottant en
+  attribut, JSON (échappements, NUL, clés en double, OMITTED), DISPLAY qui
+  prend NOT ON EXCEPTION, concaténation `"ab"- "cd"`.
+- Fixture `tests/fixtures/ml_generate_comma.cob` identique au natif, sortie
+  d'erreur et code de retour compris : virgule décimale en XML, point en
+  JSON, littéraux `,75` et `,,5`, VALUE d'un article édité, homonymes sous
+  deux groupes FILLER (non contrôlés par cobc), arrêt `cob_fatal_error` sur un
+  contenu flottant. Les deux défauts de virgule décimale corrigés existaient
+  avant ce chantier et donnaient une sortie fausse sans refus.
+- Le test qui imposait le refus de `CALL … ON EXCEPTION DISPLAY … NOT ON
+  EXCEPTION …` est remplacé : le DISPLAY prend la phrase, comme cobc
+  (vérifié : « A » puis « B »).
+- Validateur d'URI (Python et Rust) comparé à `xmlParseURI` de la libxml2
+  installée : 0 différence sur 20 027 puis 30 000 chaînes ; un test de la
+  suite le refait sur 5 000 chaînes.
+- Refus de cobc reproduits et vérifiés par `cobc -fsyntax-only` (25 formes) ;
+  XML GENERATE dans un programme contenu refusé comme cobc (« missing
+  register definition ») ; la forme sur laquelle cobc ne se termine pas
+  (vérifié : arrêt par délai) est refusée.
+- Sources débloquées identiques au natif : run_ml-002, 003, 004, 005, 008,
+  009, 010, 011, 012, run_misc-022, TEST10, TEST14, TEST15.
+- Mesure : **1395 → 1408/3593**, écart **222 → 209**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-ml.json`) ; suite
+  **632 tests**, 0 échec.
+
 ## FD GLOBAL et articles non GLOBAL — 1er novembre 2026
 
 - Fixture `tests/fixtures/global_file_status.cob` identique au natif : READ

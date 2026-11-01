@@ -669,6 +669,8 @@ def declaration(p, file_record=False):
         "JUST", "LEADING", "TRAILING", "SYNC", "SYNCHRONIZED", "ANY", "."} | USAGES
     if implicit_filler and p.t.key in {"PIC", "PICTURE"} and p.tokens[p.i + 1].key in {"PIC", "PICTURE"}:
         p.error("nom réservé: " + p.t.key)
+    # cb_name: the word as written (JSON/XML GENERATE names).
+    spelling = "FILLER" if implicit_filler else p.t.text
     label = "FILLER" if implicit_filler else p.name()
     if label != "FILLER":
         p.user_word(label)
@@ -782,6 +784,7 @@ def declaration(p, file_record=False):
                 duplicate += 1
             key = f"{key}${duplicate}"
         p.renames.append((key, label, first, thru, founder, line))
+        p.renames_spelling = {**getattr(p, "renames_spelling", {}), key: spelling}
         return key
     if level not in {1, 77} and not 2 <= level <= 49:
         p.error("niveaux pris en charge: 01-49, 66, 77 et 88")
@@ -1346,6 +1349,7 @@ def declaration(p, file_record=False):
     if comp_x_size is not None:
         descriptor.comp_x_size = comp_x_size
     descriptor.linkage = linkage
+    descriptor.spelling = spelling
     descriptor.any_length = any_length
     descriptor.explicit_value = explicit_value
     descriptor.occurs_min, descriptor.depending = minimum, depending

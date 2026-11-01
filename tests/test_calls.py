@@ -44,14 +44,20 @@ class CallTests(unittest.TestCase):
 
     def test_refusals(self):
         cases = [
-            # GnuCOBOL gives this NOT ON EXCEPTION to the DISPLAY, not to the CALL.
-            program("01 n pic 9.", 'call "X" on exception display "A" not on exception display "B" end-call. stop run.'),
             subprogram("S", "01 a pic 9 value 1.", "a", "goback."),
             program("01 n pic 9.", 'call "X" using by value n. stop run.'),
         ]
         for text in cases:
             with self.subTest(text=text), self.assertRaises(CobolError):
                 Parser(text).parse()
+
+    def test_not_on_exception_goes_to_the_inner_display(self):
+        # GnuCOBOL gives this NOT ON EXCEPTION to the DISPLAY, not to the CALL
+        # (screen_or_device_display _common_exception_phrases).
+        parsed = Parser(program("01 n pic 9.", 'call "X" on exception display "A" not on exception display "B" '
+                                               'end-call. stop run.')).parse()
+        rust, _ = Emitter(parsed).generate()
+        self.assertIn("runtime::exception::accept_display_failed(false)", rust)
 
     def test_sibling_programs_resolve_before_call_path(self):
         text = (program("01 n pic 9.", 'call "SIB" using n. stop run.').replace("\nprocedure", "\nprocedure", 1)

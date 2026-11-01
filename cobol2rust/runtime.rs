@@ -373,6 +373,11 @@ impl Value {
         match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Justified | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
     pub fn snapshot(&self) -> Self { match self { Self::View(view) => view.value(), _ => self.clone() } }
+    /// The storage bytes of an item, a literal's bytes otherwise.
+    pub fn data(&self) -> Vec<u8> {
+        match self { Self::View(view) => view.data(), Self::Bytes(b) => b.clone(), Self::Text(t) => t.clone().into_bytes(),
+                     Self::Num(..) => fail("item storage required") }
+    }
     /// The value of an operand: as snapshot, but invalid numeric data is read
     /// as libcob does without runtime checks (COB_D2I).
     pub fn operand(&self) -> Self { match self { Self::View(view) => view.operand_value(false), _ => self.clone() } }
@@ -3006,6 +3011,13 @@ pub mod exception {
         current & 0xff00 == code("EC-SCREEN") || current == code(if accept { "EC-IMP-ACCEPT" } else { "EC-IMP-DISPLAY" })
     }
 
+    /// output_level_2_ex_condition: the current exception is of the class.
+    pub fn raised_class(class: &str) -> bool {
+        let current = STATE.with(|state| state.borrow().current)
+            .unwrap_or_else(|| fail("ON EXCEPTION after an operation that may change cob_exception_code not modelled"));
+        current & 0xff00 == code(class)
+    }
+
     /// `if (unlikely (cob_glob_ptr->cob_exception_code != 0))` of a deferred
     /// error check.
     pub fn pending() -> bool {
@@ -3281,5 +3293,513 @@ pub mod environment {
             if buff.len() > size { break; }
         }
         moved(buff)
+    }
+}
+
+/// XML GENERATE and JSON GENERATE: libcob mlio.c with the libxml2 2.9
+/// text writer (xmlwriter.c, entities.c, xmlsave.c, uri.c) and json-c 0.17.
+pub mod ml {
+    use super::{fail, fatal_error, module_symbols, Value};
+    use std::cell::Cell;
+
+    /// The cob_field of a tree node: the item and the attributes libcob tests.
+    pub struct Data<'a> { pub item: &'a Value, pub numeric: bool, pub float: bool, pub justified: bool }
+
+    /// cob_ml_tree and cob_ml_attr: `name` is None for a CONTENT node (and
+    /// NAME OF ... OMITTED), `slot` the is_suppressed flag of the program.
+    pub struct Node<'a> {
+        pub name: Option<&'static [u8]>,
+        pub content: Option<Data<'a>>,
+        pub attrs: Vec<Node<'a>>,
+        pub children: Vec<Node<'a>>,
+        pub slot: usize,
+    }
+
+    /// What the statement leaves: the XML-CODE (JSON-CODE) value, whether
+    /// EC-XML-IMP (EC-JSON-IMP) is raised, the receiving item's new bytes
+    /// and the COUNT IN value.
+    pub struct Outcome { pub code: i32, pub exception: bool, pub output: Option<Vec<u8>>, pub count: Option<i64> }
+
+    /// iscntrl in the "C" locale libcob runs with.
+    fn is_control(b: u8) -> bool { b < 0x20 || b == 0x7f }
+
+    /// has_invalid_xml_char.
+    fn has_invalid_xml_char(data: &[u8]) -> bool {
+        data.iter().any(|&b| is_control(b) && b != 0x09 && b != 0x0a && b != 0x0d)
+    }
+
+    /// cob_is_xml_namestartchar and cob_is_xml_namechar.
+    fn name_start(c: u8) -> bool {
+        c.is_ascii_alphabetic() || c == b'_' || (0xc0..=0xd6).contains(&c) || (0xd8..=0xf6).contains(&c) || c >= 0xf8
+    }
+    fn name_char(c: u8) -> bool { name_start(c) || c == b'-' || c == b'.' || c.is_ascii_digit() || c == 0xb7 }
+
+    /// get_trimmed_data: right-trimmed of spaces and NULs, left-trimmed of
+    /// spaces for a JUSTIFIED item, at least one byte; " " for size 0.
+    fn trimmed(data: &[u8], justified: bool) -> Vec<u8> {
+        if data.is_empty() { return b" ".to_vec(); }
+        if justified {
+            let start = data.iter().position(|&b| b != b' ').unwrap_or(data.len()).min(data.len() - 1);
+            data[start..].to_vec()
+        } else {
+            let end = data.iter().rposition(|&b| b != b' ' && b != 0).map_or(1, |p| p + 1);
+            data[..end].to_vec()
+        }
+    }
+
+    /// A string handed to libxml2 or json-c ends at its first NUL.
+    fn c_string(mut bytes: Vec<u8>) -> Vec<u8> {
+        if let Some(nul) = bytes.iter().position(|&b| b == 0) { bytes.truncate(nul); }
+        bytes
+    }
+
+    fn is_empty(data: &[u8]) -> bool { data.iter().all(|&b| b == b' ') }
+
+    /// is_valid_xml_name (mlio.c): the untrimmed first byte, then the
+    /// trimmed string up to its NUL.
+    fn is_valid_xml_name(data: &[u8], justified: bool) -> bool {
+        if data.is_empty() || !name_start(data[0]) { return false; }
+        c_string(trimmed(data, justified)).iter().skip(1).all(|&c| name_char(c))
+    }
+
+    fn content_bytes(data: &Data) -> Vec<u8> { data.item.data() }
+
+    // uri.c: xmlParse3986URIReference, through a byte string ending with 0.
+    fn at(s: &[u8], i: usize) -> u8 { s.get(i).copied().unwrap_or(0) }
+    fn alpha(c: u8) -> bool { c.is_ascii_alphabetic() }
+    fn digit(c: u8) -> bool { c.is_ascii_digit() }
+    fn hexdig(c: u8) -> bool { c.is_ascii_hexdigit() }
+    fn sub_delim(c: u8) -> bool { b"!$&()*+,;='".contains(&c) }
+    fn unreserved(c: u8) -> bool { alpha(c) || digit(c) || b"-._~".contains(&c) }
+    fn pct_encoded(s: &[u8], i: usize) -> bool { at(s, i) == b'%' && hexdig(at(s, i + 1)) && hexdig(at(s, i + 2)) }
+    fn pchar(s: &[u8], i: usize) -> bool {
+        let c = at(s, i);
+        unreserved(c) || pct_encoded(s, i) || sub_delim(c) || c == b':' || c == b'@'
+    }
+    /// NEXT: a '%' always skips three bytes.
+    fn next(s: &[u8], i: usize) -> usize { if at(s, i) == b'%' { i + 3 } else { i + 1 } }
+
+    fn scheme(s: &[u8], i: &mut usize) -> bool {
+        if !alpha(at(s, *i)) { return false; }
+        *i += 1;
+        while alpha(at(s, *i)) || digit(at(s, *i)) || matches!(at(s, *i), b'+' | b'-' | b'.') { *i += 1; }
+        true
+    }
+    fn fragment(s: &[u8], i: &mut usize) {
+        while pchar(s, *i) || matches!(at(s, *i), b'/' | b'?' | b'[' | b']') { *i = next(s, *i); }
+    }
+    fn query(s: &[u8], i: &mut usize) {
+        while pchar(s, *i) || matches!(at(s, *i), b'/' | b'?') { *i = next(s, *i); }
+    }
+    fn port(s: &[u8], i: &mut usize) -> bool {
+        if !digit(at(s, *i)) { return false; }
+        let mut value: i32 = 0;
+        while digit(at(s, *i)) {
+            let d = (at(s, *i) - b'0') as i32;
+            if value > i32::MAX / 10 { return false; }
+            value *= 10;
+            if value > i32::MAX - d { return false; }
+            value += d;
+            *i += 1;
+        }
+        true
+    }
+    fn userinfo(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        while unreserved(at(s, cur)) || pct_encoded(s, cur) || sub_delim(at(s, cur)) || at(s, cur) == b':' { cur = next(s, cur); }
+        if at(s, cur) == b'@' { *i = cur; true } else { false }
+    }
+    /// xmlParse3986Host: a bracketed literal, else a reg-name (the IPv4
+    /// attempt of uri.c never succeeds and falls back to it).
+    fn host(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        if at(s, cur) == b'[' {
+            cur += 1;
+            while at(s, cur) != b']' && at(s, cur) != 0 { cur += 1; }
+            if at(s, cur) != b']' { return false; }
+            *i = cur + 1;
+            return true;
+        }
+        while unreserved(at(s, cur)) || pct_encoded(s, cur) || sub_delim(at(s, cur)) { cur = next(s, cur); }
+        *i = cur;
+        true
+    }
+    fn authority(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        if !(userinfo(s, &mut cur) && at(s, cur) == b'@') { cur = *i; } else { cur += 1; }
+        if !host(s, &mut cur) { return false; }
+        if at(s, cur) == b':' {
+            cur += 1;
+            if !port(s, &mut cur) { return false; }
+        }
+        *i = cur;
+        true
+    }
+    fn segment(s: &[u8], i: &mut usize, forbid: u8, empty: bool) -> bool {
+        if !pchar(s, *i) { return empty; }
+        while pchar(s, *i) && at(s, *i) != forbid { *i = next(s, *i); }
+        true
+    }
+    fn path_ab_empty(s: &[u8], i: &mut usize) -> bool {
+        while at(s, *i) == b'/' {
+            *i += 1;
+            if !segment(s, i, 0, true) { return false; }
+        }
+        true
+    }
+    fn path_absolute(s: &[u8], i: &mut usize) -> bool {
+        if at(s, *i) != b'/' { return false; }
+        *i += 1;
+        if segment(s, i, 0, false) {
+            while at(s, *i) == b'/' {
+                *i += 1;
+                if !segment(s, i, 0, true) { return false; }
+            }
+        }
+        true
+    }
+    fn path_rootless(s: &[u8], i: &mut usize, forbid: u8) -> bool {
+        if !segment(s, i, forbid, false) { return false; }
+        path_ab_empty(s, i)
+    }
+    fn query_fragment_end(s: &[u8], i: &mut usize) -> bool {
+        if at(s, *i) == b'?' { *i += 1; query(s, i); }
+        if at(s, *i) == b'#' { *i += 1; fragment(s, i); }
+        at(s, *i) == 0
+    }
+    fn absolute_uri(s: &[u8]) -> bool {
+        let mut i = 0;
+        if !scheme(s, &mut i) || at(s, i) != b':' { return false; }
+        i += 1;
+        if at(s, i) == b'/' && at(s, i + 1) == b'/' {
+            i += 2;
+            if !authority(s, &mut i) || !path_ab_empty(s, &mut i) { return false; }
+        } else if at(s, i) == b'/' {
+            if !path_absolute(s, &mut i) { return false; }
+        } else if pchar(s, i) && !path_rootless(s, &mut i, 0) {
+            return false;
+        }
+        query_fragment_end(s, &mut i)
+    }
+    fn relative_ref(s: &[u8]) -> bool {
+        let mut i = 0;
+        if at(s, 0) == b'/' && at(s, 1) == b'/' {
+            i = 2;
+            if !authority(s, &mut i) || !path_ab_empty(s, &mut i) { return false; }
+        } else if at(s, 0) == b'/' {
+            if !path_absolute(s, &mut i) { return false; }
+        } else if pchar(s, 0) && !path_rootless(s, &mut i, b':') {
+            return false;
+        }
+        query_fragment_end(s, &mut i)
+    }
+    /// cob_is_valid_uri: xmlParseURI succeeds.
+    pub fn is_valid_uri(s: &[u8]) -> bool {
+        let s = c_string(s.to_vec());
+        absolute_uri(&s) || relative_ref(&s)
+    }
+
+    /// The libxml2 text writer on a memory buffer, without indentation.
+    struct Writer { out: Vec<u8>, open: Vec<(Vec<u8>, bool)>, namespaces: Vec<(Vec<u8>, Vec<u8>)> }
+
+    impl Writer {
+        /// xmlTextWriterOutputNSDecl then ">": a start tag in XML_TEXTWRITER_NAME state closes.
+        fn close_start(&mut self) {
+            if let Some((_, true)) = self.open.last() {
+                while let Some((prefix, uri)) = self.namespaces.pop() { self.attribute(&prefix, &uri); }
+                self.out.push(b'>');
+                self.open.last_mut().unwrap().1 = false;
+            }
+        }
+        /// xmlTextWriterStartElementNS.
+        fn start(&mut self, prefix: Option<&[u8]>, name: &[u8], uri: Option<&[u8]>) {
+            self.close_start();
+            let full = match prefix { Some(p) => [p, b":", name].concat(), None => name.to_vec() };
+            self.out.push(b'<');
+            self.out.extend_from_slice(&full);
+            self.open.push((full, true));
+            if let Some(uri) = uri {
+                let declaration = match prefix { Some(p) => [b"xmlns:", p].concat(), None => b"xmlns".to_vec() };
+                self.namespaces.push((declaration, uri.to_vec()));
+            }
+        }
+        /// xmlTextWriterWriteAttribute: the value through xmlBufAttrSerializeTxtContent.
+        fn attribute(&mut self, name: &[u8], value: &[u8]) {
+            self.out.push(b' ');
+            self.out.extend_from_slice(name);
+            self.out.extend_from_slice(b"=\"");
+            attribute_text(&mut self.out, &c_string(value.to_vec()));
+            self.out.push(b'"');
+        }
+        /// xmlTextWriterWriteString in a start tag or text: xmlEncodeSpecialChars.
+        fn text(&mut self, content: &[u8]) {
+            self.close_start();
+            for &c in &c_string(content.to_vec()) {
+                match c {
+                    b'<' => self.out.extend_from_slice(b"&lt;"),
+                    b'>' => self.out.extend_from_slice(b"&gt;"),
+                    b'&' => self.out.extend_from_slice(b"&amp;"),
+                    b'"' => self.out.extend_from_slice(b"&quot;"),
+                    b'\r' => self.out.extend_from_slice(b"&#13;"),
+                    _ => self.out.push(c),
+                }
+            }
+        }
+        /// xmlTextWriterEndElement: "/>" for a start tag still open.
+        fn end(&mut self) {
+            let (name, in_start) = self.open.last().cloned().unwrap();
+            if in_start {
+                while let Some((prefix, uri)) = self.namespaces.pop() { self.attribute(&prefix, &uri); }
+                self.out.extend_from_slice(b"/>");
+            } else {
+                self.out.extend_from_slice(b"</");
+                self.out.extend_from_slice(&name);
+                self.out.push(b'>');
+            }
+            self.open.pop();
+        }
+    }
+
+    /// xmlSerializeHexCharRef.
+    fn char_ref(out: &mut Vec<u8>, value: u32) { out.extend_from_slice(format!("&#x{value:X};").as_bytes()); }
+
+    /// xmlBufAttrSerializeTxtContent without a document: UTF-8 sequences
+    /// become character references.
+    fn attribute_text(out: &mut Vec<u8>, s: &[u8]) {
+        let mut i = 0;
+        while i < s.len() {
+            let c = s[i];
+            match c {
+                b'\n' => out.extend_from_slice(b"&#10;"),
+                b'\r' => out.extend_from_slice(b"&#13;"),
+                b'\t' => out.extend_from_slice(b"&#9;"),
+                b'"' => out.extend_from_slice(b"&quot;"),
+                b'<' => out.extend_from_slice(b"&lt;"),
+                b'>' => out.extend_from_slice(b"&gt;"),
+                b'&' => out.extend_from_slice(b"&amp;"),
+                0x80.. if i + 1 < s.len() => {
+                    let byte = |k: usize| at(s, i + k) as u32;
+                    let (value, length) = if c < 0xc0 {
+                        (0, 1)
+                    } else if c < 0xe0 {
+                        (((byte(0) & 0x1f) << 6) | (byte(1) & 0x3f), 2)
+                    } else if c < 0xf0 && byte(2) != 0 {
+                        (((byte(0) & 0x0f) << 12) | ((byte(1) & 0x3f) << 6) | (byte(2) & 0x3f), 3)
+                    } else if c < 0xf8 && byte(2) != 0 && byte(3) != 0 {
+                        (((byte(0) & 0x07) << 18) | ((byte(1) & 0x3f) << 12) | ((byte(2) & 0x3f) << 6) | (byte(3) & 0x3f), 4)
+                    } else {
+                        (0, 1)
+                    };
+                    let is_char = matches!(value, 0x9 | 0xa | 0xd | 0x20..=0xd7ff | 0xe000..=0xfffd | 0x10000..=0x10ffff);
+                    if length == 1 || !is_char {
+                        // xmlSaveErr reports on stderr through libxml2's error handler.
+                        fail("XML GENERATE: attribut non UTF-8 (diagnostic libxml2 non reproduit)");
+                    }
+                    char_ref(out, value);
+                    i += length;
+                    continue;
+                },
+                _ => out.push(c),
+            }
+            i += 1;
+        }
+    }
+
+    fn suppressed(node: &Node, flags: &[Cell<bool>]) -> bool { flags[node.slot].get() }
+
+    /// get_xml_name: an underscore before a name that cannot start one.
+    fn xml_name(name: &[u8]) -> Vec<u8> {
+        let name = c_string(trimmed(name, false));
+        if name.first().is_some_and(|&c| name_start(c)) { name } else { [b"_", &name[..]].concat() }
+    }
+
+    fn hex(data: &[u8]) -> Vec<u8> { data.iter().flat_map(|b| format!("{b:02x}").into_bytes()).collect() }
+
+    struct Xml<'f> { writer: Writer, flags: &'f [Cell<bool>], point: u8, code: i32 }
+
+    impl Xml<'_> {
+        fn attributes(&mut self, attrs: &[Node]) {
+            for attr in attrs {
+                if suppressed(attr, self.flags) { continue; }
+                let data = attr.content.as_ref().unwrap();
+                let value = content_bytes(data);
+                if has_invalid_xml_char(&value) {
+                    self.code = 417;
+                    self.writer.attribute(&[b"hex.", &xml_name(attr.name.unwrap())[..]].concat(), &hex(&value));
+                } else {
+                    self.writer.attribute(&xml_name(attr.name.unwrap()), &trimmed(&value, data.justified));
+                }
+            }
+        }
+        fn content(&mut self, data: &Data) {
+            let text = if data.float {
+                fatal_error(b"attempt to use non-implemented XML I/O")
+            } else if data.numeric {
+                number(data, self.point)
+            } else {
+                trimmed(&content_bytes(data), data.justified)
+            };
+            self.writer.text(&text);
+        }
+        fn tree(&mut self, node: &Node, uri: Option<&[u8]>, prefix: Option<&[u8]>) {
+            if suppressed(node, self.flags) { return; }
+            let Some(name) = node.name else { return self.content(node.content.as_ref().unwrap()) };
+            if let Some(data) = node.content.as_ref().filter(|d| !d.numeric) {
+                let value = content_bytes(data);
+                if has_invalid_xml_char(&value) {
+                    // generate_hex_element.
+                    self.code = 417;
+                    self.writer.start(prefix, &[b"hex.", &xml_name(name)[..]].concat(), uri);
+                    self.attributes(&node.attrs);
+                    self.writer.text(&hex(&value));
+                    return self.writer.end();
+                }
+            }
+            self.writer.start(prefix, &xml_name(name), uri);
+            self.attributes(&node.attrs);
+            if !node.children.is_empty() {
+                // Only the outermost element has the namespace declaration.
+                for child in &node.children { self.tree(child, None, prefix); }
+            } else if let Some(data) = &node.content {
+                self.content(data);
+            }
+            self.writer.end();
+        }
+    }
+
+    fn number(data: &Data, point: u8) -> Vec<u8> {
+        match data.item {
+            Value::View(view) => view.ml_number(point),
+            _ => fail("numeric item required"),
+        }
+    }
+
+    /// The bytes copied to the receiving item (trailing newlines of the
+    /// copy become spaces), the count of characters, whether it was too small.
+    fn store(buffer: &[u8], size: usize) -> (Vec<u8>, i64, bool) {
+        let mut copy = buffer.len().min(size);
+        let mut out = buffer[..copy].to_vec();
+        out.resize(size, b' ');
+        let mut newlines = 0;
+        while copy > 0 && out[copy - 1] == b'\n' {
+            out[copy - 1] = b' ';
+            copy -= 1;
+            newlines += 1;
+        }
+        let written = buffer.len() - newlines;
+        (out, written as i64, written > copy)
+    }
+
+    /// cob_xml_generate_new.
+    #[allow(clippy::too_many_arguments)]
+    pub fn xml_generate(tree: &Node, flags: &[Cell<bool>], size: usize, counted: bool, declaration: bool,
+                        namespace: Option<&Data>, prefix: Option<&Data>) -> Outcome {
+        let failure = |code| Outcome { code, exception: true, output: None, count: None };
+        if size == 0 { return failure(600); }
+        let uri = match namespace.map(content_bytes) {
+            Some(data) if !is_empty(&data) => {
+                if has_invalid_xml_char(&data) { return failure(416); }
+                let text = c_string(trimmed(&data, namespace.unwrap().justified));
+                if !is_valid_uri(&text) { return failure(416); }
+                Some(text)
+            },
+            _ => None,
+        };
+        let prefix = match prefix.map(|p| (content_bytes(p), p.justified)) {
+            Some((data, justified)) if !is_empty(&data) => {
+                if !is_valid_xml_name(&data, justified) { return failure(419); }
+                Some(c_string(trimmed(&data, justified)))
+            },
+            _ => None,
+        };
+        // XML-CODE 0, then the document.
+        let point = module_symbols().0;
+        let mut xml = Xml { writer: Writer { out: Vec::new(), open: Vec::new(), namespaces: Vec::new() }, flags, point, code: 0 };
+        if declaration { xml.writer.out.extend_from_slice(b"<?xml version=\"1.0\"?>\n"); }
+        xml.tree(tree, uri.as_deref(), prefix.as_deref());
+        // xmlTextWriterEndDocument.
+        xml.writer.out.push(b'\n');
+        let (output, written, small) = store(&xml.writer.out, size);
+        Outcome { code: if small { 400 } else { xml.code }, exception: small, output: Some(output), count: counted.then_some(written) }
+    }
+
+    enum Json { Object(Vec<(Vec<u8>, Json)>), Text(Vec<u8>), Number(Vec<u8>) }
+
+    /// json_object_object_add: a key already there keeps its place.
+    fn add(object: &mut Vec<(Vec<u8>, Json)>, key: Vec<u8>, value: Json) {
+        match object.iter_mut().find(|(k, _)| *k == key) {
+            Some(entry) => entry.1 = value,
+            None => object.push((key, value)),
+        }
+    }
+
+    fn json_tree(node: &Node, flags: &[Cell<bool>], out: &mut Vec<(Vec<u8>, Json)>) {
+        if suppressed(node, flags) { return; }
+        let name = node.name.map(|n| c_string(trimmed(n, false)));
+        if !node.children.is_empty() {
+            match name {
+                Some(name) => {
+                    let mut object = Vec::new();
+                    for child in &node.children { json_tree(child, flags, &mut object); }
+                    add(out, name, Json::Object(object));
+                },
+                None => for child in &node.children { json_tree(child, flags, out); },
+            }
+        } else if let Some(data) = &node.content {
+            let Some(name) = name else { fatal_error(b"attempt to use non-implemented JSON I/O") };
+            if data.float { fatal_error(b"attempt to use non-implemented JSON I/O"); }
+            if data.numeric {
+                add(out, name, Json::Number(number(data, b'.')));
+            } else {
+                add(out, name, Json::Text(c_string(trimmed(&content_bytes(data), data.justified))));
+            }
+        }
+    }
+
+    /// json_escape_str.
+    fn escape(out: &mut Vec<u8>, s: &[u8]) {
+        for &c in s {
+            match c {
+                b'\x08' => out.extend_from_slice(b"\\b"),
+                b'\n' => out.extend_from_slice(b"\\n"),
+                b'\r' => out.extend_from_slice(b"\\r"),
+                b'\t' => out.extend_from_slice(b"\\t"),
+                b'\x0c' => out.extend_from_slice(b"\\f"),
+                b'"' => out.extend_from_slice(b"\\\""),
+                b'\\' => out.extend_from_slice(b"\\\\"),
+                b'/' => out.extend_from_slice(b"\\/"),
+                0..=0x1f => out.extend_from_slice(format!("\\u00{c:02x}").as_bytes()),
+                _ => out.push(c),
+            }
+        }
+    }
+
+    /// json_object_to_json_string_ext with JSON_C_TO_STRING_PLAIN.
+    fn print(out: &mut Vec<u8>, value: &Json) {
+        match value {
+            Json::Object(members) => {
+                out.push(b'{');
+                for (index, (key, member)) in members.iter().enumerate() {
+                    if index > 0 { out.push(b','); }
+                    out.push(b'"');
+                    escape(out, key);
+                    out.extend_from_slice(b"\":");
+                    print(out, member);
+                }
+                out.push(b'}');
+            },
+            Json::Text(text) => { out.push(b'"'); escape(out, text); out.push(b'"'); },
+            Json::Number(text) => out.extend_from_slice(text),
+        }
+    }
+
+    /// cob_json_generate_new with json-c.
+    pub fn json_generate(tree: &Node, flags: &[Cell<bool>], size: usize, counted: bool) -> Outcome {
+        let mut object = Vec::new();
+        json_tree(tree, flags, &mut object);
+        let mut printed = Vec::new();
+        print(&mut printed, &Json::Object(object));
+        let (output, written, small) = store(&printed, size);
+        Outcome { code: if small { 1 } else { 0 }, exception: small, output: Some(output), count: counted.then_some(written) }
     }
 }

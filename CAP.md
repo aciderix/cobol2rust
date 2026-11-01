@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T14:07:55+00:00 (commit `2e1307145b`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T20:09:14+00:00 (commit `6f7b449a61`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -104,11 +104,11 @@ Dernière mesure : 2026-11-01T14:07:55+00:00 (commit `2e1307145b`, cobc (GnuCOBO
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 324 | 331 | 7 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 670 | 879 | 209 | 0 |
-| **Total** | | **3593** | **1395** | **1617** | **222** | **0** |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 327 | 331 | 4 | 0 |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 680 | 879 | 199 | 0 |
+| **Total** | | **3593** | **1408** | **1617** | **209** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T14:07:55+00:00, commit `2e1307145b`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T20:09:14+00:00, commit `6f7b449a61`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -122,15 +122,15 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 36 × SCREEN SECTION non prise en charge à cet endroit
 2. 14 × expression non prise en charge: LINE
 3. 8 × PROCEDURE attendu
-4. 8 × instruction non prise en charge: XML
-5. 8 × PROGRAM-ID attendu
-6. 5 × instruction non prise en charge: AT
-7. 5 × instruction non prise en charge: JSON
-8. 4 × CALL dump: programme non converti ou routine système non pris en charge
-9. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
-10. 4 × USAGE/clause non pris en charge: FLOAT-DECIMAL-16
+4. 8 × PROGRAM-ID attendu
+5. 5 × instruction non prise en charge: AT
+6. 4 × CALL dump: programme non converti ou routine système non pris en charge
+7. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
+8. 4 × USAGE/clause non pris en charge: FLOAT-DECIMAL-16
+9. 4 × entrée SPECIAL-NAMES non prise en charge: CURSOR
+10. 4 × USAGE/clause non pris en charge: is
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 222 sources, 222 au premier diagnostic identique à la mesure, 116 à inventaire complet, 152 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 209 sources, 209 au premier diagnostic identique à la mesure, 104 à inventaire complet, 144 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -138,11 +138,11 @@ Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) :
 | 2 | OCCURS UNBOUNDED non pris en charge | 2 | 5 | 3 | 4 |
 | 3 | instruction non prise en charge: AT | 1 | 6 | 5 | 5 |
 | 4 | GOBACK RETURNING non pris en charge | 1 | 7 | 0 | 53 |
-| 5 | invalid expression: unfinished expression | 31 | 38 | 0 | 50 |
+| 5 | invalid expression: unfinished expression | 31 | 38 | 0 | 49 |
 | 6 | expression non prise en charge: LINE | 3 | 41 | 14 | 17 |
 | 7 | instruction non prise en charge: LINE | 13 | 54 | 0 | 16 |
 | 8 | DISPLAY UPON CRT non pris en charge | 2 | 56 | 0 | 2 |
-| 9 | expression attendue | 1 | 57 | 1 | 8 |
+| 9 | expression attendue | 1 | 57 | 1 | 6 |
 | 10 | USAGE/clause non pris en charge: is | 1 | 58 | 4 | 4 |
 | 11 | donnée subordonnée sans groupe parent | 1 | 59 | 0 | 5 |
 | 12 | USAGE/clause non pris en charge: IS | 3 | 62 | 3 | 3 |
@@ -150,17 +150,17 @@ Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) :
 Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'une source complète) :
 
 - 53 × GOBACK RETURNING non pris en charge (1er : 0, seul : 0)
-- 50 × invalid expression: unfinished expression (1er : 0, seul : 0)
+- 49 × invalid expression: unfinished expression (1er : 0, seul : 0)
 - 38 × SCREEN SECTION non prise en charge à cet endroit (1er : 36, seul : 3)
 - 17 × expression non prise en charge: LINE (1er : 14, seul : 0)
 - 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
-- 12 × GENERATE requiert un nom de rapport ou de groupe DETAIL (1er : 0, seul : 0)
-- 9 × instruction non prise en charge: XML (1er : 8, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
-- 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
+- 6 × expression attendue (1er : 1, seul : 0)
 - 5 × instruction non prise en charge: AT (1er : 5, seul : 1)
 - 5 × donnée subordonnée sans groupe parent (1er : 0, seul : 0)
+- 4 × CALL dump: programme non converti ou routine système non pris en charge (1er : 4, seul : 0)
+- 4 × OCCURS UNBOUNDED non pris en charge (1er : 3, seul : 2)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -928,3 +928,17 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   defined » comme cobc). Trois sources débloquées (run_file-105,
   run_fundamental-035 et 037), identiques au natif. Testsuite **667 →
   670/1135**, total **1392 → 1395/3593**, écart **225 → 222**.
+- 2026-11-01 — XML GENERATE et JSON GENERATE (chantier « instruction non
+  prise en charge: XML/JSON », 13 sources visées) : grammaire et contrôles de
+  cobc, arbre de `cb_build_ml_tree`, conditions SUPPRESS dans l'ordre
+  d'`output_ml_suppress_checks` (défauts compris : attributs de racine jamais
+  testés, indicateur collant jusqu'au CANCEL, forme sur laquelle cobc ne se
+  termine pas refusée), sortie de libxml2 2.9 et json-c 0.17 (validateur
+  d'URI comparé à `xmlParseURI` sur 30 000 chaînes), XML-CODE/JSON-CODE.
+  Constructions générales levées avec : DISPLAY ON/NOT ON EXCEPTION, tiret
+  collé au guillemet (`"a"- "b"`), et deux défauts silencieux de DECIMAL-POINT
+  IS COMMA corrigés (littéral `,25` lu 25, VALUE d'un article édité posée avec
+  `.`). Treize sources débloquées, identiques au natif : run_ml-002 à 005,
+  008 à 012, run_misc-022, TEST10, TEST14, TEST15 (che4z, non exécutés par la
+  mesure, vérifiés un par un). che4z **324 → 327/1505**, testsuite **670 →
+  680/1135**, total **1395 → 1408/3593**, écart **222 → 209**.

@@ -111,7 +111,7 @@ Ces résultats portent sur les entrées testées.
 
 | Domaine | Pris en charge |
 | --- | --- |
-| Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"`, numériques `B"…"` et `H"…"` (`scan_b`/`scan_h`, B refusé en cobol85) ; concaténation `&`, `Z"…"`, `N"…"` refusés |
+| Littéraux | Alphanumériques en octets source (UTF-8 compris), hexadécimaux `X"…"`, numériques `B"…"` et `H"…"` (`scan_b`/`scan_h`, B refusé en cobol85), `Z"…"` ; concaténation `&`, et tiret collé au guillemet fermant (`"a"- "b"`, lu comme `&` par `read_literal`) ; `N"…"` refusé |
 | Sources | Lecture en octets comme cobc (colonnes d'octets, BOM UTF-8 ignoré), en-tête IDENTIFICATION et PROCEDURE DIVISION facultatifs, INPUT-OUTPUT SECTION sans FILE-CONTROL si aucun SELECT ; détection du format comme cobc (colonne 7 de la première ligne, format fixe avec `-std=cobol85`), format libre, format fixe explicite avec continuations de mots/nombres/PICTURE/littéraux, commentaires, directive `>>SOURCE FORMAT`, séparateurs virgule/point-virgule |
 | Options IBM | Lignes `CBL …` / `PROCESS …` d'options du compilateur ignorées jusqu'à la fin de ligne, comme pplex.l |
 | Documentation COBOL | `AUTHOR`, `INSTALLATION`, `DATE-WRITTEN`, `DATE-COMPILED`, `SECURITY`, `REMARKS` avec point, en début de ligne dans IDENTIFICATION |
@@ -446,7 +446,10 @@ EXTERNAL et GLOBAL à la fois, avec LINAGE ou REPORT, SD GLOBAL/EXTERNAL,
 plusieurs programmes dans un source appelé,
 VALUE d'un article EXTERNAL, VALUE en LINKAGE hors d'un article
 BASED, et `NOT ON EXCEPTION` suivant un
-DISPLAY/ACCEPT/CALL de ON EXCEPTION (GnuCOBOL le rattache à ce DISPLAY).
+ACCEPT ou un CALL de ON EXCEPTION (GnuCOBOL le rattache à cette instruction).
+Un DISPLAY prend lui-même ses phrases ON/NOT ON EXCEPTION
+(`_common_exception_phrases`) : vers SYSOUT ou SYSERR, `cob_display` ne lève
+rien et NOT ON EXCEPTION s'exécute.
 
 Conventions d'appel (`_mnemonic_conv`) : `CALL STATIC` (et `WINAPI`) lie le
 programme statiquement : nom littéral obligatoire, `ON EXCEPTION` ignoré comme
@@ -714,7 +717,8 @@ module selon cette table ; deux littéraux comparés par `=` ou `<>` sont pliés
 sur leurs octets bruts, comme dans tree.c. `CURRENCY SIGN IS "c"` (un
 caractère, contrôles de `set_currency_picture_symbol`) et `DECIMAL-POINT IS
 COMMA` sont des réglages du module (`COB_MODULE_PTR`) : le scanner lit alors
-1,5 comme un littéral, les PICTURE échangent `.` et `,`, et l'édition, le MOVE
+1,5 et ,5 comme des littéraux, les PICTURE échangent `.` et `,`, les VALUE sont
+posées avec ces symboles, et l'édition, le MOVE
 alphanumérique vers numérique, la dé-édition, NUMVAL/NUMVAL-C et l'affichage
 d'un nombre à décimales utilisent ces symboles. `CURRENCY … PICTURE SYMBOL` et
 SORT … COLLATING SEQUENCE avec un alphabet littéral restent refusés. Une
@@ -958,6 +962,46 @@ python -m cobol2rust verify tests/fixtures/edited_report.cob
 ```
 
 Cette fixture combine arrondis, suppression Z, FD partagés et rapport imprimé.
+
+## XML GENERATE et JSON GENERATE
+
+`XML GENERATE` et `JSON GENERATE` suivent cobc 3.2 et libcob (`mlio.c`) avec
+libxml2 2.9 et json-c 0.17, les bibliothèques du cobc de référence :
+
+- grammaire de parser.y : COUNT IN, `[WITH] ENCODING` (ignoré comme le
+  CB_PENDING de cobc), XML-DECLARATION, ATTRIBUTES, NAMESPACE [NAMESPACE-PREFIX],
+  NAME OF (… IS OMITTED pour JSON), TYPE OF … ATTRIBUTE/ELEMENT/CONTENT,
+  SUPPRESS identifiant [WHEN …], EVERY [NUMERIC|NONNUMERIC] [type] WHEN …,
+  WHEN … seul, ON/NOT ON EXCEPTION, END-XML/END-JSON ; les contrôles de
+  typeck.c avec leurs messages (« WHEN clause must follow EVERY clause »,
+  « NAMESPACE must be a valid URI », « NAME OF item must be the input record or
+  a child of it »…) ;
+- arbre de `cb_build_ml_tree` : FILLER, REDEFINES et RENAMES THRU ignorés ;
+  WITH ATTRIBUTES ne fait attributs que les fils élémentaires directs de
+  l'article source ; nom tel qu'écrit dans la déclaration ; un article OCCURS
+  donne sa première occurrence (cobc l'annonce non implémenté) ;
+- conditions SUPPRESS dans l'ordre de `get_suppress_cond` et
+  d'`output_ml_suppress_checks`, défauts de cobc compris : les attributs d'une
+  racine qui a des éléments ne sont jamais testés, et l'indicateur
+  `is_suppressed` d'un groupe sans condition reste levé jusqu'au CANCEL (les
+  arbres sont `static` en C) ; une forme d'arbre sur laquelle la génération de
+  code de cobc ne se termine pas est refusée ;
+- sortie : écriture de libxml2 (`xmlEncodeSpecialChars`,
+  `xmlBufAttrSerializeTxtContent` avec références de caractère pour l'UTF-8
+  d'un attribut, déclaration d'espace de noms sur l'élément le plus externe,
+  `/>` pour un élément vide), `xmlParseURI` porté pour NAMESPACE, nombres par
+  l'image `-(n)9.9(d)` de `get_num` (point décimal du module pour XML, `.`
+  pour JSON, comme `dpc-in-data: xml`), article numérique en attribut écrit
+  brut, caractère de contrôle en élément ou attribut `hex.` avec XML-CODE 417 ;
+  JSON comme `json_object_to_json_string_ext (… PLAIN)` : échappements de
+  json-c, clé en double remplacée sur place, chaîne coupée au premier NUL ;
+- XML-CODE et JSON-CODE (`S9(9) BINARY`, GLOBAL du programme externe ; un
+  programme contenu n'en a pas : « missing register definition » comme cobc),
+  receveur trop court (copie tronquée, 400 ou 1, EC-XML-IMP ou EC-JSON-IMP),
+  COUNT IN de la longueur complète, codes 416 et 419, contenu flottant arrêté
+  par `cob_fatal_error`.
+
+XML PARSE et JSON PARSE restent refusés.
 
 ## Groupes, tableaux et mémoire partagée
 

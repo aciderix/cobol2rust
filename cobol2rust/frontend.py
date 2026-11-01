@@ -437,12 +437,15 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             tokens.append(Token(word, line, False, i, end))
             i = end
             picture_pending = False
-        elif c in ",;":
+        elif c in ",;" and not (c == "," and decimal_comma and source[i + 1:i + 2].isdigit()):
             # Parenthesized lists need a delimiter: dropping it would merge
             # t(1,+2) into the single arithmetic subscript t(1+2).
             end = i + 1
             while end < len(source) and source[end] == c:
                 end += 1
+            if c == "," and decimal_comma and source[end:end + 1].isdigit():
+                # <DECIMAL_IS_COMMA>,{2,}: the last comma starts a literal.
+                end -= 1
             if parentheses:
                 tokens.append(Token(c, line, False, i, end))
             i = end
@@ -474,6 +477,11 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             if len(value) > limit:
                 raise CobolError(f"ligne {start}: invalid literal: literal length exceeds {limit} characters")
             tokens.append(Token(value, start, True, token_start, i))
+            if i < len(source) and source[i] == "-":
+                # read_literal: a hyphen after the closing quote ("a"- 'b')
+                # is a concatenation, scanned as '&'.
+                tokens.append(Token("&", line, False, i, i + 1))
+                i += 1
         elif c in "zZ" and i + 1 < len(source) and source[i + 1] in "\"'":
             # Z"text": the text and a terminating NUL (scan_z).
             quote, start = source[i + 1], line
@@ -529,6 +537,8 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             # a numeric literal may start with its decimal point after a separator.
             point = (not decimal_comma and c == "." and i + 1 < len(source) and source[i + 1].isdigit()
                      and (i == 0 or source[i - 1].isspace() or source[i - 1] in "(+-*/=<>,"))
+            # <DECIMAL_IS_COMMA>[+-]?[0-9]*,[0-9]+: a literal may start with its comma.
+            comma = decimal_comma and c == "," and source[i + 1:i + 2].isdigit()
             dp = "," if decimal_comma else r"\."
             # cobc scans a sign followed by digits as a signed literal, so in
             # a list "(I +1)" holds two subscripts. After an operand that
@@ -547,7 +557,7 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
                 tokens.append(FloatLiteralToken(text, line, False, i, i + len(floating[0])))
                 i += len(floating[0])
                 continue
-            match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else
+            match = re.match(rf"[+-](?:\d+(?:{dp}\d+)?|\.\d+)" if signed else r"\.\d+" if point else r",\d+" if comma else
                              rf"\d+[A-Za-z0-9-]*[A-Za-z][A-Za-z_0-9-]*|\d+(?:{dp}\d+)?|[A-Za-z_][A-Za-z_0-9-]*|>=|<=|<>|\*\*|[.(),:+*/=<>-]",
                              source[i:])
             if not match and c == "&":
@@ -557,7 +567,7 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             if not match:
                 raise CobolError(f"ligne {line}: caractère non pris en charge {c!r}")
             text = match[0]
-            if decimal_comma and re.fullmatch(r"[+-]?\d+,\d+", text):
+            if decimal_comma and re.fullmatch(r"[+-]?\d*,\d+", text):
                 text = text.replace(",", ".")
             if text == "." and tokens and tokens[-1].key == "." and not tokens[-1].string:
                 # scanner.l "."([ \n]*".")+: "ignoring redundant .".
@@ -869,11 +879,11 @@ class Program:
         raise CobolError(f"procédure inconnue: {name}")
 
 
-VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE ALLOCATE FREE UNLOCK".split())
+VERBS = set("ALTER DISPLAY ACCEPT MOVE ADD SUBTRACT MULTIPLY DIVIDE COMPUTE IF PERFORM STOP GOBACK CONTINUE EVALUATE INITIALIZE EXIT OPEN READ WRITE REWRITE DELETE START CLOSE SET GO CALL CANCEL NEXT SORT MERGE RELEASE RETURN SEARCH INSPECT STRING UNSTRING INITIATE GENERATE TERMINATE ENTRY ENABLE DISABLE RECEIVE SEND PURGE ALLOCATE FREE UNLOCK XML JSON".split())
 INSPECT_FIGURATIVES = {"ZERO": "0", "ZEROS": "0", "ZEROES": "0", "SPACE": " ", "SPACES": " ",
                        "QUOTE": '"', "QUOTES": '"', "HIGH-VALUE": "\xff", "HIGH-VALUES": "\xff",
                        "LOW-VALUE": "\x00", "LOW-VALUES": "\x00"}
-BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
+BOUNDARIES = VERBS | set("ELSE END-IF END-PERFORM END-EVALUATE WHEN END-DISPLAY END-ACCEPT END-ADD END-SUBTRACT END-MULTIPLY END-DIVIDE END-COMPUTE END-READ END-WRITE END-REWRITE END-DELETE END-START END-CALL END-RETURN END-SEARCH END-STRING END-UNSTRING END-RECEIVE END-XML END-JSON EXCEPTION OVERFLOW AT NOT ON INVALID . <EOF>".split())
 
 
 # pplex.l: an IBM CBL/PROCESS statement of compiler options is ignored to
@@ -1182,6 +1192,8 @@ class Parser:
         # cb_build_program: nest_level, and the programs of the source in
         # PROGRAM-ID order (cobc's next_program chain, reversed).
         self.level = 0
+        # The is_suppressed flags of the JSON/XML GENERATE trees (static in cobc).
+        self.ml_slots = 0
         self.chain = []
         self.containers = []
 
@@ -1732,6 +1744,7 @@ class Parser:
         memory_size = self.composite_key_items(memory_size)
         memory_size = self.debug_item(memory_size)
         self.return_code_register()
+        self.ml_registers()
         self.call_parameters_register()
         # GLOBAL items of the containing programs (copies of their
         # descriptions, storage owned by the declaring program).
@@ -1913,6 +1926,7 @@ class Parser:
         program.uses_exceptions = getattr(self, "uses_exceptions", False)
         program.uses_locale = getattr(self, "uses_locale", False)
         program.deferred_open = getattr(self, "deferred_open", False)
+        program.ml_slots = self.ml_slots
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
         program.runtime_checks = RUNTIME_CHECKS
@@ -2273,6 +2287,29 @@ class Parser:
         layout_fields({key: self.fields[key]})
         self.fields[key].register = True
 
+    def ml_registers(self):
+        """cb_build_register_internal_code: XML-CODE and JSON-CODE, "GLOBAL
+        PICTURE S9(9) USAGE BINARY VALUE 0", in each outermost program
+        (contained programs share them as GLOBAL items). They are built when
+        the statement or the register occurs; cobol85.words has neither."""
+        if STD == "cobol85" or self.level:
+            return
+        words = {t.key for t in self.tokens[self.i:] if not t.string}
+        for name, uses in (("XML-CODE", {"XML", "XML-CODE"}), ("JSON-CODE", {"JSON", "JSON-CODE"})):
+            if not words & uses or self.candidates(name):
+                continue
+            saved = self.tokens, self.i, self.data_stack, self.last_data
+            self.tokens, self.i, self.data_stack = lex(f"01 {name} GLOBAL PIC S9(9) USAGE BINARY VALUE 0."), 0, []
+            self.building_register = True
+            try:
+                key = self.declaration()
+            finally:
+                self.building_register = False
+                self.tokens, self.i, self.data_stack, self.last_data = saved
+            from .layout import layout_fields
+            layout_fields({key: self.fields[key]})
+            self.fields[key].register = True
+
     def composite_key_items(self, memory_size):
         """The WORKING-STORAGE items of split keys (record_key_clause:
         cb_build_field of the key name), after the other items."""
@@ -2493,6 +2530,9 @@ class Parser:
                               label, 66, record, [], 1, False, first)
                 alias.offset, alias.size = start.offset, size
             alias.offset = start.offset
+            # rename_thru, and cb_name of the level 66 item.
+            alias.rename_thru = thru is not None
+            alias.spelling = getattr(self, "renames_spelling", {}).get(key, label)
             self.fields[key] = alias
 
     def user_word(self, name):
@@ -4735,8 +4775,17 @@ class Parser:
                 atoms.append(Stmt("display", (values, newline, device), line))
                 if not seen:
                     break
+            # screen_or_device_display _common_exception_phrases: cob_display
+            # to SYSOUT or SYSERR raises nothing.
+            exception, success = self.exception_phrases("END-DISPLAY", escape=False)
             self.accept("END-DISPLAY")
-            return atoms[0] if len(atoms) == 1 else Stmt("sequence", (atoms,), line)
+            stmt = atoms[0] if len(atoms) == 1 else Stmt("sequence", (atoms,), line)
+            if exception is None and success is None:
+                return stmt
+            check = Stmt("if", (Expr("imp_exception", (False,)), exception or [], success or []), line)
+            result = Stmt("sequence", ([Stmt("clear_exception", (), line), stmt, check],), line)
+            result.takes_exception = success is None
+            return result
         if verb == "ACCEPT":
             if not self.t.string and self.t.key in self.cds:
                 # ACCEPT cd-name [MESSAGE] COUNT: CB_PENDING, nothing generated.
@@ -5298,6 +5347,9 @@ class Parser:
             stmt.returning = returning
             stmt.static = static
             return stmt
+        if verb in {"XML", "JSON"}:
+            from .ml_parser import ml_statement
+            return ml_statement(self, verb, line)
         if verb in {"INITIATE", "GENERATE", "TERMINATE"}:
             # cb_emit_initiate/generate/terminate: report names, or for
             # GENERATE one report name or DETAIL report group.

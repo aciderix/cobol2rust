@@ -841,6 +841,37 @@ impl View {
         let mut bytes = edit(symbols, self.size, digits.as_bytes(), number.scale as i32, negative, blank_zero);
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
+    /// The storage of an item, as the cob_field data libcob reads.
+    pub fn data(&self) -> Vec<u8> {
+        self.resolved();
+        self.raw()
+    }
+    /// get_num (mlio.c): a cob_move to the numeric-edited -(n)9[.9(d)] of
+    /// n = digits - scale and d = scale, left-trimmed (COB_FLAG_JUSTIFIED);
+    /// the module decimal point becomes `point`.
+    pub fn ml_number(&self, point: u8) -> Vec<u8> {
+        self.resolved();
+        let (digits, scale) = match self.kind {
+            Kind::Numeric { digits, scale, .. } => (digits as i32, scale),
+            _ => fail("numeric item required"),
+        };
+        let integer = (digits - scale).max(0) as u32;
+        let decimals = scale.max(0) as u32;
+        let mut symbols = vec![(b'-', integer.max(1)), (b'9', 1)];
+        let mut size = (integer as usize + 1).max(2);
+        if decimals > 0 {
+            symbols.extend([(b'.', 1), (b'9', decimals)]);
+            size += 1 + decimals as usize;
+        }
+        let number = match self.value() { Value::Num(number, _) => number, _ => fail("numeric item required") };
+        let negative = number.n.sign() == Sign::Minus;
+        let digits = absolute(&number.n).to_string();
+        let mut bytes = edit(&symbols, size, digits.as_bytes(), number.scale as i32, negative, false);
+        let module_point = crate::runtime::module_symbols().0;
+        if let Some(position) = bytes.iter().position(|&b| b == module_point) { bytes[position] = point; }
+        let start = bytes.iter().position(|&b| b != b' ').unwrap_or(bytes.len()).min(bytes.len() - 1);
+        bytes.split_off(start)
+    }
     /// Numeric MOVE: excess decimals are truncated, the magnitude is reduced
     /// modulo the PICTURE capacity (binary included) without SIZE ERROR, and an
     /// unsigned receiver drops the sign. A signed DISPLAY or packed receiver

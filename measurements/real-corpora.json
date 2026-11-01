@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T14:07:55+00:00",
- "git_head": "2e1307145bcca0f35b991768601ce7e1f535d5e1",
- "implementation_sha256": "45d0ce645e51e8d15fdd50a7ec690b71066f6e8e086742cc3ed2266cd4b99241",
+ "measured_at": "2026-11-01T20:09:14+00:00",
+ "git_head": "6f7b449a618a0be35c4a6747a01aa19ff986e7cc",
+ "implementation_sha256": "201b8485af4b4b6cb80585e20f0fcb7c415d90437818babd25d14ee45ba19ddf",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1395,
+  "accepted": 1408,
   "cobc_accepted": 1617,
-  "gap": 222,
+  "gap": 209,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -313,7 +313,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 324,
+   "accepted": 327,
    "internal_errors": 0,
    "blockers": [
     [
@@ -368,27 +368,15 @@
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 7,
+   "gap": 4,
    "gap_sources": [
     [
      "tests/test_files/project/HELLO-WORLD.cbl",
      "CALL identifiant requiert un champ alphanumérique"
     ],
     [
-     "tests/test_files/project/TEST10.CBL",
-     "instruction non prise en charge: XML"
-    ],
-    [
-     "tests/test_files/project/TEST14.CBL",
-     "instruction non prise en charge: XML"
-    ],
-    [
-     "tests/test_files/project/TEST15.CBL",
-     "instruction non prise en charge: XML"
-    ],
-    [
      "tests/test_files/project/XML2.cbl",
-     "instruction non prise en charge: XML"
+     "XML PARSE non pris en charge"
     ],
     [
      "tests/test_files/project/xmls1.cbl",
@@ -396,13 +384,13 @@
     ],
     [
      "tests/test_files/project/xmlup.cbl",
-     "expression non prise en charge: xml"
+     "XML PARSE non pris en charge"
     ]
    ],
    "gap_blockers": [
     [
-     "instruction non prise en charge: XML",
-     4
+     "XML PARSE non pris en charge",
+     2
     ],
     [
      "CALL identifiant requiert un champ alphanumérique",
@@ -410,10 +398,6 @@
     ],
     [
      "USAGE/clause non pris en charge: NATIONAL",
-     1
-    ],
-    [
-     "expression non prise en charge: xml",
      1
     ]
    ]
@@ -427,7 +411,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 670,
+   "accepted": 680,
    "internal_errors": 1,
    "blockers": [
     [
@@ -463,10 +447,6 @@
      5
     ],
     [
-     "instruction non prise en charge: JSON",
-     5
-    ],
-    [
      ". attendu",
      5
     ],
@@ -477,12 +457,16 @@
     [
      "identifiant attendu",
      5
+    ],
+    [
+     "USAGE/clause non pris en charge: IS",
+     5
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 209,
+   "gap": 199,
    "gap_sources": [
     [
      "run_accept-006/prog.cob",
@@ -925,10 +909,6 @@
      "CALL dump: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-022/prog.cob",
-     "DISPLAY accepte uniquement champs et littéraux simples"
-    ],
-    [
      "run_misc-025/prog.cob",
      "indicateur fixe 'A' non pris en charge"
     ],
@@ -1033,44 +1013,8 @@
      "CALL broken: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_ml-002/prog.cob",
-     "instruction non prise en charge: XML"
-    ],
-    [
-     "run_ml-003/prog.cob",
-     "instruction non prise en charge: XML"
-    ],
-    [
-     "run_ml-004/prog.cob",
-     "instruction non prise en charge: XML"
-    ],
-    [
-     "run_ml-005/prog.cob",
-     "instruction non prise en charge: XML"
-    ],
-    [
      "run_ml-006/prog.cob",
      "option $SET DPC-IN-DATA non prise en charge"
-    ],
-    [
-     "run_ml-008/prog.cob",
-     "instruction non prise en charge: JSON"
-    ],
-    [
-     "run_ml-009/prog.cob",
-     "instruction non prise en charge: JSON"
-    ],
-    [
-     "run_ml-010/prog.cob",
-     "instruction non prise en charge: JSON"
-    ],
-    [
-     "run_ml-011/prog.cob",
-     "instruction non prise en charge: JSON"
-    ],
-    [
-     "run_ml-012/prog.cob",
-     "instruction non prise en charge: JSON"
     ],
     [
      "run_ml-013/prog.cob",
@@ -1343,10 +1287,6 @@
      5
     ],
     [
-     "instruction non prise en charge: JSON",
-     5
-    ],
-    [
      "CALL dump: programme non converti ou routine système non pris en charge",
      4
     ],
@@ -1367,18 +1307,22 @@
      4
     ],
     [
-     "instruction non prise en charge: XML",
-     4
+     "OCCURS UNBOUNDED non pris en charge",
+     3
+    ],
+    [
+     "IDENTIFICATION DIVISION attendue",
+     3
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 222,
-  "matching": 222,
-  "complete": 116,
-  "distinct": 152,
+  "sources": 209,
+  "matching": 209,
+  "complete": 104,
+  "distinct": 144,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1389,7 +1333,7 @@
    {
     "diagnostic": "invalid expression: unfinished expression",
     "first": 0,
-    "present": 50,
+    "present": 49,
     "alone": 0
    },
    {
@@ -1411,26 +1355,8 @@
     "alone": 0
    },
    {
-    "diagnostic": "GENERATE requiert un nom de rapport ou de groupe DETAIL",
-    "first": 0,
-    "present": 12,
-    "alone": 0
-   },
-   {
-    "diagnostic": "instruction non prise en charge: XML",
-    "first": 8,
-    "present": 9,
-    "alone": 0
-   },
-   {
     "diagnostic": "PROCEDURE attendu",
     "first": 8,
-    "present": 8,
-    "alone": 0
-   },
-   {
-    "diagnostic": "expression attendue",
-    "first": 1,
     "present": 8,
     "alone": 0
    },
@@ -1438,6 +1364,12 @@
     "diagnostic": "PROGRAM-ID attendu",
     "first": 8,
     "present": 8,
+    "alone": 0
+   },
+   {
+    "diagnostic": "expression attendue",
+    "first": 1,
+    "present": 6,
     "alone": 0
    },
    {
@@ -1450,18 +1382,6 @@
     "diagnostic": "donnée subordonnée sans groupe parent",
     "first": 0,
     "present": 5,
-    "alone": 0
-   },
-   {
-    "diagnostic": "instruction non prise en charge: JSON",
-    "first": 5,
-    "present": 5,
-    "alone": 0
-   },
-   {
-    "diagnostic": "expression non prise en charge: XML-CODE",
-    "first": 0,
-    "present": 4,
     "alone": 0
    },
    {
@@ -1507,6 +1427,18 @@
     "alone": 0
    },
    {
+    "diagnostic": "XML PARSE non pris en charge",
+    "first": 2,
+    "present": 3,
+    "alone": 0
+   },
+   {
+    "diagnostic": "IF without imperative statement",
+    "first": 0,
+    "present": 3,
+    "alone": 0
+   },
+   {
     "diagnostic": "IDENTIFICATION DIVISION attendue",
     "first": 3,
     "present": 3,
@@ -1527,12 +1459,6 @@
    {
     "diagnostic": "COMMUNICATION SECTION non conforme hors -std=cobol85",
     "first": 2,
-    "present": 2,
-    "alone": 0
-   },
-   {
-    "diagnostic": "expression non prise en charge: END-XML",
-    "first": 0,
     "present": 2,
     "alone": 0
    },
@@ -1571,12 +1497,6 @@
     "first": 1,
     "present": 2,
     "alone": 1
-   },
-   {
-    "diagnostic": "IF without imperative statement",
-    "first": 0,
-    "present": 2,
-    "alone": 0
    },
    {
     "diagnostic": "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
@@ -1705,19 +1625,7 @@
     "alone": 0
    },
    {
-    "diagnostic": "expression non prise en charge: xml",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "expression non prise en charge: xml-event",
-    "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "nom inconnu: XML-CODE; qualifier avec OF/IN si nécessaire",
     "first": 0,
     "present": 1,
     "alone": 0
@@ -1927,12 +1835,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "DISPLAY accepte uniquement champs et littéraux simples",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "indicateur fixe 'A' non pris en charge",
     "first": 1,
     "present": 1,
@@ -2049,12 +1951,6 @@
    {
     "diagnostic": "CALL broken: programme non converti ou routine système non pris en charge",
     "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "expression non prise en charge: JSON-CODE",
-    "first": 0,
     "present": 1,
     "alone": 0
    },
@@ -2327,7 +2223,7 @@
     "unlocked": 31,
     "cumulative": 38,
     "first": 0,
-    "present": 50
+    "present": 49
    },
    {
     "diagnostic": "expression non prise en charge: LINE",
@@ -2355,7 +2251,7 @@
     "unlocked": 1,
     "cumulative": 57,
     "first": 1,
-    "present": 8
+    "present": 6
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: is",
@@ -2445,44 +2341,12 @@
    },
    {
     "corpus": "che4z-lsp-for-cobol",
-    "source": "tests/test_files/project/TEST10.CBL",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "che4z-lsp-for-cobol",
-    "source": "tests/test_files/project/TEST14.CBL",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
-     "expression non prise en charge: XML-CODE"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "che4z-lsp-for-cobol",
-    "source": "tests/test_files/project/TEST15.CBL",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "che4z-lsp-for-cobol",
     "source": "tests/test_files/project/XML2.cbl",
     "diagnostics": [
-     "instruction non prise en charge: XML",
-     "expression non prise en charge: XML-CODE",
-     "expression non prise en charge: END-XML",
-     "expression attendue",
+     "XML PARSE non pris en charge",
      "expression non prise en charge: XML-EVENT",
+     "expression attendue",
+     "IF without imperative statement",
      "expression non prise en charge: XML-TEXT"
     ],
     "complete": true,
@@ -2493,9 +2357,7 @@
     "source": "tests/test_files/project/xmls1.cbl",
     "diagnostics": [
      "USAGE/clause non pris en charge: NATIONAL",
-     "instruction non prise en charge: XML",
-     "expression non prise en charge: XML-CODE",
-     "expression non prise en charge: END-XML",
+     "XML PARSE non pris en charge",
      "expression non prise en charge: XML-EVENT"
     ],
     "complete": true,
@@ -2505,10 +2367,9 @@
     "corpus": "che4z-lsp-for-cobol",
     "source": "tests/test_files/project/xmlup.cbl",
     "diagnostics": [
-     "expression non prise en charge: xml",
+     "XML PARSE non pris en charge",
      "expression attendue",
-     "expression non prise en charge: xml-event",
-     "nom inconnu: XML-CODE; qualifier avec OF/IN si nécessaire"
+     "expression non prise en charge: xml-event"
     ],
     "complete": true,
     "matches_measure": true
@@ -3660,15 +3521,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-022/prog.cob",
-    "diagnostics": [
-     "DISPLAY accepte uniquement champs et littéraux simples"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-025/prog.cob",
     "diagnostics": [
      "indicateur fixe 'A' non pris en charge"
@@ -3911,106 +3763,11 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_ml-002/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-003/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
-     "expression attendue",
-     "expression non prise en charge: XML-CODE"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-004/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-005/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: XML",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_ml-006/prog.cob",
     "diagnostics": [
      "option $SET DPC-IN-DATA non prise en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-008/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: JSON",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-009/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: JSON",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-010/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: JSON",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL",
-     "invalid expression: unfinished expression",
-     "expression non prise en charge: JSON-CODE",
-     "expression attendue"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-011/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: JSON",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_ml-012/prog.cob",
-    "diagnostics": [
-     "instruction non prise en charge: JSON",
-     "GENERATE requiert un nom de rapport ou de groupe DETAIL"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -4587,9 +4344,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T14:07:55+00:00",
-  "git_head": "2e1307145bcca0f35b991768601ce7e1f535d5e1",
-  "implementation_sha256": "45d0ce645e51e8d15fdd50a7ec690b71066f6e8e086742cc3ed2266cd4b99241",
+  "measured_at": "2026-11-01T20:09:14+00:00",
+  "git_head": "6f7b449a618a0be35c4a6747a01aa19ff986e7cc",
+  "implementation_sha256": "201b8485af4b4b6cb80585e20f0fcb7c415d90437818babd25d14ee45ba19ddf",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

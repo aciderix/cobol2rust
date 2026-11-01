@@ -22,6 +22,11 @@ def quoted(text):
     return '"' + ''.join(escapes.get(c, f"\\x{ord(c):02x}" if ord(c) < 32 or ord(c) == 127 else c) for c in text) + '"'
 
 
+def byte_string(data: bytes):
+    """A Rust byte string literal."""
+    return 'b"' + ''.join(chr(b) if 32 <= b < 127 and b not in b'"\\' else f"\\x{b:02x}" for b in data) + '"'
+
+
 def text_value(text):
     """A Rust Value for COBOL text; HIGH-VALUE/LOW-VALUE bytes are not ASCII."""
     if all(ord(c) < 128 for c in text):
@@ -180,7 +185,7 @@ class Emitter:
             return e.op
         if e.op in {"all", "refmod"}:
             return "text"
-        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "omitted_class", "switch", "user_class", "alpha_class", "imp_exception"}:
+        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "omitted_class", "switch", "user_class", "alpha_class", "imp_exception", "ml_exception"}:
             return "bool"
         return "number"
 
@@ -425,6 +430,8 @@ class Emitter:
             return str(args[0]).lower()
         if op == "imp_exception":
             return f"runtime::exception::accept_display_failed({str(args[0]).lower()})"
+        if op == "ml_exception":
+            return f"runtime::exception::raised_class({quoted(args[0])})"
         if op == "switch":
             number, on = args
             return f"(runtime::switch_on({number}) == {str(on).lower()})"
@@ -1448,6 +1455,7 @@ class Emitter:
         "set_condition", "open", "close", "rewrite", "delete_file", "delete", "start", "write", "display",
         "set_address", "allocate", "free", "table_sort", "assign", "move", "compute", "accept", "accept_clock",
         "initialize", "set_switch", "inspect", "continue", "exception_off", "read", "environment", "unlock",
+        "ml_generate", "clear_exception",
         # cob_cancel: the run unit checks the files it closes.
         "cancel",
     }
@@ -1473,6 +1481,9 @@ class Emitter:
         op, a = stmt.op, stmt.args
         if op == "exception_off":
             self.write("runtime::exception::off();")
+        elif op == "clear_exception":
+            # output_stmt: cob_exception_code = 0 before a statement with handlers.
+            self.write("runtime::exception::clear_current();")
         elif op == "set_index":
             refs, mode, expr = a
             if self.kind(expr) != "number":
@@ -1744,6 +1755,8 @@ class Emitter:
                 self.assignment(Expr("clock", (kind,)), [ref], False, move=True)
         elif op == "environment":
             self.environment(stmt)
+        elif op == "ml_generate":
+            self.ml_generate(stmt)
         elif op == "accept_omitted":
             if getattr(stmt, "handled", False):
                 self.write("runtime::exception::clear_current();")
@@ -1857,6 +1870,81 @@ class Emitter:
             # The intrinsic's result field.
             return f"Some(({self.expression(operand)}).bytes())"
         raise CobolError("opérande calculé d'une routine d'environnement non pris en charge")
+
+    def ml_generate(self, stmt):
+        """cb_emit_xml_generate / cb_emit_json_generate: the suppress checks
+        (output_ml_suppress_checks), then cob_xml_generate_new or
+        cob_json_generate_new on the tree (runtime ml)."""
+        spec = stmt.args[0]
+        fields = self.program.fields
+        if getattr(stmt, "handled", False):
+            self.write("runtime::exception::clear_current();")
+        for check in spec["checks"]:
+            node = check[1]
+            if check[0] == "cond":
+                self.write(f"self.ml_suppressed[{node.slot}].set({self.expression(node.cond)});")
+            else:
+                members = " && ".join(f"self.ml_suppressed[{m.slot}].get()" for m in check[2])
+                self.write(f"self.ml_suppressed[{node.slot}].set(self.ml_suppressed[{node.slot}].get() | ({members}));")
+        self.write("{")
+        self.indent += 1
+        values = {}
+
+        def data(value_name, f):
+            numeric = f is not None and f.kind == "number"
+            floating = f is not None and f.usage in {"COMP-1", "COMP-2"}
+            justified = f is not None and f.justified
+            return (f"runtime::ml::Data {{ item: &{value_name}, numeric: {str(numeric).lower()}, "
+                    f"float: {str(floating).lower()}, justified: {str(justified).lower()} }}")
+
+        def node_code(node):
+            content = "None"
+            if node.value is not None:
+                values[node.slot] = f"ml_v{node.slot}"
+                ref = DataRef(node.value, tuple(Expr("number", ("1",)) for _ in fields[node.value].dimensions))
+                self.write(f"let ml_v{node.slot} = ({self.reference(ref)}).clone();")
+                content = f"Some({data(values[node.slot], fields[node.value])})"
+            name = "None" if node.name is None else f"Some({byte_string(node.name)})"
+            attrs = ", ".join(node_code(a) for a in node.attrs)
+            children = ", ".join(node_code(c) for c in node.children)
+            return (f"runtime::ml::Node {{ name: {name}, content: {content}, attrs: vec![{attrs}], "
+                    f"children: vec![{children}], slot: {node.slot} }}")
+
+        tree = node_code(spec["tree"])
+        self.write(f"let ml_tree = {tree};")
+        out = self.reference(spec["out"])
+        size = f"storage_runtime::descriptor_size(&{out})"
+        counted = str(spec["count"] is not None).lower()
+        if spec["xml"]:
+            operands = []
+            for which in ("namespace", "prefix"):
+                value = spec[which]
+                if value is None:
+                    operands.append("None")
+                    continue
+                if value[0] == "lit":
+                    self.write(f"let ml_{which} = Value::Bytes({byte_string(value[1])}.to_vec());")
+                    operands.append(f"Some(&{data('ml_' + which, None)})")
+                else:
+                    self.write(f"let ml_{which} = ({self.reference(value[1])}).clone();")
+                    operands.append(f"Some(&{data('ml_' + which, fields[value[1].name])})")
+            self.write(f"let ml_outcome = runtime::ml::xml_generate(&ml_tree, &self.ml_suppressed, {size}, {counted}, "
+                       f"{str(spec['declaration']).lower()}, {operands[0]}, {operands[1]});")
+        else:
+            self.write(f"let ml_outcome = runtime::ml::json_generate(&ml_tree, &self.ml_suppressed, {size}, {counted});")
+        self.write("drop(ml_tree);")
+        register = "XML-CODE" if spec["xml"] else "JSON-CODE"
+        self.set_int(DataRef(register), "ml_outcome.code")
+        self.write(f"if let Some(ml_output) = ml_outcome.output {{ {out}.assign(&Value::Bytes(ml_output), false); }}")
+        if spec["count"] is not None:
+            self.write("if let Some(ml_count) = ml_outcome.count {")
+            self.indent += 1
+            self.set_int(spec["count"], "ml_count")
+            self.indent -= 1
+            self.write("}")
+        self.write(f'if ml_outcome.exception {{ runtime::exception::set({quoted("EC-XML-IMP" if spec["xml"] else "EC-JSON-IMP")}); }}')
+        self.indent -= 1
+        self.write("}")
 
     def environment(self, stmt):
         """common.c environment, argument and command-line routines."""
@@ -2658,6 +2746,9 @@ class Emitter:
         # kept between CALLs, cleared by CANCEL with the program instance.
         self.write("alter: Vec<usize>,")
         self.write("alter_saved: Vec<usize>,")
+        # The static cob_ml_tree / cob_ml_attr of the JSON/XML GENERATE
+        # statements: their is_suppressed flags, kept until CANCEL.
+        self.write("ml_suppressed: std::rc::Rc<Vec<std::cell::Cell<bool>>>,")
         if getattr(self.program, "deferred_open", False):
             # The status of the last cob_open, and whether a USE procedure ran
             # during the error checks of the same OPEN.
@@ -2733,6 +2824,7 @@ class Emitter:
         alters = len(self.program.alters)
         self.write(f"alter: vec![0; {alters}],")
         self.write(f"alter_saved: vec![0; {alters}],")
+        self.write(f"ml_suppressed: std::rc::Rc::new((0..{getattr(self.program, 'ml_slots', 0)}).map(|_| std::cell::Cell::new(false)).collect()),")
         if getattr(self.program, "deferred_open", False):
             self.write("io_status: 0,")
             self.write("open_use: false,")
@@ -2757,6 +2849,7 @@ class Emitter:
                 self.rebind_address(root, address, "result")
                 self.indent -= 1
                 self.write("}")
+        self.symbols_guard()
         self.initialize("result", lambda field: True)
         for number, key in enumerate(getattr(self.program, "chaining", []), 1):
             # output_initialize_chaining: after the normal initialization.
@@ -2796,11 +2889,7 @@ class Emitter:
             if getattr(field, "call_parameters", False):
                 # NUMBER-OF-CALL-PARAMETERS = cob_glob_ptr->cob_call_params.
                 self.write(f"self.{self.names[name]}.move_number(&Value::number(&unit.params.last().map_or(0, |p| p.len()).to_string()));")
-        decimal_comma, currency = getattr(self.program, "decimal_comma", False), getattr(self.program, "currency", "$")
-        if decimal_comma or currency != "$":
-            # COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol.
-            separators = "b',', b'.'" if decimal_comma else "b'.', b','"
-            self.write(f"let _symbols = runtime::SymbolGuard::new({separators}, {ord(currency)});")
+        self.symbols_guard()
         self.write(f"let mut pc: usize = {'start' if uses or graph.entry_points else graph.entry};")
         self.write("let mut stack: Vec<PerformFrame> = Vec::new();")
         # Like GnuCOBOL's n0/n1 counters, TIMES state belongs to its source
@@ -2839,7 +2928,7 @@ class Emitter:
         recursive = getattr(self.program, "recursive", False)
         if uses or recursive:
             fields = [*self.names.values(), *self.files.values(), *(f"{rust}_area" for rust in self.files.values()),
-                      "alter", "alter_saved", *(["io_status", "open_use"] if getattr(self.program, "deferred_open", False) else [])]
+                      "alter", "alter_saved", "ml_suppressed", *(["io_status", "open_use"] if getattr(self.program, "deferred_open", False) else [])]
             self.write("fn alias(&self) -> Self {")
             self.write("    Self { " + " ".join(f"{name}: self.{name}.clone()," for name in fields) + " }")
             self.write("}")
@@ -3054,6 +3143,14 @@ class Emitter:
             root = self.program.fields[root.redefines]
         return root.based
 
+    def symbols_guard(self):
+        """COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol
+        while the program runs, and while its VALUEs are moved in."""
+        decimal_comma, currency = getattr(self.program, "decimal_comma", False), getattr(self.program, "currency", "$")
+        if decimal_comma or currency != "$":
+            separators = "b',', b'.'" if decimal_comma else "b'.', b','"
+            self.write(f"let _symbols = runtime::SymbolGuard::new({separators}, {ord(currency)});")
+
     def initialize(self, receiver, selected, bound=False):
         """The VALUE or PICTURE initialization of the selected items; with
         `bound`, of a BASED or LINKAGE item just given storage (INITIALIZE
@@ -3167,6 +3264,7 @@ class Emitter:
             size = fields[name].size
             self.write(f"self.{self.names[name]}.assign_text_move(&Value::Bytes(vec![0; {size}]), true);")
         if local:
+            self.symbols_guard()
             self.initialize("self", lambda field: getattr(field, "local", False))
         # RETURN-CODE keeps its value between CALLs: codegen.c clears it with
         # the program's first initialization only (VALUE ZERO here).
