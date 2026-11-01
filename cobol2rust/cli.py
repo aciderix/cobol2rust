@@ -234,6 +234,11 @@ def run_unit(source: Path, fmt, includes, call_paths):
 def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
     """Rust source of the run unit of `source`, with its parsed programs."""
     main, expanded, copies, subprograms = run_unit(source, fmt, includes, call_paths)
+    # COB_SOURCE_FILE: the source as named to the compiler (MODULE-SOURCE).
+    main.source_file, main.in_main_source = str(source), True
+    for path, sub, _, _ in subprograms:
+        sub.source_file = str(path)
+        sub.in_main_source = Path(path).resolve() == Path(source).resolve()
     called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
     present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
                for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}

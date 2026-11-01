@@ -1,5 +1,26 @@
 # Validation — 30 octobre 2026
 
+## Fonctions intrinsèques du module, du pointeur et du calcul — 1er novembre 2026
+
+- Fixture `tests/fixtures/module_functions.cob` identique au natif : SIGN
+  d'un littéral, d'un FLOAT-LONG et d'un -0.0 décimal (affichage sur 9
+  chiffres, signe seulement si négatif), COMBINED-DATETIME valide,
+  à 86400 secondes et invalide (EC-ARGUMENT-FUNCTION, dernière exception
+  conservée par un appel valide), CONTENT-LENGTH et CONTENT-OF (longueur,
+  sous-chaîne, octet NUL pointé, POINTER NULL dans STRING), MODULE-ID et
+  MODULE-CALLER-ID du principal et d'un programme contenu, MODULE-DATE,
+  MODULE-TIME, MODULE-FORMATTED-DATE, MODULE-PATH et SECONDS-PAST-MIDNIGHT
+  par leur forme (leurs valeurs dépendent de l'instant de compilation).
+- Comportement de cobc constaté au natif : dans `DISPLAY f EXCEPTION-STATUS`,
+  EXCEPTION-STATUS est évalué avant `f` (arguments de `cob_display` évalués
+  de droite à gauche par gcc) ; ce mélange est refusé.
+- Sources débloquées identiques au natif : run_functions-008, 013, 014,
+  063 (prog et prog2), 064 à 069, 090, 091.
+- Mesure : **1351 → 1364/3593**, écart **266 → 253**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-fn.json`) ; suite
+  **602 tests**, 0 échec.
+
 ## RECURSIVE — 1er novembre 2026
 
 - Fixture `tests/fixtures/recursive_calls.cob` avec l'appelé dynamique

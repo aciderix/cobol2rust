@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T08:19:49+00:00",
- "git_head": "ac7898bd459a5756fcf241bb0d5b5ba16eb406bc",
- "implementation_sha256": "038fba09b27bacaa50a2263d83008a8c8e11824d4f3a2b5fb59da5e5eafea749",
+ "measured_at": "2026-11-01T09:05:46+00:00",
+ "git_head": "3afbff1d432b6406d75f44a285dad38824a10b94",
+ "implementation_sha256": "4c8061f1c988945255a1ad53d09d1d55c2912d97f2e0c7fe4a95ef34461dbbfc",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1351,
+  "accepted": 1364,
   "cobc_accepted": 1617,
-  "gap": 266,
+  "gap": 253,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 627,
+   "accepted": 640,
    "internal_errors": 1,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 252,
+   "gap": 239,
    "gap_sources": [
     [
      "run_accept-003/prog.cob",
@@ -637,20 +637,8 @@
      "PICTURE non prise en charge: N(4)"
     ],
     [
-     "run_functions-008/prog.cob",
-     "FUNCTION COMBINED-DATETIME non prise en charge"
-    ],
-    [
      "run_functions-011/prog.cob",
      "FUNCTION BIT-OF non prise en charge"
-    ],
-    [
-     "run_functions-013/prog.cob",
-     "FUNCTION CONTENT-LENGTH non prise en charge"
-    ],
-    [
-     "run_functions-014/prog.cob",
-     "FUNCTION CONTENT-OF non prise en charge"
     ],
     [
      "run_functions-017/prog.cob",
@@ -673,38 +661,6 @@
      "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
     ],
     [
-     "run_functions-063/prog.cob",
-     "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge"
-    ],
-    [
-     "run_functions-063/prog2.cob",
-     "FUNCTION MODULE-CALLER-ID non prise en charge"
-    ],
-    [
-     "run_functions-064/prog.cob",
-     "FUNCTION MODULE-DATE non prise en charge"
-    ],
-    [
-     "run_functions-065/prog.cob",
-     "FUNCTION MODULE-FORMATTED-DATE non prise en charge"
-    ],
-    [
-     "run_functions-066/prog.cob",
-     "FUNCTION MODULE-ID non prise en charge"
-    ],
-    [
-     "run_functions-067/prog.cob",
-     "FUNCTION MODULE-PATH non prise en charge"
-    ],
-    [
-     "run_functions-068/prog.cob",
-     "FUNCTION MODULE-SOURCE non prise en charge"
-    ],
-    [
-     "run_functions-069/prog.cob",
-     "FUNCTION MODULE-TIME non prise en charge"
-    ],
-    [
      "run_functions-070/prog.cob",
      "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
     ],
@@ -719,14 +675,6 @@
     [
      "run_functions-073/prog.cob",
      "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
-    ],
-    [
-     "run_functions-090/prog.cob",
-     "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
-    ],
-    [
-     "run_functions-091/prog.cob",
-     "FUNCTION SIGN non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -1555,10 +1503,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 266,
-  "matching": 266,
-  "complete": 147,
-  "distinct": 185,
+  "sources": 253,
+  "matching": 253,
+  "complete": 136,
+  "distinct": 172,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1772,12 +1720,6 @@
    },
    {
     "diagnostic": "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge",
-    "first": 1,
-    "present": 2,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-ID non prise en charge",
     "first": 1,
     "present": 2,
     "alone": 1
@@ -2101,12 +2043,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "FUNCTION COMBINED-DATETIME non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
     "diagnostic": "FUNCTION BIT-OF non prise en charge",
     "first": 1,
     "present": 1,
@@ -2117,18 +2053,6 @@
     "first": 0,
     "present": 1,
     "alone": 0
-   },
-   {
-    "diagnostic": "FUNCTION CONTENT-LENGTH non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION CONTENT-OF non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
    },
    {
     "diagnostic": "FUNCTION CURRENCY-SYMBOL non prise en charge",
@@ -2161,48 +2085,6 @@
     "alone": 1
    },
    {
-    "diagnostic": "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-CALLER-ID non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-DATE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-FORMATTED-DATE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-PATH non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-SOURCE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MODULE-TIME non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
     "diagnostic": "FUNCTION MONETARY-DECIMAL-POINT non prise en charge",
     "first": 1,
     "present": 1,
@@ -2222,18 +2104,6 @@
    },
    {
     "diagnostic": "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION SIGN non prise en charge",
     "first": 1,
     "present": 1,
     "alone": 1
@@ -3040,10 +2910,9 @@
      "USAGE/clause non pris en charge: PROCEDURE-POINTER",
      "ENTRY 'ExtProc' duplicated",
      "ENTRY 'ExtProc-internal2' duplicated",
-     "FUNCTION MODULE-ID non prise en charge",
      "ENTRY 'ExtProc-internal' duplicated"
     ],
-    "complete": false,
+    "complete": true,
     "matches_measure": true
    },
    {
@@ -3245,37 +3114,10 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_functions-008/prog.cob",
-    "diagnostics": [
-     "FUNCTION COMBINED-DATETIME non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_functions-011/prog.cob",
     "diagnostics": [
      "FUNCTION BIT-OF non prise en charge",
      "FUNCTION BIT-TO-CHAR non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-013/prog.cob",
-    "diagnostics": [
-     "FUNCTION CONTENT-LENGTH non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-014/prog.cob",
-    "diagnostics": [
-     "FUNCTION CONTENT-OF non prise en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -3327,78 +3169,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_functions-063/prog.cob",
-    "diagnostics": [
-     "programme appelé prog2.cob: ligne 7: FUNCTION MODULE-CALLER-ID non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-063/prog2.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-CALLER-ID non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-064/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-DATE non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-065/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-FORMATTED-DATE non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-066/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-ID non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-067/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-PATH non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-068/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-SOURCE non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-069/prog.cob",
-    "diagnostics": [
-     "FUNCTION MODULE-TIME non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_functions-070/prog.cob",
     "diagnostics": [
      "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
@@ -3429,24 +3199,6 @@
     "source": "run_functions-073/prog.cob",
     "diagnostics": [
      "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-090/prog.cob",
-    "diagnostics": [
-     "FUNCTION SECONDS-PAST-MIDNIGHT non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-091/prog.cob",
-    "diagnostics": [
-     "FUNCTION SIGN non prise en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5363,9 +5115,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T08:19:49+00:00",
-  "git_head": "ac7898bd459a5756fcf241bb0d5b5ba16eb406bc",
-  "implementation_sha256": "038fba09b27bacaa50a2263d83008a8c8e11824d4f3a2b5fb59da5e5eafea749",
+  "measured_at": "2026-11-01T09:05:46+00:00",
+  "git_head": "3afbff1d432b6406d75f44a285dad38824a10b94",
+  "implementation_sha256": "4c8061f1c988945255a1ad53d09d1d55c2912d97f2e0c7fe4a95ef34461dbbfc",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

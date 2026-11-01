@@ -562,6 +562,10 @@ class Emitter:
         # cob_mod_or_rem and the ISO 8601 functions: EC-ARGUMENT-FUNCTION.
         "MOD", "REM", "FORMATTED-DATE", "FORMATTED-TIME", "FORMATTED-DATETIME", "FORMATTED-CURRENT-DATE",
         "TEST-FORMATTED-DATETIME", "INTEGER-OF-FORMATTED-DATE", "SECONDS-FROM-FORMATTED-TIME",
+        "COMBINED-DATETIME", "CONTENT-LENGTH", "CONTENT-OF",
+        # No exception: the module's data, cob_decimal_set_field, localtime.
+        "SIGN", "SECONDS-PAST-MIDNIGHT", "MODULE-ID", "MODULE-CALLER-ID", "MODULE-SOURCE",
+        "MODULE-FORMATTED-DATE", "MODULE-PATH", "MODULE-DATE", "MODULE-TIME",
     }
 
     def exception_effect_inline(self, code, reason):
@@ -576,10 +580,34 @@ class Emitter:
         "EXCEPTION-STATEMENT", "EXCEPTION-STATUS", "HEX-OF", "LENGTH", "LOWER-CASE", "MAX", "MIN", "ORD",
         "ORD-MAX", "ORD-MIN", "REVERSE", "STORED-CHAR-LENGTH", "SUBSTITUTE", "SUBSTITUTE-CASE",
         "TEST-DATE-YYYYMMDD", "TEST-DAY-YYYYDDD", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F", "TRIM",
-        "UPPER-CASE", "WHEN-COMPILED",
+        "UPPER-CASE", "WHEN-COMPILED", "SIGN", "SECONDS-PAST-MIDNIGHT", "MODULE-ID", "MODULE-CALLER-ID",
+        "MODULE-SOURCE", "MODULE-FORMATTED-DATE", "MODULE-PATH", "MODULE-DATE", "MODULE-TIME",
     }
 
+    def check_argument_order(self, operands):
+        """cobc passes these operands as the arguments of one C call, whose
+        evaluation order C leaves unspecified (gcc goes right to left): an
+        EXCEPTION-* function beside one that may set the last exception."""
+        names = []
+
+        def walk(e):
+            if isinstance(e, Expr):
+                if e.op == "function":
+                    names.append(e.args[0])
+                for x in e.args:
+                    walk(x)
+            elif isinstance(e, (list, tuple)):
+                for x in e:
+                    walk(x)
+        walk(list(operands))
+        if any(n.startswith("EXCEPTION-") for n in names) and any(
+                not n.startswith("EXCEPTION-") and n not in self.CODE_PRESERVING_FUNCTIONS for n in names):
+            raise CobolError("FUNCTION EXCEPTION-* évaluée avec une fonction qui modifie l'exception : "
+                             "ordre d'évaluation des arguments C non modélisé")
+
     def function(self, name, args):
+        if len(args) > 1:
+            self.check_argument_order(args)
         code = self.function_code(name, args)
         code = code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
         return self.current_effect(name, code)
@@ -597,6 +625,9 @@ class Emitter:
         """A call into runtime::intrinsic (libcob intrinsic.c)."""
         if name.startswith("EXCEPTION-"):
             return f"runtime::exception::{name[len('EXCEPTION-'):].lower()}()"
+        module = self.module_function(name, args)
+        if module is not None:
+            return module
         if name == "LENGTH" and args[0].op == "var" and (
                 args[0].args[0].start is None or self.program.fields[args[0].args[0].name].any_length):
             # cob_intr_length: the field's current size (ANY LENGTH, ODO).
@@ -651,7 +682,7 @@ class Emitter:
                 "COS": "cos", "TAN": "tan", "ASIN": "asin", "ACOS": "acos", "ATAN": "atan_of",
                 "ABS": "abs", "FRACTION-PART": "fraction_part", "EXP10": "exp10",
                 "STORED-CHAR-LENGTH": "stored_char_length", "TEST-DATE-YYYYMMDD": "test_date_yyyymmdd",
-                "TEST-DAY-YYYYDDD": "test_day_yyyyddd"}
+                "TEST-DAY-YYYYDDD": "test_day_yyyyddd", "SIGN": "sign"}
         listed = {"SUM": "sum", "MEAN": "mean", "MEDIAN": "median", "MIDRANGE": "midrange", "RANGE": "range",
                   "VARIANCE": "variance", "ORD-MAX": "ord_max", "ORD-MIN": "ord_min", "MAX": "max", "MIN": "min",
                   "PRESENT-VALUE": "present_value", "STANDARD-DEVIATION": "standard_deviation",
@@ -735,10 +766,50 @@ class Emitter:
         code = code if name in self.EXCEPTION_FUNCTIONS else self.exception_effect_inline(code, f"FUNCTION {name}")
         return self.current_effect(name, code)
 
+    def module_function(self, name, args):
+        """intrinsic.c functions of the module, the pointer and the clock."""
+        if name == "MODULE-ID":
+            return f"Value::text({quoted(getattr(self.program, 'module_name', self.program.entry_name))})"
+        if name == "MODULE-CALLER-ID":
+            # COB_MODULE_PTR->next->module_name, zero-length for the main program.
+            return ("(if unit.callers.len() > 1 { Value::text(unit.callers[unit.callers.len() - 2]) } "
+                    "else { Value::Bytes(Vec::new()) })")
+        if name == "MODULE-SOURCE":
+            source = getattr(self.program, "source_file", None)
+            if source is None:
+                raise CobolError("FUNCTION MODULE-SOURCE sans fichier source")
+            return f"Value::Bytes({quoted(source)}.as_bytes().to_vec())"
+        if name == "MODULE-PATH":
+            # cob_module_path: cob_main_argv0 for the programs of the main
+            # source; a module's path is that of its shared object.
+            if self.subprogram and not getattr(self.program, "in_main_source", False):
+                raise CobolError("FUNCTION MODULE-PATH d'un programme appelé hors du source principal non pris en charge")
+            return "runtime::main_argv0()"
+        if name in {"MODULE-DATE", "MODULE-TIME"}:
+            digits = args[0].args[0]
+            return f"runtime::intrinsic::display_field(Value::number({quoted(digits)}), {len(digits)})"
+        if name == "SECONDS-PAST-MIDNIGHT":
+            return "runtime::intrinsic::seconds_past_midnight()"
+        if name in {"CONTENT-LENGTH", "CONTENT-OF"}:
+            pointer = self.reference(args[0].args[0])
+            if name == "CONTENT-LENGTH":
+                return f"runtime::intrinsic::content_length(&{pointer})"
+            length = f"Some(&{self.numeric_argument(name, args[1])})" if len(args) > 1 else "None"
+            return f"runtime::intrinsic::content_of(&{pointer}, {length})"
+        if name == "COMBINED-DATETIME":
+            return (f"runtime::intrinsic::combined_datetime(&{self.numeric_argument(name, args[0])}, "
+                    f"&{self.numeric_argument(name, args[1])})")
+        return None
+
     def function_field_code(self, e):
         """The temporary field libcob returns for a numeric intrinsic, shown
         by cob_display (pretty_display_numeric)."""
         name, args = e.args
+        if name in {"COMBINED-DATETIME", "CONTENT-LENGTH", "MODULE-DATE", "MODULE-TIME"}:
+            # Their runtime result carries libcob's field already.
+            return self.expression(e)
+        if name in {"SIGN", "SECONDS-PAST-MIDNIGHT"}:
+            return f"runtime::intrinsic::int_field({self.expression(e)})"
         if name in {"MAX", "MIN", "MEDIAN"} or (name == "MEAN" and len(args) == 1):
             # cob_intr_max/min/median/mean: a copy of the chosen argument's field.
             for a in args:
@@ -1495,6 +1566,7 @@ class Emitter:
             self.file_status(name, "status")
         elif op == "display":
             values = []
+            self.check_argument_order(a[0])
             for e in a[0]:
                 if e.op == "all":
                     # DISPLAY shows an ALL literal or a figurative constant once.

@@ -105,6 +105,12 @@ DEBUGGING_LINES = False
 # items without VALUE (defaultbyte: init); "cobol85" keeps segment numbers
 # and leaves such items as allocated (defaultbyte: none).
 STD = "default"
+
+
+def time_text(form, moment):
+    """strftime of cobc in the C locale (English month abbreviations)."""
+    import time
+    return time.strftime(form, moment)
 # cobc -fno-ec=data-incompatible: MOVE from DISPLAY data without cob_check_numeric.
 NO_EC_DATA_INCOMPATIBLE = False
 # cobc -debug: runtime checks (EC-ALL); without them, libcob computes with
@@ -1902,6 +1908,8 @@ class Parser:
         # RECURSIVE (flag_recursive), or assumed for a CALL of the program's
         # own PROGRAM-ID (self-call-recursive: warning; skip in cobol85).
         program.recursive = recursive or self.self_call
+        # module_name (orig_program_id): the PROGRAM-ID as written, not AS.
+        program.module_name = internal
         if self.level and not ended and not nested_start and self.at("<EOF>"):
             # A contained program needs its END PROGRAM (depth > 1 at the end).
             self.error("multiple PROGRAM-ID's without matching END PROGRAM")
@@ -3635,8 +3643,12 @@ class Parser:
         "INTEGER-OF-FORMATTED-DATE": (2, "number"), "SECONDS-FROM-FORMATTED-TIME": (2, "number"),
         "EXCEPTION-STATUS": (0, "text"), "EXCEPTION-LOCATION": (0, "text"), "EXCEPTION-STATEMENT": (0, "text"),
         "EXCEPTION-FILE": (0, "text"),
+        "SIGN": (1, "number"), "COMBINED-DATETIME": (2, "number"), "SECONDS-PAST-MIDNIGHT": (0, "number"),
+        "MODULE-ID": (0, "text"), "MODULE-CALLER-ID": (0, "text"), "MODULE-SOURCE": (0, "text"),
+        "MODULE-FORMATTED-DATE": (0, "text"), "MODULE-PATH": (0, "text"), "MODULE-DATE": (0, "number"),
+        "MODULE-TIME": (0, "number"), "CONTENT-LENGTH": (1, "number"), "CONTENT-OF": (-1, "text"),
     }
-    MAX_ARGUMENTS = {"NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
+    MAX_ARGUMENTS = {"CONTENT-OF": 2, "NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
                      "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
     # valid_format (tree.c): the formats a literal first argument may have.
     DATE_TIME_FORMATS = {"FORMATTED-CURRENT-DATE": ("datetime",), "FORMATTED-DATE": ("date",),
@@ -3659,6 +3671,16 @@ class Parser:
         if not (result.op == "text" or (result.op == "function" and self.FUNCTIONS[result.args[0]][1] == "text")):
             self.error("modification de référence d'une FUNCTION numérique non prise en charge")
         return Expr("refmod", (result, start, length))
+
+    def compile_clock(self):
+        """current_compile_time of cobc, read once per conversion."""
+        if os.environ.get("COB_CURRENT_DATE") is not None:
+            self.error("COB_CURRENT_DATE à la compilation non pris en charge")
+        if not hasattr(Parser, "compile_time"):
+            import time
+            stamp = time.time()
+            Parser.compile_time = (stamp, time.localtime(stamp))
+        return Parser.compile_time
 
     def function_value(self):
         """FUNCTION name [(exp_list)]: arguments separated by spaces or commas."""
@@ -3715,20 +3737,26 @@ class Parser:
                 or len(args) > self.MAX_ARGUMENTS.get(name.key, len(args)) \
                 or (name.key in {"SUBSTITUTE", "SUBSTITUTE-CASE"} and len(args) % 2 == 0):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
-        if name.key == "WHEN-COMPILED":
-            # cb_set_intr_when_compiled: a literal of the compilation time,
-            # hundredths and local UTC offset included.
-            if os.environ.get("COB_CURRENT_DATE") is not None:
-                self.error("COB_CURRENT_DATE à la compilation non pris en charge")
-            if not hasattr(Parser, "compile_time"):
-                import time
-                stamp = time.time()
-                now = time.localtime(stamp)
-                offset = now.tm_gmtoff // 60
-                hundredths = f"{int(stamp * 100) % 100:02d}"
-                Parser.compile_time = (time.strftime("%Y%m%d%H%M%S", now) + hundredths + ("-" if offset < 0 else "+")
-                                       + f"{abs(offset) // 60:02d}{abs(offset) % 60:02d}")
-            return Expr("text", (Parser.compile_time,))
+        if name.key in {"CONTENT-LENGTH", "CONTENT-OF"}:
+            # cb_build_intrinsic: the first argument is a data pointer.
+            first = args[0]
+            if first.op != "var" or self.fields[first.args[0].name].kind != "pointer" \
+                    or self.fields[first.args[0].name].usage != "POINTER":
+                self.error(f"FUNCTION '{name.key}' has invalid argument")
+        if name.key in {"WHEN-COMPILED", "MODULE-DATE", "MODULE-TIME", "MODULE-FORMATTED-DATE"}:
+            # cb_set_intr_when_compiled and the COB_MODULE_* defines of
+            # output_gnucobol_defines: the time of the compilation.
+            stamp, now = self.compile_clock()
+            if name.key in {"MODULE-DATE", "MODULE-TIME"}:
+                # cob_intr_module_date/time: an unsigned DISPLAY field of 8/6 digits.
+                digits = time_text("%Y%m%d" if name.key == "MODULE-DATE" else "%H%M%S", now)
+                return Expr("function", (name.key, (Expr("number", (digits,)),)))
+            if name.key == "MODULE-FORMATTED-DATE":
+                return Expr("text", (time_text("%b %d %Y %H:%M:%S", now),))
+            offset = now.tm_gmtoff // 60
+            hundredths = f"{int(stamp * 100) % 100:02d}"
+            return Expr("text", (time_text("%Y%m%d%H%M%S", now) + hundredths + ("-" if offset < 0 else "+")
+                                 + f"{abs(offset) // 60:02d}{abs(offset) % 60:02d}",))
         if name.key == "LENGTH":
             # cb_build_intrinsic: the length of a fixed item or literal is a literal.
             arg = args[0]

@@ -928,6 +928,56 @@ pub mod intrinsic {
     }
     /// cob_alloc_set_field_uint: an unsigned binary of 9 digits.
     pub fn uint_field(v: Value) -> Value { Value::Num(v.num(), Some((9, 0, false, false))) }
+    /// cob_alloc_set_field_int: a binary of 9 digits, signed when negative.
+    pub fn int_field(v: Value) -> Value {
+        let n = v.num();
+        let negative = n.n.sign() == Sign::Minus;
+        Value::Num(n, Some((9, 0, negative, false)))
+    }
+    /// cob_intr_sign: mpz_sgn of the argument.
+    pub fn sign(v: &Value) -> Value {
+        int_of(match v.num().n.sign() { Sign::Minus => -1, Sign::NoSign => 0, Sign::Plus => 1 })
+    }
+    /// cob_intr_combined_datetime: days + seconds / 100000 (cob_decimal_div,
+    /// cob_alloc_field), or an unsigned 0 with EC-ARGUMENT-FUNCTION for a day
+    /// outside 1..3067671 or more than 86400 seconds.
+    pub fn combined_datetime(days: &Value, seconds: &Value) -> Value {
+        let day = get_int(days);
+        if !(1..=3067671).contains(&day) || seconds.compare(&Value::number("86400")) == std::cmp::Ordering::Greater {
+            super::exception::set("EC-ARGUMENT-FUNCTION");
+            return uint_field(int_of(0));
+        }
+        alloc_field(int_of(day as i128).plus(&seconds.divide(&Value::number("100000"))))
+    }
+    /// cob_intr_seconds_past_midnight: the local time of day (localtime of
+    /// time (NULL), leap second as 59), without COB_CURRENT_DATE.
+    pub fn seconds_past_midnight() -> Value {
+        super::utc_only("FUNCTION SECONDS-PAST-MIDNIGHT");
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_else(|_| fail("system clock before 1970"));
+        int_field(int_of((now.as_secs() % 86400) as i128))
+    }
+    /// cob_intr_content_length: strlen at the pointer, EC-DATA-PTR-NULL and 0
+    /// for NULL (cob_set_exception (0) first).
+    pub fn content_length(pointer: &Value) -> Value {
+        super::exception::off();
+        let size = match crate::storage_runtime::pointed_content(pointer, None) {
+            Some(bytes) => bytes.len(),
+            None => { super::exception::set("EC-DATA-PTR-NULL"); 0 },
+        };
+        uint_field(int_of(size as i128))
+    }
+    /// cob_intr_content_of: the bytes at the pointer, a zero-length field and
+    /// EC-DATA-PTR-NULL for NULL.
+    pub fn content_of(pointer: &Value, length: Option<&Value>) -> Value {
+        super::exception::off();
+        let requested = length.map(get_int).unwrap_or(0) as u32;
+        let wanted = if requested == 0 { None } else { Some(requested as usize) };
+        match crate::storage_runtime::pointed_content(pointer, wanted) {
+            Some(bytes) => Value::Bytes(bytes),
+            None => { super::exception::set("EC-DATA-PTR-NULL"); Value::Bytes(Vec::new()) },
+        }
+    }
     /// cob_intr_date_of_integer, cob_intr_day_of_integer: unsigned DISPLAY.
     pub fn display_field(v: Value, digits: u32) -> Value { Value::Num(v.num(), Some((digits, 0, false, false))) }
     /// cob_intr_max, min, median and mean of one argument return a copy of
@@ -2232,7 +2282,19 @@ fn normalized(t: &CobTime) -> CobTime {
 }
 
 /// The local time zone, modelled only when it is UTC.
-fn utc_only(what: &str) {
+/// cob_main_argv0 (common.c): readlink of /proc/self/exe, else the
+/// canonicalized argv[0], else argv[0], else "unknown".
+pub fn main_argv0() -> Value {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::fs::read_link("/proc/self/exe").ok()
+        .or_else(|| std::env::args_os().next().map(|argv0| std::fs::canonicalize(&argv0).unwrap_or_else(|_| argv0.into())));
+    match path {
+        Some(path) => Value::Bytes(path.as_os_str().as_bytes().to_vec()),
+        None => Value::text("unknown"),
+    }
+}
+
+pub(crate) fn utc_only(what: &str) {
     let utc = match std::env::var("TZ") {
         Ok(tz) => matches!(tz.trim_start_matches(':'), "UTC" | "UTC0" | "GMT" | "GMT0" | "Etc/UTC" | "Etc/GMT" | "UCT" | "Zulu" | ""),
         Err(_) => match std::fs::read("/etc/localtime") {

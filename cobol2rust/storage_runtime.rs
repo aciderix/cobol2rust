@@ -1272,6 +1272,29 @@ pub fn rehome(item: &Value, memory: &Memory) -> Value {
     }
 }
 
+/// cob_intr_content_length and cob_intr_content_of: the bytes at a
+/// pointer's address, `length` of them or up to the first NUL (strlen);
+/// None for a NULL pointer or one addressing a NUL byte (EC-DATA-PTR-NULL).
+/// Reading past the addressed storage is a named stop.
+pub fn pointed_content(pointer: &Value, length: Option<usize>) -> Option<Vec<u8>> {
+    let address = pointer_value(pointer);
+    if address == 0 { return None; }
+    let (memory, start, len, offset) = decode(address);
+    let bytes = memory.borrow();
+    let area = bytes.get(start + offset..start + len).unwrap_or(&[]);
+    let Some(&first) = area.first() else { fail("FUNCTION CONTENT-OF/CONTENT-LENGTH past the addressed storage; not modelled") };
+    check_defined(&memory, start + offset, 1);
+    if first == 0 { return None; }
+    let size = match length {
+        Some(size) if size <= area.len() => size,
+        Some(_) => fail("FUNCTION CONTENT-OF length past the addressed storage; not modelled"),
+        None => area.iter().position(|byte| *byte == 0)
+            .unwrap_or_else(|| fail("FUNCTION CONTENT-OF/CONTENT-LENGTH: no NUL in the addressed storage (strlen past it); not modelled")),
+    };
+    check_defined(&memory, start + offset, size.max(1));
+    Some(area[..size].to_vec())
+}
+
 /// cob_is_omitted: the item has no storage (its data is NULL).
 pub fn is_omitted(item: &Value) -> bool {
     matches!(item, Value::View(view) if view.memory.borrow().is_empty())

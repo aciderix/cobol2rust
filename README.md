@@ -627,9 +627,32 @@ non signé de 9 chiffres pour ORD, LENGTH, INTEGER-OF-DATE… Restent refusés
 le DISPLAY de RANDOM (double imprimé par `%G`), d'un argument PICTURE P
 (échelle négative) et d'une expression en argument de MAX/MIN/MEDIAN. Un
 littéral alphanumérique vide vaut une espace, comme le scanner de cobc, et
-est refusé sous `-std=cobol85`. Les fonctions LOCALE-*,
-MODULE-*, EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF, COMBINED-DATETIME,
-SECONDS-PAST-MIDNIGHT et les fonctions utilisateur restent refusées.
+est refusé sous `-std=cobol85`.
+
+SIGN (`mpz_sgn`, binaire de 9 chiffres signé seulement si négatif),
+COMBINED-DATETIME (jours + secondes / 100000 par `cob_decimal_div`, zéro et
+EC-ARGUMENT-FUNCTION pour un jour hors de 1 à 3067671 ou plus de 86400
+secondes ; un appel valide n'efface pas la dernière exception) et
+SECONDS-PAST-MIDNIGHT (`localtime` de l'horloge, sans `COB_CURRENT_DATE`,
+fuseau UTC seulement, sinon arrêt nommé) sont portées. Les fonctions du
+module suivent `cob_module` : MODULE-ID et MODULE-CALLER-ID donnent le
+PROGRAM-ID écrit (sans AS) du programme courant et de son appelant (vide
+pour le principal), MODULE-SOURCE le source tel qu'il est nommé au
+convertisseur (`COB_SOURCE_FILE`), MODULE-DATE, MODULE-TIME et
+MODULE-FORMATTED-DATE l'heure de conversion (comme WHEN-COMPILED : champs
+DISPLAY de 8 et 6 chiffres, `%b %d %Y %H:%M:%S`), MODULE-PATH
+`cob_main_argv0` (lien de `/proc/self/exe`) pour les programmes du source
+principal ; celui d'un module chargé (chemin de son objet partagé) est
+refusé. CONTENT-LENGTH et CONTENT-OF lisent à l'adresse d'un POINTER
+jusqu'au premier NUL ou sur la longueur demandée (EC-DATA-PTR-NULL et
+résultat vide pour NULL ou un octet NUL pointé) ; lire au-delà du stockage
+adressé est un arrêt nommé. Une fonction EXCEPTION-* évaluée dans le même
+DISPLAY ou la même liste d'arguments qu'une fonction qui modifie
+l'exception est refusée : cobc en fait les arguments d'un seul appel C, dont
+l'ordre d'évaluation n'est pas défini (gcc évalue de droite à gauche). Les
+fonctions LOCALE-*, CURRENCY-SYMBOL, NUMERIC-* et MONETARY-*,
+EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF et les fonctions utilisateur
+restent refusées.
 
 ### Dernière exception : FUNCTION EXCEPTION-* et SET LAST EXCEPTION
 

@@ -131,8 +131,9 @@ def verify(source: Path, fmt="auto", stdin=b"", includes=(), data_dir: Path | No
     with tempfile.TemporaryDirectory(prefix="cobol2rust-") as temporary:
         work = Path(temporary)
         output = work / "rust"
-        conversion = convert(source, output, fmt, includes, call_paths, debugging_lines, std, no_ec_data_incompatible,
-                             runtime_checks)
+        # cobc compiles the resolved paths (MODULE-SOURCE names them).
+        conversion = convert(source.resolve(), output, fmt, includes, [str(Path(path).resolve()) for path in call_paths],
+                             debugging_lines, std, no_ec_data_incompatible, runtime_checks)
         # The runtime checks of the conversion are cobc's -debug.
         if runtime_checks and not any(flag in {"-debug", "--debug"} for flag in cobc_flags):
             cobc_flags = [*cobc_flags, "-debug"]
