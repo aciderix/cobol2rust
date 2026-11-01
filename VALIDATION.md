@@ -1,5 +1,17 @@
 # Validation — 30 octobre 2026
 
+## Lot 3 : SPECIAL-NAMES, classes, portée des GLOBAL — 1er novembre 2026
+
+- Fixture `tests/fixtures/small_constructs_3.cob` identique au natif : deux
+  phrases CLASS séparées par un point, classe utilisateur sur PIC 9, S9 (octet
+  à surfrappe), 9.99, COMP et sous-chaîne, ALPHABETIC d'un numérique, X
+  GLOBAL d'un conteneur intermédiaire masquant celui du programme externe.
+- Sources débloquées identiques au natif : run_fundamental-021, 114.
+- Mesure : **1385 → 1387/3593**, écart **232 → 230**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lot3.json`) ; suite
+  **612 tests**, 0 échec.
+
 ## Lot 2 de constructions générales — 1er novembre 2026
 
 - Fixtures identiques au natif : `small_constructs_2.cob` (EVALUATE à objets

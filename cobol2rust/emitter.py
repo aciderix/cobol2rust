@@ -431,7 +431,7 @@ class Emitter:
         if op == "user_class":
             item, members = args
             table = "[" + ", ".join(f"{m}u8" for m in members) + "]"
-            return f"({self.expression(item)}).bytes().iter().all(|byte| {table}.contains(byte))"
+            return f"{self.class_bytes(item)}.iter().all(|byte| {table}.contains(byte))"
         if op == "function":
             return self.function(*args)
         if op == "refmod":
@@ -444,7 +444,7 @@ class Emitter:
             item, kind = args
             test = {"ALPHABETIC": "is_ascii_alphabetic", "ALPHABETIC-UPPER": "is_ascii_uppercase",
                     "ALPHABETIC-LOWER": "is_ascii_lowercase"}[kind]
-            return (f"({self.expression(item)}).bytes().iter().all(|byte| if *byte >= 128 {{ runtime::fail(\"alphabetic test of a non-ASCII byte depends on the locale\") }} "
+            return (f"{self.class_bytes(item)}.iter().all(|byte| if *byte >= 128 {{ runtime::fail(\"alphabetic test of a non-ASCII byte depends on the locale\") }} "
                     f"else {{ *byte == b' ' || byte.{test}() }})")
         if op == "numeric_class":
             return f"({self.expression(args[0])}).is_numeric()" if args[0].op != "var" else self.reference(args[0].args[0]) + ".is_numeric()"
@@ -585,6 +585,10 @@ class Emitter:
         "UPPER-CASE", "WHEN-COMPILED", "SIGN", "SECONDS-PAST-MIDNIGHT", "MODULE-ID", "MODULE-CALLER-ID",
         "MODULE-SOURCE", "MODULE-FORMATTED-DATE", "MODULE-PATH", "MODULE-DATE", "MODULE-TIME",
     }
+
+    def class_bytes(self, item):
+        """The data bytes a class test reads (the field as stored)."""
+        return f"storage_runtime::Operand::of(&{self.reference(item.args[0])}).data"
 
     def check_argument_order(self, operands):
         """cobc passes these operands as the arguments of one C call, whose

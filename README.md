@@ -750,7 +750,11 @@ sous-scripts.
 Les conditions sont construites par un portage de `cb_build_expr` (pile de
 priorités de typeck.c) : conditions abrégées (`A = 1 OR 2`,
 `A NOT = B AND > C`), place du NOT, conditions de signe POSITIVE/NEGATIVE/ZERO
-et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur.
+et de classe ALPHABETIC(-UPPER/-LOWER), NUMERIC et CLASS utilisateur
+(ALPHABETIC et CLASS testent les octets stockés de tout article, numérique,
+édité ou binaire compris ; les phrases de SPECIAL-NAMES peuvent se suivre,
+chacune close par un point). Un nom GLOBAL se résout dans le conteneur le
+plus proche, comme `cb_ref`.
 `STRING` (DELIMITED BY, POINTER, ON OVERFLOW) et `UNSTRING` (DELIMITED BY
 [ALL] … OR …, DELIMITER IN, COUNT IN, POINTER, TALLYING, ON OVERFLOW)
 reprennent `strings.c`, y compris la règle de NOT ON OVERFLOW (aucune

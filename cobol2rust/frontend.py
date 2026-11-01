@@ -1427,6 +1427,13 @@ class Parser:
             # A name of the program hides the GLOBAL names of its containers.
             own = [key for key in valid if not getattr(registry[key], "global_owner", None)]
             valid = own if own else valid
+        if len(valid) > 1 and not own:
+            # cb_ref searches the containing programs from the nearest one out.
+            containers = getattr(self, "containers", [])
+            rank = lambda key: containers.index(registry[key].global_owner) \
+                if registry[key].global_owner in containers else -1
+            nearest = max(rank(key) for key in valid)
+            valid = [key for key in valid if rank(key) == nearest]
         if len(valid) != 1:
             self.error(f"{'nom ambigu' if valid else 'nom inconnu'}: {label}; qualifier avec OF/IN si nécessaire")
         return valid[0]
@@ -2597,7 +2604,14 @@ class Parser:
             ends = {"SOURCE-COMPUTER", "OBJECT-COMPUTER", "SPECIAL-NAMES", "REPOSITORY", "INPUT-OUTPUT", "DATA",
                     "PROCEDURE"}
             while self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES") \
-                    or self.at("REPOSITORY"):
+                    or self.at("REPOSITORY") or ("SPECIAL-NAMES" in computers and not self.t.string
+                                                 and self.t.key not in ends and not self.program_end()):
+                if not (self.at("SOURCE-COMPUTER") or self.at("OBJECT-COMPUTER") or self.at("SPECIAL-NAMES")
+                        or self.at("REPOSITORY")):
+                    # configuration_paragraph: special_names_sentence, another
+                    # sentence of special names after the paragraph's period.
+                    self.special_names()
+                    continue
                 paragraph = self.take().key
                 if paragraph in computers:
                     self.error(f"paragraphe {paragraph} dupliqué")
@@ -4029,14 +4043,16 @@ class Parser:
         return tokens
 
     def alpha_class(self, x, kind):
-        if x.op != "var" or (self.fields[x.args[0].name].kind != "text" and x.args[0].start is None):
-            self.error(f"condition {kind} limitée aux champs alphanumériques")
+        # cob_is_alpha/upper/lower test the data bytes of any item.
+        if x.op != "var":
+            self.error(f"condition {kind} limitée aux identificateurs")
         return Expr("alpha_class", (x, kind))
 
     def user_class(self, x, members):
-        # A user CLASS: every byte of the item belongs to the class.
-        if x.op != "var" or (self.fields[x.args[0].name].kind != "text" and x.args[0].start is None):
-            self.error("condition CLASS limitée aux champs alphanumériques")
+        # A user CLASS: every data byte of the item (any usage, as stored)
+        # belongs to the class.
+        if x.op != "var":
+            self.error("condition CLASS limitée aux identificateurs")
         return Expr("user_class", (x, members))
 
     def cobc_expression(self):

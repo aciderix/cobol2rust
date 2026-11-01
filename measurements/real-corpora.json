@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T12:37:34+00:00",
- "git_head": "b072c5a21ae756e621728f1e9f40a9ce87fff59e",
- "implementation_sha256": "b9ca69360d81d08affa596ba58eab5a69df4a2c0ac39861e3491ce05080dfcf1",
+ "measured_at": "2026-11-01T13:06:40+00:00",
+ "git_head": "5256215cda0effd7a71cfc1450728114b56a1bc5",
+ "implementation_sha256": "06de0e20d8796766967659779a3fef3ef2756dde2a43f42ee8d677f8db212177",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1385,
+  "accepted": 1387,
   "cobc_accepted": 1617,
-  "gap": 232,
+  "gap": 230,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -427,7 +427,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 660,
+   "accepted": 662,
    "internal_errors": 1,
    "blockers": [
     [
@@ -482,7 +482,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 219,
+   "gap": 217,
    "gap_sources": [
     [
      "run_accept-006/prog.cob",
@@ -653,10 +653,6 @@
      "littéral flottant hors d'un emploi numérique (display) non pris en charge"
     ],
     [
-     "run_fundamental-021/prog.cob",
-     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
-    ],
-    [
      "run_fundamental-022/prog.cob",
      "expression attendue"
     ],
@@ -674,7 +670,7 @@
     ],
     [
      "run_fundamental-028/prog.cob",
-     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+     "CALL prog3 depuis prog: programme contenu non visible (non modélisé)"
     ],
     [
      "run_fundamental-029/prog.cob",
@@ -711,10 +707,6 @@
     [
      "run_fundamental-112/prog.cob",
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-16"
-    ],
-    [
-     "run_fundamental-114/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
     ],
     [
      "run_initialize-013/prog.cob",
@@ -990,11 +982,11 @@
     ],
     [
      "run_misc-045/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "instruction non prise en charge: TRANSFORM"
     ],
     [
      "run_misc-046/prog.cob",
-     "paragraphe CONFIGURATION non pris en charge"
+     "opérande INSPECT attendu"
     ],
     [
      "run_misc-085/prog.cob",
@@ -1415,10 +1407,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 232,
-  "matching": 232,
-  "complete": 114,
-  "distinct": 153,
+  "sources": 230,
+  "matching": 230,
+  "complete": 116,
+  "distinct": 154,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1571,12 +1563,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "paragraphe CONFIGURATION non pris en charge",
-    "first": 3,
-    "present": 3,
-    "alone": 0
-   },
-   {
     "diagnostic": "USAGE/clause non pris en charge: IS",
     "first": 3,
     "present": 3,
@@ -1650,12 +1636,6 @@
    },
    {
     "diagnostic": "PICTURE non prise en charge: N(4)",
-    "first": 2,
-    "present": 2,
-    "alone": 0
-   },
-   {
-    "diagnostic": "nom ambigu: X; qualifier avec OF/IN si nécessaire",
     "first": 2,
     "present": 2,
     "alone": 0
@@ -1949,6 +1929,12 @@
     "alone": 0
    },
    {
+    "diagnostic": "CALL prog3 depuis prog: programme contenu non visible (non modélisé)",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
     "diagnostic": "CALL prog3 depuis prog2: programme contenu non visible (non modélisé)",
     "first": 1,
     "present": 1,
@@ -2010,6 +1996,18 @@
    },
    {
     "diagnostic": "argument CALL calculé non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "instruction non prise en charge: TRANSFORM",
+    "first": 1,
+    "present": 1,
+    "alone": 1
+   },
+   {
+    "diagnostic": "opérande INSPECT attendu",
     "first": 1,
     "present": 1,
     "alone": 1
@@ -2959,15 +2957,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-021/prog.cob",
-    "diagnostics": [
-     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-022/prog.cob",
     "diagnostics": [
      "expression attendue"
@@ -3006,7 +2995,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-028/prog.cob",
     "diagnostics": [
-     "nom ambigu: X; qualifier avec OF/IN si nécessaire"
+     "CALL prog3 depuis prog: programme contenu non visible (non modélisé)"
     ],
     "complete": false,
     "matches_measure": true
@@ -3091,15 +3080,6 @@
      "USAGE/clause non pris en charge: FLOAT-DECIMAL-34"
     ],
     "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-114/prog.cob",
-    "diagnostics": [
-     "paragraphe CONFIGURATION non pris en charge"
-    ],
-    "complete": false,
     "matches_measure": true
    },
    {
@@ -3852,18 +3832,18 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-045/prog.cob",
     "diagnostics": [
-     "paragraphe CONFIGURATION non pris en charge"
+     "instruction non prise en charge: TRANSFORM"
     ],
-    "complete": false,
+    "complete": true,
     "matches_measure": true
    },
    {
     "corpus": "gnucobol-testsuite",
     "source": "run_misc-046/prog.cob",
     "diagnostics": [
-     "paragraphe CONFIGURATION non pris en charge"
+     "opérande INSPECT attendu"
     ],
-    "complete": false,
+    "complete": true,
     "matches_measure": true
    },
    {
@@ -4723,9 +4703,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T12:37:34+00:00",
-  "git_head": "b072c5a21ae756e621728f1e9f40a9ce87fff59e",
-  "implementation_sha256": "b9ca69360d81d08affa596ba58eab5a69df4a2c0ac39861e3491ce05080dfcf1",
+  "measured_at": "2026-11-01T13:06:40+00:00",
+  "git_head": "5256215cda0effd7a71cfc1450728114b56a1bc5",
+  "implementation_sha256": "06de0e20d8796766967659779a3fef3ef2756dde2a43f42ee8d677f8db212177",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {
