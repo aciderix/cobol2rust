@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T06:46:36+00:00",
- "git_head": "bf632f049e0f91ede0a30ade210a362895f972c0",
- "implementation_sha256": "12323bc4bbed14e87ef10bf7315f8458bd6d38bd7b07fe8d1368fcaf4af88cd2",
+ "measured_at": "2026-11-01T07:25:24+00:00",
+ "git_head": "20e77f75c302a71304c7e68b16946ccb3d4a92e1",
+ "implementation_sha256": "3f08ba7524ddf4399e96b0083c4ecf32a4fd96fba09647765e598e7bebbd0de4",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1338,
+  "accepted": 1346,
   "cobc_accepted": 1617,
-  "gap": 279,
+  "gap": 271,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 614,
+   "accepted": 622,
    "internal_errors": 1,
    "blockers": [
     [
@@ -467,10 +467,6 @@
      6
     ],
     [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-     6
-    ],
-    [
      "instruction non prise en charge: AT",
      6
     ],
@@ -485,12 +481,16 @@
     [
      "instruction non prise en charge: JSON",
      5
+    ],
+    [
+     "RECORD attendu",
+     5
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 265,
+   "gap": 257,
    "gap_sources": [
     [
      "run_accept-003/prog.cob",
@@ -523,14 +523,6 @@
     [
      "run_extensions-028/prog.cob",
      "PROCEDURE DIVISION USING limité à BY REFERENCE"
-    ],
-    [
-     "run_extensions-034/callee.cob",
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_extensions-034/caller.cob",
-     "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_extensions-037/callee.cob",
@@ -571,14 +563,6 @@
     [
      "run_extensions-087/prog.cob",
      "indicateur fixe 'I' non pris en charge"
-    ],
-    [
-     "run_file-021/prog.cob",
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_file-021/prog2.cob",
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     [
      "run_file-024/prog.cob",
@@ -1161,22 +1145,6 @@
      "CALL callee: programme non converti ou routine système non pris en charge"
     ],
     [
-     "run_misc-101/callee.cob",
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_misc-101/caller.cob",
-     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_misc-116/callee.cob",
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
-     "run_misc-116/caller.cob",
-     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    [
      "run_misc-120/prog.cob",
      "SYMBOLIC CHARACTERS IN avec alphabet non natif non pris en charge"
     ],
@@ -1575,10 +1543,6 @@
      6
     ],
     [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-     5
-    ],
-    [
      "clé INDEXED composée (SOURCE IS) non prise en charge",
      5
     ],
@@ -1601,16 +1565,20 @@
     [
      "entrée SPECIAL-NAMES non prise en charge: CURSOR",
      4
+    ],
+    [
+     "USAGE/clause non pris en charge: is",
+     4
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 279,
-  "matching": 279,
+  "sources": 271,
+  "matching": 271,
   "complete": 146,
-  "distinct": 182,
+  "distinct": 179,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1676,12 +1644,6 @@
     "diagnostic": "PROGRAM-ID attendu",
     "first": 8,
     "present": 8,
-    "alone": 0
-   },
-   {
-    "diagnostic": "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-    "first": 5,
-    "present": 5,
     "alone": 0
    },
    {
@@ -1907,12 +1869,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-    "first": 2,
-    "present": 2,
-    "alone": 0
-   },
-   {
     "diagnostic": "END PROGRAM ne correspond pas au PROGRAM-ID",
     "first": 2,
     "present": 2,
@@ -2035,12 +1991,6 @@
    {
     "diagnostic": "length of 'A-TABLE' out of bounds: 10",
     "first": 0,
-    "present": 1,
-    "alone": 0
-   },
-   {
-    "diagnostic": "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING",
-    "first": 1,
     "present": 1,
     "alone": 0
    },
@@ -3012,24 +2962,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-034/callee.cob",
-    "diagnostics": [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_extensions-034/caller.cob",
-    "diagnostics": [
-     "programme appelé callee.cob: ligne 10: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_extensions-037/callee.cob",
     "diagnostics": [
      "PROCEDURE DIVISION USING limité à BY REFERENCE"
@@ -3117,24 +3049,6 @@
     "source": "run_extensions-087/prog.cob",
     "diagnostics": [
      "indicateur fixe 'I' non pris en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-021/prog.cob",
-    "diagnostics": [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-021/prog2.cob",
-    "diagnostics": [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
     ],
     "complete": false,
     "matches_measure": true
@@ -4593,42 +4507,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-101/callee.cob",
-    "diagnostics": [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-101/caller.cob",
-    "diagnostics": [
-     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-116/callee.cob",
-    "diagnostics": [
-     "PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_misc-116/caller.cob",
-    "diagnostics": [
-     "programme appelé callee.cob: ligne 7: PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-120/prog.cob",
     "diagnostics": [
      "SYMBOLIC CHARACTERS IN avec alphabet non natif non pris en charge"
@@ -5509,9 +5387,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T06:46:36+00:00",
-  "git_head": "bf632f049e0f91ede0a30ade210a362895f972c0",
-  "implementation_sha256": "12323bc4bbed14e87ef10bf7315f8458bd6d38bd7b07fe8d1368fcaf4af88cd2",
+  "measured_at": "2026-11-01T07:25:24+00:00",
+  "git_head": "20e77f75c302a71304c7e68b16946ccb3d4a92e1",
+  "implementation_sha256": "3f08ba7524ddf4399e96b0083c4ecf32a4fd96fba09647765e598e7bebbd0de4",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

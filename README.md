@@ -262,6 +262,19 @@ OVERFLOW, NOT ON EXCEPTION, CANCEL, EXIT PROGRAM et GOBACK suivent GnuCOBOL 3.2
   l'entrée, LINKAGE hors de tout USING) n'a pas d'adresse, comme le NULL de
   cobc, et son premier accès est un arrêt nommé (`LINKAGE item not passed by
   caller`) ;
+- `PROCEDURE DIVISION USING [BY REFERENCE] OPTIONAL x` (`_procedure_optional`,
+  refusé en `--std cobol85` comme `using-optional: unconformable`) ne change
+  rien sans contrôles ; sous `--runtime-checks` (`cobc -debug`), le contrôle
+  d'entrée `cob_check_linkage_size` arrête (arrêt nommé, cobc sort en code 1)
+  un appel qui ne transmet pas, ou transmet OMITTED, un paramètre non
+  OPTIONAL ; en cobol85 aucun paramètre n'est contrôlé. La condition
+  `x [IS] [NOT] OMITTED` (`cob_is_omitted` : adresse nulle — article non
+  transmis ou OMITTED, BASED sans stockage) est limitée à un identificateur
+  sans indice ni modification de référence (cobc teste alors l'adresse
+  décalée). Le registre `NUMBER-OF-CALL-PARAMETERS`
+  (`cb_build_register_number_parameters` : index S9(9) propre à chaque
+  programme, absent en cobol85) vaut à chaque entrée le nombre d'arguments
+  du CALL, OMITTED compris, 0 pour le programme principal ;
 - `01 arg [PIC X] ANY LENGTH` en LINKAGE reçoit la taille réelle de
   l'argument, sans changer ses attributs alphanumériques. Les longueurs,
   sous-chaînes, MOVE et conditions de niveau 88 utilisent cette taille ;

@@ -179,7 +179,9 @@ RETURNING OMITTED n'écrit rien ; un argument FUNCTION alphanumérique passe
 par un temporaire, LENGTH OF par `cob_content`. Les routines de common.c
 `SYSTEM`, `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`, `C$PRINTABLE`, `C$NARG`,
 `C$PARAMSIZE` et `C$CALLEDBY` sont portées (pile des paramètres reçus dans
-`RunUnit`), ainsi que `CBL_GC_GETOPT` (getopt GNU de cobgetopt.c, état
+`RunUnit`, qui donne aussi NUMBER-OF-CALL-PARAMETERS ; USING OPTIONAL ne joue
+que dans le contrôle d'entrée de `--runtime-checks`, la condition OMITTED
+teste l'absence de stockage), ainsi que `CBL_GC_GETOPT` (getopt GNU de cobgetopt.c, état
 statique et permutation d'argv dans `system_runtime::getopt`, `*flag` écrit
 par `storage_runtime::store_at_address` ; `verify --arg` donne les mêmes
 arguments et le même argv[0] aux deux programmes). PICTURE L est un groupe à

@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T06:46:36+00:00 (commit `bf632f049e`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T07:25:24+00:00 (commit `20e77f75c3`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-11-01T06:46:36+00:00 (commit `bf632f049e`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 614 | 879 | 265 | 0 |
-| **Total** | | **3593** | **1338** | **1617** | **279** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 622 | 879 | 257 | 0 |
+| **Total** | | **3593** | **1346** | **1617** | **271** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T06:46:36+00:00, commit `bf632f049e`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T07:25:24+00:00, commit `20e77f75c3`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -124,13 +124,13 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 3. 8 × PROCEDURE attendu
 4. 8 × . attendu
 5. 8 × PROGRAM-ID attendu
-6. 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING
-7. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
-8. 5 × instruction non prise en charge: AT
-9. 5 × instruction non prise en charge: JSON
-10. 4 × instruction non prise en charge: XML
+6. 5 × clé INDEXED composée (SOURCE IS) non prise en charge
+7. 5 × instruction non prise en charge: AT
+8. 5 × instruction non prise en charge: JSON
+9. 4 × instruction non prise en charge: XML
+10. 4 × CALL dump: programme non converti ou routine système non pris en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 279 sources, 279 au premier diagnostic identique à la mesure, 146 à inventaire complet, 182 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 271 sources, 271 au premier diagnostic identique à la mesure, 146 à inventaire complet, 179 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -160,7 +160,7 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
 - 8 × expression attendue (1er : 1, seul : 0)
 - 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
-- 5 × PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING (1er : 5, seul : 0)
+- 5 × clé INDEXED composée (SOURCE IS) non prise en charge (1er : 5, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -811,3 +811,28 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   (run_fundamental-097 caller et callee, identiques au natif, EXTERNAL
   partagé par le type). Testsuite **612 → 614/1135**, total **1336 →
   1338/3593**, écart **281 → 279**.
+- 2026-11-01 — Paramètres facultatifs et omis (lot « USING OPTIONAL »,
+  « NUMBER-OF-CALL-PARAMETERS », « IS NOT OMITTED ») : choisi après une
+  analyse par familles des 279 sources de l'écart (146 à inventaire
+  complet) et des sondes neutralisant chaque construction. Classement :
+  (1) paramètres facultatifs, 8 sources, difficulté faible, conformité
+  vérifiable, sans dépendance ; (2) RECURSIVE, 4 à 5 sources (réentrance,
+  LOCAL-STORAGE par activation) ; (3) FUNCTION-ID avec RETURNING, jusqu'à
+  9 sources, gain incertain (autres blocages derrière) ; (4) XML/JSON
+  GENERATE, une dizaine de sources, port de mlio.c ; (5) écran (SCREEN
+  SECTION, LINE/COL, GOBACK RETURNING), 56 à 73 sources acceptées mais
+  conformité presque invérifiable (tests MANUAL_CHECK sous curses).
+  Réalisé : `_procedure_optional` (BY REFERENCE seul, refusé en cobol85),
+  contrôle d'entrée `cob_check_linkage_size` sous `--runtime-checks`
+  (arrêt nommé pour un paramètre non OPTIONAL absent ou OMITTED, aucun
+  contrôle en cobol85), condition `cob_is_omitted` (identificateur sans
+  indice ni modification de référence, sinon refus nommé), registre
+  `cb_build_register_number_parameters` (index S9(9) par programme, nombre
+  d'arguments du CALL, 0 pour le principal, absent en cobol85, ambigu face
+  à un homonyme déclaré). Huit sources débloquées comme prévu
+  (run_extensions-034, run_file-021, run_misc-101, run_misc-116, chacune
+  appelant et appelé) ; trois paires identiques au natif par `cobol2rust
+  verify --call-path` (la testsuite n'est pas exécutée par la mesure), run_misc-116
+  meurt de SIGSEGV chez cobc sans -debug et s'arrête par un arrêt nommé
+  chez nous. Testsuite **614 → 622/1135**, total **1338 → 1346/3593**,
+  écart **279 → 271**.

@@ -179,7 +179,7 @@ class Emitter:
             return e.op
         if e.op in {"all", "refmod"}:
             return "text"
-        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class", "alpha_class", "imp_exception"}:
+        if e.op.startswith("cmp") or e.op in {"and", "or", "not", "condition", "bool", "numeric_class", "omitted_class", "switch", "user_class", "alpha_class", "imp_exception"}:
             return "bool"
         return "number"
 
@@ -345,7 +345,8 @@ class Emitter:
     @property
     def register(self):
         """RETURN-CODE of this program: its own, or its container's GLOBAL one."""
-        name = next((name for name, field in self.program.fields.items() if getattr(field, "register", False)), None)
+        name = next((name for name, field in self.program.fields.items()
+                     if getattr(field, "register", False) and not getattr(field, "call_parameters", False)), None)
         return None if name is None else f"self.{self.names[name]}"
 
     def exit_code(self):
@@ -446,6 +447,12 @@ class Emitter:
                     f"else {{ *byte == b' ' || byte.{test}() }})")
         if op == "numeric_class":
             return f"({self.expression(args[0])}).is_numeric()" if args[0].op != "var" else self.reference(args[0].args[0]) + ".is_numeric()"
+        if op == "omitted_class":
+            # cob_is_omitted: the field's data is NULL (an item not passed,
+            # passed as OMITTED, or BASED without storage).
+            if args[0].op != "var" or args[0].args[0].indices or args[0].args[0].start is not None:
+                raise CobolError("OMITTED limité à un identificateur sans indice ni modification de référence")
+            return f"storage_runtime::is_omitted(&self.{self.names[args[0].args[0].name]})"
         if op == "condition":
             ref = args[0]
             condition = self.program.conditions[ref.name]
@@ -2660,6 +2667,10 @@ class Emitter:
             # OBJECT-COMPUTER PROGRAM COLLATING SEQUENCE: the alphabet's weights.
             self.write(f"static COLLATING: [u8; 256] = [{', '.join(str(w) for w in collating)}];")
         self.write(f"let _collating = runtime::CollatingGuard::new({'Some(&COLLATING)' if collating else 'None'});")
+        for name, field in self.program.fields.items():
+            if getattr(field, "call_parameters", False):
+                # NUMBER-OF-CALL-PARAMETERS = cob_glob_ptr->cob_call_params.
+                self.write(f"self.{self.names[name]}.move_number(&Value::number(&unit.params.last().map_or(0, |p| p.len()).to_string()));")
         decimal_comma, currency = getattr(self.program, "decimal_comma", False), getattr(self.program, "currency", "$")
         if decimal_comma or currency != "$":
             # COB_MODULE_PTR->decimal_point, numeric_separator, currency_symbol.
@@ -2967,6 +2978,17 @@ class Emitter:
         for number, (_, using) in enumerate(entries):
             self.write(f"if entry == {number} {{")
             self.indent += 1
+            required = [(index, name) for index, name in enumerate(using) if not fields[name].optional]
+            if required:
+                # output_entry_function, EC-PROGRAM-ARG-MISMATCH (-debug):
+                # cob_check_linkage_size stops on a parameter that is not
+                # OPTIONAL and the CALL does not pass or passes OMITTED.
+                self.write("if storage_runtime::runtime_checks() {")
+                for index, name in required:
+                    message = quoted(f"LINKAGE item {fields[name].label} not passed by caller (EC-PROGRAM-ARG-MISMATCH)")
+                    self.write(f"    if arguments.len() <= {index} || storage_runtime::is_omitted(&arguments[{index}]) "
+                               f"{{ runtime::fail({message}); }}")
+                self.write("}")
             for name, field in fields.items():
                 if not field.linkage:
                     continue

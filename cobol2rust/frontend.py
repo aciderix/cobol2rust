@@ -687,6 +687,9 @@ class Field:
     picture_l: bool = False
     # IS TYPEDEF: a type for TYPE TO / USAGE, removed before the layout.
     typedef: bool = False
+    # USING OPTIONAL (flag_is_pdiv_opt): a parameter the -debug entry check
+    # lets the CALL omit.
+    optional: bool = False
     index_for: str | None = None
     editing: str = ""
     # Numeric-edited: cobc's symbol groups and storage size.
@@ -1695,6 +1698,7 @@ class Parser:
         self.validate_files()
         memory_size = self.debug_item(memory_size)
         self.return_code_register()
+        self.call_parameters_register()
         # GLOBAL items of the containing programs (copies of their
         # descriptions, storage owned by the declaring program).
         for key, item in getattr(self, "inherited", {}).items():
@@ -2207,6 +2211,27 @@ class Parser:
         from .layout import layout_fields
         layout_fields({key: self.fields[key]})
         self.fields[key].register = True
+
+    def call_parameters_register(self):
+        """cb_build_register_number_parameters: NUMBER-OF-CALL-PARAMETERS, an
+        index of each program (cb_build_index, CB_INT_INDEX) set at each entry
+        to cob_call_params, the argument count of the CALL. cobol85.words
+        disables the register (not-register). It is built when the word
+        occurs, like a declared homonym it then makes ambiguous."""
+        if STD == "cobol85" or not any(t.key == "NUMBER-OF-CALL-PARAMETERS" and not t.string for t in self.tokens[self.i:]):
+            return
+        saved = self.tokens, self.i, self.data_stack, self.last_data
+        self.tokens, self.i, self.data_stack = lex("77 NUMBER-OF-CALL-PARAMETERS USAGE INDEX."), 0, []
+        self.building_register = True
+        try:
+            key = self.declaration()
+        finally:
+            self.building_register = False
+            self.tokens, self.i, self.data_stack, self.last_data = saved
+        from .layout import layout_fields
+        layout_fields({key: self.fields[key]})
+        self.fields[key].register = True
+        self.fields[key].call_parameters = True
 
     def debug_item(self, memory_size):
         """cb_build_debug_item, at the first USE FOR DEBUGGING: DEBUG-ITEM in
@@ -3731,13 +3756,22 @@ class Parser:
             if self.accept("BY"):
                 if not self.accept("REFERENCE"):
                     self.error("PROCEDURE DIVISION USING limité à BY REFERENCE")
-            if self.at("RETURNING") or self.at("VALUE") or self.at("OPTIONAL"):
+            if self.at("RETURNING") or self.at("VALUE"):
                 self.error("PROCEDURE DIVISION USING limité à BY REFERENCE sans RETURNING")
+            # _procedure_optional: cb_verify (cb_using_optional); OPTIONAL
+            # only sets flag_is_pdiv_opt, which the -debug checks read.
+            optional = self.accept("OPTIONAL")
+            if optional and STD == "cobol85":
+                self.error("USING OPTIONAL does not conform to COBOL 85")
             key = self.resolve(self.name())
             field = self.fields[key]
             if not field.linkage or field.parent is not None or field.redefines or key in using:
                 self.error("USING requiert des articles 01/77 distincts de la LINKAGE SECTION")
             using.append(key)
+            # cob_check_linkage_size's optional argument: cb_using_optional
+            # != CB_OK (cobol85) exempts every parameter.
+            if optional or STD == "cobol85":
+                field.optional = True
         if not using:
             self.error("USING requiert au moins un paramètre")
         return using
@@ -3883,6 +3917,11 @@ class Parser:
             elif k == "NUMERIC":
                 self.take()
                 tokens.append(("class", lambda x: Expr("numeric_class", (x,))))
+            elif k == "OMITTED" and not self.candidates(k):
+                # condition_or_class: OMITTED, build_expr_shift_class
+                # ("cob_is_omitted").
+                self.take()
+                tokens.append(("class", lambda x: Expr("omitted_class", (x,))))
             elif k in {"ALPHABETIC", "ALPHABETIC-LOWER", "ALPHABETIC-UPPER"}:
                 self.take()
                 tokens.append(("class", lambda x, k=k: self.alpha_class(x, k)))

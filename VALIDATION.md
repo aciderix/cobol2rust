@@ -1,5 +1,27 @@
 # Validation — 30 octobre 2026
 
+## Paramètres facultatifs et omis — 1er novembre 2026
+
+- Fixture `tests/fixtures/optional_params.cob` avec l'appelé dynamique
+  `tests/fixtures/optional_params_calls/OPTSUB.cob` identique au natif, sans
+  contrôles et sous `--runtime-checks` (`cobc -debug`) : USING OPTIONAL
+  (deux paramètres, un BY REFERENCE explicite), arguments manquants et
+  OMITTED, NUMBER-OF-CALL-PARAMETERS (principal 0, appelé, ENTRY, programme
+  contenu, MOVE vers un numérique), `[IS] [NOT] OMITTED` sur LINKAGE,
+  BASED alloué ou non et WORKING-STORAGE, SET ADDRESS d'un paramètre omis.
+- Comportements de cobc vérifiés au natif : registre affiché en +S9(9)
+  (index, pas BINARY-LONG), homonyme déclaré ambigu, registre absent et
+  OPTIONAL refusé en cobol85, OMITTED d'une sous-chaîne décalée faux (refusé
+  chez nous), ENTRY sans OPTIONAL ; sous -debug, paramètre obligatoire absent
+  arrêté à l'entrée (code 1 chez cobc, arrêt nommé chez nous).
+- Sources débloquées : run_extensions-034, run_file-021, run_misc-101
+  identiques au natif (`cobol2rust verify --call-path`) ; run_misc-116 :
+  SIGSEGV chez cobc sans -debug, arrêt nommé chez nous.
+- Mesure : **1338 → 1346/3593**, écart **279 → 271**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-opt.json`) ;
+  suite **591 tests**, 0 échec.
+
 ## TYPEDEF, TYPE TO, USAGE nom-de-type et SAME AS — 1er novembre 2026
 
 - Fixture `tests/fixtures/typedefs.cob` identique au natif : BINARY-LONG

@@ -1263,6 +1263,11 @@ pub fn chain_setup(item: &Value, parameter: usize) {
     }
 }
 
+/// cob_is_omitted: the item has no storage (its data is NULL).
+pub fn is_omitted(item: &Value) -> bool {
+    matches!(item, Value::View(view) if view.memory.borrow().is_empty())
+}
+
 /// CALL ... USING OMITTED: a NULL address.
 /// A system routine's view of a parameter: the bytes behind its data
 /// pointer (None for an omitted parameter, a NULL address).
