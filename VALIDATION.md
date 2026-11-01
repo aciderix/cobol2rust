@@ -1,5 +1,24 @@
 # Validation — 30 octobre 2026
 
+## Fonctions de locale — 1er novembre 2026
+
+- Fixture `tests/fixtures/locale_functions.cob` identique au natif :
+  `localeconv` (symbole monétaire et séparateurs vides, point décimal « . »
+  sous LC_NUMERIC « C »), LOCALE-COMPARE (espaces de fin, minuscule contre
+  majuscule, locale POSIX en argument, argument de locale blanc en erreur),
+  LOCALE-DATE d'une date alphanumérique, numérique, avec locale et en
+  sous-chaîne, date invalide (dix espaces, EC-ARGUMENT-FUNCTION),
+  LOCALE-TIME (24:00:00 admis, minutes invalides), LOCALE-TIME-FROM-SECONDS
+  (86400 admis, argument alphanumérique refusé à l'exécution comme libcob).
+- Refus de cobc reproduit : littéral en second argument de LOCALE-DATE,
+  LOCALE-TIME et LOCALE-TIME-FROM-SECONDS (`locale_dt_args`).
+- Sources débloquées identiques au natif : run_functions-017, 047 à 050,
+  070 à 073.
+- Mesure : **1364 → 1373/3593**, écart **253 → 244**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-loc.json`) ; suite
+  **605 tests**, 0 échec.
+
 ## Fonctions intrinsèques du module, du pointeur et du calcul — 1er novembre 2026
 
 - Fixture `tests/fixtures/module_functions.cob` identique au natif : SIGN

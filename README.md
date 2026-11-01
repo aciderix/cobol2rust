@@ -649,10 +649,23 @@ résultat vide pour NULL ou un octet NUL pointé) ; lire au-delà du stockage
 adressé est un arrêt nommé. Une fonction EXCEPTION-* évaluée dans le même
 DISPLAY ou la même liste d'arguments qu'une fonction qui modifie
 l'exception est refusée : cobc en fait les arguments d'un seul appel C, dont
-l'ordre d'évaluation n'est pas défini (gcc évalue de droite à gauche). Les
-fonctions LOCALE-*, CURRENCY-SYMBOL, NUMERIC-* et MONETARY-*,
-EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF et les fonctions utilisateur
-restent refusées.
+l'ordre d'évaluation n'est pas défini (gcc évalue de droite à gauche).
+
+Les fonctions de locale appellent la bibliothèque C elle-même (glibc 64 bits,
+sinon arrêt nommé) après la locale de `cob_init` : `setlocale (LC_ALL, "")`
+au démarrage, puis « C » pour LC_NUMERIC et LC_CTYPE. CURRENCY-SYMBOL,
+NUMERIC-DECIMAL-POINT, NUMERIC-THOUSANDS-SEPARATOR, MONETARY-DECIMAL-POINT
+et MONETARY-THOUSANDS-SEPARATOR rendent la chaîne de `localeconv` (vide si
+elle l'est) ; LOCALE-COMPARE compare par `strcoll` les arguments sans leurs
+espaces de fin (premier octet conservé) ; LOCALE-DATE, LOCALE-TIME et
+LOCALE-TIME-FROM-SECONDS formatent par `strftime` le motif `nl_langinfo`
+(D_FMT, T_FMT), après les contrôles d'intrinsic.c (année 1601 à 9999,
+heure 0 à 24, 0 à 86400 secondes ; dix espaces et EC-ARGUMENT-FUNCTION
+sinon). L'argument de locale (une donnée pour les trois dernières, comme
+`locale_dt_args`) passe par `cob_field_to_string` puis `setlocale` de la
+catégorie, la locale de `cob_init` étant rétablie ensuite. Les noms de
+locale de SPECIAL-NAMES, EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF et
+les fonctions utilisateur restent refusés.
 
 ### Dernière exception : FUNCTION EXCEPTION-* et SET LAST EXCEPTION
 

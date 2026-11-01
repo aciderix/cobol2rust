@@ -562,7 +562,9 @@ class Emitter:
         # cob_mod_or_rem and the ISO 8601 functions: EC-ARGUMENT-FUNCTION.
         "MOD", "REM", "FORMATTED-DATE", "FORMATTED-TIME", "FORMATTED-DATETIME", "FORMATTED-CURRENT-DATE",
         "TEST-FORMATTED-DATETIME", "INTEGER-OF-FORMATTED-DATE", "SECONDS-FROM-FORMATTED-TIME",
-        "COMBINED-DATETIME", "CONTENT-LENGTH", "CONTENT-OF",
+        "COMBINED-DATETIME", "CONTENT-LENGTH", "CONTENT-OF", "CURRENCY-SYMBOL", "NUMERIC-DECIMAL-POINT",
+        "NUMERIC-THOUSANDS-SEPARATOR", "MONETARY-DECIMAL-POINT", "MONETARY-THOUSANDS-SEPARATOR", "LOCALE-COMPARE",
+        "LOCALE-DATE", "LOCALE-TIME", "LOCALE-TIME-FROM-SECONDS",
         # No exception: the module's data, cob_decimal_set_field, localtime.
         "SIGN", "SECONDS-PAST-MIDNIGHT", "MODULE-ID", "MODULE-CALLER-ID", "MODULE-SOURCE",
         "MODULE-FORMATTED-DATE", "MODULE-PATH", "MODULE-DATE", "MODULE-TIME",
@@ -799,6 +801,22 @@ class Emitter:
         if name == "COMBINED-DATETIME":
             return (f"runtime::intrinsic::combined_datetime(&{self.numeric_argument(name, args[0])}, "
                     f"&{self.numeric_argument(name, args[1])})")
+        lconv = {"NUMERIC-DECIMAL-POINT": 0, "NUMERIC-THOUSANDS-SEPARATOR": 1, "CURRENCY-SYMBOL": 4,
+                 "MONETARY-DECIMAL-POINT": 5, "MONETARY-THOUSANDS-SEPARATOR": 6}
+        if name in lconv:
+            # The char * members of struct lconv, in glibc's order.
+            return f"runtime::locale::lconv({lconv[name]})"
+        if name == "LOCALE-COMPARE":
+            values = [self.text_argument(name, a) for a in args]
+            locale = f"Some(&{values[2]})" if len(values) > 2 else "None"
+            return f"runtime::locale::compare(&{values[0]}, &{values[1]}, {locale})"
+        if name in {"LOCALE-DATE", "LOCALE-TIME", "LOCALE-TIME-FROM-SECONDS"}:
+            # COB_FIELD_IS_NUMERIC: cob_get_int, otherwise the digits of the data.
+            numeric = self.kind(args[0]) == "number"
+            source = self.numeric_argument(name, args[0]) if numeric else self.text_argument(name, args[0])
+            locale = f"Some(&{self.text_argument(name, args[1])})" if len(args) > 1 else "None"
+            routine = {"LOCALE-DATE": "date", "LOCALE-TIME": "time", "LOCALE-TIME-FROM-SECONDS": "time_from_seconds"}[name]
+            return f"runtime::locale::{routine}(&{source}, {str(numeric).lower()}, {locale})"
         return None
 
     def function_field_code(self, e):
@@ -3456,6 +3474,9 @@ def generate_unit(emitters):
     # A module runs as cobcrun calls it: its main entry, no arguments.
     start = "program.call(&mut unit, Vec::new());" if emitters[0].module else "program.run(&mut unit);"
     base = "unit.main_base = Some(Box::new(program.alias())); " if main_recursive else ""
+    if any(getattr(emitter.program, "uses_locale", False) for emitter in emitters):
+        # cob_init: setlocale (LC_ALL, "") before the run unit starts.
+        unchecked += "runtime::locale::init(); "
     run = f"let mut unit = RunUnit::new(); let mut program = {emitters[0].struct}::new(); {base}{start}"
     # cob_terminate_routines: the warnings for files left open, then the files
     # closed (dropped with the program), also after a fatal runtime error.

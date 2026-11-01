@@ -1890,6 +1890,7 @@ class Parser:
             f.kind == "pointer" or f.based for f in self.fields.values())
         # FUNCTION EXCEPTION-*: the run unit follows the last exception.
         program.uses_exceptions = getattr(self, "uses_exceptions", False)
+        program.uses_locale = getattr(self, "uses_locale", False)
         program.deferred_open = getattr(self, "deferred_open", False)
         program.global_uses, program.inherited_uses = dict(self.global_uses), self.inherited_uses(mode_declaratives)
         program.unchecked_data = NO_EC_DATA_INCOMPATIBLE
@@ -3647,8 +3648,17 @@ class Parser:
         "MODULE-ID": (0, "text"), "MODULE-CALLER-ID": (0, "text"), "MODULE-SOURCE": (0, "text"),
         "MODULE-FORMATTED-DATE": (0, "text"), "MODULE-PATH": (0, "text"), "MODULE-DATE": (0, "number"),
         "MODULE-TIME": (0, "number"), "CONTENT-LENGTH": (1, "number"), "CONTENT-OF": (-1, "text"),
+        "CURRENCY-SYMBOL": (0, "text"), "NUMERIC-DECIMAL-POINT": (0, "text"),
+        "NUMERIC-THOUSANDS-SEPARATOR": (0, "text"), "MONETARY-DECIMAL-POINT": (0, "text"),
+        "MONETARY-THOUSANDS-SEPARATOR": (0, "text"), "LOCALE-COMPARE": (-2, "text"), "LOCALE-DATE": (-1, "text"),
+        "LOCALE-TIME": (-1, "text"), "LOCALE-TIME-FROM-SECONDS": (-1, "text"),
     }
-    MAX_ARGUMENTS = {"CONTENT-OF": 2, "NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
+    # intrinsic.c functions reading the C library's locale.
+    LOCALE_FUNCTIONS = {"CURRENCY-SYMBOL", "NUMERIC-DECIMAL-POINT", "NUMERIC-THOUSANDS-SEPARATOR",
+                        "MONETARY-DECIMAL-POINT", "MONETARY-THOUSANDS-SEPARATOR", "LOCALE-COMPARE", "LOCALE-DATE",
+                        "LOCALE-TIME", "LOCALE-TIME-FROM-SECONDS"}
+    MAX_ARGUMENTS = {"LOCALE-COMPARE": 3, "LOCALE-DATE": 2, "LOCALE-TIME": 2, "LOCALE-TIME-FROM-SECONDS": 2,
+                     "CONTENT-OF": 2, "NUMVAL-C": 2, "TEST-NUMVAL-C": 2, "YEAR-TO-YYYY": 3, "DATE-TO-YYYYMMDD": 3, "DAY-TO-YYYYDDD": 3,
                      "FORMATTED-TIME": 3, "FORMATTED-DATETIME": 4}
     # valid_format (tree.c): the formats a literal first argument may have.
     DATE_TIME_FORMATS = {"FORMATTED-CURRENT-DATE": ("datetime",), "FORMATTED-DATE": ("date",),
@@ -3693,6 +3703,9 @@ class Parser:
                 self.error(f"FUNCTION {name.key} avec les contrôles d'exécution (-debug, -fsource-location) "
                            "non prise en charge")
             self.uses_exceptions = True
+        if name.key in self.LOCALE_FUNCTIONS:
+            # cob_init primes the locale from the environment.
+            self.uses_locale = True
         count, _ = self.FUNCTIONS[name.key]
         args = []
         system_offset = False
@@ -3737,6 +3750,10 @@ class Parser:
                 or len(args) > self.MAX_ARGUMENTS.get(name.key, len(args)) \
                 or (name.key in {"SUBSTITUTE", "SUBSTITUTE-CASE"} and len(args) % 2 == 0):
             self.error(f"FUNCTION '{name.key}' has wrong number of arguments")
+        if name.key in {"LOCALE-DATE", "LOCALE-TIME", "LOCALE-TIME-FROM-SECONDS"} and len(args) == 2 \
+                and args[1].op != "var":
+            # locale_dt_args: exp [_e_sep reference].
+            self.error("syntax error, unexpected Literal, expecting Identifier")
         if name.key in {"CONTENT-LENGTH", "CONTENT-OF"}:
             # cb_build_intrinsic: the first argument is a data pointer.
             first = args[0]

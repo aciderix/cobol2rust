@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T09:05:46+00:00",
- "git_head": "3afbff1d432b6406d75f44a285dad38824a10b94",
- "implementation_sha256": "4c8061f1c988945255a1ad53d09d1d55c2912d97f2e0c7fe4a95ef34461dbbfc",
+ "measured_at": "2026-11-01T09:41:02+00:00",
+ "git_head": "1afa02ba52d93a014a6a1bdcf3c7791914c55797",
+ "implementation_sha256": "f5271a1b7e854878410fc1be8b38ee03179216fe40f56eeea4751544b8bbd051",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1364,
+  "accepted": 1373,
   "cobc_accepted": 1617,
-  "gap": 253,
+  "gap": 244,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -435,7 +435,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 640,
+   "accepted": 649,
    "internal_errors": 1,
    "blockers": [
     [
@@ -490,7 +490,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 239,
+   "gap": 230,
    "gap_sources": [
     [
      "run_accept-003/prog.cob",
@@ -639,42 +639,6 @@
     [
      "run_functions-011/prog.cob",
      "FUNCTION BIT-OF non prise en charge"
-    ],
-    [
-     "run_functions-017/prog.cob",
-     "FUNCTION CURRENCY-SYMBOL non prise en charge"
-    ],
-    [
-     "run_functions-047/prog.cob",
-     "FUNCTION LOCALE-COMPARE non prise en charge"
-    ],
-    [
-     "run_functions-048/prog.cob",
-     "FUNCTION LOCALE-DATE non prise en charge"
-    ],
-    [
-     "run_functions-049/prog.cob",
-     "FUNCTION LOCALE-TIME non prise en charge"
-    ],
-    [
-     "run_functions-050/prog.cob",
-     "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
-    ],
-    [
-     "run_functions-070/prog.cob",
-     "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
-    ],
-    [
-     "run_functions-071/prog.cob",
-     "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge"
-    ],
-    [
-     "run_functions-072/prog.cob",
-     "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge"
-    ],
-    [
-     "run_functions-073/prog.cob",
-     "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
     ],
     [
      "run_functions-123/prog.cob",
@@ -1503,10 +1467,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 253,
-  "matching": 253,
-  "complete": 136,
-  "distinct": 172,
+  "sources": 244,
+  "matching": 244,
+  "complete": 127,
+  "distinct": 163,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -2053,60 +2017,6 @@
     "first": 0,
     "present": 1,
     "alone": 0
-   },
-   {
-    "diagnostic": "FUNCTION CURRENCY-SYMBOL non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION LOCALE-COMPARE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION LOCALE-DATE non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION LOCALE-TIME non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MONETARY-DECIMAL-POINT non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
    },
    {
     "diagnostic": "expression non prise en charge: BX",
@@ -3118,87 +3028,6 @@
     "diagnostics": [
      "FUNCTION BIT-OF non prise en charge",
      "FUNCTION BIT-TO-CHAR non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-017/prog.cob",
-    "diagnostics": [
-     "FUNCTION CURRENCY-SYMBOL non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-047/prog.cob",
-    "diagnostics": [
-     "FUNCTION LOCALE-COMPARE non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-048/prog.cob",
-    "diagnostics": [
-     "FUNCTION LOCALE-DATE non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-049/prog.cob",
-    "diagnostics": [
-     "FUNCTION LOCALE-TIME non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-050/prog.cob",
-    "diagnostics": [
-     "FUNCTION LOCALE-TIME-FROM-SECONDS non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-070/prog.cob",
-    "diagnostics": [
-     "FUNCTION MONETARY-DECIMAL-POINT non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-071/prog.cob",
-    "diagnostics": [
-     "FUNCTION MONETARY-THOUSANDS-SEPARATOR non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-072/prog.cob",
-    "diagnostics": [
-     "FUNCTION NUMERIC-DECIMAL-POINT non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-073/prog.cob",
-    "diagnostics": [
-     "FUNCTION NUMERIC-THOUSANDS-SEPARATOR non prise en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -5115,9 +4944,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T09:05:46+00:00",
-  "git_head": "3afbff1d432b6406d75f44a285dad38824a10b94",
-  "implementation_sha256": "4c8061f1c988945255a1ad53d09d1d55c2912d97f2e0c7fe4a95ef34461dbbfc",
+  "measured_at": "2026-11-01T09:41:02+00:00",
+  "git_head": "1afa02ba52d93a014a6a1bdcf3c7791914c55797",
+  "implementation_sha256": "f5271a1b7e854878410fc1be8b38ee03179216fe40f56eeea4751544b8bbd051",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

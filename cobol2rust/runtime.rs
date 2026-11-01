@@ -861,7 +861,7 @@ pub mod intrinsic {
     fn value(n: Number) -> Value { Value::Num(n, None) }
     fn int_of(n: i128) -> Value { Value::Num(Number::new(BigInt::from(n), 0), None) }
     /// cob_get_int: the integer part, which must fit a C int.
-    fn get_int(v: &Value) -> i64 {
+    pub(crate) fn get_int(v: &Value) -> i64 {
         let units = v.num().units(0, false);
         let n: i64 = units.to_string().parse().unwrap_or_else(|_| fail("function argument outside the C int range"));
         if n < i32::MIN as i64 || n > i32::MAX as i64 { fail("function argument outside the C int range"); }
@@ -2282,6 +2282,183 @@ fn normalized(t: &CobTime) -> CobTime {
 }
 
 /// The local time zone, modelled only when it is UTC.
+/// The locale of libcob (cob_init: setlocale (LC_ALL, ""), then "C" for
+/// LC_NUMERIC and LC_CTYPE) and the intrinsic.c functions reading it, through
+/// the C library itself (glibc).
+pub mod locale {
+    use super::{fail, Value};
+    use std::os::raw::{c_char, c_int, c_long};
+
+    const LC_TIME: c_int = 2;
+    const LC_COLLATE: c_int = 3;
+    const LC_ALL: c_int = 6;
+    const D_FMT: c_int = 0x20029;
+    const T_FMT: c_int = 0x2002A;
+
+    #[repr(C)]
+    struct Tm { sec: c_int, min: c_int, hour: c_int, mday: c_int, mon: c_int, year: c_int, wday: c_int, yday: c_int,
+                isdst: c_int, gmtoff: c_long, zone: *const c_char }
+
+    extern "C" {
+        fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
+        fn localeconv() -> *const *const c_char;
+        fn strcoll(a: *const c_char, b: *const c_char) -> c_int;
+        fn nl_langinfo(item: c_int) -> *const c_char;
+        fn strftime(s: *mut c_char, max: usize, format: *const c_char, tm: *const Tm) -> usize;
+    }
+
+    thread_local! {
+        /// cobglobptr->cob_locale: setlocale (LC_ALL, NULL) after cob_init.
+        static COB_LOCALE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    fn c_string(pointer: *const c_char) -> Vec<u8> {
+        if pointer.is_null() { return Vec::new(); }
+        unsafe { std::ffi::CStr::from_ptr(pointer) }.to_bytes().to_vec()
+    }
+
+    fn check_platform() {
+        if !cfg!(all(target_os = "linux", target_env = "gnu", target_pointer_width = "64")) {
+            fail("locale functions outside 64-bit glibc not modelled");
+        }
+    }
+
+    /// cob_init's locale, at the start of the run unit.
+    pub fn init() {
+        check_platform();
+        unsafe {
+            if setlocale(LC_ALL, c"".as_ptr()).is_null() { return; }
+            setlocale(1, c"C".as_ptr());
+            setlocale(0, c"C".as_ptr());
+            let current = c_string(setlocale(LC_ALL, std::ptr::null()));
+            COB_LOCALE.with(|locale| *locale.borrow_mut() = Some(current));
+        }
+    }
+
+    fn restore() {
+        COB_LOCALE.with(|locale| if let Some(name) = locale.borrow().as_ref() {
+            let name = std::ffi::CString::new(name.clone()).unwrap_or_default();
+            unsafe { setlocale(LC_ALL, name.as_ptr()); }
+        });
+    }
+
+    /// cob_intr_currency_symbol, cob_intr_num_decimal_point, ... : a
+    /// localeconv () string, a zero-length field when empty.
+    pub fn lconv(index: usize) -> Value {
+        check_platform();
+        Value::Bytes(c_string(unsafe { *localeconv().add(index) }))
+    }
+
+    /// cob_field_to_string: the bytes up to the last one neither space nor
+    /// NUL, as a C string; None for blank data or more than COB_MINI_MAX.
+    fn locale_name(field: &Value) -> Option<std::ffi::CString> {
+        let data = field.bytes();
+        let end = data.iter().rposition(|byte| *byte != b' ' && *byte != 0)?;
+        if end > 255 { return None; }
+        let mut name = data[..=end].to_vec();
+        name.truncate(name.iter().position(|byte| *byte == 0).unwrap_or(name.len()));
+        Some(std::ffi::CString::new(name).unwrap_or_default())
+    }
+
+    fn argument_error(size: usize) -> Value {
+        super::exception::set("EC-ARGUMENT-FUNCTION");
+        Value::Bytes(vec![b' '; size])
+    }
+
+    /// cob_intr_locale_compare: strcoll of the two arguments without their
+    /// trailing spaces (the first byte kept), under the locale argument.
+    pub fn compare(first: &Value, second: &Value, locale: Option<&Value>) -> Value {
+        check_platform();
+        let trimmed = |value: &Value| {
+            let mut data = value.bytes();
+            if data.is_empty() { fail("FUNCTION LOCALE-COMPARE of a zero-length argument not modelled"); }
+            while data.len() > 1 && data[data.len() - 1] == b' ' { data.pop(); }
+            data.push(0);
+            data
+        };
+        let (a, b) = (trimmed(first), trimmed(second));
+        let switched = match locale {
+            Some(field) => match locale_name(field) {
+                Some(name) => { unsafe { setlocale(LC_COLLATE, name.as_ptr()); } true },
+                None => return argument_error(1),
+            },
+            None => false,
+        };
+        let order = unsafe { strcoll(a.as_ptr() as *const c_char, b.as_ptr() as *const c_char) };
+        if switched { restore(); }
+        Value::Bytes(vec![if order < 0 { b'<' } else if order > 0 { b'>' } else { b'=' }])
+    }
+
+    fn format(item: c_int, category: c_int, tm: &Tm, locale: Option<&Value>) -> Option<Value> {
+        let switched = match locale {
+            Some(field) => { let name = locale_name(field)?; unsafe { setlocale(category, name.as_ptr()); } true },
+            None => false,
+        };
+        // snprintf of nl_langinfo into a buffer of 128 (127 kept).
+        let mut pattern = c_string(unsafe { nl_langinfo(item) });
+        pattern.truncate(127);
+        pattern.push(0);
+        if switched { restore(); }
+        let mut buffer = [0u8; 128];
+        let size = unsafe { strftime(buffer.as_mut_ptr() as *mut c_char, buffer.len(), pattern.as_ptr() as *const c_char, tm) };
+        Some(Value::Bytes(buffer[..size].to_vec()))
+    }
+
+    fn blank_tm() -> Tm { Tm { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: std::ptr::null() } }
+
+    /// The digits of an alphanumeric date or time argument (range check, not isdigit).
+    fn digits(value: &Value, count: usize) -> Option<i64> {
+        let data = value.bytes();
+        if data.len() < count { return None; }
+        data[..count].iter().try_fold(0i64, |n, byte| byte.is_ascii_digit().then(|| n * 10 + (byte - b'0') as i64))
+    }
+
+    /// cob_intr_locale_date: strftime of nl_langinfo (D_FMT).
+    pub fn date(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        let Some(date) = (if numeric { Some(super::intrinsic::get_int(source)) } else { digits(source, 8) }) else { return argument_error(10) };
+        let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if !(1601..=9999).contains(&year) || !(1..=12).contains(&month) || day < 1 || day > days[month as usize - 1] {
+            return argument_error(10);
+        }
+        let mut tm = blank_tm();
+        tm.year = (year - 1900) as c_int;
+        tm.mon = (month - 1) as c_int;
+        tm.mday = day as c_int;
+        format(D_FMT, LC_TIME, &tm, locale).unwrap_or_else(|| argument_error(10))
+    }
+
+    fn time_of_day(hours: i64, minutes: i64, seconds: i64, locale: Option<&Value>) -> Value {
+        let mut tm = blank_tm();
+        tm.hour = hours as c_int;
+        tm.min = minutes as c_int;
+        tm.sec = seconds as c_int;
+        format(T_FMT, LC_TIME, &tm, locale).unwrap_or_else(|| argument_error(10))
+    }
+
+    /// cob_intr_locale_time: hours 0 to 24, then locale_time.
+    pub fn time(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        let Some(time) = (if numeric { Some(super::intrinsic::get_int(source)) } else { digits(source, 6) }) else { return argument_error(10) };
+        let (hours, minutes, seconds) = (time / 10000, time % 10000 / 100, time % 100);
+        if !(0..=24).contains(&hours) || !(0..=59).contains(&minutes) || !(0..=59).contains(&seconds) {
+            return argument_error(10);
+        }
+        time_of_day(hours, minutes, seconds, locale)
+    }
+
+    /// cob_intr_lcl_time_from_secs: a numeric count of 0 to 86400 seconds.
+    pub fn time_from_seconds(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        if !numeric { return argument_error(10); }
+        let seconds = super::intrinsic::get_int(source);
+        if !(0..=86400).contains(&seconds) { return argument_error(10); }
+        time_of_day(seconds / 3600, seconds % 3600 / 60, seconds % 60, locale)
+    }
+}
+
 /// cob_main_argv0 (common.c): readlink of /proc/self/exe, else the
 /// canonicalized argv[0], else argv[0], else "unknown".
 pub fn main_argv0() -> Value {
