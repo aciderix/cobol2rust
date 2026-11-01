@@ -618,7 +618,8 @@ def type_reference(p, word, label, level):
             p.error("item may not be subordinate to any item with USAGE clause")
         if cursor.group_sign:
             p.error("item may not be subordinate to any item with SIGN clause")
-    if any(key == item or key.startswith(item + ".") for item in p.data_stack):
+    # The item itself or one of its parents (the current field's ancestors).
+    if key in p.data_stack:
         p.error("item may not reference itself")
     return key
 
@@ -677,8 +678,15 @@ def declaration(p, file_record=False):
         # A group's condition compares its storage as alphanumeric text.
         group_condition = not p.fields[p.last_data].picture and p.fields[p.last_data].usage != "INDEX"
         key = p.last_data + "." + label
-        if key in p.conditions or label in VERBS:
+        if label in VERBS:
             p.error("condition dupliquée ou réservée")
+        if key in p.conditions:
+            # Homonymous conditions of one item are valid; a reference to
+            # them is ambiguous (cb_ref). Keep their keys distinct.
+            duplicate = 2
+            while f"{key}${duplicate}" in p.conditions:
+                duplicate += 1
+            key = f"{key}${duplicate}"
         if not (p.accept("VALUE") or p.accept("VALUES")):
             p.error("VALUE attendu au niveau 88")
         p.accept("IS") or p.accept("ARE")
@@ -1194,6 +1202,21 @@ def declaration(p, file_record=False):
             p.error("ANY LENGTH limité à PIC X DISPLAY; formats national et booléen non pris en charge")
         if not picture:
             picture = expanded = "X"
+    def alphanumeric_digits(edit):
+        """An unsigned integer VALUE of an alphanumeric item or a group (cobc:
+        "alphanumeric value is expected"): cob_move of the literal, its
+        digits, through cob_move_alphanum_to_edited for an edited item."""
+        if (initial is None or figurative is not None or initial.string or value_signed
+                or isinstance(initial, FloatLiteralToken) or not re.fullmatch(r"\d+", initial.text)):
+            return initial
+        text = initial.text
+        if edit:
+            source = iter(text)
+            text = "".join(next(source, " ") if symbol in "AX9" else " " if symbol == "B" else symbol
+                           for symbol in edit)
+        return Token(text, initial.line, True)
+    if not picture:
+        initial = alphanumeric_digits("")
     group_value = group_usage = None
     if not picture:
         kind, digits, scale, signed = "text", 0, 0, False
@@ -1250,6 +1273,11 @@ def declaration(p, file_record=False):
         p.error(f"PICTURE non prise en charge: {picture}")
     if usage == "POINTER":
         kind, signed = "pointer", False
+    if picture and kind == "text":
+        initial = alphanumeric_digits(alnum_edit)
+        if figurative == "0" and initial is not None and set(expanded) <= {"A", "B"} and "A" in expanded:
+            # validate_move (is_value): ZERO to an alphabetic item.
+            p.error("invalid VALUE clause")
     if kind == "number" and digits > 18 and usage in {"COMP", "COMPUTATIONAL", "BINARY", "COMP-4", "COMPUTATIONAL-4",
                                                        "COMP-5", "COMPUTATIONAL-5"}:
         # compute_size: BINARY and COMP-5 items hold at most 18 digits.

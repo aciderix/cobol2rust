@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T09:41:02+00:00",
- "git_head": "1afa02ba52d93a014a6a1bdcf3c7791914c55797",
- "implementation_sha256": "f5271a1b7e854878410fc1be8b38ee03179216fe40f56eeea4751544b8bbd051",
+ "measured_at": "2026-11-01T12:37:34+00:00",
+ "git_head": "b072c5a21ae756e621728f1e9f40a9ce87fff59e",
+ "implementation_sha256": "b9ca69360d81d08affa596ba58eab5a69df4a2c0ac39861e3491ce05080dfcf1",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1373,
+  "accepted": 1385,
   "cobc_accepted": 1617,
-  "gap": 244,
+  "gap": 232,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -313,7 +313,7 @@
     "kind": "tests de serveur de langage IBM"
    },
    "sources": 1505,
-   "accepted": 323,
+   "accepted": 324,
    "internal_errors": 0,
    "blockers": [
     [
@@ -337,15 +337,15 @@
      20
     ],
     [
+     "OCCURS limité à 1..10000, minimum variable 0..maximum",
+     17
+    ],
+    [
      "instruction non prise en charge: EXEC",
      16
     ],
     [
      "expression attendue",
-     16
-    ],
-    [
-     "OCCURS limité à 1..10000, minimum variable 0..maximum",
      16
     ],
     [
@@ -368,12 +368,8 @@
    "cobc_accepted": 331,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 8,
+   "gap": 7,
    "gap_sources": [
-    [
-     "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
-     "instruction non prise en charge: OF"
-    ],
     [
      "tests/test_files/project/HELLO-WORLD.cbl",
      "CALL identifiant requiert un champ alphanumérique"
@@ -409,10 +405,6 @@
      4
     ],
     [
-     "instruction non prise en charge: OF",
-     1
-    ],
-    [
      "CALL identifiant requiert un champ alphanumérique",
      1
     ],
@@ -435,7 +427,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 649,
+   "accepted": 660,
    "internal_errors": 1,
    "blockers": [
     [
@@ -490,12 +482,8 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 230,
+   "gap": 219,
    "gap_sources": [
-    [
-     "run_accept-003/prog.cob",
-     "ACCEPT FROM MICROSECOND-TIME non pris en charge"
-    ],
     [
      "run_accept-006/prog.cob",
      "PROCEDURE attendu"
@@ -506,7 +494,7 @@
     ],
     [
      "run_extensions-010/prog.cob",
-     "expression non prise en charge: WHEN-COMPILED"
+     "CALL CBL_OC_DUMP: programme non converti ou routine système non pris en charge"
     ],
     [
      "run_extensions-017/prog.cob",
@@ -591,10 +579,6 @@
     [
      "run_file-043/prog.cob",
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    [
-     "run_file-064/prog.cob",
-     "READ direct requiert INVALID KEY, pas AT END"
     ],
     [
      "run_file-078/prog.cob",
@@ -723,10 +707,6 @@
     [
      "run_fundamental-075/prog.cob",
      "REMAINDER avec un quotient recouvrant un opérande non pris en charge"
-    ],
-    [
-     "run_fundamental-079/prog.cob",
-     "DISPLAY UPON STDOUT non pris en charge"
     ],
     [
      "run_fundamental-112/prog.cob",
@@ -1069,10 +1049,6 @@
      "REPOSITORY PROGRAM non pris en charge"
     ],
     [
-     "run_misc-146/prog.cob",
-     "expression non prise en charge: >="
-    ],
-    [
      "run_misc-148/prog.cob",
      "END PROGRAM ne correspond pas au PROGRAM-ID"
     ],
@@ -1193,10 +1169,6 @@
      "COPY REPLACING d'un copybook contenant COPY non pris en charge"
     ],
     [
-     "syn_definition-019/prog.cob",
-     "condition dupliquée ou réservée"
-    ],
-    [
      "syn_definition-025/prog.cob",
      "PROGRAM-ID attendu"
     ],
@@ -1219,10 +1191,6 @@
     [
      "syn_definition-056/prog3.cob",
      "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté"
-    ],
-    [
-     "syn_definition-059/prog.cob",
-     "item may not reference itself"
     ],
     [
      "syn_definition-060/prog.cob",
@@ -1309,10 +1277,6 @@
      "directive >>CALL-CONVENTION non prise en charge"
     ],
     [
-     "syn_misc-062/prog.cob",
-     "niveau de donnée attendu"
-    ],
-    [
      "syn_misc-080/prog.cob",
      "PROCEDURE attendu"
     ],
@@ -1323,10 +1287,6 @@
     [
      "syn_misc-084/prog.cob",
      "CALL prog3: programme non converti ou routine système non pris en charge"
-    ],
-    [
-     "syn_misc-093/prog.cob",
-     "RUN attendu"
     ],
     [
      "syn_misc-097/prog.cob",
@@ -1397,18 +1357,6 @@
      "DISPLAY WITH CONVERSION (écran) non pris en charge"
     ],
     [
-     "syn_value-008/prog.cob",
-     "VALUE incompatible avec la PICTURE"
-    ],
-    [
-     "syn_value-009/prog.cob",
-     "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE"
-    ],
-    [
-     "syn_value-012/prog.cob",
-     "VALUE incompatible avec la PICTURE"
-    ],
-    [
      "syn_value-013/prog.cob",
      "groupe vide: IMPHEAD.IMPPIC"
     ]
@@ -1467,10 +1415,10 @@
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 244,
-  "matching": 244,
-  "complete": 127,
-  "distinct": 163,
+  "sources": 232,
+  "matching": 232,
+  "complete": 114,
+  "distinct": 153,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1627,12 +1575,6 @@
     "first": 3,
     "present": 3,
     "alone": 0
-   },
-   {
-    "diagnostic": "niveau de donnée attendu",
-    "first": 1,
-    "present": 3,
-    "alone": 1
    },
    {
     "diagnostic": "USAGE/clause non pris en charge: IS",
@@ -1797,12 +1739,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "VALUE incompatible avec la PICTURE",
-    "first": 2,
-    "present": 2,
-    "alone": 1
-   },
-   {
     "diagnostic": "CALL ValidateCheckDigit: programme non converti ou routine système non pris en charge",
     "first": 1,
     "present": 1,
@@ -1813,12 +1749,6 @@
     "first": 1,
     "present": 1,
     "alone": 0
-   },
-   {
-    "diagnostic": "instruction non prise en charge: OF",
-    "first": 1,
-    "present": 1,
-    "alone": 1
    },
    {
     "diagnostic": "CALL identifiant requiert un champ alphanumérique",
@@ -1857,16 +1787,10 @@
     "alone": 0
    },
    {
-    "diagnostic": "ACCEPT FROM MICROSECOND-TIME non pris en charge",
+    "diagnostic": "CALL CBL_OC_DUMP: programme non converti ou routine système non pris en charge",
     "first": 1,
     "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "expression non prise en charge: WHEN-COMPILED",
-    "first": 1,
-    "present": 1,
-    "alone": 1
+    "alone": 0
    },
    {
     "diagnostic": "VALUE en LINKAGE SECTION non pris en charge",
@@ -1959,12 +1883,6 @@
     "alone": 1
    },
    {
-    "diagnostic": "READ direct requiert INVALID KEY, pas AT END",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
     "diagnostic": "copybook introuvable: xfhfcd.cpy",
     "first": 1,
     "present": 1,
@@ -2050,12 +1968,6 @@
    },
    {
     "diagnostic": "REMAINDER avec un quotient recouvrant un opérande non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "DISPLAY UPON STDOUT non pris en charge",
     "first": 1,
     "present": 1,
     "alone": 1
@@ -2169,12 +2081,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "expression non prise en charge: >=",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
     "diagnostic": "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge",
     "first": 1,
     "present": 1,
@@ -2253,22 +2159,16 @@
     "alone": 0
    },
    {
-    "diagnostic": "condition dupliquée ou réservée",
-    "first": 1,
+    "diagnostic": "niveau de donnée attendu",
+    "first": 0,
     "present": 1,
-    "alone": 1
+    "alone": 0
    },
    {
     "diagnostic": "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté",
     "first": 1,
     "present": 1,
     "alone": 0
-   },
-   {
-    "diagnostic": "item may not reference itself",
-    "first": 1,
-    "present": 1,
-    "alone": 1
    },
    {
     "diagnostic": "niveau 88 de groupe limité aux littéraux alphanumériques",
@@ -2373,12 +2273,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "RUN attendu",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
     "diagnostic": "ordinal requiert un entier littéral non signé",
     "first": 1,
     "present": 1,
@@ -2434,12 +2328,6 @@
    },
    {
     "diagnostic": "DISPLAY WITH CONVERSION (écran) non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 1
-   },
-   {
-    "diagnostic": "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE",
     "first": 1,
     "present": 1,
     "alone": 1
@@ -2594,15 +2482,6 @@
    },
    {
     "corpus": "che4z-lsp-for-cobol",
-    "source": "clients/analysis/src/__tests__/__resources__/cfgraph/case99.cbl",
-    "diagnostics": [
-     "instruction non prise en charge: OF"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "che4z-lsp-for-cobol",
     "source": "tests/test_files/project/HELLO-WORLD.cbl",
     "diagnostics": [
      "CALL identifiant requiert un champ alphanumérique"
@@ -2682,15 +2561,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_accept-003/prog.cob",
-    "diagnostics": [
-     "ACCEPT FROM MICROSECOND-TIME non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_accept-006/prog.cob",
     "diagnostics": [
      "PROCEDURE attendu"
@@ -2711,9 +2581,9 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_extensions-010/prog.cob",
     "diagnostics": [
-     "expression non prise en charge: WHEN-COMPILED"
+     "CALL CBL_OC_DUMP: programme non converti ou routine système non pris en charge"
     ],
-    "complete": true,
+    "complete": false,
     "matches_measure": true
    },
    {
@@ -2914,15 +2784,6 @@
     "source": "run_file-043/prog.cob",
     "diagnostics": [
      "CALL BY VALUE : ABI hors des routines système d'octets non prise en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-064/prog.cob",
-    "diagnostics": [
-     "READ direct requiert INVALID KEY, pas AT END"
     ],
     "complete": true,
     "matches_measure": true
@@ -3218,15 +3079,6 @@
     "source": "run_fundamental-075/prog.cob",
     "diagnostics": [
      "REMAINDER avec un quotient recouvrant un opérande non pris en charge"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-079/prog.cob",
-    "diagnostics": [
-     "DISPLAY UPON STDOUT non pris en charge"
     ],
     "complete": true,
     "matches_measure": true
@@ -4139,15 +3991,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_misc-146/prog.cob",
-    "diagnostics": [
-     "expression non prise en charge: >="
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_misc-148/prog.cob",
     "diagnostics": [
      "END PROGRAM ne correspond pas au PROGRAM-ID"
@@ -4434,15 +4277,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_definition-019/prog.cob",
-    "diagnostics": [
-     "condition dupliquée ou réservée"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_definition-025/prog.cob",
     "diagnostics": [
      "PROGRAM-ID attendu"
@@ -4494,15 +4328,6 @@
      "clause OBJECT-COMPUTER non prise en charge; seul le nom de machine est accepté"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_definition-059/prog.cob",
-    "diagnostics": [
-     "item may not reference itself"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -4705,15 +4530,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_misc-062/prog.cob",
-    "diagnostics": [
-     "niveau de donnée attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_misc-080/prog.cob",
     "diagnostics": [
      "PROCEDURE attendu"
@@ -4737,15 +4553,6 @@
      "CALL prog3: programme non converti ou routine système non pris en charge"
     ],
     "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_misc-093/prog.cob",
-    "diagnostics": [
-     "RUN attendu"
-    ],
-    "complete": true,
     "matches_measure": true
    },
    {
@@ -4906,34 +4713,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_value-008/prog.cob",
-    "diagnostics": [
-     "VALUE incompatible avec la PICTURE",
-     "niveau de donnée attendu"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_value-009/prog.cob",
-    "diagnostics": [
-     "VALUE de groupe limité à un littéral alphanumérique, ZERO ou SPACE"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_value-012/prog.cob",
-    "diagnostics": [
-     "VALUE incompatible avec la PICTURE"
-    ],
-    "complete": true,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_value-013/prog.cob",
     "diagnostics": [
      "groupe vide: IMPHEAD.IMPPIC"
@@ -4944,9 +4723,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T09:41:02+00:00",
-  "git_head": "1afa02ba52d93a014a6a1bdcf3c7791914c55797",
-  "implementation_sha256": "f5271a1b7e854878410fc1be8b38ee03179216fe40f56eeea4751544b8bbd051",
+  "measured_at": "2026-11-01T12:37:34+00:00",
+  "git_head": "b072c5a21ae756e621728f1e9f40a9ce87fff59e",
+  "implementation_sha256": "b9ca69360d81d08affa596ba58eab5a69df4a2c0ac39861e3491ce05080dfcf1",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

@@ -1,5 +1,28 @@
 # Validation — 30 octobre 2026
 
+## Lot 2 de constructions générales — 1er novembre 2026
+
+- Fixtures identiques au natif : `small_constructs_2.cob` (EVALUATE à objets
+  partiels relationnels, de classe et de signe, avec ALSO ; STOP
+  identificateur ; point redondant ; registre WHEN-COMPILED sous sa forme),
+  `read_handler_class.cob` (READ direct RELATIVE avec AT END : statut 23
+  sans gestionnaire exécuté), `value_literals.cob` (VALUE numérique et
+  trop long en PIC X, BXX et groupe), `sort_qualified_procedures.cob`
+  (paragraphes homonymes WORK OF FEED / IN DRAIN).
+- Comportements de cobc vérifiés au natif : INVALID KEY refusé sur un READ
+  SEQUENTIAL, VALUE ZERO d'un PIC A refusé, référence à un 88 homonyme
+  ambiguë, `CBL_OC_DUMP` résolu dans `COB_LIBRARY_PATH` (laissé refusé),
+  centièmes d'ACCEPT FROM TIME présents sous Linux quel que soit le receveur.
+- Sources débloquées identiques au natif : run_accept-003 (à l'horloge
+  près), run_file-064, run_fundamental-079, run_misc-146,
+  syn_definition-019 et 059, syn_misc-062 et 093, syn_value-008, 009, 012 ;
+  case99 (che4z) seulement acceptée, la forme étant vérifiée par
+  `sort_qualified_procedures.cob`.
+- Mesure : **1373 → 1385/3593**, écart **244 → 232**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lot2.json`) ; suite
+  **610 tests**, 0 échec.
+
 ## Fonctions de locale — 1er novembre 2026
 
 - Fixture `tests/fixtures/locale_functions.cob` identique au natif :

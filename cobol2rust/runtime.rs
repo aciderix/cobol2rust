@@ -2645,6 +2645,11 @@ fn clock(kind: &str) -> (i64, usize) {
             let t = current_datetime();
             (t.nanosecond / 10_000_000 + t.second * 100 + t.minute * 10000 + t.hour * 1000000, 8)
         },
+        // cob_accept_microsecond_time: HHMMSSuuuuuu, a binary of 12 digits.
+        "MICROSECOND-TIME" => {
+            let t = current_datetime();
+            (t.nanosecond / 1000 + t.second * 1_000_000 + t.minute * 100_000_000 + t.hour * 10_000_000_000, 12)
+        },
         _ => fail("ACCEPT FROM clock register not modelled"),
     }
 }

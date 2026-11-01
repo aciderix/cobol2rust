@@ -2506,8 +2506,9 @@ class Emitter:
             random, previous = node.stmt.args[4], str(node.stmt.args[5]).lower()
             # INDEXED: (key index, compared length) of the keyed READ.
             keyed = bool(random)
-            # AT END takes every 1x status of a sequential read, INVALID KEY every 2x.
-            exception_class = 2 if random else 1
+            # AT END takes every 1x status, INVALID KEY every 2x.
+            handler_kind = getattr(node.stmt, "handler", None) or ("key" if random else "end")
+            exception_class = 2 if handler_kind == "key" else 1
             area, depending = f"self.{self.files[name]}_area", self.depending(name, True)
             if spec.organization == "INDEXED":
                 if random:
@@ -2521,8 +2522,8 @@ class Emitter:
                 self.write(f"let {status} = {self.handle(name)}.read_key(&mut {area}, &self.{self.names[spec.relative_key]}, {depending});")
             else:
                 self.write(f"let {status} = {self.handle(name)}.read_next(&mut {area}, {self.relative_key(name, True)}, {previous}, {depending});")
-            self.io_invalid = handled and keyed
-            self.file_status(name, status, handled and not keyed)
+            self.io_invalid = handled and handler_kind == "key"
+            self.file_status(name, status, handled and handler_kind == "end")
             self.io_handlers, self.io_invalid = None, False
             self.write(f"if matches!({status}, 0 | 4 | 6 | 9) {{")
             self.indent += 1

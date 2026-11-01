@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T09:41:02+00:00 (commit `1afa02ba52`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-01T12:37:34+00:00 (commit `b072c5a21a`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -104,11 +104,11 @@ Dernière mesure : 2026-11-01T09:41:02+00:00 (commit `1afa02ba52`, cobc (GnuCOBO
 | cobol-programming-course | cours IBM Enterprise COBOL | 32 | 12 | 12 | 0 | 0 |
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
-| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 323 | 331 | 8 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 649 | 879 | 230 | 0 |
-| **Total** | | **3593** | **1373** | **1617** | **244** | **0** |
+| che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 324 | 331 | 7 | 0 |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 660 | 879 | 219 | 0 |
+| **Total** | | **3593** | **1385** | **1617** | **232** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T09:41:02+00:00, commit `1afa02ba52`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T12:37:34+00:00, commit `b072c5a21a`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -130,7 +130,7 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 9. 4 × CALL dump: programme non converti ou routine système non pris en charge
 10. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 244 sources, 244 au premier diagnostic identique à la mesure, 127 à inventaire complet, 163 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 232 sources, 232 au premier diagnostic identique à la mesure, 114 à inventaire complet, 153 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -883,3 +883,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   débloquées (run_functions-017, 047 à 050, 070 à 073), identiques au natif.
   Testsuite **640 → 649/1135**, total **1364 → 1373/3593**, écart **253 →
   244**.
+- 2026-11-01 — Lot 2 de constructions générales (traîne de l'écart : sources
+  complètes bloquées par une seule construction) : EVALUATE à objet partiel
+  (`evaluate_object` : sujet inséré en tête, NOT rattaché), STOP
+  identificateur, point redondant du scanner, registre WHEN-COMPILED, ACCEPT
+  FROM MICROSECOND-TIME, dispositifs STDIN/STDOUT/STDERR/SYSIPT prédéfinis,
+  niveaux 88 homonymes, règle « item may not reference itself » de cobc
+  (article ou ancêtres seulement), VALUE entier non signé d'un article
+  alphanumérique, édité ou groupe (et VALUE ZERO d'un alphabétique refusé),
+  classe des gestionnaires de READ (AT END sur une lecture directe ;
+  INVALID KEY refusé hors RELATIVE/INDEXED), procédures de SORT qualifiées
+  par leur section. Une erreur de ma part, corrigée avant mesure : la règle
+  DTR_TIME_NO_NANO d'ACCEPT FROM TIME ne vaut que sous Windows. Douze
+  sources débloquées (run_accept-003, run_file-064, run_fundamental-079,
+  run_misc-146, syn_definition-019 et 059, syn_misc-062 et 093, syn_value-008,
+  009, 012 identiques au natif, et case99 de che4z, acceptée sans être
+  exécutée : le corpus che4z n'est pas exécuté) ; syn_value-007, exposée
+  un temps en « à examiner », est de nouveau refusée comme par cobc.
+  Testsuite **649 → 660/1135**, che4z **323 → 324/1505**, total **1373 →
+  1385/3593**, écart **244 → 232**.

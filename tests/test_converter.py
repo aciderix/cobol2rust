@@ -43,7 +43,6 @@ class FrontendTests(unittest.TestCase):
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("display n.", "01 n pic 9. 01 n pic 9."),   # ambiguous reference
             program("stop run.", "01 x pic x(0)."),
-            program("accept n from microsecond-time.", "01 n pic 9(8)."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):

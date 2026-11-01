@@ -559,6 +559,10 @@ def lex(source: str, decimal_comma: bool = False) -> list[Token]:
             text = match[0]
             if decimal_comma and re.fullmatch(r"[+-]?\d+,\d+", text):
                 text = text.replace(",", ".")
+            if text == "." and tokens and tokens[-1].key == "." and not tokens[-1].string:
+                # scanner.l "."([ \n]*".")+: "ignoring redundant .".
+                i += len(match[0])
+                continue
             tokens.append(Token(text, line, False, i, i + len(match[0])))
             i += len(match[0])
             if match[0].upper() in {"PIC", "PICTURE"} and not (len(tokens) > 1 and tokens[-2].key == "COPY"):
@@ -2667,7 +2671,13 @@ class Parser:
         if not (self.at("DATA") or self.at("PROCEDURE") or self.program_end()):
             self.error("clause ENVIRONMENT DIVISION non prise en charge")
 
-    DEVICES = {"SYSIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout", "SYSLIST": "stdout", "SYSLST": "stdout",
+    # system_name_table of reserved.c; cb_set_system_names predefines CONSOLE,
+    # SYSIN, SYSIPT, STDIN, SYSOUT, STDOUT, SYSERR, STDERR, SYSLST, SYSLIST and
+    # FORMFEED, the others name a device in SPECIAL-NAMES only.
+    DEFINED_DEVICES = {"PRINT": "stdout", "SYSPUNCH": "punch", "PRINTER-1": "printer",
+                       "ALTERNATE-CONSOLE": "console", "TERMINAL": "console"}
+    DEVICES = {"SYSIN": "stdin", "SYSIPT": "stdin", "STDIN": "stdin", "CONSOLE": "console", "SYSOUT": "stdout",
+               "STDOUT": "stdout", "STDERR": "stderr", "SYSLIST": "stdout", "SYSLST": "stdout",
                "SYSERR": "stderr", "PRINTER": "printer", "SYSPCH": "punch", "FORMFEED": "formfeed",
                **{f"C{n:02d}": "channel" for n in range(1, 13)},
                **{f"S{n:02d}": "formfeed" for n in range(1, 6)}, "CSP": "formfeed", "TOP": "formfeed"}
@@ -2790,12 +2800,12 @@ class Parser:
             key = self.t.key
             if self.t.string:
                 self.error("entrée SPECIAL-NAMES attendue")
-            if key in self.DEVICES:
+            if key in self.DEVICES or key in self.DEFINED_DEVICES:
                 self.take()
                 self.accept("IS")
                 if self.at("CRT"):
                     self.error("CONSOLE IS CRT (entrées-sorties écran) non pris en charge")
-                self.mnemonics[self.name()] = self.DEVICES[key]
+                self.mnemonics[self.name()] = self.DEVICES.get(key, self.DEFINED_DEVICES.get(key))
             elif re.fullmatch(r"SWITCH-(\d+)", key) and int(key[7:]) <= 36:
                 number = int(self.take().key[7:])
                 if self.accept("IS") or not (self.at("ON") or self.at("OFF")):
@@ -2869,7 +2879,8 @@ class Parser:
             elif self.accept("SYMBOLIC"):
                 self.accept("CHARACTERS")
                 while not self.at(".") and not self.t.string and self.t.key not in {
-                        "ALPHABET", "CLASS", "SYMBOLIC", "IN", "CURRENCY", "DECIMAL-POINT"} | set(self.DEVICES):
+                        "ALPHABET", "CLASS", "SYMBOLIC", "IN", "CURRENCY", "DECIMAL-POINT"} | set(self.DEVICES) \
+                        | set(self.DEFINED_DEVICES):
                     names = []
                     while not self.t.string and not self.t.key[:1].isdigit() and self.t.key not in {"IS", "ARE"}:
                         names.append(self.name())
@@ -3338,6 +3349,10 @@ class Parser:
             left = Expr("linage", (self.linage_file(),))
         elif not t.string and t.key in {"LINE-COUNTER", "PAGE-COUNTER"}:
             left = Expr("report_counter", (self.counter_report(t.key), t.key))
+        elif not t.string and t.key == "WHEN-COMPILED" and not self.candidates(t.key) and STD != "cobol85":
+            # cb_build_register_when_compiled: a constant "DD/MM/YYhh.mm.ss".
+            stamp, now = self.compile_clock()
+            left = Expr("text", (time_text("%d/%m/%y%H.%M.%S", now),))
         elif not t.string and t.key == "LENGTH" and not self.candidates(t.key):
             left = self.length_of()
         elif not t.string and t.key in {"NULL", "NULLS"} and not self.candidates(t.key):
@@ -4058,6 +4073,18 @@ class Parser:
             return condition if value else Expr("not", (condition,))
         if kind == "condition":
             self.error("objet d'un sujet conditionnel: TRUE, FALSE ou ANY attendu")
+        # evaluate_object: a partial expression starting (after NOT) with a
+        # relational operator or a class condition gets the subject inserted
+        # at its head, the NOT bound to it.
+        start = self.i
+        tokens = self.expression_tokens()
+        rest = tokens[1:] if tokens and tokens[0][0] == "!" else tokens
+        if rest and rest[0][0] in {"<", ">", "[", "]", "~", "=", "class", "P", "N"}:
+            if self.at("THRU") or self.at("THROUGH"):
+                self.error("invalid THROUGH usage")
+            from .conditions import build
+            return build([("x", value), *tokens], self.error)
+        self.i = start
         negate = self.accept("NOT")
         x = self.expr()
         if x.op == "condition":
@@ -4397,9 +4424,15 @@ class Parser:
             if random and spec.organization == "INDEXED":
                 # cob_read with KEY IS item, or the RECORD KEY (cob_findkey_attr).
                 random = self.index_key(spec, key_item) if key_item else (0, spec.record_key[2])
-            if handler == ("end" if random else "key"):
-                self.error("READ " + ("direct requiert INVALID KEY, pas AT END" if random else "séquentiel requiert AT END, pas INVALID KEY"))
-            return Stmt("read", (name, into, exception, success, random, previous), line)
+            if handler == "key" and spec.organization not in {"RELATIVE", "INDEXED"}:
+                # read_statement: only AT END suits the other organizations.
+                self.error("INVALID KEY clause invalid with this file type")
+            stmt = Stmt("read", (name, into, exception, success, random, previous), line)
+            # The handler takes the exceptions of its own class (AT END: 1x,
+            # INVALID KEY: 2x) whatever the kind of read; the others go to
+            # the error handling, as cobc's handler code.
+            stmt.handler = handler
+            return stmt
         if verb == "REWRITE":
             record = self.variable()
             files = [f.name for f in self.files.values() if record.name in f.records and not record.indices and record.start is None]
@@ -4614,7 +4647,8 @@ class Parser:
             # parser.y accept_body: an identifier, not a target_identifier.
             name = self.variable()
             if self.accept("FROM"):
-                if not self.t.string and self.t.key in {"DATE", "DAY", "DAY-OF-WEEK", "TIME"}:
+                if not self.t.string and (self.t.key in {"DATE", "DAY", "DAY-OF-WEEK", "TIME"}
+                                          or (self.t.key == "MICROSECOND-TIME" and STD != "cobol85")):
                     # cb_emit_accept_date/day/day_of_week/time: the clock moved
                     # as a binary field (DAY-OF-WEEK a one-character alphanumeric).
                     kind = self.take().key
@@ -4950,6 +4984,14 @@ class Parser:
                 # STOP literal (obsolete): DISPLAY the literal, then ACCEPT
                 # OMITTED waits for a line, as cb_emit_display/cb_emit_accept.
                 value = self.expr()
+                return Stmt("sequence", ([Stmt("display", ([value], True, "stdout"), line),
+                                          Stmt("accept_omitted", (), line)],), line)
+            if not self.t.string and self.t.key not in {"RUN", "ERROR", "THREAD"} and self.candidates(self.t.key):
+                # stop_argument: identifier (stop-identifier-statement:
+                # obsolete; unconformable in cobol85), as STOP literal.
+                if STD == "cobol85":
+                    self.error("STOP identifier does not conform to COBOL 85")
+                value = Expr("var", (self.variable(),))
                 return Stmt("sequence", ([Stmt("display", ([value], True, "stdout"), line),
                                           Stmt("accept_omitted", (), line)],), line)
             self.expect("RUN")
@@ -6010,10 +6052,11 @@ class Parser:
             self.check_identity_alphabet(self.t, self.name(), f"{verb} COLLATING SEQUENCE")
 
         def procedure():
+            # sort_input/output_proc: perform_procedure, qualified labels included.
             self.accept("IS")
-            target = [self.name()]
+            target = [self.procedure_reference()]
             if self.accept("THRU") or self.accept("THROUGH"):
-                target.append(self.name())
+                target.append(self.procedure_reference())
             return ("procedure", target)
 
         def files(word):

@@ -559,9 +559,11 @@ des arrêts nommés.
 
 ## Horloge, ACCEPT FROM DATE et FUNCTION RANDOM
 
-`ACCEPT x FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK` et `TIME`
-reprennent `cob_accept_date`… (valeur déplacée comme un champ binaire de 6, 8,
-5, 7 ou 8 chiffres, DAY-OF-WEEK comme un caractère alphanumérique) et
+`ACCEPT x FROM DATE [YYYYMMDD]`, `DAY [YYYYDDD]`, `DAY-OF-WEEK`, `TIME` et
+`MICROSECOND-TIME` (HHMMSSuuuuuu, hors cobol85) reprennent `cob_accept_date`…
+(valeur déplacée comme un champ binaire de 6, 8, 5, 7, 8 ou 12 chiffres,
+DAY-OF-WEEK comme un caractère alphanumérique ; sous Linux
+`DTR_TIME_NO_NANO` ne retire pas les centièmes) et
 FUNCTION CURRENT-DATE ; l'heure vient de `cob_get_current_datetime` : heure
 locale (fuseau UTC seul modélisé), nanosecondes toujours lues comme
 `clock_gettime` sous Linux, et `COB_CURRENT_DATE` porté de
@@ -757,7 +759,26 @@ ou une FUNCTION alphanumérique (`id_or_lit_or_func`, extension de cobc),
 lus comme un champ temporaire (un littéral numérique reste refusé). Les mots réservés de cobc sont refusés comme noms : la
 liste par défaut, ou celle de `config/cobol85.words` avec `--std cobol85`
 (NOTHING y redevient un nom, AUTHOR y est réservé). Deux articles frères de même
-nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée.
+nom sont acceptés ; seule une référence ambiguë à l'un d'eux est refusée ;
+il en va de même de deux niveaux 88 homonymes d'un même article.
+`EVALUATE` admet l'objet partiel de `evaluate_object` (`WHEN >= 10`,
+`WHEN NOT < 4`, `WHEN NUMERIC`, `WHEN IS NEGATIVE`) : le sujet est inséré en
+tête de l'expression, le NOT lui est rattaché, THRU y est refusé. `STOP
+identificateur` (désuet, refusé en cobol85) affiche l'article puis attend une
+ligne comme `STOP littéral` ; une suite de points séparés par des blancs vaut
+un seul point (« ignoring redundant . » du scanner) ; le registre
+`WHEN-COMPILED` (hors cobol85) est la constante « JJ/MM/AAhh.mm.ss » de la
+conversion ; STDIN, STDOUT, STDERR et SYSIPT sont prédéfinis comme les autres
+noms de `cb_set_system_names`, PRINT, TERMINAL, ALTERNATE-CONSOLE, SYSPUNCH
+et PRINTER-1 ne valent qu'en SPECIAL-NAMES. Un VALUE entier non signé d'un
+article alphanumérique ou d'un groupe donne ses chiffres (`cob_move`, à
+travers `cob_move_alphanum_to_edited` pour un alphanumérique édité, alors
+qu'un littéral alphanumérique y est copié tel quel) ; VALUE ZERO d'un
+article alphabétique est l'erreur « invalid VALUE clause ». Le gestionnaire
+d'un READ retient les exceptions de sa classe (AT END : 1x, INVALID KEY :
+2x), quelle que soit la lecture, INVALID KEY restant refusé hors RELATIVE et
+INDEXED ; les procédures de SORT/MERGE peuvent être qualifiées par leur
+section (`WORK OF FEED`).
 
 ## Partage et verrouillage de fichiers
 
