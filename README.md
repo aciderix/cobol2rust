@@ -1357,7 +1357,17 @@ statut 23 hors de 1..taille de la clé). READ PREVIOUS (RELATIVE et INDEXED)
 suit `cob_read_next` : en RELATIVE, `relative_read_next` recule de deux
 emplacements depuis la position courante, et d'un après un enregistrement,
 ce qui saute des enregistrements comme en natif.
-Les autres clauses FD et les clés INDEXED composées (SOURCE IS) ou SUPPRESS restent refusées. Le vérificateur refuse les réglages de concaténation de fichiers non
+Les clés composées (`RECORD KEY IS k SOURCE IS a, b` ou `= a b`, primaires et
+alternatives) suivent `bdb_savekey`/`bdb_cmpkey` : la clé est la suite des
+composantes prises dans l'enregistrement ; son nom désigne un article PIC
+X(somme) de WORKING-STORAGE (`cb_build_field`), qui ne sert qu'à nommer la
+clé dans READ KEY et START. START admet comme cobc (`check_valid_key`)
+l'article d'une clé, ou un article de l'enregistrement au déplacement de
+l'article d'une clé (0 pour une clé composée), puis `cob_findkey` choisit la
+clé (statut 23 sinon). `SUPPRESS WHEN ALL littéral / SPACE / ZERO` d'une clé
+alternative n'écrit pas dans son index une clé faite entièrement de ce
+caractère (`bdb_suppresskey`, caractère de `cb_literal_value`) ; HIGH-VALUE
+et LOW-VALUE y restent refusés. Les autres clauses FD restent refusées. Le vérificateur refuse les réglages de concaténation de fichiers non
 modélisés (`COB_SEQ_CONCAT_NAME`, `COB_SEQ_CONCAT_SEP`). Les options `COB_LS_FIXED`
 et `COB_LS_SPLIT` s'appliquent seulement au runtime LINE SEQUENTIAL.
 

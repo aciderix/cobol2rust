@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T13:06:40+00:00",
- "git_head": "5256215cda0effd7a71cfc1450728114b56a1bc5",
- "implementation_sha256": "06de0e20d8796766967659779a3fef3ef2756dde2a43f42ee8d677f8db212177",
+ "measured_at": "2026-11-01T13:40:05+00:00",
+ "git_head": "03a863dc6c5e6d7cbb17fad9bd3567e0d2656b68",
+ "implementation_sha256": "13e9c4402545b51f7819e31484d47b9f534747d82ac8b8eb14443a97fd56a413",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1387,
+  "accepted": 1392,
   "cobc_accepted": 1617,
-  "gap": 230,
+  "gap": 225,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -427,7 +427,7 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 662,
+   "accepted": 667,
    "internal_errors": 1,
    "blockers": [
     [
@@ -459,10 +459,6 @@
      6
     ],
     [
-     "clé INDEXED composée (SOURCE IS) non prise en charge",
-     5
-    ],
-    [
      "CURRENCY ... PICTURE SYMBOL non pris en charge",
      5
     ],
@@ -477,12 +473,16 @@
     [
      "RECORD attendu",
      5
+    ],
+    [
+     "identifiant attendu",
+     5
     ]
    ],
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 217,
+   "gap": 212,
    "gap_sources": [
     [
      "run_accept-006/prog.cob",
@@ -553,18 +553,6 @@
      "indicateur fixe 'I' non pris en charge"
     ],
     [
-     "run_file-024/prog.cob",
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    [
-     "run_file-025/prog.cob",
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    [
-     "run_file-026/prog.cob",
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    [
      "run_file-029/prog.cob",
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
     ],
@@ -587,10 +575,6 @@
     [
      "run_file-087/prog.cob",
      "copybook introuvable: xfhfcd3.cpy"
-    ],
-    [
-     "run_file-090/prog.cob",
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
     ],
     [
      "run_file-092/prog.cob",
@@ -1197,10 +1181,6 @@
      "RECORD attendu"
     ],
     [
-     "syn_file-040/prog.cob",
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    [
      "syn_file-043/prog.cob",
      "clause SELECT non prise en charge"
     ],
@@ -1371,10 +1351,6 @@
      6
     ],
     [
-     "clé INDEXED composée (SOURCE IS) non prise en charge",
-     5
-    ],
-    [
      "instruction non prise en charge: AT",
      5
     ],
@@ -1401,16 +1377,20 @@
     [
      "USAGE/clause non pris en charge: is",
      4
+    ],
+    [
+     "instruction non prise en charge: XML",
+     4
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 230,
-  "matching": 230,
+  "sources": 225,
+  "matching": 225,
   "complete": 116,
-  "distinct": 154,
+  "distinct": 153,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1470,12 +1450,6 @@
     "diagnostic": "PROGRAM-ID attendu",
     "first": 8,
     "present": 8,
-    "alone": 0
-   },
-   {
-    "diagnostic": "clé INDEXED composée (SOURCE IS) non prise en charge",
-    "first": 5,
-    "present": 5,
     "alone": 0
    },
    {
@@ -2724,33 +2698,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_file-024/prog.cob",
-    "diagnostics": [
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-025/prog.cob",
-    "diagnostics": [
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-026/prog.cob",
-    "diagnostics": [
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_file-029/prog.cob",
     "diagnostics": [
      "nom inconnu: FILE; qualifier avec OF/IN si nécessaire"
@@ -2800,15 +2747,6 @@
     "source": "run_file-087/prog.cob",
     "diagnostics": [
      "copybook introuvable: xfhfcd3.cpy"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_file-090/prog.cob",
-    "diagnostics": [
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
     ],
     "complete": false,
     "matches_measure": true
@@ -4341,15 +4279,6 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_file-040/prog.cob",
-    "diagnostics": [
-     "clé INDEXED composée (SOURCE IS) non prise en charge"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_file-043/prog.cob",
     "diagnostics": [
      "clause SELECT non prise en charge"
@@ -4703,9 +4632,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T13:06:40+00:00",
-  "git_head": "5256215cda0effd7a71cfc1450728114b56a1bc5",
-  "implementation_sha256": "06de0e20d8796766967659779a3fef3ef2756dde2a43f42ee8d677f8db212177",
+  "measured_at": "2026-11-01T13:40:05+00:00",
+  "git_head": "03a863dc6c5e6d7cbb17fad9bd3567e0d2656b68",
+  "implementation_sha256": "13e9c4402545b51f7819e31484d47b9f534747d82ac8b8eb14443a97fd56a413",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

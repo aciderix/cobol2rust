@@ -2699,8 +2699,11 @@ class Emitter:
             elif spec.organization == "RELATIVE":
                 created = f"file_runtime::RelativeFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}).named({quoted(spec.select_text or name)})"
             elif spec.organization == "INDEXED":
-                keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()} }}"
-                                 for _, offset, size, duplicates in [spec.record_key, *spec.alternate_keys])
+                components = getattr(spec, "key_parts", {})
+                keys = ", ".join(f"file_runtime::IndexKey {{ offset: {offset}, size: {size}, duplicates: {str(duplicates).lower()}, "
+                                 f"parts: vec![{', '.join(f'({o}, {n})' for o, n in components.get(index, []))}], "
+                                 f"suppress: {('Some(' + str(spec.key_suppress[index]) + ')') if index in getattr(spec, 'key_suppress', {}) else 'None'} }}"
+                                 for index, (_, offset, size, duplicates) in enumerate([spec.record_key, *spec.alternate_keys]))
                 created = f"file_runtime::IndexedFile::new({self.assign_literal(spec)}, {str(spec.optional).lower()}, {quoted(spec.access)}, {limits}, vec![{keys}]).named({quoted(spec.select_text or name)})"
             else:
                 linage = ".with_linage()" if spec.linage else ""

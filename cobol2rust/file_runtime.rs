@@ -1576,7 +1576,12 @@ impl SortFile {
 }
 
 /// One INDEXED key: its place in the record and WITH DUPLICATES.
-pub struct IndexKey { pub offset: usize, pub size: usize, pub duplicates: bool }
+/// A key of an INDEXED file; `parts` are the (offset, size) components of a
+/// split key (count_components), empty for a key that is one record item.
+/// `suppress`: char_suppress of SUPPRESS WHEN, a key of only that byte is
+/// not written to its index (bdb_suppresskey).
+pub struct IndexKey { pub offset: usize, pub size: usize, pub duplicates: bool, pub parts: Vec<(usize, usize)>,
+                      pub suppress: Option<u8> }
 
 /// A Berkeley DB btree as libcob 3.2 uses it: keys in memcmp order (a
 /// shorter key first), duplicates of a key in insertion order (DB_DUP).
@@ -1749,13 +1754,16 @@ impl IndexedFile {
     /// bdb_savekey: the key of index `idx` in `record`.
     fn savekey(&self, record: &[u8], idx: usize) -> Vec<u8> {
         let k = &self.keys[idx];
-        record[k.offset..k.offset + k.size].to_vec()
+        if k.parts.is_empty() { return record[k.offset..k.offset + k.size].to_vec(); }
+        // Each component's bytes, concatenated.
+        k.parts.iter().flat_map(|&(offset, size)| record[offset..offset + size].iter().copied()).collect()
     }
     /// bdb_cmpkey: compare the first `partlen` (0: whole key) bytes.
     fn cmpkey(&self, keyarea: &[u8], record: &[u8], idx: usize, partlen: usize) -> std::cmp::Ordering {
         let k = &self.keys[idx];
         let length = if partlen == 0 { k.size } else { partlen.min(k.size) };
-        keyarea[..length.min(keyarea.len())].cmp(&record[k.offset..k.offset + length])
+        let key = self.savekey(record, idx);
+        keyarea[..length.min(keyarea.len())].cmp(&key[..length])
     }
     fn dupno(data: &[u8], primekeylen: usize) -> u32 {
         u32::from_le_bytes(data[primekeylen..primekeylen + 4].try_into().unwrap())
@@ -2148,6 +2156,7 @@ impl IndexedFile {
         for i in 1..self.keys.len() {
             if rewrite && !self.rewrite_sec_key[i] { continue; }
             let altkey = self.savekey(full, i);
+            if self.keys[i].suppress.is_some_and(|c| altkey.iter().all(|b| *b == c)) { continue; }
             let mut data = self.savekey(full, 0);
             let duplicates = self.keys[i].duplicates;
             if duplicates {

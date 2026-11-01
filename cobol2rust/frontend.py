@@ -795,6 +795,14 @@ class FileSpec:
     # INDEXED: RECORD KEY, then ALTERNATE RECORD KEYs as (key, WITH DUPLICATES).
     record_key: object = None
     alternate_keys: list = field(default_factory=list)
+    # Split keys (key_component_list): key index -> components as written,
+    # then their (offset, size) in the record; the composite key's
+    # WORKING-STORAGE item -> key index.
+    key_components: dict = field(default_factory=dict)
+    # ALTERNATE ... SUPPRESS WHEN: key index -> char_suppress (bdb_suppresskey).
+    key_suppress: dict = field(default_factory=dict)
+    key_parts: dict = field(default_factory=dict)
+    composite_fields: dict = field(default_factory=dict)
     # FD LINAGE: part (lines, footing, top, bottom) -> ("literal", n) or ("field", name).
     linage: dict | None = None
     # FD EXTERNAL / GLOBAL; global_owner: the containing program that declared it.
@@ -1720,6 +1728,7 @@ class Parser:
             condition.values[index] = (token, token)
         self.apply_renames()
         self.validate_files()
+        memory_size = self.composite_key_items(memory_size)
         memory_size = self.debug_item(memory_size)
         self.return_code_register()
         self.call_parameters_register()
@@ -2248,6 +2257,24 @@ class Parser:
         from .layout import layout_fields
         layout_fields({key: self.fields[key]})
         self.fields[key].register = True
+
+    def composite_key_items(self, memory_size):
+        """The WORKING-STORAGE items of split keys (record_key_clause:
+        cb_build_field of the key name), after the other items."""
+        from .layout import layout_fields
+        for file_name, index, label, total in getattr(self, "composite_keys", []):
+            saved = self.tokens, self.i, self.data_stack, self.last_data
+            self.tokens, self.i, self.data_stack = lex(f"01 {label} PIC X({total})."), 0, []
+            try:
+                key = self.declaration()
+            finally:
+                self.tokens, self.i, self.data_stack, self.last_data = saved
+            extent = layout_fields({key: self.fields[key]})
+            self.fields[key].offset += memory_size
+            memory_size += extent
+            self.files[file_name].composite_fields[key] = index
+        self.composite_keys = []
+        return memory_size
 
     def call_parameters_register(self):
         """cb_build_register_number_parameters: NUMBER-OF-CALL-PARAMETERS, an
@@ -2995,6 +3022,25 @@ class Parser:
             self.expect("SEQUENTIAL")
             return "SEQUENTIAL"
 
+        components, suppress = {}, {}
+
+        def split_keys(index):
+            # _split_keys: source_is (= or SOURCE [IS]) split_key_list.
+            if not (self.at("SOURCE") or self.at("=")):
+                return
+            if self.take().key == "SOURCE":
+                self.accept("IS")
+            parts = []
+            stops = clause_words | {"WITH", "DUPLICATES", "PASSWORD", "SUPPRESS", "ASSIGN", "SELECT"}
+            while True:
+                self.accept(",")
+                if self.t.string or self.t.key in stops or any(self.at(word) for word in ends):
+                    break
+                parts.append(reference())
+            if not parts:
+                self.error("SOURCE IS requiert au moins une donnée")
+            components[index] = parts
+
         def reference():
             # Data names are declared later: keep the qualifiers for resolution.
             label, qualifiers = self.name(), []
@@ -3051,22 +3097,38 @@ class Parser:
                 self.accept("KEY")
                 self.accept("IS")
                 record_key = reference()
-                if self.at("SOURCE") or self.at("="):
-                    self.error("clé INDEXED composée (SOURCE IS) non prise en charge")
+                split_keys(0)
             elif self.accept("ALTERNATE"):
                 self.expect("RECORD")
                 self.accept("KEY")
                 self.accept("IS")
                 key = reference()
-                if self.at("SOURCE") or self.at("="):
-                    self.error("clé INDEXED composée (SOURCE IS) non prise en charge")
+                split_keys(len(alternate_keys) + 1)
                 duplicates = False
                 if self.at("WITH") or self.at("DUPLICATES"):
                     self.accept("WITH")
                     self.expect("DUPLICATES")
                     duplicates = True
-                if self.at("SUPPRESS"):
-                    self.error("ALTERNATE KEY SUPPRESS non pris en charge")
+                if self.accept("SUPPRESS"):
+                    # _suppress_clause: cb_literal_value of the character.
+                    self.expect("WHEN")
+                    if self.accept("ALL"):
+                        if self.t.string:
+                            text = self.take().text
+                            if not text:
+                                self.error("SUPPRESS WHEN ALL d'un littéral vide non pris en charge")
+                            char = ord(text[0])
+                        elif re.fullmatch(r"\d+", self.t.text):
+                            char = (int(self.take().text) - 1) & 0xFF
+                        elif self.t.key in {"SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES", "QUOTE", "QUOTES"}:
+                            char = {"S": 32, "Z": 48, "Q": 34}[self.take().key[0]]
+                        else:
+                            self.error(f"SUPPRESS WHEN ALL {self.t.text} non pris en charge")
+                    elif self.t.key in {"SPACE", "SPACES", "ZERO", "ZEROS", "ZEROES"}:
+                        char = 32 if self.take().key.startswith("S") else 48
+                    else:
+                        self.error("SUPPRESS WHEN ALL, SPACE ou ZERO attendu")
+                    suppress[len(alternate_keys) + 1] = char
                 alternate_keys.append((key, duplicates))
             elif self.accept("ACCESS") and access is None:
                 self.accept("MODE")
@@ -3145,7 +3207,8 @@ class Parser:
             self.error("ACCESS RANDOM/DYNAMIC requiert RELATIVE KEY")
         self.files[name] = FileSpec(name, path, optional, status, organization=organization,
                                     access=access or "SEQUENTIAL", relative_key=relative_key,
-                                    record_key=record_key, alternate_keys=alternate_keys,
+                                    record_key=record_key, alternate_keys=alternate_keys, key_components=components,
+                                    key_suppress=suppress,
                                     assign_field=assign_field, select_text=select_text)
         self.files[name].line_advancing = line_advancing
         self.files[name].lock_mode, self.files[name].sharing = lock_mode, bool(sharing)
@@ -3249,7 +3312,27 @@ class Parser:
                 keys = [(spec.record_key, False), *spec.alternate_keys]
                 spec.record_key, spec.alternate_keys = None, []
                 resolved = []
-                for (label, qualifiers), duplicates in keys:
+                for index, ((label, qualifiers), duplicates) in enumerate(keys):
+                    if index in spec.key_components:
+                        # validate_indexed_key_field: the composite key is an
+                        # item X(total) of WORKING-STORAGE, its value the
+                        # components' bytes in the record (bdb_savekey).
+                        parts = []
+                        for part_label, part_qualifiers in spec.key_components[index]:
+                            part = self.fields[self.resolve(part_label, part_qualifiers)]
+                            root = part.name.split(".")[0]
+                            if root not in spec.records or part.dimensions or part.depending:
+                                self.error(f"composante {part.label} de clé hors de l'enregistrement de {spec.name} ou dans une table")
+                            parts.append((part.offset - self.fields[root].offset, part.size))
+                        total = sum(size for _, size in parts)
+                        if total > 255:
+                            self.error(f"clé INDEXED {label} limitée à 255 octets")
+                        if qualifiers or self.candidates(label):
+                            self.error(f"clé composée {label} : nom déjà déclaré ou qualifié")
+                        spec.key_parts[index] = parts
+                        self.composite_keys = [*getattr(self, "composite_keys", []), (spec.name, index, label, total)]
+                        resolved.append((label, parts[0][0], total, duplicates))
+                        continue
                     name = self.resolve(label, qualifiers)
                     root = name.split(".")[0]
                     key = self.fields[name]
@@ -3258,7 +3341,10 @@ class Parser:
                     if key.size > 255:
                         self.error(f"clé INDEXED {key.label} limitée à 255 octets")
                     resolved.append((name, key.offset - self.fields[root].offset, key.size, duplicates))
-                if len({(offset, size) for _, offset, size, _ in resolved}) != len(resolved):
+                simple = [(offset, size) for index, (_, offset, size, _) in enumerate(resolved)
+                          if index not in spec.key_parts]
+                composite = [tuple(parts) for parts in spec.key_parts.values()]
+                if len(set(simple)) != len(simple) or len(set(composite)) != len(composite):
                     self.error("clés INDEXED de même position non prises en charge")
                 spec.record_key, spec.alternate_keys = resolved[0], resolved[1:]
             if "linage" in spec.fd_clauses:
@@ -4516,10 +4602,8 @@ class Parser:
                     self.error("LENGTH/SIZE clause only allowed on INDEXED files")
             if key is not None:
                 if spec.organization == "INDEXED":
+                    self.check_valid_key(spec, key)
                     index = self.index_key(spec, key)
-                    if index[0] < 0:
-                        # check_valid_key: a record item at a key's offset.
-                        self.error("invalid key item")
                 elif key.name != spec.relative_key or key.indices or key.start is not None:
                     self.error("START KEY doit désigner la RELATIVE KEY du fichier")
             elif spec.organization == "INDEXED":
@@ -5316,6 +5400,22 @@ class Parser:
             self.error("instruction attendue après INVALID KEY")
         return body
 
+    def check_valid_key(self, spec, ref):
+        """check_valid_key of cb_emit_start: a key's own item, or a record
+        item at the offset of a key's item in its 01 (a split key's item is
+        a WORKING-STORAGE 01: offset 0)."""
+        keys = [spec.record_key, *spec.alternate_keys]
+        if ref.name in spec.composite_fields or any(
+                index not in spec.key_parts and key[0] == ref.name for index, key in enumerate(keys)):
+            return
+        root = ref.name.split(".")[0]
+        if root not in spec.records:
+            self.error("invalid key item")
+        offset = self.fields[ref.name].offset - self.fields[root].offset
+        offsets = {0 if index in spec.key_parts else key[1] for index, key in enumerate(keys)}
+        if offset not in offsets:
+            self.error("invalid key item")
+
     def index_key(self, spec, ref):
         """cob_findkey_attr: the key whose field starts where the KEY item
         starts; the item's size is the compared (partial) length. Without
@@ -5324,15 +5424,24 @@ class Parser:
         root = ref.name.split(".")[0]
         if ref.indices or ref.start is not None or f.dimensions:
             self.error(f"KEY {f.label} indicé ou modifié non pris en charge")
+        if ref.name in spec.composite_fields:
+            # cob_findkey: the composite key's own item, its whole length.
+            index = spec.composite_fields[ref.name]
+            return index, [spec.record_key, *spec.alternate_keys][index][2]
         if root not in spec.records:
             # Not in the record area: no key starts there, status 23.
             return -1, f.size
         offset = f.offset - self.fields[root].offset
-        for index, (_, key_offset, size, _) in enumerate([spec.record_key, *spec.alternate_keys]):
-            if key_offset == offset:
+        keys = list(enumerate([spec.record_key, *spec.alternate_keys]))
+        for index, (_, key_offset, size, _) in keys:
+            if key_offset == offset and index not in spec.key_parts:
                 if f.size > size:
                     self.error(f"KEY {f.label} plus longue que la clé du fichier")
                 return index, f.size
+        for index, (_, key_offset, size, _) in keys:
+            # A split key whose first component starts there: the full key.
+            if key_offset == offset and index in spec.key_parts:
+                return index, size
         return -1, f.size
 
     def key_handlers(self, file_name, ending):

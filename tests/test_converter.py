@@ -103,8 +103,9 @@ class FrontendTests(unittest.TestCase):
         Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
         # READ KEY of an item no key starts at: status 23 (cob_findkey_attr).
         Emitter(Parser(source("record key is k", "read f key is a. stop run.")).parse()).generate()
+        # SUPPRESS WHEN of an alternate key is modelled (tests/test_split_keys.py).
+        Emitter(Parser(source("record key is k alternate record key is a suppress when space")).parse()).generate()
         for case in (source("record key is w"), source("alternate record key is a"),
-                     source("record key is k alternate record key is a suppress when space"),
                      source("record key is k", "start f key is = w. stop run.")):
             with self.subTest(case=case), self.assertRaises(CobolError):
                 Emitter(Parser(case).parse()).generate()

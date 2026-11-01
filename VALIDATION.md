@@ -1,5 +1,22 @@
 # Validation — 30 octobre 2026
 
+## Clés INDEXED composées et SUPPRESS — 1er novembre 2026
+
+- Fixture `tests/fixtures/split_keys.cob` identique au natif, fichier compris :
+  clé primaire composée (ordre des composantes différent de l'enregistrement),
+  clé alternative composée avec DUPLICATES, clé alternative simple avec
+  SUPPRESS WHEN ALL "*", doublon de clé primaire (22), READ KEY par l'article
+  composé, START par la clé composée, START par un article au déplacement 0
+  (accepté par cobc, statut 23), REWRITE vers une clé supprimée, DELETE.
+- Refus de cobc reproduit : START par la première composante (« invalid key
+  item »).
+- Sources débloquées identiques au natif : run_file-024, 025, 026, 090,
+  syn_file-040.
+- Mesure : **1387 → 1392/3593**, écart **230 → 225**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-sk.json`) ; suite
+  **617 tests**, 0 échec après mise à jour du test qui imposait le refus de SUPPRESS.
+
 ## Lot 3 : SPECIAL-NAMES, classes, portée des GLOBAL — 1er novembre 2026
 
 - Fixture `tests/fixtures/small_constructs_3.cob` identique au natif : deux
