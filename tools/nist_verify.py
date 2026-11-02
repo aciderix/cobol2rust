@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from concurrent.futures import ProcessPoolExecutor
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -192,6 +193,13 @@ def check(corpus: Path, native_logs: Path, name: str, work: Path) -> dict:
     return entry
 
 
+def guarded_check(task) -> dict:
+    try:
+        return check(*task)
+    except (OSError, ValueError, CobolError, subprocess.SubprocessError) as exc:
+        return {"program": task[2], "passed": False, "error": str(exc)}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("programs", nargs="*", help="noms NIST, par ex. SQ143A")
@@ -201,6 +209,8 @@ def main(argv=None) -> int:
     parser.add_argument("--native-logs", type=Path, default=Path(".tools/nist-native-gnucobol-3.2"))
     parser.add_argument("--work", type=Path, required=True, help="dossier de travail inexistant")
     parser.add_argument("-o", "--output", type=Path, required=True, help="nouveau rapport JSON")
+    parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1,
+                        help="programmes vérifiés en parallèle (défaut : un par CPU)")
     args = parser.parse_args(argv)
     global NATIVE_LOGS
     NATIVE_LOGS = args.native_logs
@@ -218,17 +228,19 @@ def main(argv=None) -> int:
         print("GnuCOBOL et Cargo sont requis", file=sys.stderr)
         return 2
     entries = []
-    for name in sorted(set(names)):
-        try:
-            entry = check(args.corpus.absolute(), args.native_logs.absolute(), name, args.work.absolute() / name)
-        except (OSError, ValueError, CobolError, subprocess.SubprocessError) as exc:
-            entry = {"program": name, "passed": False, "error": str(exc)}
-        entries.append(entry)
-        counts = entry.get("runner_counts") or {}
-        print(f"{'PASS' if entry['passed'] else 'FAIL'} {name}"
-              + (f" ({counts['pass']}/{counts['total']} PASS natifs)" if counts else "")
-              + (f" : {entry.get('error') or entry.get('rust_stderr', '').strip()}" if not entry["passed"] else ""),
-              flush=True)
+    names = sorted(set(names))
+    tasks = [(args.corpus.absolute(), args.native_logs.absolute(), name, args.work.absolute() / name) for name in names]
+    # Each program has its own work directory; convert() sets the frontend
+    # profile, which is global: one process per program at a time.
+    with ProcessPoolExecutor(max_workers=max(1, min(args.jobs, len(tasks)))) as pool:
+        for entry in pool.map(guarded_check, tasks):
+            entries.append(entry)
+            name = entry["program"]
+            counts = entry.get("runner_counts") or {}
+            print(f"{'PASS' if entry['passed'] else 'FAIL'} {name}"
+                  + (f" ({counts['pass']}/{counts['total']} PASS natifs)" if counts else "")
+                  + (f" : {entry.get('error') or entry.get('rust_stderr', '').strip()}" if not entry["passed"] else ""),
+                  flush=True)
     totals = {key: sum((entry.get("runner_counts") or {}).get(key, 0) for entry in entries if entry["passed"])
               for key in ("total", "pass", "fail", "deleted", "inspect")}
     summary = {"programs": entries, "passed": sum(entry["passed"] for entry in entries),

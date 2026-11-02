@@ -22,13 +22,15 @@ pub fn owned_block(name: &str, size: usize) -> Memory {
 /// cob_external_addr: the run unit's storage of an EXTERNAL item, created
 /// zero-filled by its first program; a different size is not modelled
 /// (libcob stops on a larger one and warns on a smaller one).
+/// cob_external_addr: the item allocated by its first declaration; a larger
+/// one is a runtime error, a smaller one a warning.
 pub fn external(name: &str, size: usize) -> Memory {
-    EXTERNALS.with(|externals| {
-        let mut externals = externals.borrow_mut();
-        let block = externals.entry(name.to_string()).or_insert_with(|| memory(size)).clone();
-        if block.borrow().len() != size { crate::runtime::fail(&format!("EXTERNAL item {name} declared with another size")); }
-        block
-    })
+    let block = EXTERNALS.with(|externals| externals.borrow_mut().entry(name.to_string()).or_insert_with(|| memory(size)).clone());
+    let stored = block.borrow().len();
+    let message = format!("EXTERNAL item '{name}' previously allocated with size {stored}, requested size is {size}");
+    if size > stored { crate::runtime::fatal_error(message.as_bytes()); }
+    if size < stored { eprintln!("libcob: warning: {message}"); }
+    block
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -44,6 +46,13 @@ pub enum Usage {
     /// Signed DISPLAY with a SIGN clause: overpunched first digit, or a
     /// separate '+'/'-' byte before or after the digits.
     SignLeading, SignLeadingSeparate, SignTrailingSeparate,
+    /// COMP-1 / COMP-2: a native C float or double (COB_TYPE_NUMERIC_FLOAT,
+    /// COB_TYPE_NUMERIC_DOUBLE), read and stored through runtime::float.
+    Float, Double,
+    /// COMP-X / COMP-N: a real binary item bounded by its size, like
+    /// COMP-5, but stored big-endian (flag_binary_swap) and displayed on the
+    /// digits of its PICTURE.
+    Swapped,
 }
 impl Usage {
     pub fn is_display(self) -> bool {
@@ -93,6 +102,13 @@ const SYSTEM_PACK_TO_BIN: [u8; 256] = [
     150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165,
 ];
 
+/// cob_decimal_get_field for COB_TYPE_NUMERIC_FLOAT / DOUBLE: the native
+/// bytes, None when the double is not finite (cob_not_finite).
+fn float_bytes(source: &Value, usage: Usage) -> Option<Vec<u8>> {
+    let value = crate::runtime::float::to_f64(&source.num())?;
+    Some(if matches!(usage, Usage::Float) { (value as f32).to_le_bytes().to_vec() } else { value.to_le_bytes().to_vec() })
+}
+
 fn system_integer_impl(value: &Value, optimized_display: bool) -> i128 {
     fn int32(units: &BigInt) -> i128 {
         let bytes: [u8; 4] = native_bytes(units, 4).try_into().unwrap();
@@ -110,12 +126,13 @@ fn system_integer_impl(value: &Value, optimized_display: bool) -> i128 {
     let mut bytes = view.raw();
     if bytes.is_empty() { fail("argument entier BY VALUE sans stockage"); }
     match usage {
-        Usage::Binary | Usage::Native | Usage::Register | Usage::Index => {
+        Usage::Float | Usage::Double => fail("argument entier BY VALUE d'un flottant non pris en charge"),
+        Usage::Binary | Usage::Native | Usage::Register | Usage::Index | Usage::Swapped => {
             if !matches!(bytes.len(), 1 | 2 | 4 | 8) {
                 fail("taille binaire BY VALUE non prise en charge");
             }
             let signed = signed || matches!(usage, Usage::Index);
-            let number = if matches!(usage, Usage::Binary) {
+            let number = if matches!(usage, Usage::Binary | Usage::Swapped) {
                 if signed { BigInt::from_signed_bytes_be(&bytes) } else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             } else if signed {
                 BigInt::from_signed_bytes_le(&bytes)
@@ -453,21 +470,22 @@ impl View {
     /// The storage of the item; an unbound LINKAGE item (not passed by the
     /// caller, a NULL address for GnuCOBOL) is a named stop.
     fn mem(&self) -> std::cell::Ref<'_, Vec<u8>> {
-        let memory = self.memory.borrow();
-        if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
-            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
-        }
-        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
-        memory
+        self.check_storage();
+        check_defined(&self.memory, self.offset, self.size);
+        self.memory.borrow()
     }
+    /// The storage of the item, which the caller overwrites in full.
     fn mem_mut(&self) -> std::cell::RefMut<'_, Vec<u8>> {
         check_writable(&self.memory);
-        let memory = self.memory.borrow_mut();
+        self.check_storage();
+        define(&self.memory, self.offset, self.size);
+        self.memory.borrow_mut()
+    }
+    fn check_storage(&self) {
         if self.limit.is_some_and(|limit| self.offset + self.size > limit) {
-            fail("LINKAGE item extends beyond the storage of its CALL argument; not modelled");
+            fail("item extends beyond the storage at its address (CALL argument, ADDRESS OF or ALLOCATE); not modelled");
         }
-        if memory.len() < self.offset + self.size { fail("LINKAGE item not passed by caller"); }
-        memory
+        if self.memory.borrow().len() < self.offset + self.size { fail("item without storage (LINKAGE item not passed, NULL or freed address)"); }
     }
     pub fn resolved(&self) {
         if !self.dimensions.is_empty() { fail("array reference requires all subscripts"); }
@@ -507,6 +525,10 @@ impl View {
             _ => return Err("numeric view required"),
         };
         let bytes = self.raw();
+        if let Some(value) = self.float_value() {
+            // cob_decimal_set_field: COMP-1 through (double) fval.
+            return Ok(Value::Num(crate::runtime::float::from_f64(value), None));
+        }
         let coefficient = match usage {
             Usage::Display | Usage::SignLeading | Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {
                 if bytes.is_empty() { return Err("empty numeric field"); }
@@ -544,9 +566,15 @@ impl View {
             },
             // An index is a native int: little endian on x86-64.
             Usage::Index => BigInt::from_signed_bytes_le(&bytes),
+            // Read above through float_value.
+            Usage::Float | Usage::Double => unreachable!(),
             Usage::Native | Usage::Register => {
                 if signed { BigInt::from_signed_bytes_le(&bytes) }
                 else { BigInt::from_bytes_le(Sign::Plus, &bytes) }
+            },
+            Usage::Swapped => {
+                if signed { BigInt::from_signed_bytes_be(&bytes) }
+                else { BigInt::from_bytes_be(Sign::Plus, &bytes) }
             },
             Usage::Binary => {
                 if signed { BigInt::from_signed_bytes_be(&bytes) }
@@ -558,13 +586,38 @@ impl View {
     /// DISPLAY of a real binary item, cob_print_realbin: the stored integer
     /// (no decimal point) on bin_digits[size] digits, or on the PICTURE
     /// digits for an internal register; a sign only when the item has one.
+    /// The stored C float (as a double) or double of a COMP-1 / COMP-2 item.
+    pub fn float_value(&self) -> Option<f64> {
+        match self.kind {
+            Kind::Numeric { usage: Usage::Float, .. } => Some(f32::from_le_bytes(self.raw()[..4].try_into().unwrap()) as f64),
+            Kind::Numeric { usage: Usage::Double, .. } => Some(f64::from_le_bytes(self.raw()[..8].try_into().unwrap())),
+            _ => None,
+        }
+    }
     pub fn native_display(&self) -> Option<String> {
+        if let Kind::Numeric { usage: usage @ (Usage::Float | Usage::Double), .. } = self.kind {
+            self.resolved();
+            // cob_display_common: "%-.8G" of (double) fval, "%-.16G" of a double.
+            let value = self.float_value().unwrap();
+            return Some(crate::runtime::float::display(value, if matches!(usage, Usage::Float) { 8 } else { 16 }));
+        }
         let (digits, signed, usage) = match self.kind {
-            Kind::Numeric { digits, signed, usage: usage @ (Usage::Native | Usage::Register), .. } => (digits, signed, usage),
+            Kind::Numeric { digits, signed, usage: usage @ (Usage::Native | Usage::Register | Usage::Swapped), .. } => (digits, signed, usage),
             _ => return None,
         };
         self.resolved();
         let bytes = self.raw();
+        if matches!(usage, Usage::Swapped) {
+            // cob_display of a binary item: a DISPLAY copy of its PICTURE
+            // digits, so the high-order digits of the stored value are lost.
+            let integer = if signed { BigInt::from_signed_bytes_be(&bytes) } else { BigInt::from_bytes_be(Sign::Plus, &bytes) };
+            let mut text = format!("{:0>width$}", (absolute(&integer) % power(digits)).to_string(), width = digits as usize);
+            if let Kind::Numeric { scale, .. } = self.kind {
+                if scale > 0 && (scale as u32) <= digits { text.insert(text.len() - scale as usize, '.'); }
+                else if scale != 0 { fail("DISPLAY d'un COMP-X à échelle P non modélisé"); }
+            }
+            return Some(if signed { format!("{}{text}", if integer.sign() == Sign::Minus { '-' } else { '+' }) } else { text });
+        }
         let integer = if signed { BigInt::from_signed_bytes_le(&bytes) } else { BigInt::from_bytes_le(Sign::Plus, &bytes) };
         const BIN_DIGITS: [usize; 9] = [1, 3, 5, 8, 10, 13, 15, 17, 20];
         let width = if matches!(usage, Usage::Register) { digits as usize } else { BIN_DIGITS[self.size.min(8)] };
@@ -675,6 +728,9 @@ impl View {
             _ => fail("numeric text operation requires a numeric source"),
         };
         if comparison && matches!(usage, Usage::Index) { fail("mixed comparison with an index is unsupported"); }
+        if matches!(usage, Usage::Float | Usage::Double) {
+            fail("MOVE ou comparaison alphanumérique d'un flottant non modélisé");
+        }
         // cob_cmp_alnum reads the stored digits of a DISPLAY item, P positions
         // not included; other usages go through a DISPLAY copy of their digits.
         if comparison && (scale < 0 || scale as u32 > digits) && !usage.is_display() { fail("alphanumeric comparison of a P-scaled item not modelled"); }
@@ -710,7 +766,9 @@ impl View {
                 if !comparison { bytes.extend(std::iter::repeat(b'0').take((-scale).max(0) as usize)); }
                 bytes
             },
-            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register => {
+            Usage::Float | Usage::Double => unreachable!(),
+            Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register
+            | Usage::Swapped => {
                 let number = self.number().unwrap_or_else(|error| fail(error));
                 let coefficient = absolute(&number.num().units(scale, false)) % power(digits);
                 format!("{:0>width$}", coefficient.to_string(), width = digits as usize).into_bytes()
@@ -725,7 +783,7 @@ impl View {
         if matches!(self.kind, Kind::Numeric { usage: Usage::Index, .. }) {
             fail("MOVE of text to an index requires native index semantics");
         }
-        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register, .. }) && !raw_group {
+        if matches!(self.kind, Kind::Numeric { usage: Usage::Native | Usage::Register | Usage::Swapped, .. }) && !raw_group {
             fail("MOVE of text to a COMP-5 item not modelled");
         }
         if raw_group {
@@ -783,6 +841,37 @@ impl View {
         let mut bytes = edit(symbols, self.size, digits.as_bytes(), number.scale as i32, negative, blank_zero);
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
     }
+    /// The storage of an item, as the cob_field data libcob reads.
+    pub fn data(&self) -> Vec<u8> {
+        self.resolved();
+        self.raw()
+    }
+    /// get_num (mlio.c): a cob_move to the numeric-edited -(n)9[.9(d)] of
+    /// n = digits - scale and d = scale, left-trimmed (COB_FLAG_JUSTIFIED);
+    /// the module decimal point becomes `point`.
+    pub fn ml_number(&self, point: u8) -> Vec<u8> {
+        self.resolved();
+        let (digits, scale) = match self.kind {
+            Kind::Numeric { digits, scale, .. } => (digits as i32, scale),
+            _ => fail("numeric item required"),
+        };
+        let integer = (digits - scale).max(0) as u32;
+        let decimals = scale.max(0) as u32;
+        let mut symbols = vec![(b'-', integer.max(1)), (b'9', 1)];
+        let mut size = (integer as usize + 1).max(2);
+        if decimals > 0 {
+            symbols.extend([(b'.', 1), (b'9', decimals)]);
+            size += 1 + decimals as usize;
+        }
+        let number = match self.value() { Value::Num(number, _) => number, _ => fail("numeric item required") };
+        let negative = number.n.sign() == Sign::Minus;
+        let digits = absolute(&number.n).to_string();
+        let mut bytes = edit(&symbols, size, digits.as_bytes(), number.scale as i32, negative, false);
+        let module_point = crate::runtime::module_symbols().0;
+        if let Some(position) = bytes.iter().position(|&b| b == module_point) { bytes[position] = point; }
+        let start = bytes.iter().position(|&b| b != b' ').unwrap_or(bytes.len()).min(bytes.len() - 1);
+        bytes.split_off(start)
+    }
     /// Numeric MOVE: excess decimals are truncated, the magnitude is reduced
     /// modulo the PICTURE capacity (binary included) without SIZE ERROR, and an
     /// unsigned receiver drops the sign. A signed DISPLAY or packed receiver
@@ -792,7 +881,9 @@ impl View {
         let (digits, scale, signed, usage) = match self.kind {
             // cob_move_display_to_binary on a real binary receiver keeps the
             // low-order bytes of the value, not its PICTURE digits.
-            Kind::Numeric { usage: Usage::Native | Usage::Register, .. } => return self.assign(source, false),
+            Kind::Numeric { usage: Usage::Native | Usage::Register | Usage::Swapped, .. } => return self.assign(source, false),
+            // cob_move to a float: cob_decimal_get_field of the whole value.
+            Kind::Numeric { usage: Usage::Float | Usage::Double, .. } => return self.assign(source, false),
             Kind::Numeric { digits, scale, signed, usage } if !matches!(usage, Usage::Index) => (digits, scale, signed, usage),
             _ => return self.assign(source, false),
         };
@@ -841,7 +932,8 @@ impl View {
         let (usage, signed) = match self.kind { Kind::Numeric { usage, signed, .. } => (usage, signed), _ => return };
         let mut bytes = match usage {
             Usage::Packed => { let mut raw = self.raw(); let last = raw.last_mut().unwrap(); *last = (*last & 0xf0) | 0x0d; raw },
-            Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::PackedNoSign => return,
+            Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::PackedNoSign
+            | Usage::Float | Usage::Double | Usage::Swapped => return,
             _ => display_bytes(display_digits(&self.raw(), usage, signed).0, true, usage, signed),
         };
         self.mem_mut()[self.offset..self.offset + self.size].swap_with_slice(&mut bytes);
@@ -882,10 +974,18 @@ impl View {
                 let coefficient = absolute(&units) % power(digits);
                 edit(symbols, self.size, coefficient.to_string().as_bytes(), scale, negative, blank_zero)
             },
-            Kind::Numeric { scale, signed, usage: Usage::Native | Usage::Register, .. } => {
+            Kind::Numeric { usage: usage @ (Usage::Float | Usage::Double), .. } => {
+                // cob_decimal_get_field without COB_STORE_KEEP_ON_OVERFLOW: a
+                // non-finite double is stored as 0.0, a float overflow as inf.
+                float_bytes(source, usage).unwrap_or_else(|| if matches!(usage, Usage::Float) { 0f32.to_le_bytes().to_vec() }
+                                                         else { 0f64.to_le_bytes().to_vec() })
+            },
+            Kind::Numeric { scale, signed, usage: usage @ (Usage::Native | Usage::Register | Usage::Swapped), .. } => {
                 let mut units = source.num().units(scale, rounded);
                 if !signed { units = absolute(&units); }
-                native_bytes(&units, self.size)
+                let mut bytes = native_bytes(&units, self.size);
+                if matches!(usage, Usage::Swapped) { bytes.reverse(); }
+                bytes
             },
             Kind::Numeric { digits, scale, signed, usage } => {
                 let mut units = source.num().units(scale, rounded);
@@ -937,8 +1037,8 @@ impl View {
                         padded.append(&mut bytes);
                         padded
                     },
-                    // Stored by the real binary arm above.
-                    Usage::Native | Usage::Register => unreachable!(),
+                    // Stored by the real binary and float arms above.
+                    Usage::Native | Usage::Register | Usage::Float | Usage::Double | Usage::Swapped => unreachable!(),
                 }
             },
         };
@@ -1029,8 +1129,19 @@ impl View {
             Kind::Numeric { digits, scale, signed, usage } => (digits, scale, signed, usage),
             _ => fail("checked arithmetic destination requires numeric storage"),
         };
+        if matches!(usage, Usage::Float | Usage::Double) {
+            // COB_STORE_KEEP_ON_OVERFLOW: inf, nan or cob_not_finite raise
+            // EC-SIZE-OVERFLOW and keep the receiver.
+            let bytes = float_bytes(source, usage).ok_or(SizeError)?;
+            let finite = if matches!(usage, Usage::Float) { f32::from_le_bytes(bytes[..4].try_into().unwrap()).is_finite() }
+                         else { f64::from_le_bytes(bytes[..8].try_into().unwrap()).is_finite() };
+            if !finite { return Err(SizeError); }
+            self.resolved();
+            self.mem_mut()[self.offset..self.offset + self.size].copy_from_slice(&bytes);
+            return Ok(());
+        }
         let mut units = source.num().units(scale, rounded);
-        if matches!(usage, Usage::Native | Usage::Register) {
+        if matches!(usage, Usage::Native | Usage::Register | Usage::Swapped) {
             // cob_decimal_get_binary: SIZE ERROR beyond size * 8 - sign bits.
             if !signed { units = absolute(&units); }
             if absolute(&units).bits() > (self.size * 8 - signed as usize) as u64 { return Err(SizeError); }
@@ -1045,9 +1156,13 @@ impl View {
     }
     pub fn initialize(&mut self, with_filler: bool) {
         self.resolved();
+        // cb_emit_initialize: an item of OCCURS DEPENDING is initialized up
+        // to its current length (the occurrences within the view).
+        let end = self.offset + self.size;
         for initializer in &self.initializers {
             if initializer.filler && !with_filler { continue; }
             offsets(&initializer.dimensions, self.offset + initializer.offset, &mut |offset| {
+                if offset + initializer.size > end { return; }
                 let mut leaf = Self { memory: self.memory.clone(), offset, size: initializer.size,
                                       kind: initializer.kind, dimensions: vec![], initializers: vec![], limit: self.limit };
                 let value = match initializer.kind { Kind::Text | Kind::Justified | Kind::AlnumEdited { .. } => Value::text(""), _ => Value::number("0") };
@@ -1172,13 +1287,78 @@ pub fn chain_setup(item: &Value, parameter: usize) {
             let mut bytes = argument.into_vec();
             bytes.resize(view.size, b' ');
             check_writable(&view.memory);
+            define(&view.memory, view.offset, view.size);
             view.memory.borrow_mut()[view.offset..view.offset + view.size].copy_from_slice(&bytes);
         },
         _ => crate::runtime::fail("CHAINING requires a data item"),
     }
 }
 
+/// A further activation of a RECURSIVE program: the item at the same offset
+/// of that activation's storage (LOCAL-STORAGE, flag_local registers).
+pub fn rehome(item: &Value, memory: &Memory) -> Value {
+    match item {
+        Value::View(view) => Value::View(View { memory: memory.clone(), ..view.clone() }),
+        _ => fail("activation of an item without storage"),
+    }
+}
+
+/// cob_intr_content_length and cob_intr_content_of: the bytes at a
+/// pointer's address, `length` of them or up to the first NUL (strlen);
+/// None for a NULL pointer or one addressing a NUL byte (EC-DATA-PTR-NULL).
+/// Reading past the addressed storage is a named stop.
+pub fn pointed_content(pointer: &Value, length: Option<usize>) -> Option<Vec<u8>> {
+    let address = pointer_value(pointer);
+    if address == 0 { return None; }
+    let (memory, start, len, offset) = decode(address);
+    let bytes = memory.borrow();
+    let area = bytes.get(start + offset..start + len).unwrap_or(&[]);
+    let Some(&first) = area.first() else { fail("FUNCTION CONTENT-OF/CONTENT-LENGTH past the addressed storage; not modelled") };
+    check_defined(&memory, start + offset, 1);
+    if first == 0 { return None; }
+    let size = match length {
+        Some(size) if size <= area.len() => size,
+        Some(_) => fail("FUNCTION CONTENT-OF length past the addressed storage; not modelled"),
+        None => area.iter().position(|byte| *byte == 0)
+            .unwrap_or_else(|| fail("FUNCTION CONTENT-OF/CONTENT-LENGTH: no NUL in the addressed storage (strlen past it); not modelled")),
+    };
+    check_defined(&memory, start + offset, size.max(1));
+    Some(area[..size].to_vec())
+}
+
+/// cob_is_omitted: the item has no storage (its data is NULL).
+pub fn is_omitted(item: &Value) -> bool {
+    matches!(item, Value::View(view) if view.memory.borrow().is_empty())
+}
+
 /// CALL ... USING OMITTED: a NULL address.
+/// A system routine's view of a parameter: the bytes behind its data
+/// pointer (None for an omitted parameter, a NULL address).
+pub fn parameter_bytes(item: &Value) -> Option<Vec<u8>> {
+    match item {
+        Value::View(view) if view.memory.borrow().is_empty() => None,
+        Value::View(view) => { view.resolved(); Some(view.raw()) },
+        _ => fail("paramètre de routine système sans stockage"),
+    }
+}
+
+/// A system routine writing `bytes` at `offset` of a parameter, without
+/// PICTURE conversion; a literal passed BY REFERENCE stays protected.
+pub fn store_parameter(item: &Value, offset: usize, bytes: &[u8]) {
+    let Value::View(view) = item else { fail("paramètre de routine système sans stockage") };
+    if view.memory.borrow().is_empty() { fail("écriture d'une routine système à une adresse NULL (SIGSEGV)"); }
+    if offset + bytes.len() > view.size { fail("écriture d'une routine système au-delà du paramètre non modélisée"); }
+    let mut target = View { memory: view.memory.clone(), offset: view.offset + offset, size: bytes.len(),
+        kind: Kind::Text, dimensions: vec![], initializers: vec![], limit: view.limit };
+    target.assign_text_move(&Value::Bytes(bytes.to_vec()), true);
+}
+
+/// output_call's cob_content of a numeric literal: native binary bytes.
+pub fn content_number(bytes: &[u8], digits: u32, signed: bool) -> Value {
+    Value::View(View { memory: Rc::new(RefCell::new(bytes.to_vec())), offset: 0, size: bytes.len(),
+        kind: Kind::Numeric { digits, scale: 0, signed, usage: Usage::Native }, dimensions: vec![], initializers: vec![], limit: None })
+}
+
 pub fn omitted() -> Value {
     Value::View(View { memory: Rc::new(RefCell::new(Vec::new())), offset: 0, size: 0, kind: Kind::Text,
                        dimensions: vec![], initializers: vec![], limit: None })
@@ -1326,6 +1506,7 @@ pub struct Inspect {
 }
 impl Inspect {
     fn common(target: &Value) -> Self {
+        crate::runtime::exception::clear_current();
         let view = match target { Value::View(view) => view, _ => fail("INSPECT requires a data item") };
         view.resolved();
         drop(view.mem());
@@ -1344,7 +1525,7 @@ impl Inspect {
                 Usage::SignLeadingSeparate | Usage::SignTrailingSeparate => {},
                 _ => fail("INSPECT of a binary or packed item not modelled"),
             }
-        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register, .. } = view.kind {
+        } else if let Kind::Numeric { usage: Usage::Packed | Usage::PackedNoSign | Usage::Binary | Usage::Index | Usage::Native | Usage::Register | Usage::Swapped, .. } = view.kind {
             fail("INSPECT of a binary or packed item not modelled");
         }
         // COB_FIELD_DATA/COB_FIELD_SIZE leave a separate sign byte out.
@@ -1376,7 +1557,10 @@ impl Inspect {
         inspect
     }
     pub fn init_converting(target: &Value) -> Self { Self::common(target) }
-    fn data(&self) -> Vec<u8> { self.memory.borrow()[self.offset..self.offset + self.size].to_vec() }
+    fn data(&self) -> Vec<u8> {
+        check_defined(&self.memory, self.offset, self.size);
+        self.memory.borrow()[self.offset..self.offset + self.size].to_vec()
+    }
     pub fn start(&mut self) { self.start = 0; self.end = self.size; }
     fn find(&self, operand: &Operand) -> Option<usize> {
         let data = self.data();
@@ -1490,7 +1674,7 @@ impl Inspect {
         if len == 0 { return; }
         let f2 = &from.data[..];
         let f1: Vec<u8> = if to.data.len() != f2.len() {
-            if !to.all { return; } // EC-RANGE-INSPECT-SIZE, not checked
+            if !to.all { crate::runtime::exception::set("EC-RANGE-INSPECT-SIZE"); return; }
             to.data.iter().cycle().take(f2.len()).copied().collect()
         } else { to.data.clone() };
         if f2.len() > len { return; }
@@ -1547,7 +1731,7 @@ impl Inspect {
         let len = self.end - self.start;
         if len == 0 { return; }
         let f2: Vec<u8> = if from.data.len() != to.data.len() {
-            if !to.all { return; } // EC-RANGE-INSPECT-SIZE
+            if !to.all { crate::runtime::exception::set("EC-RANGE-INSPECT-SIZE"); return; }
             to.data.iter().cycle().take(from.data.len()).copied().collect()
         } else { to.data.clone() };
         let mut table = [None; 256];
@@ -1591,12 +1775,13 @@ impl StringInto {
     pub fn init(target: &Value, pointer: Option<i128>) -> Self {
         let view = match target { Value::View(view) => view, _ => fail("STRING INTO requires a data item") };
         view.resolved();
-        drop(view.mem());
+        view.check_storage();
+        crate::runtime::exception::clear_current();
         let mut s = StringInto { memory: view.memory.clone(), offset: view.offset, size: view.size, position: 0, overflow: false, delimiter: None };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("STRING POINTER outside the C int range"); }
             s.position = p as i64 - 1;
-            if s.position < 0 || s.position >= s.size as i64 { s.overflow = true; }
+            if s.position < 0 || s.position >= s.size as i64 { s.overflow = true; crate::runtime::exception::set("EC-OVERFLOW-STRING"); }
         }
         s
     }
@@ -1614,6 +1799,7 @@ impl StringInto {
         check_writable(&self.memory);
         let mut memory = self.memory.borrow_mut();
         let start = self.offset + self.position as usize;
+        define(&self.memory, start, (size as i64).min(room) as usize);
         if size as i64 <= room {
             memory[start..start + size].copy_from_slice(&data[..size]);
             self.position += size as i64;
@@ -1621,6 +1807,7 @@ impl StringInto {
             memory[start..start + room as usize].copy_from_slice(&data[..room as usize]);
             self.position += room;
             self.overflow = true;
+            crate::runtime::exception::set("EC-OVERFLOW-STRING");
         }
     }
     /// The overflow condition and the value cob_set_int stores in the POINTER.
@@ -1633,11 +1820,12 @@ impl StringInto {
 pub struct Unstring { source: Value, position: i64, count: i64, exception: bool, delimiters: Vec<(Vec<u8>, bool)> }
 impl Unstring {
     pub fn init(source: &Value, pointer: Option<i128>) -> Self {
+        crate::runtime::exception::clear_current();
         let mut u = Unstring { source: source.clone(), position: 0, count: 0, exception: false, delimiters: vec![] };
         if let Some(p) = pointer {
             if p < i32::MIN as i128 || p > i32::MAX as i128 { fail("UNSTRING POINTER outside the C int range"); }
             u.position = p as i64 - 1;
-            if u.position < 0 || u.position >= u.data().len() as i64 { u.exception = true; }
+            if u.position < 0 || u.position >= u.data().len() as i64 { u.exception = true; crate::runtime::exception::set("EC-OVERFLOW-UNSTRING"); }
         }
         u
     }
@@ -1720,8 +1908,43 @@ impl Unstring {
     pub fn count(&self) -> i64 { self.count }
     /// The overflow condition, whether any exception is set, and the POINTER value.
     pub fn finish(&mut self, size_exception: bool) -> (bool, bool, i64) {
+        // cob_unstring_tallying (cob_add_int), then cob_unstring_finish.
+        if size_exception { crate::runtime::exception::set("EC-SIZE-OVERFLOW"); }
+        if self.position < self.data().len() as i64 { crate::runtime::exception::set("EC-OVERFLOW-UNSTRING"); }
         let overflow = self.exception || self.position < self.data().len() as i64;
         (overflow, overflow || size_exception, self.position + 1)
+    }
+}
+
+/// cob_decimal_get_display (opt 0), for a DISPLAY receiver or the DISPLAY
+/// temporary of an edited one: the result has more digits than the PICTURE.
+pub fn display_overflow(item: &Value, source: &Value, rounded: bool) -> bool {
+    let Value::View(view) = item else { fail("arithmetic receiver requires storage") };
+    match view.kind {
+        Kind::Numeric { digits, scale, usage, .. } if usage.is_display() => absolute(&source.num().units(scale, rounded)) >= power(digits),
+        Kind::Edited { digits, scale, .. } => absolute(&source.num().units(scale, rounded)) >= power(digits),
+        _ => fail("DISPLAY overflow check of another receiver"),
+    }
+}
+
+/// propagate_table (codegen.c): the bytes of the first occurrence of an
+/// OCCURS item copied over its other occurrences, the outer subscripts given.
+pub fn propagate_table(table: &Value, outer: &[Value]) {
+    let Value::View(view) = table else { fail("OCCURS item requires storage") };
+    let Some(&(stride, count)) = view.dimensions.last() else { fail("propagate_table of an item without OCCURS") };
+    if outer.len() + 1 != view.dimensions.len() { fail("wrong number of subscripts"); }
+    let mut base = view.offset;
+    for (index, (step, limit)) in outer.iter().zip(&view.dimensions) {
+        let number = index.integer("subscript");
+        if number < 1 || number > *limit as i128 { fail("COBOL subscript out of bounds"); }
+        base += (number as usize - 1) * step;
+    }
+    let first = View { memory: view.memory.clone(), offset: base, size: view.size, kind: Kind::Text, dimensions: vec![],
+                       initializers: vec![], limit: view.limit };
+    let bytes = first.raw();
+    for occurrence in 1..count {
+        let next = View { offset: base + occurrence * stride, ..first.clone() };
+        next.mem_mut()[next.offset..next.offset + next.size].copy_from_slice(&bytes);
     }
 }
 
@@ -1747,5 +1970,279 @@ pub fn fill_spaces(item: &Value) {
             view.mem_mut()[view.offset..view.offset + view.size].iter_mut().for_each(|b| *b = b' ');
         },
         _ => fail("DELIMITER IN requires a data item"),
+    }
+}
+
+// Addresses: USAGE POINTER, ADDRESS OF, BASED and LINKAGE items, ALLOCATE
+// and FREE. A native address is replaced by a region (a 01 record of a
+// program, a block without records such as an EXTERNAL item or a BY CONTENT
+// copy, an ALLOCATE area) and an offset in it, encoded in the 8 bytes of a
+// POINTER (a void * of libcob, x86_64). Addresses inside one region keep the
+// native order and differences; the values themselves, like the native ones
+// under ASLR, are not reproducible.
+const ADDRESS_BASE: u64 = 0x0000_7f00_0000_0000;
+const REGION_SPAN: u64 = 1 << 32;
+/// common.c COB_MAX_ALLOC_SIZE on Linux x86_64.
+const MAX_ALLOC_SIZE: i128 = 2_147_483_646;
+
+struct Region {
+    memory: std::rc::Weak<RefCell<Vec<u8>>>,
+    start: usize,
+    len: usize,
+    /// cob_alloc_cache: an ALLOCATE area not yet freed.
+    allocated: Option<Memory>,
+    freed: bool,
+}
+
+thread_local! {
+    static REGIONS: RefCell<Vec<Region>> = const { RefCell::new(Vec::new()) };
+    static REGION_INDEX: RefCell<std::collections::HashMap<(usize, usize), usize>> = RefCell::new(std::collections::HashMap::new());
+    static RECORDS: RefCell<std::collections::HashMap<usize, (std::rc::Weak<RefCell<Vec<u8>>>, Vec<(usize, usize)>)>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+fn memory_key(memory: &Memory) -> usize { Rc::as_ptr(memory) as *const u8 as usize }
+
+fn same_memory(weak: &std::rc::Weak<RefCell<Vec<u8>>>, memory: &Memory) -> bool {
+    weak.upgrade().is_some_and(|alive| Rc::ptr_eq(&alive, memory))
+}
+
+/// The 01 records (offset, size) of a program's storage: each one is a
+/// separate allocation of cobc (its own b_ array).
+pub fn records(memory: &Memory, records: &[(usize, usize)]) {
+    RECORDS.with(|map| { map.borrow_mut().insert(memory_key(memory), (Rc::downgrade(memory), records.to_vec())); });
+}
+
+fn region_id(memory: &Memory, start: usize, len: usize, allocated: Option<Memory>) -> usize {
+    let key = (memory_key(memory), start);
+    let known = REGION_INDEX.with(|index| index.borrow().get(&key).copied());
+    if let Some(id) = known {
+        if REGIONS.with(|regions| same_memory(&regions.borrow()[id].memory, memory)) { return id; }
+    }
+    let id = REGIONS.with(|regions| {
+        let mut regions = regions.borrow_mut();
+        regions.push(Region { memory: Rc::downgrade(memory), start, len, allocated, freed: false });
+        regions.len() - 1
+    });
+    REGION_INDEX.with(|index| { index.borrow_mut().insert(key, id); });
+    id
+}
+
+fn encode(id: usize, offset: usize) -> u64 { ADDRESS_BASE + id as u64 * REGION_SPAN + offset as u64 }
+
+/// The region and the offset in it of an address that this run unit made.
+fn decode(address: u64) -> (Memory, usize, usize, usize) {
+    let relative = address.checked_sub(ADDRESS_BASE)
+        .unwrap_or_else(|| fail("address not obtained from ADDRESS OF or ALLOCATE; not modelled"));
+    let (id, offset) = ((relative / REGION_SPAN) as usize, (relative % REGION_SPAN) as usize);
+    REGIONS.with(|regions| {
+        let regions = regions.borrow();
+        let region = regions.get(id).unwrap_or_else(|| fail("address not obtained from ADDRESS OF or ALLOCATE; not modelled"));
+        let memory = region.memory.upgrade().unwrap_or_else(|| fail(if region.freed {
+            "address of storage released by FREE; not modelled"
+        } else {
+            "address of storage released by CANCEL; not modelled"
+        }));
+        (memory, region.start, region.len, offset)
+    })
+}
+
+/// ADDRESS OF: NULL for an item without storage (BASED or LINKAGE item
+/// whose address is not set).
+pub fn address_of(item: &Value) -> u64 {
+    let Value::View(view) = item else { fail("ADDRESS OF requires storage") };
+    let key = memory_key(&view.memory);
+    if view.memory.borrow().is_empty() {
+        // A freed ALLOCATE area keeps its (dangling) address.
+        return match REGION_INDEX.with(|index| index.borrow().get(&(key, 0)).copied()) {
+            Some(id) if REGIONS.with(|regions| same_memory(&regions.borrow()[id].memory, &view.memory)) => encode(id, view.offset),
+            _ => 0,
+        };
+    }
+    let record = RECORDS.with(|map| {
+        map.borrow().get(&key).filter(|(weak, _)| same_memory(weak, &view.memory))
+            .and_then(|(_, records)| records.iter().find(|(start, size)| *start <= view.offset && view.offset < start + size).copied())
+    });
+    let (start, len) = record.unwrap_or((0, view.memory.borrow().len()));
+    encode(region_id(&view.memory, start, len, None), view.offset - start)
+}
+
+/// SET ADDRESS OF: the item (at `delta` in its 01 record) addresses the
+/// storage at `address`; accesses beyond the region are named stops.
+pub fn bind_address(address: u64, delta: usize, item: &Value) -> Value {
+    let Value::View(template) = item else { fail("SET ADDRESS OF requires storage") };
+    if address == 0 { return unbind(item); }
+    let (memory, start, len, offset) = decode(address);
+    let offset = start.checked_add(offset).and_then(|o| o.checked_add(delta))
+        .unwrap_or_else(|| fail("address outside its storage; not modelled"));
+    Value::View(View { memory, offset, size: template.size, kind: template.kind, dimensions: template.dimensions.clone(),
+                       initializers: template.initializers.clone(), limit: Some(start + len) })
+}
+
+thread_local! {
+    static STATIC_BASES: RefCell<std::collections::HashMap<String, u64>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// A system routine writing through an address it was given
+/// (cob_sys_getopt_long_long's `*flag = val`).
+pub fn store_at_address(address: u64, bytes: &[u8]) {
+    let (memory, start, len, offset) = decode(address);
+    if offset.checked_add(bytes.len()).is_none_or(|end| end > len) {
+        fail("écriture d'une routine système au-delà de la zone adressée non modélisée");
+    }
+    check_writable(&memory);
+    define(&memory, start + offset, bytes.len());
+    memory.borrow_mut()[start + offset..start + offset + bytes.len()].copy_from_slice(bytes);
+}
+
+/// The static base pointer of a LINKAGE item of no USING: its address
+/// outlives the program instance (CANCEL).
+pub fn static_base(key: &str) -> u64 { STATIC_BASES.with(|bases| bases.borrow().get(key).copied().unwrap_or(0)) }
+
+pub fn set_static_base(key: &str, address: u64) {
+    STATIC_BASES.with(|bases| { bases.borrow_mut().insert(key.to_string(), address); });
+}
+
+/// The value of a USAGE POINTER item (8 bytes, native byte order).
+pub fn pointer_value(item: &Value) -> u64 {
+    let Value::View(view) = item else { fail("POINTER requires storage") };
+    if view.size != 8 { fail("POINTER item of another size than 8"); }
+    let memory = view.mem();
+    u64::from_le_bytes(memory[view.offset..view.offset + 8].try_into().unwrap())
+}
+
+pub fn set_pointer(item: &Value, address: u64) {
+    let Value::View(view) = item else { fail("POINTER requires storage") };
+    if view.size != 8 { fail("POINTER item of another size than 8"); }
+    let mut memory = view.mem_mut();
+    memory[view.offset..view.offset + 8].copy_from_slice(&address.to_le_bytes());
+}
+
+/// SET pointer UP/DOWN BY n: the address moves by n bytes.
+pub fn offset_address(address: u64, delta: i128) -> u64 {
+    let moved = address as i128 + delta;
+    if !(0..=u64::MAX as i128).contains(&moved) { fail("address arithmetic outside the address space"); }
+    moved as u64
+}
+
+/// A relation between two addresses as cobc generates it, (int)(a - b)
+/// against zero. The order of two different regions depends on the native
+/// layout of storage: a named stop.
+pub fn compare_addresses(left: u64, right: u64) -> std::cmp::Ordering {
+    if left == right { return std::cmp::Ordering::Equal; }
+    let region = |address: u64| address.checked_sub(ADDRESS_BASE).map(|relative| relative / REGION_SPAN);
+    if left == 0 || right == 0 || region(left).is_none() || region(left) != region(right) {
+        fail("order of addresses of different storage areas (native layout); not modelled");
+    }
+    left.cmp(&right)
+}
+
+/// cob_allocate: `size` bytes, NULL when the size is not positive or above
+/// COB_MAX_ALLOC_SIZE. calloc for INITIALIZED to low-values; otherwise the
+/// malloc area is undetermined until written, and reading it is a named stop.
+pub fn allocate(size: i128, zeroed: bool) -> u64 {
+    crate::runtime::exception::clear_current();
+    if size > MAX_ALLOC_SIZE { crate::runtime::exception::set("EC-STORAGE-IMP"); }
+    if size <= 0 || size > MAX_ALLOC_SIZE { return 0; }
+    let memory = memory(size as usize);
+    if !zeroed {
+        UNDEFINED.with(|undefined| undefined.borrow_mut().push((Rc::downgrade(&memory), vec![true; size as usize])));
+    }
+    encode(region_id(&memory.clone(), 0, size as usize, Some(memory)), 0)
+}
+
+/// ALLOCATE n CHARACTERS: cob_get_llint of the size (integer part).
+pub fn allocate_value(size: &Value, zeroed: bool) -> u64 {
+    allocate(size.num().units(0, false).to_string().parse::<i128>().unwrap_or(i128::MAX), zeroed)
+}
+
+thread_local! {
+    /// The bytes of malloc areas not yet written.
+    static UNDEFINED: RefCell<Vec<(std::rc::Weak<RefCell<Vec<u8>>>, Vec<bool>)>> = RefCell::new(Vec::new());
+}
+
+pub fn check_defined(memory: &Memory, offset: usize, size: usize) {
+    UNDEFINED.with(|undefined| {
+        let undefined = undefined.borrow();
+        if undefined.is_empty() { return; }
+        let Some((_, mask)) = undefined.iter().find(|(area, _)| area.strong_count() > 0 && std::ptr::eq(area.as_ptr(), Rc::as_ptr(memory))) else { return };
+        if mask.get(offset..offset + size).is_some_and(|bytes| bytes.contains(&true)) {
+            fail("read of ALLOCATE storage before it is written (undetermined malloc contents in GnuCOBOL); not modelled");
+        }
+    })
+}
+
+fn define(memory: &Memory, offset: usize, size: usize) {
+    UNDEFINED.with(|undefined| {
+        let mut undefined = undefined.borrow_mut();
+        if undefined.is_empty() { return; }
+        undefined.retain(|(area, _)| area.strong_count() > 0);
+        let Some(index) = undefined.iter().position(|(area, _)| std::ptr::eq(area.as_ptr(), Rc::as_ptr(memory))) else { return };
+        let mask = &mut undefined[index].1;
+        if let Some(bytes) = mask.get_mut(offset..offset + size) { bytes.fill(false); }
+        if !mask.contains(&true) { undefined.remove(index); }
+    })
+}
+
+/// SET ... UP/DOWN BY n: cob_get_int of the amount (integer part).
+pub fn address_delta(amount: &Value) -> i128 { amount.num().units(0, false).to_string().parse::<i128>().unwrap_or_else(|_| fail("SET UP/DOWN BY overflow")) }
+
+/// INITIALIZED TO ALL literal: the literal repeated over the area.
+pub fn fill_repeated(area: &Value, pattern: &[u8]) {
+    let Value::View(view) = area else { fail("ALLOCATE area requires storage") };
+    let mut memory = view.mem_mut();
+    for (index, byte) in memory[view.offset..view.offset + view.size].iter_mut().enumerate() { *byte = pattern[index % pattern.len()]; }
+}
+
+/// The area of an ALLOCATE as an alphanumeric item (INITIALIZED TO).
+pub fn allocated_area(address: u64) -> Value {
+    let (memory, start, len, offset) = decode(address);
+    Value::View(View { memory, offset: start + offset, size: len - offset, kind: Kind::Text, dimensions: vec![],
+                       initializers: vec![], limit: Some(start + len) })
+}
+
+/// cob_free_alloc: only the address returned by an ALLOCATE is freed (its
+/// storage then has no bytes); any other address leaves EC-STORAGE-NOT-ALLOC.
+pub fn free(address: u64) -> bool {
+    crate::runtime::exception::clear_current();
+    if address == 0 { return false; }
+    let freed = address.checked_sub(ADDRESS_BASE).filter(|relative| relative % REGION_SPAN == 0).is_some_and(|relative| {
+        REGIONS.with(|regions| {
+            let mut regions = regions.borrow_mut();
+            let Some(region) = regions.get_mut((relative / REGION_SPAN) as usize) else { return false };
+            match region.allocated.take() {
+                Some(memory) => { memory.borrow_mut().clear(); region.freed = true; true },
+                None => false,
+            }
+        })
+    });
+    if !freed { crate::runtime::exception::set("EC-STORAGE-NOT-ALLOC"); }
+    freed
+}
+
+/// The bytes of an ASSIGN data item; none when it has no address.
+pub fn assign_bytes(item: &Value) -> Option<Vec<u8>> {
+    if let Value::View(view) = item {
+        if view.memory.borrow().len() < view.offset + view.size { return None; }
+    }
+    Some(Operand::of(item).data)
+}
+
+/// DISPLAY of a POINTER: "0x" and 16 hexadecimal digits; a non-NULL value
+/// is a native address, different at each run (ASLR).
+pub fn pointer_display(address: u64) -> Value {
+    if address != 0 { fail("DISPLAY of a non-NULL address (native value, not reproducible); not modelled"); }
+    Value::text("0x0000000000000000")
+}
+
+/// Output of storage containing POINTER items: their non-NULL values are
+/// native addresses.
+pub fn check_no_address(item: &Value, offsets: &[usize]) {
+    let Value::View(view) = item else { return };
+    let memory = view.mem();
+    for offset in offsets {
+        if memory[view.offset + offset..view.offset + offset + 8].iter().any(|&byte| byte != 0) {
+            fail("output of a non-NULL address (native value, not reproducible); not modelled");
+        }
     }
 }

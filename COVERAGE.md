@@ -4,6 +4,12 @@
 > (tableau de [CAP.md](CAP.md), `tools/real_corpora.py`). Les sections NIST
 > ci-dessous décrivent la première partie ; NIST est désormais un test de
 > non-régression, pas une mesure de la couverture du COBOL existant.
+> L'inventaire de l'écart (table « Chantier » de CAP.md) liste tous les
+> blocages de chaque source refusée, pour viser les chantiers qui débloquent
+> des sources entières ; ses diagnostics suivants sont indicatifs.
+> Virgule flottante binaire (COMP-1/COMP-2) portée depuis libcob, avec arrêts
+> nommés là où GMP ou le système décident (fractions de plus de 96 chiffres,
+> sous-normaux, -0.0) ; FLOAT-DECIMAL et FLOAT-EXTENDED restent refusés.
 
 L'objectif demandé est une **garantie universelle de conversion COBOL vers
 Rust**, couvrant tout le COBOL existant, au-delà du sous-ensemble de la version
@@ -682,8 +688,9 @@ d'insertion, numéro de doublon natif). Comportements de libcob conservés : pas
 de statut 02 (écrasé par DB_PUT), REWRITE séquentiel à clé changée accepté,
 21 au lieu de 22 en écriture séquentielle OUTPUT. Format disque propre à
 cobol2rust (fichiers `nom`, `nom.1`, ...), non interchangeable avec les
-fichiers BDB de GnuCOBOL. Refusés : clés composées (SOURCE IS), SUPPRESS,
-READ PREVIOUS, LOCK. Émission acceptée : **375/458** ; revérification :
+fichiers BDB de GnuCOBOL. Refusés à cette étape : clés composées (SOURCE IS),
+SUPPRESS, READ PREVIOUS, LOCK (tous levés depuis, voir README.md). Émission
+acceptée : **375/458** ; revérification :
 **350/351 programmes principaux conformes** (`build/nist-verify-indexed.json`).
 
 ## Progression : PROGRAM COLLATING SEQUENCE et fonctions mathématiques
@@ -963,3 +970,100 @@ Suite Python complète : **490/491 validés**, un PE Windows ignoré, sans
 échec ni erreur. Les scénarios d'entrée restent **11/11 identiques**,
 distincts des campagnes des corpus et des nouvelles sources.
 Preuves : `build/system-calls-validation-20261030.json`.
+
+## Progression : modèle d'adresses — 30 octobre 2026
+
+`USAGE POINTER`, `BASED`, `ADDRESS OF`, `SET … TO/UP BY/DOWN BY`, `ALLOCATE`
+et `FREE` suivent cobc 3.2 (`cb_check_set_to`, `cb_emit_allocate_identifier`,
+`cb_emit_allocate_characters`, `cob_allocate`, `cob_free_alloc`). Une adresse
+native devient une région (chaque 01/77 d'un programme, zone ALLOCATE, bloc
+EXTERNAL, copie BY CONTENT) et un décalage, dans les 8 octets du POINTER ;
+tout accès hors région, par NULL ou après FREE est un arrêt nommé. Une zone
+`malloc` (ALLOCATE sans INITIALIZED TO) est suivie octet par octet : lire un
+octet jamais écrit est un arrêt nommé. Un ASSIGN vers un article sans adresse
+donne le statut 31 avec le nom `field with NULL address`
+(`cob_field_to_string`). Restent des arrêts nommés le DISPLAY d'une adresse
+non NULL (ASLR) et l'ordre de deux régions ; restent refusés les pointeurs BY
+VALUE, PROGRAM-POINTER/FUNCTION-POINTER, l'arithmétique hors SET et VALUE en
+LINKAGE hors article BASED.
+
+Acceptation **1214 → 1225/3593**, testsuite **490 → 501/1135**, écart à cobc
+**403 → 392**, aucune acceptation refusée par cobc. Sur les onze sources
+débloquées, sept s'exécutent à l'identique avec des codes zéro ;
+run_file-020/prog s'arrête des deux côtés sur le statut 31 avec le même
+message (codes 1/1, pas compté comme réussite) ; data_pointer-001 s'arrête
+nommément sur le DISPLAY d'une adresse ; les deux programmes de run_misc-115
+plantent en natif (SIGSEGV) là où Rust s'arrête nommément. Exécution globale
+renouvelée : **74/84 identiques**, deux divergences et huit délais ;
+zopeneditor passe de 0/3 à 3/3 sans changement côté Rust (le plantage natif à
+la fermeture implicite n'est plus observé). NIST statique **451/458**.
+Fixtures `pointers.cob` et `pointer_tables.cob` identiques au natif ;
+détails dans [VALIDATION.md](VALIDATION.md).
+
+## Progression : dernière exception — 30 octobre 2026
+
+`FUNCTION EXCEPTION-STATUS`, `EXCEPTION-LOCATION`, `EXCEPTION-STATEMENT`,
+`EXCEPTION-FILE` et `SET LAST EXCEPTION TO OFF` suivent la dernière exception
+de libcob (`cob_set_exception`, table `exception.def`), commune à l'unité
+d'exécution. Sources portées : `save_status`, division par zéro, stockages
+arithmétiques DISPLAY ou édités (`cob_decimal_get_display`), SIZE ERROR,
+ROUNDED MODE PROHIBITED, STRING/UNSTRING, INSPECT, ALLOCATE/FREE, ACCEPT en
+fin d'entrée, CALL introuvable ou récursif sous ON EXCEPTION, MOD/REM et
+fonctions ISO 8601. Toute autre source possible rend l'exception inconnue :
+sa lecture est alors un arrêt nommé. Sous `-debug`, EXCEPTION-LOCATION et
+EXCEPTION-STATEMENT restent refusées.
+
+Acceptation **1225 → 1240/3593**, testsuite **501 → 516/1135**, écart à cobc
+**392 → 377**, aucune acceptation refusée par cobc. Douze des quinze sources
+débloquées s'exécutent à l'identique avec des codes zéro, deux à l'identique
+avec le code 1 voulu par le test ; la troisième de run_misc-040, exécutée
+seule, ne diffère que par la pile de l'erreur fatale de libcob. Exécution
+globale **74/84**, inchangée ; NIST statique **451/458**. Fixtures
+`exceptions.cob` et `exception_recursive_call.cob` identiques au natif ;
+détails dans [VALIDATION.md](VALIDATION.md).
+
+## Progression : START complet et READ PREVIOUS — 30 octobre 2026
+
+START suit `cob_start` pour toutes les conditions de `start_op` (=, >, >=,
+<, <= et leurs formes NOT), FIRST, LAST et `WITH SIZE/LENGTH`, en RELATIVE
+(`relative_start`) et INDEXED (`indexed_start_internal`, Berkeley DB). READ
+PREVIOUS suit `cob_read_next`, `relative_read_next` (reculs de libcob 3.2
+compris) et `indexed_read_next`. Acceptation **1240 → 1245/3593**, testsuite
+**516 → 521/1135**, écart **377 → 372** ; les cinq sources débloquées
+s'exécutent à l'identique avec des codes zéro. Exécution globale **74/84**,
+inchangée ; NIST statique **451/458**. Fixture `start_previous.cob`
+identique au natif.
+
+## Progression : INITIALIZE VALUE et DEFAULT — 30 octobre 2026
+
+`INITIALIZE … {ALL|catégorie} [TO] VALUE … [THEN] [TO] DEFAULT` suit
+`cb_emit_initialize`, `deduce_initialize_type` et `output_initialize` : VALUE
+de l'article ou du groupe, REPLACING, puis ZERO/SPACE ; un article OCCURS est
+initialisé dans sa première occurrence, recopiée sur les autres
+(`propagate_table`). Acceptation **1245 → 1250/3593**, testsuite **521 →
+526/1135**, écart **372 → 367** ; les cinq sources débloquées s'exécutent à
+l'identique avec des codes zéro. Exécution globale **74/84**, inchangée ;
+NIST statique **451/458**. Fixture `initialize_value.cob` identique au natif.
+
+## Progression : EXTERNAL AS — 31 octobre 2026
+
+`EXTERNAL [AS littéral]` désigne le bloc de l'unité d'exécution par le nom C de
+`cb_to_cname` ; `cob_external_addr` est porté (première déclaration,
+avertissement pour une plus courte, erreur pour une plus longue). Acceptation
+**1250 → 1255/3593**, testsuite **526 → 531/1135**, écart **367 → 362** ;
+quatre des cinq sources débloquées s'exécutent à l'identique avec des codes
+zéro, la cinquième s'arrête des deux côtés sur l'erreur de taille. Exécution
+globale **74/84**, inchangée ; NIST statique **451/458**. Fixture
+`external_as.cob` identique au natif.
+
+## Progression : COLUMN PLUS et OPEN de plusieurs fichiers — 31 octobre 2026
+
+COLUMN PLUS et les articles de rapport sans COLUMN suivent `output_report_data`
+; INITIATE d'un rapport actif et GENERATE/TERMINATE sans INITIATE suivent
+reportio.c. Un OPEN de plusieurs modes imbrique ses instructions implicites
+comme le C généré par cobc : le dernier fichier d'un mode est contrôlé après
+les modes suivants. Acceptation
+**1255 → 1262/3593**, testsuite **531 → 538/1135**, écart **362 → 355** ;
+les sept sources débloquées s'exécutent à l'identique (cinq en code zéro, deux
+sur l'erreur fatale). 20 programmes NIST à OPEN multiple re-vérifiés : 20/20
+conformes. Exécution globale **74/84**, inchangée ; NIST statique **451/458**.

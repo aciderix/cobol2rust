@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import pickle
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
@@ -17,6 +19,59 @@ from .toolchain import compiler_env, find_tool
 
 
 SOURCE_SUFFIXES = (".CBL", ".cbl", ".COB", ".cob")
+
+
+_ANALYSIS = None
+
+
+@contextmanager
+def analysis_cache():
+    """Memoize load_source and the parse of each source while measuring a
+    read-only corpus: a dynamic CALL brings in every program of the call path,
+    for each caller. The parse is returned as a fresh copy (pickle) of the
+    first one, so a later change to a program never reaches the cache."""
+    global _ANALYSIS
+    previous, _ANALYSIS = _ANALYSIS, {}
+    try:
+        yield
+    finally:
+        _ANALYSIS = previous
+
+
+def _profile():
+    from . import frontend
+    return frontend.STD, frontend.DEBUGGING_LINES, frontend.NO_EC_DATA_INCOMPATIBLE, frontend.RUNTIME_CHECKS
+
+
+def _memoized(key, compute, store, restore):
+    if _ANALYSIS is None:
+        return compute()
+    if key in _ANALYSIS:
+        kind, value = _ANALYSIS[key]
+        if kind == "error":
+            raise CobolError(*value)
+        return restore(value)
+    try:
+        result = compute()
+    except CobolError as error:
+        _ANALYSIS[key] = ("error", error.args)
+        raise
+    try:
+        _ANALYSIS[key] = ("value", store(result))
+    except (pickle.PicklingError, TypeError, AttributeError, RecursionError):
+        pass
+    return result
+
+
+def load_cached(path: Path, includes, fmt):
+    key = ("load", str(Path(path).absolute()), tuple(map(str, includes)), fmt, _profile())
+    return _memoized(key, lambda: load_source(path, list(includes), fmt),
+                     lambda result: (result[0], list(result[1])), lambda value: (value[0], list(value[1])))
+
+
+def parse_cached(expanded: str):
+    key = ("parse", hashlib.sha256(expanded.encode("utf-8", "surrogatepass")).digest(), _profile())
+    return _memoized(key, lambda: Parser(expanded).parse(), pickle.dumps, pickle.loads)
 
 
 def statements(program):
@@ -61,7 +116,9 @@ def check_nested_calls(main, local):
             callee = programs.get(target)
             if callee is None or callee.parent is None:
                 continue
-            visible = callee.parent == caller or (
+            # cb_build_program: a contained program sees itself ("for
+            # possible recursion").
+            visible = callee.parent == caller or target == caller or (
                 callee.common and callee.parent in ancestors(caller)
                 and target not in [caller, *ancestors(caller)])
             if not visible:
@@ -75,8 +132,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
     name in the call path. A name found nowhere raises EXCEPTION at run time.
     A dynamic CALL brings in every program of the call path that converts.
     """
-    expanded, copies = load_source(source, list(includes), fmt)
-    main = Parser(expanded).parse()
+    expanded, copies = load_cached(source, includes, fmt)
+    main = parse_cached(expanded)
     directories = [Path(path) for path in call_paths]
     units = {}
     # Programs after the main one in its source are in the executable itself:
@@ -104,7 +161,7 @@ def run_unit(source: Path, fmt, includes, call_paths):
             for path in sorted(directory.iterdir()) if directory.is_dir() else []:
                 if path.suffix in SOURCE_SUFFIXES:
                     try:
-                        load_source(path, list(includes), fmt)
+                        load_cached(path, includes, fmt)
                         scanned.add(path.stem)
                         pending.add(path.stem)
                     except (CobolError, OSError):
@@ -140,8 +197,8 @@ def run_unit(source: Path, fmt, includes, call_paths):
         # when it converts as a single program of that name.
         optional = name not in targets
         try:
-            sub_expanded, sub_copies = load_source(path, list(includes), fmt)
-            program = Parser(sub_expanded).parse()
+            sub_expanded, sub_copies = load_cached(path, includes, fmt)
+            program = parse_cached(sub_expanded)
         except CobolError as exc:
             if optional:
                 continue
@@ -166,7 +223,7 @@ def run_unit(source: Path, fmt, includes, call_paths):
     while pruned:
         pruned = False
         for name in [name for name in units if name not in targets]:
-            from .system_calls import CATALOG
+            from .system_calls import SYSTEM_ROUTINES as CATALOG
             if any(callee not in CATALOG and callee not in units and callee != main.entry_name and not surely_absent(callee, present)
                    for callee in call_targets(units[name][1])[0]):
                 del units[name]
@@ -177,6 +234,11 @@ def run_unit(source: Path, fmt, includes, call_paths):
 def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
     """Rust source of the run unit of `source`, with its parsed programs."""
     main, expanded, copies, subprograms = run_unit(source, fmt, includes, call_paths)
+    # COB_SOURCE_FILE: the source as named to the compiler (MODULE-SOURCE).
+    main.source_file, main.in_main_source = str(source), True
+    for path, sub, _, _ in subprograms:
+        sub.source_file = str(path)
+        sub.in_main_source = Path(path).resolve() == Path(source).resolve()
     called = [main.entry_name, *(sub.entry_name for _, sub, _, _ in subprograms)]
     present = {path.stem for directory in map(Path, call_paths) if directory.is_dir()
                for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
@@ -252,7 +314,7 @@ def convert(source: Path, output: Path, fmt="auto", includes=(), call_paths=(), 
     (output / "src" / "runtime.rs").write_text(Path(__file__).with_name("runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "storage_runtime.rs").write_text(Path(__file__).with_name("storage_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     (output / "src" / "system_runtime.rs").write_text(Path(__file__).with_name("system_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
-    if program.files or any(sub.files for _, sub, _, _ in subprograms):
+    if "mod file_runtime;" in rust:
         (output / "src" / "file_runtime.rs").write_text(Path(__file__).with_name("file_runtime.rs").read_text(encoding="utf-8"), encoding="utf-8")
     # One character per source byte: expanded.cob keeps the original bytes.
     (output / "expanded.cob").write_text(expanded + "\n", encoding="latin-1")
@@ -294,6 +356,10 @@ def main(argv=None):
     verification.add_argument("--std", choices=["default", "cobol85"], default="default", help="dialecte cobc (-std) des deux côtés")
     verification.add_argument("--fno-ec-data-incompatible", action="store_true", help="cobc -fno-ec=data-incompatible des deux côtés")
     verification.add_argument("--runtime-checks", action="store_true", help="contrôles d'exécution (cobc -debug) des deux côtés")
+    verification.add_argument("--companion", action="append", default=[], type=Path, metavar="SOURCE",
+                              help="autre programme principal lancé par le programme vérifié (./<nom>), compilé des deux côtés")
+    verification.add_argument("--arg", action="append", default=[], dest="arguments", metavar="ARGUMENT",
+                              help="argument de ligne de commande (après argv[0], identique des deux côtés), répétable")
     verification.add_argument("-o", "--output", type=Path, help="rapport JSON")
     inventory = subs.add_parser("audit", help="inventorier les sources COBOL acceptées et leurs blocages, sans exécution")
     inventory.add_argument("path", type=Path)
@@ -331,7 +397,7 @@ def main(argv=None):
             report = verify(args.source, args.format, args.stdin_file.read_bytes() if args.stdin_file else b"", args.copybook_path,
                             args.data_dir, environment, args.call_path, debugging_lines=args.debugging_lines,
                             std=args.std, no_ec_data_incompatible=args.fno_ec_data_incompatible, file_env=file_env,
-                            runtime_checks=args.runtime_checks)
+                            runtime_checks=args.runtime_checks, arguments=args.arguments, companions=args.companion)
             encoded = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
             if args.output:
                 if args.output.exists():

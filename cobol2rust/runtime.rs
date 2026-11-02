@@ -117,6 +117,104 @@ pub(crate) fn power(scale: u32) -> BigInt {
 pub(crate) fn absolute(n: &BigInt) -> BigInt {
     if n.sign() == Sign::Minus { -n } else { n.clone() }
 }
+/// Binary floating point (USAGE COMP-1 / COMP-2) as libcob 3.2 handles it:
+/// numeric.c cob_decimal_set_double / cob_decimal_get_double, termio.c
+/// cob_display_common, numeric.c cob_cmp_float.
+pub mod float {
+    use super::{fail, Number};
+    use num_bigint::{BigInt, BigUint, Sign};
+
+    /// cob_decimal_set_double: zero, all spaces and non-finite values read as
+    /// 0; otherwise mpf_get_str's 96 digits, exact for this range.
+    pub fn from_f64(v: f64) -> Number {
+        let bits = v.to_bits();
+        if bits == 0 || bits == 0x2020_2020_2020_2020 || !v.is_finite() { return Number::new(BigInt::from(0), 0); }
+        if v == 0.0 {
+            // mpf_get_str of -0.0 is empty and mpz_set_str keeps the previous decimal.
+            fail("lecture d'un flottant -0.0 (cob_decimal_set_double) non modélisée");
+        }
+        let exponent = ((bits >> 52) & 0x7ff) as i64;
+        let fraction = bits & ((1u64 << 52) - 1);
+        let (mantissa, e) = if exponent == 0 { (fraction, -1074) } else { (fraction | (1u64 << 52), exponent - 1075) };
+        let mut n = BigUint::from(mantissa);
+        let mut scale = 0u32;
+        if e >= 0 { n <<= e as usize; } else { n *= BigUint::from(5u32).pow((-e) as u32); scale = (-e) as u32; }
+        let ten = BigUint::from(10u32);
+        while scale > 0 && (&n % &ten) == BigUint::from(0u32) { n /= &ten; scale -= 1; }
+        let digits = n.to_str_radix(10);
+        if digits.trim_end_matches('0').len() > 96 {
+            // mpf_get_str keeps COB_MAX_INTERMEDIATE_FLOATING_SIZE digits. For
+            // an integer GMP rounds to nearest (checked against libgmp on
+            // 14594 doubles); for a fraction its approximation differs.
+            if scale > 0 { fail("flottant fractionnaire de plus de 96 chiffres significatifs (mpf_get_str) non modélisé"); }
+            let dropped = digits.len() - 96;
+            let unit = BigUint::from(10u32).pow(dropped as u32);
+            let (head, rest) = (&n / &unit, &n % &unit);
+            let twice = &rest * 2u32;
+            if twice == unit { fail("arrondi ex aequo de mpf_get_str à 96 chiffres non modélisé"); }
+            n = if twice > unit { head + 1u32 } else { head } * unit;
+        }
+        Number::new(BigInt::from_biguint(if v < 0.0 { Sign::Minus } else { Sign::Plus }, n), scale)
+    }
+
+    /// cob_decimal_get_double: the exact value truncated toward zero
+    /// (mpf_div, then mpf_get_d); None when not finite (cob_not_finite).
+    pub fn to_f64(number: &Number) -> Option<f64> {
+        if number.n.sign() == Sign::NoSign { return Some(0.0); }
+        let a = number.n.magnitude().clone();
+        let b = BigUint::from(10u32).pow(number.scale);
+        let quotient = |e: i64| -> BigUint { if e >= 0 { &a / (&b << e as usize) } else { (&a << (-e) as usize) / &b } };
+        let mut e = a.bits() as i64 - b.bits() as i64 - 53;
+        let mut q = quotient(e);
+        while q.bits() > 53 { e += 1; q = quotient(e); }
+        while q.bits() < 53 { e -= 1; q = quotient(e); }
+        if e + 52 > 1023 { return None; }
+        if e + 52 < -1022 {
+            fail("résultat flottant sous-normal (mpf_get_d, dépendant du système) non modélisé");
+        }
+        let value = q.to_u64_digits()[0] as f64 * 2f64.powi(e as i32);
+        Some(if number.n.sign() == Sign::Minus { -value } else { value })
+    }
+
+    /// sprintf "%-.<precision>G" then clean_double.
+    pub fn display(value: f64, precision: usize) -> String {
+        let mut text = if value.is_nan() {
+            if value.is_sign_negative() { "-NAN".to_string() } else { "NAN".to_string() }
+        } else if value.is_infinite() {
+            if value < 0.0 { "-INF".to_string() } else { "INF".to_string() }
+        } else if value == 0.0 {
+            if value.is_sign_negative() { "-0".to_string() } else { "0".to_string() }
+        } else {
+            let scientific = format!("{:.*e}", precision - 1, value);
+            let (mantissa, exponent) = scientific.split_once('e').unwrap();
+            let exponent: i32 = exponent.parse().unwrap();
+            let trim = |s: &str| -> String {
+                if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s.to_string() }
+            };
+            if exponent < -4 || exponent >= precision as i32 {
+                format!("{}E{}{:02}", trim(mantissa), if exponent < 0 { '-' } else { '+' }, exponent.abs())
+            } else {
+                trim(&format!("{:.*}", (precision as i32 - 1 - exponent) as usize, value))
+            }
+        };
+        if let Some(position) = text.rfind('E') {
+            if text.as_bytes().get(position + 2) == Some(&b'0') { text.remove(position + 2); }
+        } else if text == "-NAN" || text == "NAN" {
+            text = "NaN".to_string();
+        }
+        text
+    }
+
+    /// cob_cmp_float: equal within a relative TOLERANCE of 1e-7 of d1.
+    pub fn order(d1: f64, d2: f64) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        if d1 == d2 || (d1 != 0.0 && ((d1 - d2) / d1).abs() < 0.000_000_1) {
+            return Ordering::Equal;
+        }
+        if d1 < d2 { Ordering::Less } else { Ordering::Greater }
+    }
+}
+
 impl Number {
     pub(crate) fn new(n: BigInt, scale: u32) -> Self {
         if scale > 1024 || n.to_str_radix(10).len() > 4096 { fail("intermediate decimal capacity exceeded"); }
@@ -177,7 +275,9 @@ impl Number {
     }
     fn divide(self, other: Self) -> Self {
         if other.n == BigInt::from(0) {
-            // cob_decimal_div: COB_DECIMAL_NAN inside an arithmetic statement.
+            // cob_decimal_div: EC-SIZE-ZERO-DIVIDE, then COB_DECIMAL_NAN
+            // inside an arithmetic statement.
+            exception::set("EC-SIZE-ZERO-DIVIDE");
             if DECIMAL_NAN.with(|nan| nan.get().is_some()) {
                 DECIMAL_NAN.with(|nan| nan.set(Some(true)));
                 return Self::new(BigInt::from(0), 0);
@@ -224,7 +324,8 @@ pub fn round_mode(value: &Value, scale: i32, mode: u8) -> Option<Value> {
     let step = |n: &mut BigInt| { *n += if negative { -5 } else { 5 }; };
     match mode {
         1 => {}
-        2 => return None,
+        // cob_decimal_get_field: EC-SIZE-TRUNCATION.
+        2 => { exception::set("EC-SIZE-TRUNCATION"); return None },
         3 | 5 | 6 => {
             let unit = power((own - scale) as u32);
             let remainder: BigInt = &n % &unit;
@@ -272,6 +373,11 @@ impl Value {
         match self { Self::View(view) => matches!(view.kind, crate::storage_runtime::Kind::Text | crate::storage_runtime::Kind::Justified | crate::storage_runtime::Kind::Edited { .. } | crate::storage_runtime::Kind::AlnumEdited { .. }), Self::Text(_) | Self::Bytes(_) => true, _ => false }
     }
     pub fn snapshot(&self) -> Self { match self { Self::View(view) => view.value(), _ => self.clone() } }
+    /// The storage bytes of an item, a literal's bytes otherwise.
+    pub fn data(&self) -> Vec<u8> {
+        match self { Self::View(view) => view.data(), Self::Bytes(b) => b.clone(), Self::Text(t) => t.clone().into_bytes(),
+                     Self::Num(..) => fail("item storage required") }
+    }
     /// The value of an operand: as snapshot, but invalid numeric data is read
     /// as libcob does without runtime checks (COB_D2I).
     pub fn operand(&self) -> Self { match self { Self::View(view) => view.operand_value(false), _ => self.clone() } }
@@ -300,13 +406,27 @@ impl Value {
             _ => fail("OCCURS DEPENDING ON requires group view"),
         }
     }
+    /// cob_get_int of the controller (truncated toward zero, any numeric
+    /// usage). Without EC-BOUND checks cobc uses the value as it is: a count
+    /// below the minimum is a shorter item; beyond the maximum or negative it
+    /// addresses storage outside the item, a named stop. cob_check_odo's
+    /// [minimum, maximum] with the checks.
     fn occurrences(&self, minimum: usize, maximum: usize) -> usize {
-        let count = self.integer("OCCURS DEPENDING ON");
-        if count < minimum as i128 || count > maximum as i128 { fail("OCCURS DEPENDING ON count out of bounds"); }
+        let count = self.num().units(0, false).to_string().parse::<i128>().unwrap_or_else(|_| fail("OCCURS DEPENDING ON count out of bounds"));
+        let low = if crate::storage_runtime::runtime_checks() { minimum as i128 } else { 0 };
+        if count < low || count > maximum as i128 { fail("OCCURS DEPENDING ON count out of bounds"); }
         count as usize
     }
     pub fn slice(&self, start: &Value, length: Option<&Value>) -> Self {
         match self { Self::View(view) => Self::View(view.slice(start, length)), _ => fail("reference modification requires storage view") }
+    }
+    /// cob_cmp_float: a COMP-1 / COMP-2 item's stored value, any other
+    /// number through cob_decimal_get_double (0.0 when not finite).
+    pub fn float_operand(&self) -> f64 {
+        if let Self::View(view) = self {
+            if let Some(value) = view.float_value() { return value; }
+        }
+        float::to_f64(&self.num()).unwrap_or(0.0)
     }
     pub fn bytes(&self) -> Vec<u8> {
         match self {
@@ -373,7 +493,7 @@ impl Value {
     pub fn power(&self, b: &Self) -> Self { Self::Num(self.num().power(b.num()), None) }
     pub fn checked_divide(&self, b: &Self) -> Result<Self, SizeError> {
         let left = self.num(); let right = b.num();
-        if right.n == BigInt::from(0) { return Err(SizeError); }
+        if right.n == BigInt::from(0) { exception::set("EC-SIZE-ZERO-DIVIDE"); return Err(SizeError); }
         Ok(Self::Num(left.divide(right), None))
     }
     pub fn neg(&self) -> Self { Self::Num(self.num().neg(), None) }
@@ -386,7 +506,7 @@ impl Value {
         Self::Num(dividend.plus(product.neg()), None)
     }
     pub fn checked_remainder(&self, divisor: &Self, quotient_scale: i32) -> Result<Self, SizeError> {
-        if divisor.num().n == BigInt::from(0) { return Err(SizeError); }
+        if divisor.num().n == BigInt::from(0) { exception::set("EC-SIZE-ZERO-DIVIDE"); return Err(SizeError); }
         Ok(self.remainder_after(divisor, quotient_scale))
     }
     pub fn checked_assign(&mut self, source: &Self, rounded: bool) -> Result<(), SizeError> {
@@ -533,7 +653,8 @@ impl Value {
         let mut end = false;
         while line.len() < 8191 {
             match io::Read::read(&mut input, &mut byte) {
-                Ok(0) => { end = true; break; },
+                // cob_accept: EC-IMP-ACCEPT at end of input.
+                Ok(0) => { end = true; exception::set("EC-IMP-ACCEPT"); break; },
                 Ok(_) if byte[0] == b'\n' => break,
                 Ok(_) if byte[0] == 3 => interrupt(),
                 Ok(_) => line.push(byte[0]),
@@ -745,7 +866,7 @@ pub mod intrinsic {
     fn value(n: Number) -> Value { Value::Num(n, None) }
     fn int_of(n: i128) -> Value { Value::Num(Number::new(BigInt::from(n), 0), None) }
     /// cob_get_int: the integer part, which must fit a C int.
-    fn get_int(v: &Value) -> i64 {
+    pub(crate) fn get_int(v: &Value) -> i64 {
         let units = v.num().units(0, false);
         let n: i64 = units.to_string().parse().unwrap_or_else(|_| fail("function argument outside the C int range"));
         if n < i32::MIN as i64 || n > i32::MAX as i64 { fail("function argument outside the C int range"); }
@@ -767,7 +888,7 @@ pub mod intrinsic {
     }
     /// cob_mod_or_rem: f1 - f2 * INTEGER (MOD) or INTEGER-PART (REM) of f1 / f2.
     pub fn mod_or_rem(f1: &Value, f2: &Value, rem: bool) -> Value {
-        if f2.num().n == BigInt::from(0) { argument_error(if rem { "REM" } else { "MOD" }); }
+        if f2.num().n == BigInt::from(0) { super::exception::set("EC-ARGUMENT-FUNCTION"); return int_of(0); }
         let quotient = value(f1.num().divide(f2.num()));
         let whole = if rem { integer_part(&quotient) } else { integer(&quotient) };
         value(f1.num().plus(whole.num().times(f2.num()).neg()))
@@ -812,6 +933,56 @@ pub mod intrinsic {
     }
     /// cob_alloc_set_field_uint: an unsigned binary of 9 digits.
     pub fn uint_field(v: Value) -> Value { Value::Num(v.num(), Some((9, 0, false, false))) }
+    /// cob_alloc_set_field_int: a binary of 9 digits, signed when negative.
+    pub fn int_field(v: Value) -> Value {
+        let n = v.num();
+        let negative = n.n.sign() == Sign::Minus;
+        Value::Num(n, Some((9, 0, negative, false)))
+    }
+    /// cob_intr_sign: mpz_sgn of the argument.
+    pub fn sign(v: &Value) -> Value {
+        int_of(match v.num().n.sign() { Sign::Minus => -1, Sign::NoSign => 0, Sign::Plus => 1 })
+    }
+    /// cob_intr_combined_datetime: days + seconds / 100000 (cob_decimal_div,
+    /// cob_alloc_field), or an unsigned 0 with EC-ARGUMENT-FUNCTION for a day
+    /// outside 1..3067671 or more than 86400 seconds.
+    pub fn combined_datetime(days: &Value, seconds: &Value) -> Value {
+        let day = get_int(days);
+        if !(1..=3067671).contains(&day) || seconds.compare(&Value::number("86400")) == std::cmp::Ordering::Greater {
+            super::exception::set("EC-ARGUMENT-FUNCTION");
+            return uint_field(int_of(0));
+        }
+        alloc_field(int_of(day as i128).plus(&seconds.divide(&Value::number("100000"))))
+    }
+    /// cob_intr_seconds_past_midnight: the local time of day (localtime of
+    /// time (NULL), leap second as 59), without COB_CURRENT_DATE.
+    pub fn seconds_past_midnight() -> Value {
+        super::utc_only("FUNCTION SECONDS-PAST-MIDNIGHT");
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_else(|_| fail("system clock before 1970"));
+        int_field(int_of((now.as_secs() % 86400) as i128))
+    }
+    /// cob_intr_content_length: strlen at the pointer, EC-DATA-PTR-NULL and 0
+    /// for NULL (cob_set_exception (0) first).
+    pub fn content_length(pointer: &Value) -> Value {
+        super::exception::off();
+        let size = match crate::storage_runtime::pointed_content(pointer, None) {
+            Some(bytes) => bytes.len(),
+            None => { super::exception::set("EC-DATA-PTR-NULL"); 0 },
+        };
+        uint_field(int_of(size as i128))
+    }
+    /// cob_intr_content_of: the bytes at the pointer, a zero-length field and
+    /// EC-DATA-PTR-NULL for NULL.
+    pub fn content_of(pointer: &Value, length: Option<&Value>) -> Value {
+        super::exception::off();
+        let requested = length.map(get_int).unwrap_or(0) as u32;
+        let wanted = if requested == 0 { None } else { Some(requested as usize) };
+        match crate::storage_runtime::pointed_content(pointer, wanted) {
+            Some(bytes) => Value::Bytes(bytes),
+            None => { super::exception::set("EC-DATA-PTR-NULL"); Value::Bytes(Vec::new()) },
+        }
+    }
     /// cob_intr_date_of_integer, cob_intr_day_of_integer: unsigned DISPLAY.
     pub fn display_field(v: Value, digits: u32) -> Value { Value::Num(v.num(), Some((digits, 0, false, false))) }
     /// cob_intr_max, min, median and mean of one argument return a copy of
@@ -1531,6 +1702,10 @@ pub mod intrinsic {
         Value::Bytes(buff)
     }
     fn spaces(length: usize) -> Value { Value::Bytes(vec![b' '; length]) }
+    /// invalid_args of the ISO 8601 functions: EC-ARGUMENT-FUNCTION and spaces.
+    fn invalid_args(length: usize) -> Value { super::exception::set("EC-ARGUMENT-FUNCTION"); spaces(length) }
+    /// invalid_args of the numeric ISO 8601 functions: EC-ARGUMENT-FUNCTION and zero.
+    fn invalid_value() -> Value { super::exception::set("EC-ARGUMENT-FUNCTION"); int_of(0) }
     /// get_fractional_seconds: the argument less its cob_get_int.
     fn fractional_seconds(v: &Value) -> Number {
         let n = v.num();
@@ -1549,15 +1724,15 @@ pub mod intrinsic {
     pub fn formatted_date(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATESTR_MAX);
         let days = get_int(&args[1]);
-        if !(1..=3067671).contains(&days) || !valid_date_format(&format) { return spaces(format.len()); }
+        if !(1..=3067671).contains(&days) || !valid_date_format(&format) { return invalid_args(format.len()); }
         sized(format_date(parse_date_format(&format), days), format.len())
     }
     pub fn formatted_time(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), TIMESTR_MAX);
         let seconds = get_int(&args[1]);
-        if !(0..=86400).contains(&seconds) || !valid_time_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !(0..=86400).contains(&seconds) || !valid_time_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let fraction = fractional_seconds(&args[1]);
-        let Ok(offset) = offset_argument(args, 2) else { return spaces(format.len()) };
+        let Ok(offset) = offset_argument(args, 2) else { return invalid_args(format.len()) };
         sized(format_time(parse_time_format(&format), seconds, &fraction, offset).0, format.len())
     }
     fn format_datetime(date: DateFormat, time: TimeFormat, days: i64, seconds: i64, fraction: &Number, offset: Option<i64>) -> Vec<u8> {
@@ -1569,17 +1744,17 @@ pub mod intrinsic {
     }
     pub fn formatted_datetime(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
-        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !valid_datetime_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let (days, seconds) = (get_int(&args[1]), get_int(&args[2]));
-        if !(1..=3067671).contains(&days) || !(0..=86400).contains(&seconds) { return spaces(format.len()); }
+        if !(1..=3067671).contains(&days) || !(0..=86400).contains(&seconds) { return invalid_args(format.len()); }
         let (date_format, time_format, _) = split_around_t(&format);
-        let Ok(offset) = offset_argument(args, 3) else { return spaces(format.len()) };
+        let Ok(offset) = offset_argument(args, 3) else { return invalid_args(format.len()) };
         let fraction = fractional_seconds(&args[2]);
         sized(format_datetime(parse_date_format(&date_format), parse_time_format(&time_format), days, seconds, &fraction, offset), format.len())
     }
     pub fn formatted_current_date(args: &[Value]) -> Value {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
-        if !valid_datetime_format(&format, decimal_point()) { return spaces(format.len()); }
+        if !valid_datetime_format(&format, decimal_point()) { return invalid_args(format.len()); }
         let (date_format, time_format, _) = split_around_t(&format);
         let t = super::current_datetime();
         let table = if leap(t.year) { &LEAP_DAYS } else { &NORMAL_DAYS };
@@ -1718,7 +1893,7 @@ pub mod intrinsic {
         let (date_present, time_present) = if valid_date_format(&format) { (true, false) }
             else if valid_time_format(&format, point) { (false, true) }
             else if valid_datetime_format(&format, point) { (true, true) }
-            else { return int_of(0) };
+            else { return invalid_value() };
         let (date_format, time_format) = if date_present && time_present { let (d, t, _) = split_around_t(&format); (d, t) }
             else if date_present { (format.clone(), Vec::new()) } else { (Vec::new(), format.clone()) };
         let (date, time) = if date_present && time_present { let (d, t, _) = split_around_t(&value); (d, t) }
@@ -1739,10 +1914,10 @@ pub mod intrinsic {
         let format = leading(&args[0].bytes(), DATETIMESTR_MAX);
         let value = leading(&args[1].bytes(), DATETIMESTR_MAX);
         let is_date = valid_date_format(&format);
-        let date_format = if is_date { format } else if valid_datetime_format(&format, decimal_point()) { split_around_t(&format).0 } else { return int_of(0) };
+        let date_format = if is_date { format } else if valid_datetime_format(&format, decimal_point()) { split_around_t(&format).0 } else { return invalid_value() };
         let date = if is_date { value } else { split_around_t(&value).0 };
         let date_format = parse_date_format(&date_format);
-        if test_formatted_date(date_format, &date, true) != 0 { return int_of(0); }
+        if test_formatted_date(date_format, &date, true) != 0 { return invalid_value(); }
         // integer_of_formatted_date: the parts read back with sscanf.
         let number = |from: usize, len: usize| -> i64 { std::str::from_utf8(&date[from..from + len]).unwrap().parse().unwrap() };
         let year = number(0, 4);
@@ -1768,7 +1943,7 @@ pub mod intrinsic {
         let format = c_string(&data[..length]).to_vec();
         let point = decimal_point();
         let is_datetime = valid_datetime_format(&format, point);
-        if !is_datetime && !valid_time_format(&format, point) { return int_of(0); }
+        if !is_datetime && !valid_time_format(&format, point) { return invalid_value(); }
         let data = time.bytes();
         let (time_format, time) = if is_datetime {
             if !terminated { fail("SECONDS-FROM-FORMATTED-TIME of a datetime item reads past the item (C string)"); }
@@ -1778,7 +1953,7 @@ pub mod intrinsic {
             (format.clone(), c_string(&data[..length]).to_vec())
         };
         let time_format = parse_time_format(&time_format);
-        if test_formatted_time(time_format, &time, point) != 0 { return int_of(0); }
+        if test_formatted_time(time_format, &time, point) != 0 { return invalid_value(); }
         let number = |from: usize| -> i64 { (at(&time, from) - b'0') as i64 * 10 + (at(&time, from + 1) - b'0') as i64 };
         let step = if time_format.colons { 3 } else { 2 };
         let seconds = number(0) * 3600 + number(step) * 60 + number(2 * step);
@@ -2112,7 +2287,196 @@ fn normalized(t: &CobTime) -> CobTime {
 }
 
 /// The local time zone, modelled only when it is UTC.
-fn utc_only(what: &str) {
+/// The locale of libcob (cob_init: setlocale (LC_ALL, ""), then "C" for
+/// LC_NUMERIC and LC_CTYPE) and the intrinsic.c functions reading it, through
+/// the C library itself (glibc).
+pub mod locale {
+    use super::{fail, Value};
+    use std::os::raw::{c_char, c_int, c_long};
+
+    const LC_TIME: c_int = 2;
+    const LC_COLLATE: c_int = 3;
+    const LC_ALL: c_int = 6;
+    const D_FMT: c_int = 0x20029;
+    const T_FMT: c_int = 0x2002A;
+
+    #[repr(C)]
+    struct Tm { sec: c_int, min: c_int, hour: c_int, mday: c_int, mon: c_int, year: c_int, wday: c_int, yday: c_int,
+                isdst: c_int, gmtoff: c_long, zone: *const c_char }
+
+    extern "C" {
+        fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
+        fn localeconv() -> *const *const c_char;
+        fn strcoll(a: *const c_char, b: *const c_char) -> c_int;
+        fn nl_langinfo(item: c_int) -> *const c_char;
+        fn strftime(s: *mut c_char, max: usize, format: *const c_char, tm: *const Tm) -> usize;
+    }
+
+    thread_local! {
+        /// cobglobptr->cob_locale: setlocale (LC_ALL, NULL) after cob_init.
+        static COB_LOCALE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    fn c_string(pointer: *const c_char) -> Vec<u8> {
+        if pointer.is_null() { return Vec::new(); }
+        unsafe { std::ffi::CStr::from_ptr(pointer) }.to_bytes().to_vec()
+    }
+
+    fn check_platform() {
+        if !cfg!(all(target_os = "linux", target_env = "gnu", target_pointer_width = "64")) {
+            fail("locale functions outside 64-bit glibc not modelled");
+        }
+    }
+
+    /// cob_init's locale, at the start of the run unit.
+    pub fn init() {
+        check_platform();
+        unsafe {
+            if setlocale(LC_ALL, c"".as_ptr()).is_null() { return; }
+            setlocale(1, c"C".as_ptr());
+            setlocale(0, c"C".as_ptr());
+            let current = c_string(setlocale(LC_ALL, std::ptr::null()));
+            COB_LOCALE.with(|locale| *locale.borrow_mut() = Some(current));
+        }
+    }
+
+    fn restore() {
+        COB_LOCALE.with(|locale| if let Some(name) = locale.borrow().as_ref() {
+            let name = std::ffi::CString::new(name.clone()).unwrap_or_default();
+            unsafe { setlocale(LC_ALL, name.as_ptr()); }
+        });
+    }
+
+    /// cob_intr_currency_symbol, cob_intr_num_decimal_point, ... : a
+    /// localeconv () string, a zero-length field when empty.
+    pub fn lconv(index: usize) -> Value {
+        check_platform();
+        Value::Bytes(c_string(unsafe { *localeconv().add(index) }))
+    }
+
+    /// cob_field_to_string: the bytes up to the last one neither space nor
+    /// NUL, as a C string; None for blank data or more than COB_MINI_MAX.
+    fn locale_name(field: &Value) -> Option<std::ffi::CString> {
+        let data = field.bytes();
+        let end = data.iter().rposition(|byte| *byte != b' ' && *byte != 0)?;
+        if end > 255 { return None; }
+        let mut name = data[..=end].to_vec();
+        name.truncate(name.iter().position(|byte| *byte == 0).unwrap_or(name.len()));
+        Some(std::ffi::CString::new(name).unwrap_or_default())
+    }
+
+    fn argument_error(size: usize) -> Value {
+        super::exception::set("EC-ARGUMENT-FUNCTION");
+        Value::Bytes(vec![b' '; size])
+    }
+
+    /// cob_intr_locale_compare: strcoll of the two arguments without their
+    /// trailing spaces (the first byte kept), under the locale argument.
+    pub fn compare(first: &Value, second: &Value, locale: Option<&Value>) -> Value {
+        check_platform();
+        let trimmed = |value: &Value| {
+            let mut data = value.bytes();
+            if data.is_empty() { fail("FUNCTION LOCALE-COMPARE of a zero-length argument not modelled"); }
+            while data.len() > 1 && data[data.len() - 1] == b' ' { data.pop(); }
+            data.push(0);
+            data
+        };
+        let (a, b) = (trimmed(first), trimmed(second));
+        let switched = match locale {
+            Some(field) => match locale_name(field) {
+                Some(name) => { unsafe { setlocale(LC_COLLATE, name.as_ptr()); } true },
+                None => return argument_error(1),
+            },
+            None => false,
+        };
+        let order = unsafe { strcoll(a.as_ptr() as *const c_char, b.as_ptr() as *const c_char) };
+        if switched { restore(); }
+        Value::Bytes(vec![if order < 0 { b'<' } else if order > 0 { b'>' } else { b'=' }])
+    }
+
+    fn format(item: c_int, category: c_int, tm: &Tm, locale: Option<&Value>) -> Option<Value> {
+        let switched = match locale {
+            Some(field) => { let name = locale_name(field)?; unsafe { setlocale(category, name.as_ptr()); } true },
+            None => false,
+        };
+        // snprintf of nl_langinfo into a buffer of 128 (127 kept).
+        let mut pattern = c_string(unsafe { nl_langinfo(item) });
+        pattern.truncate(127);
+        pattern.push(0);
+        if switched { restore(); }
+        let mut buffer = [0u8; 128];
+        let size = unsafe { strftime(buffer.as_mut_ptr() as *mut c_char, buffer.len(), pattern.as_ptr() as *const c_char, tm) };
+        Some(Value::Bytes(buffer[..size].to_vec()))
+    }
+
+    fn blank_tm() -> Tm { Tm { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: std::ptr::null() } }
+
+    /// The digits of an alphanumeric date or time argument (range check, not isdigit).
+    fn digits(value: &Value, count: usize) -> Option<i64> {
+        let data = value.bytes();
+        if data.len() < count { return None; }
+        data[..count].iter().try_fold(0i64, |n, byte| byte.is_ascii_digit().then(|| n * 10 + (byte - b'0') as i64))
+    }
+
+    /// cob_intr_locale_date: strftime of nl_langinfo (D_FMT).
+    pub fn date(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        let Some(date) = (if numeric { Some(super::intrinsic::get_int(source)) } else { digits(source, 8) }) else { return argument_error(10) };
+        let (year, month, day) = (date / 10000, date % 10000 / 100, date % 100);
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        let days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        if !(1601..=9999).contains(&year) || !(1..=12).contains(&month) || day < 1 || day > days[month as usize - 1] {
+            return argument_error(10);
+        }
+        let mut tm = blank_tm();
+        tm.year = (year - 1900) as c_int;
+        tm.mon = (month - 1) as c_int;
+        tm.mday = day as c_int;
+        format(D_FMT, LC_TIME, &tm, locale).unwrap_or_else(|| argument_error(10))
+    }
+
+    fn time_of_day(hours: i64, minutes: i64, seconds: i64, locale: Option<&Value>) -> Value {
+        let mut tm = blank_tm();
+        tm.hour = hours as c_int;
+        tm.min = minutes as c_int;
+        tm.sec = seconds as c_int;
+        format(T_FMT, LC_TIME, &tm, locale).unwrap_or_else(|| argument_error(10))
+    }
+
+    /// cob_intr_locale_time: hours 0 to 24, then locale_time.
+    pub fn time(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        let Some(time) = (if numeric { Some(super::intrinsic::get_int(source)) } else { digits(source, 6) }) else { return argument_error(10) };
+        let (hours, minutes, seconds) = (time / 10000, time % 10000 / 100, time % 100);
+        if !(0..=24).contains(&hours) || !(0..=59).contains(&minutes) || !(0..=59).contains(&seconds) {
+            return argument_error(10);
+        }
+        time_of_day(hours, minutes, seconds, locale)
+    }
+
+    /// cob_intr_lcl_time_from_secs: a numeric count of 0 to 86400 seconds.
+    pub fn time_from_seconds(source: &Value, numeric: bool, locale: Option<&Value>) -> Value {
+        check_platform();
+        if !numeric { return argument_error(10); }
+        let seconds = super::intrinsic::get_int(source);
+        if !(0..=86400).contains(&seconds) { return argument_error(10); }
+        time_of_day(seconds / 3600, seconds % 3600 / 60, seconds % 60, locale)
+    }
+}
+
+/// cob_main_argv0 (common.c): readlink of /proc/self/exe, else the
+/// canonicalized argv[0], else argv[0], else "unknown".
+pub fn main_argv0() -> Value {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::fs::read_link("/proc/self/exe").ok()
+        .or_else(|| std::env::args_os().next().map(|argv0| std::fs::canonicalize(&argv0).unwrap_or_else(|_| argv0.into())));
+    match path {
+        Some(path) => Value::Bytes(path.as_os_str().as_bytes().to_vec()),
+        None => Value::text("unknown"),
+    }
+}
+
+pub(crate) fn utc_only(what: &str) {
     let utc = match std::env::var("TZ") {
         Ok(tz) => matches!(tz.trim_start_matches(':'), "UTC" | "UTC0" | "GMT" | "GMT0" | "Etc/UTC" | "Etc/GMT" | "UCT" | "Zulu" | ""),
         Err(_) => match std::fs::read("/etc/localtime") {
@@ -2286,6 +2650,11 @@ fn clock(kind: &str) -> (i64, usize) {
             let t = current_datetime();
             (t.nanosecond / 10_000_000 + t.second * 100 + t.minute * 10000 + t.hour * 1000000, 8)
         },
+        // cob_accept_microsecond_time: HHMMSSuuuuuu, a binary of 12 digits.
+        "MICROSECOND-TIME" => {
+            let t = current_datetime();
+            (t.nanosecond / 1000 + t.second * 1_000_000 + t.minute * 100_000_000 + t.hour * 10_000_000_000, 12)
+        },
         _ => fail("ACCEPT FROM clock register not modelled"),
     }
 }
@@ -2369,5 +2738,1068 @@ impl MersenneTwister {
         y ^= (y << 15) & 0xEFC6_0000;
         y ^= y >> 18;
         y
+    }
+}
+
+// GnuCOBOL 3.2 cob_set_exception (common.c) and the last exception it keeps
+// for the EXCEPTION- functions of intrinsic.c: only SET LAST EXCEPTION TO OFF
+// resets it. An operation whose exceptions are not ported makes it unknown;
+// reading it then is a named stop.
+pub mod exception {
+    use super::{fail, Value};
+    use std::cell::RefCell;
+
+    /// cob_exception_tab_code and cob_exception_tab_name: COB_EC_ZERO,
+    /// exception.def with exception-io.def in place, then COB_EC_MAX.
+    const TABLE: &[(u32, &str)] = &[
+    (0, "None"),
+    (0xFFFF, "EC-ALL"),
+    (0x0100, "EC-ARGUMENT"),
+    (0x0101, "EC-ARGUMENT-FUNCTION"),
+    (0x0102, "EC-ARGUMENT-IMP"),
+    (0x0200, "EC-BOUND"),
+    (0x0209, "EC-BOUND-FUNC-RET-VALUE"),
+    (0x0201, "EC-BOUND-IMP"),
+    (0x0202, "EC-BOUND-ODO"),
+    (0x0203, "EC-BOUND-OVERFLOW"),
+    (0x0204, "EC-BOUND-PTR"),
+    (0x0205, "EC-BOUND-REF-MOD"),
+    (0x0206, "EC-BOUND-SET"),
+    (0x0207, "EC-BOUND-SUBSCRIPT"),
+    (0x0208, "EC-BOUND-TABLE-LIMIT"),
+    (0x1800, "EC-CONTINUE"),
+    (0x1801, "EC-CONTINUE-IMP"),
+    (0x1802, "EC-CONTINUE-LESS-THAN-ZERO"),
+    (0x0300, "EC-DATA"),
+    (0x0301, "EC-DATA-CONVERSION"),
+    (0x0302, "EC-DATA-IMP"),
+    (0x0303, "EC-DATA-INCOMPATIBLE"),
+    (0x0304, "EC-DATA-NOT-FINITE"),
+    (0x0305, "EC-DATA-OVERFLOW"),
+    (0x0306, "EC-DATA-PTR-NULL"),
+    (0x1900, "EC-EXTERNAL"),
+    (0x1901, "EC-EXTERNAL-DATA-MISMATCH"),
+    (0x1902, "EC-EXTERNAL-FILE-MISMATCH"),
+    (0x1903, "EC-EXTERNAL-FORMAT-CONFLICT"),
+    (0x1904, "EC-EXTERNAL-IMP"),
+    (0x0400, "EC-FLOW"),
+    (0x040A, "EC-FLOW-APPLY-COMMIT"),
+    (0x040B, "EC-FLOW-COMMIT"),
+    (0x0401, "EC-FLOW-GLOBAL-EXIT"),
+    (0x0402, "EC-FLOW-GLOBAL-GOBACK"),
+    (0x0403, "EC-FLOW-IMP"),
+    (0x0404, "EC-FLOW-RELEASE"),
+    (0x0405, "EC-FLOW-REPORT"),
+    (0x0406, "EC-FLOW-RETURN"),
+    (0x040C, "EC-FLOW-ROLLBACK"),
+    (0x0407, "EC-FLOW-SEARCH"),
+    (0x0408, "EC-FLOW-USE"),
+    (0x1500, "EC-FUNCTION"),
+    (0x1503, "EC-FUNCTION-ARG-OMITTED"),
+    (0x1503, "EC-FUNCTION-IMP"),
+    (0x1504, "EC-FUNCTION-NOT-FOUND"),
+    (0x1501, "EC-FUNCTION-PTR-INVALID"),
+    (0x1502, "EC-FUNCTION-PTR-NULL"),
+    (0x0500, "EC-I-O"),
+    (0x0501, "EC-I-O-AT-END"),
+    (0x0502, "EC-I-O-EOP"),
+    (0x0503, "EC-I-O-EOP-OVERFLOW"),
+    (0x0504, "EC-I-O-FILE-SHARING"),
+    (0x0505, "EC-I-O-IMP"),
+    (0x0506, "EC-I-O-INVALID-KEY"),
+    (0x0507, "EC-I-O-LINAGE"),
+    (0x0508, "EC-I-O-LOGIC-ERROR"),
+    (0x0509, "EC-I-O-PERMANENT-ERROR"),
+    (0x050B, "EC-I-O-RECORD-CONTENT"),
+    (0x050A, "EC-I-O-RECORD-OPERATION"),
+    (0x050C, "EC-I-O-RECORD-WARNING"),
+    (0x0600, "EC-IMP"),
+    (0x0601, "EC-IMP-ACCEPT"),
+    (0x0602, "EC-IMP-DISPLAY"),
+    (0x0603, "EC-IMP-UTC-UNKNOWN"),
+    (0x0604, "EC-IMP-FEATURE-DISABLED"),
+    (0x0605, "EC-IMP-FEATURE-MISSING"),
+    (0x0700, "EC-LOCALE"),
+    (0x0701, "EC-LOCALE-IMP"),
+    (0x0702, "EC-LOCALE-INCOMPATIBLE"),
+    (0x0703, "EC-LOCALE-INVALID"),
+    (0x0704, "EC-LOCALE-INVALID-PTR"),
+    (0x0705, "EC-LOCALE-MISSING"),
+    (0x0706, "EC-LOCALE-SIZE"),
+    (0x1A00, "EC-MCS"),
+    (0x1A01, "EC-MCS-ABNORMAL-TERMINATION"),
+    (0x1A02, "EC-MCS-IMP"),
+    (0x1A03, "EC-MCS-INVALID-TAG"),
+    (0x1A04, "EC-MCS-MESSAGE-LENGTH"),
+    (0x1A05, "EC-MCS-NO-REQUESTER"),
+    (0x1A06, "EC-MCS-NO-SERVER"),
+    (0x1A07, "EC-MCS-NORMAL-TERMINATION"),
+    (0x1A08, "EC-MCS-REQUESTOR-FAILED"),
+    (0x0800, "EC-OO"),
+    (0x0803, "EC-OO-ARG-OMITTED"),
+    (0x0801, "EC-OO-CONFORMANCE"),
+    (0x0802, "EC-OO-EXCEPTION"),
+    (0x0804, "EC-OO-IMP"),
+    (0x0805, "EC-OO-METHOD"),
+    (0x0806, "EC-OO-NULL"),
+    (0x0807, "EC-OO-RESOURCE"),
+    (0x0808, "EC-OO-UNIVERSAL"),
+    (0x0900, "EC-ORDER"),
+    (0x0901, "EC-ORDER-IMP"),
+    (0x0902, "EC-ORDER-NOT-SUPPORTED"),
+    (0x0A00, "EC-OVERFLOW"),
+    (0x0A01, "EC-OVERFLOW-IMP"),
+    (0x0A02, "EC-OVERFLOW-STRING"),
+    (0x0A03, "EC-OVERFLOW-UNSTRING"),
+    (0x0B00, "EC-PROGRAM"),
+    (0x0B01, "EC-PROGRAM-ARG-MISMATCH"),
+    (0x0B02, "EC-PROGRAM-ARG-OMITTED"),
+    (0x0B03, "EC-PROGRAM-CANCEL-ACTIVE"),
+    (0x0B04, "EC-PROGRAM-IMP"),
+    (0x0B05, "EC-PROGRAM-NOT-FOUND"),
+    (0x0B06, "EC-PROGRAM-PTR-NULL"),
+    (0x0B07, "EC-PROGRAM-RECURSIVE-CALL"),
+    (0x0B08, "EC-PROGRAM-RESOURCES"),
+    (0x0C00, "EC-RAISING"),
+    (0x0C01, "EC-RAISING-IMP"),
+    (0x0C02, "EC-RAISING-NOT-SPECIFIED"),
+    (0x0D00, "EC-RANGE"),
+    (0x0D01, "EC-RANGE-IMP"),
+    (0x0D02, "EC-RANGE-INDEX"),
+    (0x0D03, "EC-RANGE-INSPECT-SIZE"),
+    (0x0D04, "EC-RANGE-INVALID"),
+    (0x0D05, "EC-RANGE-PERFORM-VARYING"),
+    (0x0D06, "EC-RANGE-PTR"),
+    (0x0D07, "EC-RANGE-SEARCH-INDEX"),
+    (0x0D08, "EC-RANGE-SEARCH-NO-MATCH"),
+    (0x0E00, "EC-REPORT"),
+    (0x0E01, "EC-REPORT-ACTIVE"),
+    (0x0E02, "EC-REPORT-COLUMN-OVERLAP"),
+    (0x0E03, "EC-REPORT-FILE-MODE"),
+    (0x0E04, "EC-REPORT-IMP"),
+    (0x0E05, "EC-REPORT-INACTIVE"),
+    (0x0E06, "EC-REPORT-LINE-OVERLAP"),
+    (0x0E08, "EC-REPORT-NOT-TERMINATED"),
+    (0x0E09, "EC-REPORT-PAGE-LIMIT"),
+    (0x0E0A, "EC-REPORT-PAGE-WIDTH"),
+    (0x0E0B, "EC-REPORT-SUM-SIZE"),
+    (0x0E0C, "EC-REPORT-VARYING"),
+    (0x0F00, "EC-SCREEN"),
+    (0x0F01, "EC-SCREEN-FIELD-OVERLAP"),
+    (0x0F02, "EC-SCREEN-IMP"),
+    (0x0F03, "EC-SCREEN-ITEM-TRUNCATED"),
+    (0x0F04, "EC-SCREEN-LINE-NUMBER"),
+    (0x0F05, "EC-SCREEN-STARTING-COLUMN"),
+    (0x1000, "EC-SIZE"),
+    (0x1001, "EC-SIZE-ADDRESS"),
+    (0x1002, "EC-SIZE-EXPONENTIATION"),
+    (0x1003, "EC-SIZE-IMP"),
+    (0x1004, "EC-SIZE-OVERFLOW"),
+    (0x1005, "EC-SIZE-TRUNCATION"),
+    (0x1006, "EC-SIZE-UNDERFLOW"),
+    (0x1007, "EC-SIZE-ZERO-DIVIDE"),
+    (0x1100, "EC-SORT-MERGE"),
+    (0x1101, "EC-SORT-MERGE-ACTIVE"),
+    (0x1102, "EC-SORT-MERGE-FILE-OPEN"),
+    (0x1103, "EC-SORT-MERGE-IMP"),
+    (0x1104, "EC-SORT-MERGE-RELEASE"),
+    (0x1105, "EC-SORT-MERGE-RETURN"),
+    (0x1106, "EC-SORT-MERGE-SEQUENCE"),
+    (0x1200, "EC-STORAGE"),
+    (0x1201, "EC-STORAGE-IMP"),
+    (0x1202, "EC-STORAGE-NOT-ALLOC"),
+    (0x1203, "EC-STORAGE-NOT-AVAIL"),
+    (0x1300, "EC-USER"),
+    (0x1400, "EC-VALIDATE"),
+    (0x1401, "EC-VALIDATE-CONTENT"),
+    (0x1402, "EC-VALIDATE-FORMAT"),
+    (0x1403, "EC-VALIDATE-IMP"),
+    (0x1404, "EC-VALIDATE-RELATION"),
+    (0x1405, "EC-VALIDATE-VARYING"),
+    (0x1600, "EC-XML"),
+    (0x1601, "EC-XML-CODESET"),
+    (0x1602, "EC-XML-CODESET-CONVERSION"),
+    (0x1603, "EC-XML-COUNT"),
+    (0x1604, "EC-XML-DOCUMENT-TYPE"),
+    (0x1605, "EC-XML-IMPLICIT-CLOSE"),
+    (0x1606, "EC-XML-INVALID"),
+    (0x1607, "EC-XML-NAMESPACE"),
+    (0x1608, "EC-XML-STACKED-OPEN"),
+    (0x1609, "EC-XML-RANGE"),
+    (0x1610, "EC-XML-IMP"),
+    (0x1700, "EC-JSON"),
+    (0x1710, "EC-JSON-IMP"),
+    (0, "Invalid"),
+    ];
+
+    /// status_exception of fileio.c, by first digit of the I-O status.
+    const STATUS_EXCEPTION: [&str; 10] = ["None", "EC-I-O-AT-END", "EC-I-O-INVALID-KEY", "EC-I-O-PERMANENT-ERROR",
+        "EC-I-O-LOGIC-ERROR", "EC-I-O-RECORD-OPERATION", "EC-I-O-FILE-SHARING", "EC-I-O-RECORD-CONTENT",
+        "EC-I-O", "EC-I-O-IMP"];
+
+    #[derive(Clone)]
+    struct Last { code: u32, module: Option<&'static str> }
+
+    struct State {
+        /// last_exception_code and last_exception_id; the line is 0 and the
+        /// statement unknown without -fsource-location.
+        last: Result<Last, &'static str>,
+        /// cob_error_file: the I-O status and SELECT name of the last save_status.
+        file: Result<Option<(u8, String)>, &'static str>,
+        /// COB_MODULE_PTR->module_name.
+        module: &'static str,
+        /// cob_exception_code, which the error checks of a statement test.
+        current: Option<u32>,
+    }
+
+    thread_local! {
+        static STATE: RefCell<State> = const { RefCell::new(State { last: Ok(Last { code: 0, module: None }), file: Ok(None), module: "", current: Some(0) }) };
+    }
+
+    fn code(name: &str) -> u32 {
+        TABLE.iter().find(|(_, n)| *n == name).map(|(c, _)| *c).unwrap_or_else(|| fail(&format!("unknown exception {name}")))
+    }
+
+    /// cob_set_exception: the code, and the current module unless it is 0.
+    pub fn set(name: &str) {
+        let code = code(name);
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            let module = if code != 0 { Some(state.module) } else { None };
+            state.last = Ok(Last { code, module });
+            state.current = Some(code);
+        });
+    }
+
+    /// SET LAST EXCEPTION TO OFF: cob_set_exception (0).
+    pub fn off() { set("None") }
+
+    /// The entry and the return of a program set COB_MODULE_PTR.
+    pub fn module(name: &'static str) { STATE.with(|state| state.borrow_mut().module = name) }
+
+    /// An operation that may raise exceptions not ported here.
+    pub fn unknown(reason: &'static str) { STATE.with(|state| state.borrow_mut().last = Err(reason)) }
+
+    /// An operation that may call save_status without being ported here.
+    pub fn unknown_file(reason: &'static str) {
+        STATE.with(|state| { let mut state = state.borrow_mut(); state.last = Err(reason); state.file = Err(reason); })
+    }
+
+    /// save_status: the file becomes cob_error_file; a status of class 1 to 9
+    /// raises its exception, an end of page EC-I-O-EOP.
+    pub fn save_status(status: u8, eop: bool, select: &str) {
+        STATE.with(|state| state.borrow_mut().file = Ok(Some((status, select.to_string()))));
+        if status >= 10 { set(STATUS_EXCEPTION[status as usize / 10]); } else if eop { set("EC-I-O-EOP"); } else { clear_current(); }
+    }
+
+    /// cob_error_file: the SELECT name and I-O status of the last save_status.
+    pub fn error_file() -> Option<(String, u8)> {
+        STATE.with(|state| state.borrow().file.clone()).ok().flatten().map(|(status, select)| (select, status))
+    }
+
+    /// cobglobptr->cob_exception_code = 0.
+    pub fn clear_current() { STATE.with(|state| state.borrow_mut().current = Some(0)) }
+
+    /// An operation that may change cob_exception_code without being ported.
+    pub fn unknown_current() { STATE.with(|state| state.borrow_mut().current = None) }
+
+    /// output_display_accept_ex_condition: an EC-SCREEN exception, or
+    /// EC-IMP-ACCEPT (EC-IMP-DISPLAY) for an ACCEPT (DISPLAY) handler.
+    pub fn accept_display_failed(accept: bool) -> bool {
+        let current = STATE.with(|state| state.borrow().current)
+            .unwrap_or_else(|| fail("ON EXCEPTION after an operation that may change cob_exception_code not modelled"));
+        current & 0xff00 == code("EC-SCREEN") || current == code(if accept { "EC-IMP-ACCEPT" } else { "EC-IMP-DISPLAY" })
+    }
+
+    /// output_level_2_ex_condition: the current exception is of the class.
+    pub fn raised_class(class: &str) -> bool {
+        let current = STATE.with(|state| state.borrow().current)
+            .unwrap_or_else(|| fail("ON EXCEPTION after an operation that may change cob_exception_code not modelled"));
+        current & 0xff00 == code(class)
+    }
+
+    /// `if (unlikely (cob_glob_ptr->cob_exception_code != 0))` of a deferred
+    /// error check.
+    pub fn pending() -> bool {
+        STATE.with(|state| state.borrow().current).map(|code| code != 0).unwrap_or_else(|| {
+            fail("error check of OPEN after a USE procedure that may change cob_exception_code not modelled")
+        })
+    }
+
+    fn last(function: &str) -> Last {
+        STATE.with(|state| state.borrow().last.clone()).unwrap_or_else(|reason| {
+            fail(&format!("FUNCTION {function} after {reason}, whose GnuCOBOL exceptions are not modelled"))
+        })
+    }
+
+    /// cob_last_exception_is.
+    fn is(last: &Last, name: &str) -> bool { let c = code(name); last.code & c == c }
+
+    /// cob_get_last_exception_name: an exact entry, then the most specific
+    /// one included, from the end of the table (where COB_EC_MAX matches).
+    fn name(last: &Last) -> &'static str {
+        if let Some((_, name)) = TABLE[1..].iter().find(|(c, _)| *c == last.code) { return name; }
+        for missing in ["EC-IMP-FEATURE-MISSING", "EC-IMP-FEATURE-DISABLED"] {
+            if is(last, missing) { return TABLE.iter().find(|(_, n)| *n == missing).unwrap().1; }
+        }
+        TABLE[1..].iter().rev().find(|(c, _)| last.code & c == *c).map_or("EXCEPTION-OBJECT", |(_, n)| n)
+    }
+
+    /// cob_intr_exception_status: X(31), spaces without an exception.
+    pub fn status() -> Value {
+        let last = last("EXCEPTION-STATUS");
+        let mut field = vec![b' '; 31];
+        if last.code != 0 {
+            let name = name(&last).as_bytes();
+            field[..name.len()].copy_from_slice(name);
+        }
+        Value::Bytes(field)
+    }
+
+    /// cob_intr_exception_location: "module; ; line" without section or
+    /// paragraph names (-fsource-location), one space without an exception.
+    pub fn location() -> Value {
+        match last("EXCEPTION-LOCATION").module {
+            None => Value::Bytes(b" ".to_vec()),
+            Some(module) => Value::Bytes(format!("{module}; ; 0").into_bytes()),
+        }
+    }
+
+    /// cob_intr_exception_statement: X(31), the statement is unknown without
+    /// -fsource-location.
+    pub fn statement() -> Value {
+        last("EXCEPTION-STATEMENT");
+        Value::Bytes(vec![b' '; 31])
+    }
+
+    /// cob_intr_exception_file: "00", or the status and SELECT name of
+    /// cob_error_file while the last exception is an I-O one.
+    pub fn file() -> Value {
+        let last = last("EXCEPTION-FILE");
+        let file = STATE.with(|state| state.borrow().file.clone()).unwrap_or_else(|reason| {
+            fail(&format!("FUNCTION EXCEPTION-FILE after {reason}, whose GnuCOBOL file statuses are not modelled"))
+        });
+        match file {
+            Some((status, select)) if is(&last, "EC-I-O") => Value::Bytes(format!("{status:02}{select}").into_bytes()),
+            _ => Value::Bytes(b"00".to_vec()),
+        }
+    }
+}
+
+/// cob_argc / cob_argv: the program's arguments, NUL terminated, in the
+/// order CBL_GC_GETOPT leaves them (it permutes them as cobgetopt.c does).
+pub mod argv {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static ARGV: RefCell<Option<(Vec<Vec<u8>>, Vec<usize>)>> = const { RefCell::new(None) };
+    }
+
+    /// The argument strings and their current order.
+    pub fn with<R>(f: impl FnOnce(&mut Vec<Vec<u8>>, &mut Vec<usize>) -> R) -> R {
+        ARGV.with(|argv| {
+            let mut argv = argv.borrow_mut();
+            let (strings, order) = argv.get_or_insert_with(|| {
+                use std::os::unix::ffi::OsStringExt;
+                let strings: Vec<Vec<u8>> = std::env::args_os().map(|a| { let mut s = a.into_vec(); s.push(0); s }).collect();
+                let order = (0..strings.len()).collect();
+                (strings, order)
+            });
+            f(strings, order)
+        })
+    }
+
+    pub fn count() -> usize { with(|_, order| order.len()) }
+
+    /// cob_argv[index] up to its NUL.
+    pub fn argument(index: usize) -> Option<Vec<u8>> {
+        with(|strings, order| order.get(index).map(|&id| {
+            let s = &strings[id];
+            s[..s.iter().position(|&b| b == 0).unwrap()].to_vec()
+        }))
+    }
+}
+
+/// common.c: DISPLAY UPON ENVIRONMENT-NAME / ENVIRONMENT-VALUE /
+/// ARGUMENT-NUMBER / COMMAND-LINE, ACCEPT FROM ENVIRONMENT[-VALUE] /
+/// ARGUMENT-NUMBER / ARGUMENT-VALUE / COMMAND-LINE and SET ENVIRONMENT.
+pub mod environment {
+    use super::{exception, fail};
+    use std::cell::RefCell;
+    use std::ffi::{c_char, c_int, CStr, CString};
+
+    extern "C" {
+        fn getenv(name: *const c_char) -> *const c_char;
+        fn setenv(name: *const c_char, value: *const c_char, overwrite: c_int) -> c_int;
+    }
+
+    /// gc_conf's environment names: cob_rescan_env_vals applies them again
+    /// after each setenv; changing one is a named stop.
+    const SETTINGS: [&str; 57] = [
+        "COB_LOAD_CASE", "COB_PHYSICAL_CANCEL", "default_cancel_mode", "LOGICAL_CANCELS", "COB_LIBRARY_PATH",
+        "COB_PRE_LOAD", "COB_BELL", "COB_DEBUG_LOG", "COB_DISABLE_WARNINGS", "COB_ENV_MANGLE", "COB_REDIRECT_DISPLAY",
+        "COB_SCREEN_ESC", "COB_SCREEN_EXCEPTIONS", "COB_TIMEOUT_SCALE", "COB_INSERT_MODE", "COB_MOUSE_FLAGS",
+        "MOUSE_FLAGS", "COB_MOUSE_INTERVAL", "COB_SET_DEBUG", "COB_SET_TRACE", "COB_TRACE_FILE", "COB_TRACE_FORMAT",
+        "COB_STACKTRACE", "COB_CORE_ON_ERROR", "COB_CORE_FILENAME", "COB_DUMP_FILE", "COB_DUMP_WIDTH", "COB_UNIX_LF",
+        "USERNAME", "LOGNAME", "LANG", "OSTYPE", "TERM", "OS", "COB_FILE_PATH", "COB_VARSEQ_FORMAT", "COB_LS_FIXED",
+        "STRIP_TRAILING_SPACES", "COB_LS_VALIDATE", "COB_LS_NULLS", "COB_LS_SPLIT", "COB_SEQ_CONCAT_NAME",
+        "COB_SEQ_CONCAT_SEP", "COB_SORT_CHUNK", "COB_SORT_MEMORY", "COB_SYNC", "DB_HOME", "COB_COL_JUST_LRC",
+        "COB_DISPLAY_PRINT_PIPE", "COBPRINTER", "COB_DISPLAY_PRINT_FILE", "COB_DISPLAY_PUNCH_FILE", "COB_LEGACY",
+        "COB_EXIT_WAIT", "COB_EXIT_MSG", "COB_CURRENT_DATE", "COB_DATE",
+    ];
+    /// COB_MEDIUM_MAX.
+    const MEDIUM_MAX: usize = 8191;
+
+    struct State { local_env: Option<Vec<u8>>, current_arg: usize, command_line: Option<Vec<u8>> }
+
+    thread_local! {
+        static STATE: RefCell<State> = const { RefCell::new(State { local_env: None, current_arg: 1, command_line: None }) };
+    }
+
+    fn unmangled() {
+        if std::env::var_os("COB_ENV_MANGLE").is_some_and(|value| !value.is_empty()) {
+            fail("COB_ENV_MANGLE (noms d'environnement modifiés) non modélisé");
+        }
+    }
+
+    /// cob_field_to_string: trailing spaces and NULs dropped (the first byte
+    /// kept); Err for an empty field or one longer than `maxsize`.
+    fn field_string(data: &[u8], maxsize: usize) -> Result<Vec<u8>, ()> {
+        if data.is_empty() { return Err(()); }
+        let mut end = data.len() - 1;
+        while end > 0 && (data[end] == b' ' || data[end] == 0) { end -= 1; }
+        if data[end] == b' ' || data[end] == 0 { return Ok(Vec::new()); }
+        if end > maxsize { return Err(()); }
+        Ok(data[..=end].to_vec())
+    }
+
+    /// The C string of `bytes`, up to its first NUL.
+    fn c_string(bytes: &[u8]) -> CString {
+        CString::new(bytes.iter().copied().take_while(|&b| b != 0).collect::<Vec<u8>>()).unwrap()
+    }
+
+    fn lookup(name: &[u8]) -> Option<Vec<u8>> {
+        let name = c_string(name);
+        let value = unsafe { getenv(name.as_ptr()) };
+        if value.is_null() { None } else { Some(unsafe { CStr::from_ptr(value) }.to_bytes().to_vec()) }
+    }
+
+    /// cob_move_intermediate: an empty value moves as one space (cob_move).
+    fn moved(value: Vec<u8>) -> Vec<u8> { if value.is_empty() { vec![b' '] } else { value } }
+
+    /// cob_display_environment.
+    pub fn display_name(data: Option<Vec<u8>>) {
+        unmangled();
+        let Some(data) = data else { fail("DISPLAY UPON ENVIRONMENT-NAME d'un article sans adresse non modélisé") };
+        let size = data.len();
+        if let Ok(name) = field_string(&data, size) {
+            STATE.with(|state| state.borrow_mut().local_env = Some(name));
+        }
+    }
+
+    /// cob_display_env_value: setenv of the current name, then
+    /// cob_rescan_env_vals.
+    pub fn display_value(data: Option<Vec<u8>>) {
+        let name = STATE.with(|state| state.borrow().local_env.clone());
+        let Some(name) = name.filter(|name| !name.is_empty() && name[0] != 0) else {
+            exception::set("EC-IMP-DISPLAY");
+            return;
+        };
+        let Some(data) = data else { fail("DISPLAY UPON ENVIRONMENT-VALUE d'un article sans adresse non modélisé") };
+        let Ok(value) = field_string(&data, MEDIUM_MAX) else {
+            exception::set("EC-IMP-DISPLAY");
+            return;
+        };
+        let name = c_string(&name);
+        if SETTINGS.iter().any(|setting| setting.as_bytes() == name.as_bytes()) {
+            fail(&format!("SET ENVIRONMENT de {} : réglage de libcob relu par cob_rescan_env_vals, non modélisé",
+                          String::from_utf8_lossy(name.as_bytes())));
+        }
+        let value = c_string(&value);
+        if unsafe { setenv(name.as_ptr(), value.as_ptr(), 1) } != 0 {
+            exception::set("EC-IMP-DISPLAY");
+        }
+    }
+
+    /// cob_set_environment.
+    pub fn set(name: Option<Vec<u8>>, value: Option<Vec<u8>>) {
+        display_name(name);
+        display_value(value);
+    }
+
+    /// cob_get_environment: None when nothing is moved.
+    pub fn get(name: Option<Vec<u8>>) -> Option<Vec<u8>> {
+        unmangled();
+        let name = name.and_then(|data| field_string(&data, MEDIUM_MAX).ok()).filter(|name| !name.is_empty());
+        let Some(name) = name else {
+            exception::set("EC-IMP-ACCEPT");
+            return None;
+        };
+        Some(match lookup(&name) {
+            Some(value) => moved(value),
+            None => { exception::set("EC-IMP-ACCEPT"); vec![b' '] },
+        })
+    }
+
+    /// cob_accept_environment.
+    pub fn accept_value() -> Vec<u8> {
+        let name = STATE.with(|state| state.borrow().local_env.clone());
+        match name.and_then(|name| lookup(&name)) {
+            Some(value) => moved(value),
+            None => { exception::set("EC-IMP-ACCEPT"); vec![b' '] },
+        }
+    }
+
+    /// cob_display_arg_number, after the move to an unsigned binary(9).
+    pub fn display_arg_number(n: u32) {
+        if n as usize >= super::argv::count() {
+            exception::set("EC-IMP-DISPLAY");
+        } else {
+            STATE.with(|state| state.borrow_mut().current_arg = n as usize);
+        }
+    }
+
+    /// cob_accept_arg_number: cob_argc - 1.
+    pub fn arg_number() -> u32 { (super::argv::count() as u32).wrapping_sub(1) }
+
+    /// cob_accept_arg_value: None when nothing is moved.
+    pub fn accept_arg_value() -> Option<Vec<u8>> {
+        let current = STATE.with(|state| state.borrow().current_arg);
+        let Some(value) = super::argv::argument(current) else {
+            exception::set("EC-IMP-ACCEPT");
+            return None;
+        };
+        STATE.with(|state| state.borrow_mut().current_arg = current + 1);
+        Some(moved(value))
+    }
+
+    /// cob_display_command_line.
+    pub fn display_command_line(data: Option<Vec<u8>>) {
+        let Some(data) = data else { fail("DISPLAY UPON COMMAND-LINE d'un article sans adresse non modélisé") };
+        STATE.with(|state| state.borrow_mut().command_line = Some(data));
+    }
+
+    /// cob_accept_command_line for a receiver of `size` bytes.
+    pub fn accept_command_line(size: usize) -> Vec<u8> {
+        if let Some(line) = STATE.with(|state| state.borrow().command_line.clone()).filter(|line| !line.is_empty()) {
+            return line;
+        }
+        let argc = super::argv::count();
+        if argc <= 1 { return vec![b' ']; }
+        let mut buff = Vec::new();
+        for i in 1..argc {
+            buff.extend(super::argv::argument(i).unwrap());
+            if i != argc - 1 { buff.push(b' '); }
+            if buff.len() > size { break; }
+        }
+        moved(buff)
+    }
+}
+
+/// XML GENERATE and JSON GENERATE: libcob mlio.c with the libxml2 2.9
+/// text writer (xmlwriter.c, entities.c, xmlsave.c, uri.c) and json-c 0.17.
+pub mod ml {
+    use super::{fail, fatal_error, module_symbols, Value};
+    use std::cell::Cell;
+
+    /// The cob_field of a tree node: the item and the attributes libcob tests.
+    pub struct Data<'a> { pub item: &'a Value, pub numeric: bool, pub float: bool, pub justified: bool }
+
+    /// cob_ml_tree and cob_ml_attr: `name` is None for a CONTENT node (and
+    /// NAME OF ... OMITTED), `slot` the is_suppressed flag of the program.
+    pub struct Node<'a> {
+        pub name: Option<&'static [u8]>,
+        pub content: Option<Data<'a>>,
+        pub attrs: Vec<Node<'a>>,
+        pub children: Vec<Node<'a>>,
+        pub slot: usize,
+    }
+
+    /// What the statement leaves: the XML-CODE (JSON-CODE) value, whether
+    /// EC-XML-IMP (EC-JSON-IMP) is raised, the receiving item's new bytes
+    /// and the COUNT IN value.
+    pub struct Outcome { pub code: i32, pub exception: bool, pub output: Option<Vec<u8>>, pub count: Option<i64> }
+
+    /// iscntrl in the "C" locale libcob runs with.
+    fn is_control(b: u8) -> bool { b < 0x20 || b == 0x7f }
+
+    /// has_invalid_xml_char.
+    fn has_invalid_xml_char(data: &[u8]) -> bool {
+        data.iter().any(|&b| is_control(b) && b != 0x09 && b != 0x0a && b != 0x0d)
+    }
+
+    /// cob_is_xml_namestartchar and cob_is_xml_namechar.
+    fn name_start(c: u8) -> bool {
+        c.is_ascii_alphabetic() || c == b'_' || (0xc0..=0xd6).contains(&c) || (0xd8..=0xf6).contains(&c) || c >= 0xf8
+    }
+    fn name_char(c: u8) -> bool { name_start(c) || c == b'-' || c == b'.' || c.is_ascii_digit() || c == 0xb7 }
+
+    /// get_trimmed_data: right-trimmed of spaces and NULs, left-trimmed of
+    /// spaces for a JUSTIFIED item, at least one byte; " " for size 0.
+    fn trimmed(data: &[u8], justified: bool) -> Vec<u8> {
+        if data.is_empty() { return b" ".to_vec(); }
+        if justified {
+            let start = data.iter().position(|&b| b != b' ').unwrap_or(data.len()).min(data.len() - 1);
+            data[start..].to_vec()
+        } else {
+            let end = data.iter().rposition(|&b| b != b' ' && b != 0).map_or(1, |p| p + 1);
+            data[..end].to_vec()
+        }
+    }
+
+    /// A string handed to libxml2 or json-c ends at its first NUL.
+    fn c_string(mut bytes: Vec<u8>) -> Vec<u8> {
+        if let Some(nul) = bytes.iter().position(|&b| b == 0) { bytes.truncate(nul); }
+        bytes
+    }
+
+    fn is_empty(data: &[u8]) -> bool { data.iter().all(|&b| b == b' ') }
+
+    /// is_valid_xml_name (mlio.c): the untrimmed first byte, then the
+    /// trimmed string up to its NUL.
+    fn is_valid_xml_name(data: &[u8], justified: bool) -> bool {
+        if data.is_empty() || !name_start(data[0]) { return false; }
+        c_string(trimmed(data, justified)).iter().skip(1).all(|&c| name_char(c))
+    }
+
+    fn content_bytes(data: &Data) -> Vec<u8> { data.item.data() }
+
+    // uri.c: xmlParse3986URIReference, through a byte string ending with 0.
+    fn at(s: &[u8], i: usize) -> u8 { s.get(i).copied().unwrap_or(0) }
+    fn alpha(c: u8) -> bool { c.is_ascii_alphabetic() }
+    fn digit(c: u8) -> bool { c.is_ascii_digit() }
+    fn hexdig(c: u8) -> bool { c.is_ascii_hexdigit() }
+    fn sub_delim(c: u8) -> bool { b"!$&()*+,;='".contains(&c) }
+    fn unreserved(c: u8) -> bool { alpha(c) || digit(c) || b"-._~".contains(&c) }
+    fn pct_encoded(s: &[u8], i: usize) -> bool { at(s, i) == b'%' && hexdig(at(s, i + 1)) && hexdig(at(s, i + 2)) }
+    fn pchar(s: &[u8], i: usize) -> bool {
+        let c = at(s, i);
+        unreserved(c) || pct_encoded(s, i) || sub_delim(c) || c == b':' || c == b'@'
+    }
+    /// NEXT: a '%' always skips three bytes.
+    fn next(s: &[u8], i: usize) -> usize { if at(s, i) == b'%' { i + 3 } else { i + 1 } }
+
+    fn scheme(s: &[u8], i: &mut usize) -> bool {
+        if !alpha(at(s, *i)) { return false; }
+        *i += 1;
+        while alpha(at(s, *i)) || digit(at(s, *i)) || matches!(at(s, *i), b'+' | b'-' | b'.') { *i += 1; }
+        true
+    }
+    fn fragment(s: &[u8], i: &mut usize) {
+        while pchar(s, *i) || matches!(at(s, *i), b'/' | b'?' | b'[' | b']') { *i = next(s, *i); }
+    }
+    fn query(s: &[u8], i: &mut usize) {
+        while pchar(s, *i) || matches!(at(s, *i), b'/' | b'?') { *i = next(s, *i); }
+    }
+    fn port(s: &[u8], i: &mut usize) -> bool {
+        if !digit(at(s, *i)) { return false; }
+        let mut value: i32 = 0;
+        while digit(at(s, *i)) {
+            let d = (at(s, *i) - b'0') as i32;
+            if value > i32::MAX / 10 { return false; }
+            value *= 10;
+            if value > i32::MAX - d { return false; }
+            value += d;
+            *i += 1;
+        }
+        true
+    }
+    fn userinfo(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        while unreserved(at(s, cur)) || pct_encoded(s, cur) || sub_delim(at(s, cur)) || at(s, cur) == b':' { cur = next(s, cur); }
+        if at(s, cur) == b'@' { *i = cur; true } else { false }
+    }
+    /// xmlParse3986Host: a bracketed literal, else a reg-name (the IPv4
+    /// attempt of uri.c never succeeds and falls back to it).
+    fn host(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        if at(s, cur) == b'[' {
+            cur += 1;
+            while at(s, cur) != b']' && at(s, cur) != 0 { cur += 1; }
+            if at(s, cur) != b']' { return false; }
+            *i = cur + 1;
+            return true;
+        }
+        while unreserved(at(s, cur)) || pct_encoded(s, cur) || sub_delim(at(s, cur)) { cur = next(s, cur); }
+        *i = cur;
+        true
+    }
+    fn authority(s: &[u8], i: &mut usize) -> bool {
+        let mut cur = *i;
+        if !(userinfo(s, &mut cur) && at(s, cur) == b'@') { cur = *i; } else { cur += 1; }
+        if !host(s, &mut cur) { return false; }
+        if at(s, cur) == b':' {
+            cur += 1;
+            if !port(s, &mut cur) { return false; }
+        }
+        *i = cur;
+        true
+    }
+    fn segment(s: &[u8], i: &mut usize, forbid: u8, empty: bool) -> bool {
+        if !pchar(s, *i) { return empty; }
+        while pchar(s, *i) && at(s, *i) != forbid { *i = next(s, *i); }
+        true
+    }
+    fn path_ab_empty(s: &[u8], i: &mut usize) -> bool {
+        while at(s, *i) == b'/' {
+            *i += 1;
+            if !segment(s, i, 0, true) { return false; }
+        }
+        true
+    }
+    fn path_absolute(s: &[u8], i: &mut usize) -> bool {
+        if at(s, *i) != b'/' { return false; }
+        *i += 1;
+        if segment(s, i, 0, false) {
+            while at(s, *i) == b'/' {
+                *i += 1;
+                if !segment(s, i, 0, true) { return false; }
+            }
+        }
+        true
+    }
+    fn path_rootless(s: &[u8], i: &mut usize, forbid: u8) -> bool {
+        if !segment(s, i, forbid, false) { return false; }
+        path_ab_empty(s, i)
+    }
+    fn query_fragment_end(s: &[u8], i: &mut usize) -> bool {
+        if at(s, *i) == b'?' { *i += 1; query(s, i); }
+        if at(s, *i) == b'#' { *i += 1; fragment(s, i); }
+        at(s, *i) == 0
+    }
+    fn absolute_uri(s: &[u8]) -> bool {
+        let mut i = 0;
+        if !scheme(s, &mut i) || at(s, i) != b':' { return false; }
+        i += 1;
+        if at(s, i) == b'/' && at(s, i + 1) == b'/' {
+            i += 2;
+            if !authority(s, &mut i) || !path_ab_empty(s, &mut i) { return false; }
+        } else if at(s, i) == b'/' {
+            if !path_absolute(s, &mut i) { return false; }
+        } else if pchar(s, i) && !path_rootless(s, &mut i, 0) {
+            return false;
+        }
+        query_fragment_end(s, &mut i)
+    }
+    fn relative_ref(s: &[u8]) -> bool {
+        let mut i = 0;
+        if at(s, 0) == b'/' && at(s, 1) == b'/' {
+            i = 2;
+            if !authority(s, &mut i) || !path_ab_empty(s, &mut i) { return false; }
+        } else if at(s, 0) == b'/' {
+            if !path_absolute(s, &mut i) { return false; }
+        } else if pchar(s, 0) && !path_rootless(s, &mut i, b':') {
+            return false;
+        }
+        query_fragment_end(s, &mut i)
+    }
+    /// cob_is_valid_uri: xmlParseURI succeeds.
+    pub fn is_valid_uri(s: &[u8]) -> bool {
+        let s = c_string(s.to_vec());
+        absolute_uri(&s) || relative_ref(&s)
+    }
+
+    /// The libxml2 text writer on a memory buffer, without indentation.
+    struct Writer { out: Vec<u8>, open: Vec<(Vec<u8>, bool)>, namespaces: Vec<(Vec<u8>, Vec<u8>)> }
+
+    impl Writer {
+        /// xmlTextWriterOutputNSDecl then ">": a start tag in XML_TEXTWRITER_NAME state closes.
+        fn close_start(&mut self) {
+            if let Some((_, true)) = self.open.last() {
+                while let Some((prefix, uri)) = self.namespaces.pop() { self.attribute(&prefix, &uri); }
+                self.out.push(b'>');
+                self.open.last_mut().unwrap().1 = false;
+            }
+        }
+        /// xmlTextWriterStartElementNS.
+        fn start(&mut self, prefix: Option<&[u8]>, name: &[u8], uri: Option<&[u8]>) {
+            self.close_start();
+            let full = match prefix { Some(p) => [p, b":", name].concat(), None => name.to_vec() };
+            self.out.push(b'<');
+            self.out.extend_from_slice(&full);
+            self.open.push((full, true));
+            if let Some(uri) = uri {
+                let declaration = match prefix { Some(p) => [b"xmlns:", p].concat(), None => b"xmlns".to_vec() };
+                self.namespaces.push((declaration, uri.to_vec()));
+            }
+        }
+        /// xmlTextWriterWriteAttribute: the value through xmlBufAttrSerializeTxtContent.
+        fn attribute(&mut self, name: &[u8], value: &[u8]) {
+            self.out.push(b' ');
+            self.out.extend_from_slice(name);
+            self.out.extend_from_slice(b"=\"");
+            attribute_text(&mut self.out, &c_string(value.to_vec()));
+            self.out.push(b'"');
+        }
+        /// xmlTextWriterWriteString in a start tag or text: xmlEncodeSpecialChars.
+        fn text(&mut self, content: &[u8]) {
+            self.close_start();
+            for &c in &c_string(content.to_vec()) {
+                match c {
+                    b'<' => self.out.extend_from_slice(b"&lt;"),
+                    b'>' => self.out.extend_from_slice(b"&gt;"),
+                    b'&' => self.out.extend_from_slice(b"&amp;"),
+                    b'"' => self.out.extend_from_slice(b"&quot;"),
+                    b'\r' => self.out.extend_from_slice(b"&#13;"),
+                    _ => self.out.push(c),
+                }
+            }
+        }
+        /// xmlTextWriterEndElement: "/>" for a start tag still open.
+        fn end(&mut self) {
+            let (name, in_start) = self.open.last().cloned().unwrap();
+            if in_start {
+                while let Some((prefix, uri)) = self.namespaces.pop() { self.attribute(&prefix, &uri); }
+                self.out.extend_from_slice(b"/>");
+            } else {
+                self.out.extend_from_slice(b"</");
+                self.out.extend_from_slice(&name);
+                self.out.push(b'>');
+            }
+            self.open.pop();
+        }
+    }
+
+    /// xmlSerializeHexCharRef.
+    fn char_ref(out: &mut Vec<u8>, value: u32) { out.extend_from_slice(format!("&#x{value:X};").as_bytes()); }
+
+    /// xmlBufAttrSerializeTxtContent without a document: UTF-8 sequences
+    /// become character references.
+    fn attribute_text(out: &mut Vec<u8>, s: &[u8]) {
+        let mut i = 0;
+        while i < s.len() {
+            let c = s[i];
+            match c {
+                b'\n' => out.extend_from_slice(b"&#10;"),
+                b'\r' => out.extend_from_slice(b"&#13;"),
+                b'\t' => out.extend_from_slice(b"&#9;"),
+                b'"' => out.extend_from_slice(b"&quot;"),
+                b'<' => out.extend_from_slice(b"&lt;"),
+                b'>' => out.extend_from_slice(b"&gt;"),
+                b'&' => out.extend_from_slice(b"&amp;"),
+                0x80.. if i + 1 < s.len() => {
+                    let byte = |k: usize| at(s, i + k) as u32;
+                    let (value, length) = if c < 0xc0 {
+                        (0, 1)
+                    } else if c < 0xe0 {
+                        (((byte(0) & 0x1f) << 6) | (byte(1) & 0x3f), 2)
+                    } else if c < 0xf0 && byte(2) != 0 {
+                        (((byte(0) & 0x0f) << 12) | ((byte(1) & 0x3f) << 6) | (byte(2) & 0x3f), 3)
+                    } else if c < 0xf8 && byte(2) != 0 && byte(3) != 0 {
+                        (((byte(0) & 0x07) << 18) | ((byte(1) & 0x3f) << 12) | ((byte(2) & 0x3f) << 6) | (byte(3) & 0x3f), 4)
+                    } else {
+                        (0, 1)
+                    };
+                    let is_char = matches!(value, 0x9 | 0xa | 0xd | 0x20..=0xd7ff | 0xe000..=0xfffd | 0x10000..=0x10ffff);
+                    if length == 1 || !is_char {
+                        // xmlSaveErr reports on stderr through libxml2's error handler.
+                        fail("XML GENERATE: attribut non UTF-8 (diagnostic libxml2 non reproduit)");
+                    }
+                    char_ref(out, value);
+                    i += length;
+                    continue;
+                },
+                _ => out.push(c),
+            }
+            i += 1;
+        }
+    }
+
+    fn suppressed(node: &Node, flags: &[Cell<bool>]) -> bool { flags[node.slot].get() }
+
+    /// get_xml_name: an underscore before a name that cannot start one.
+    fn xml_name(name: &[u8]) -> Vec<u8> {
+        let name = c_string(trimmed(name, false));
+        if name.first().is_some_and(|&c| name_start(c)) { name } else { [b"_", &name[..]].concat() }
+    }
+
+    fn hex(data: &[u8]) -> Vec<u8> { data.iter().flat_map(|b| format!("{b:02x}").into_bytes()).collect() }
+
+    struct Xml<'f> { writer: Writer, flags: &'f [Cell<bool>], point: u8, code: i32 }
+
+    impl Xml<'_> {
+        fn attributes(&mut self, attrs: &[Node]) {
+            for attr in attrs {
+                if suppressed(attr, self.flags) { continue; }
+                let data = attr.content.as_ref().unwrap();
+                let value = content_bytes(data);
+                if has_invalid_xml_char(&value) {
+                    self.code = 417;
+                    self.writer.attribute(&[b"hex.", &xml_name(attr.name.unwrap())[..]].concat(), &hex(&value));
+                } else {
+                    self.writer.attribute(&xml_name(attr.name.unwrap()), &trimmed(&value, data.justified));
+                }
+            }
+        }
+        fn content(&mut self, data: &Data) {
+            let text = if data.float {
+                fatal_error(b"attempt to use non-implemented XML I/O")
+            } else if data.numeric {
+                number(data, self.point)
+            } else {
+                trimmed(&content_bytes(data), data.justified)
+            };
+            self.writer.text(&text);
+        }
+        fn tree(&mut self, node: &Node, uri: Option<&[u8]>, prefix: Option<&[u8]>) {
+            if suppressed(node, self.flags) { return; }
+            let Some(name) = node.name else { return self.content(node.content.as_ref().unwrap()) };
+            if let Some(data) = node.content.as_ref().filter(|d| !d.numeric) {
+                let value = content_bytes(data);
+                if has_invalid_xml_char(&value) {
+                    // generate_hex_element.
+                    self.code = 417;
+                    self.writer.start(prefix, &[b"hex.", &xml_name(name)[..]].concat(), uri);
+                    self.attributes(&node.attrs);
+                    self.writer.text(&hex(&value));
+                    return self.writer.end();
+                }
+            }
+            self.writer.start(prefix, &xml_name(name), uri);
+            self.attributes(&node.attrs);
+            if !node.children.is_empty() {
+                // Only the outermost element has the namespace declaration.
+                for child in &node.children { self.tree(child, None, prefix); }
+            } else if let Some(data) = &node.content {
+                self.content(data);
+            }
+            self.writer.end();
+        }
+    }
+
+    fn number(data: &Data, point: u8) -> Vec<u8> {
+        match data.item {
+            Value::View(view) => view.ml_number(point),
+            _ => fail("numeric item required"),
+        }
+    }
+
+    /// The bytes copied to the receiving item (trailing newlines of the
+    /// copy become spaces), the count of characters, whether it was too small.
+    fn store(buffer: &[u8], size: usize) -> (Vec<u8>, i64, bool) {
+        let mut copy = buffer.len().min(size);
+        let mut out = buffer[..copy].to_vec();
+        out.resize(size, b' ');
+        let mut newlines = 0;
+        while copy > 0 && out[copy - 1] == b'\n' {
+            out[copy - 1] = b' ';
+            copy -= 1;
+            newlines += 1;
+        }
+        let written = buffer.len() - newlines;
+        (out, written as i64, written > copy)
+    }
+
+    /// cob_xml_generate_new.
+    #[allow(clippy::too_many_arguments)]
+    pub fn xml_generate(tree: &Node, flags: &[Cell<bool>], size: usize, counted: bool, declaration: bool,
+                        namespace: Option<&Data>, prefix: Option<&Data>) -> Outcome {
+        let failure = |code| Outcome { code, exception: true, output: None, count: None };
+        if size == 0 { return failure(600); }
+        let uri = match namespace.map(content_bytes) {
+            Some(data) if !is_empty(&data) => {
+                if has_invalid_xml_char(&data) { return failure(416); }
+                let text = c_string(trimmed(&data, namespace.unwrap().justified));
+                if !is_valid_uri(&text) { return failure(416); }
+                Some(text)
+            },
+            _ => None,
+        };
+        let prefix = match prefix.map(|p| (content_bytes(p), p.justified)) {
+            Some((data, justified)) if !is_empty(&data) => {
+                if !is_valid_xml_name(&data, justified) { return failure(419); }
+                Some(c_string(trimmed(&data, justified)))
+            },
+            _ => None,
+        };
+        // XML-CODE 0, then the document.
+        let point = module_symbols().0;
+        let mut xml = Xml { writer: Writer { out: Vec::new(), open: Vec::new(), namespaces: Vec::new() }, flags, point, code: 0 };
+        if declaration { xml.writer.out.extend_from_slice(b"<?xml version=\"1.0\"?>\n"); }
+        xml.tree(tree, uri.as_deref(), prefix.as_deref());
+        // xmlTextWriterEndDocument.
+        xml.writer.out.push(b'\n');
+        let (output, written, small) = store(&xml.writer.out, size);
+        Outcome { code: if small { 400 } else { xml.code }, exception: small, output: Some(output), count: counted.then_some(written) }
+    }
+
+    enum Json { Object(Vec<(Vec<u8>, Json)>), Text(Vec<u8>), Number(Vec<u8>) }
+
+    /// json_object_object_add: a key already there keeps its place.
+    fn add(object: &mut Vec<(Vec<u8>, Json)>, key: Vec<u8>, value: Json) {
+        match object.iter_mut().find(|(k, _)| *k == key) {
+            Some(entry) => entry.1 = value,
+            None => object.push((key, value)),
+        }
+    }
+
+    fn json_tree(node: &Node, flags: &[Cell<bool>], out: &mut Vec<(Vec<u8>, Json)>) {
+        if suppressed(node, flags) { return; }
+        let name = node.name.map(|n| c_string(trimmed(n, false)));
+        if !node.children.is_empty() {
+            match name {
+                Some(name) => {
+                    let mut object = Vec::new();
+                    for child in &node.children { json_tree(child, flags, &mut object); }
+                    add(out, name, Json::Object(object));
+                },
+                None => for child in &node.children { json_tree(child, flags, out); },
+            }
+        } else if let Some(data) = &node.content {
+            let Some(name) = name else { fatal_error(b"attempt to use non-implemented JSON I/O") };
+            if data.float { fatal_error(b"attempt to use non-implemented JSON I/O"); }
+            if data.numeric {
+                add(out, name, Json::Number(number(data, b'.')));
+            } else {
+                add(out, name, Json::Text(c_string(trimmed(&content_bytes(data), data.justified))));
+            }
+        }
+    }
+
+    /// json_escape_str.
+    fn escape(out: &mut Vec<u8>, s: &[u8]) {
+        for &c in s {
+            match c {
+                b'\x08' => out.extend_from_slice(b"\\b"),
+                b'\n' => out.extend_from_slice(b"\\n"),
+                b'\r' => out.extend_from_slice(b"\\r"),
+                b'\t' => out.extend_from_slice(b"\\t"),
+                b'\x0c' => out.extend_from_slice(b"\\f"),
+                b'"' => out.extend_from_slice(b"\\\""),
+                b'\\' => out.extend_from_slice(b"\\\\"),
+                b'/' => out.extend_from_slice(b"\\/"),
+                0..=0x1f => out.extend_from_slice(format!("\\u00{c:02x}").as_bytes()),
+                _ => out.push(c),
+            }
+        }
+    }
+
+    /// json_object_to_json_string_ext with JSON_C_TO_STRING_PLAIN.
+    fn print(out: &mut Vec<u8>, value: &Json) {
+        match value {
+            Json::Object(members) => {
+                out.push(b'{');
+                for (index, (key, member)) in members.iter().enumerate() {
+                    if index > 0 { out.push(b','); }
+                    out.push(b'"');
+                    escape(out, key);
+                    out.extend_from_slice(b"\":");
+                    print(out, member);
+                }
+                out.push(b'}');
+            },
+            Json::Text(text) => { out.push(b'"'); escape(out, text); out.push(b'"'); },
+            Json::Number(text) => out.extend_from_slice(text),
+        }
+    }
+
+    /// cob_json_generate_new with json-c.
+    pub fn json_generate(tree: &Node, flags: &[Cell<bool>], size: usize, counted: bool) -> Outcome {
+        let mut object = Vec::new();
+        json_tree(tree, flags, &mut object);
+        let mut printed = Vec::new();
+        print(&mut printed, &Json::Object(object));
+        let (output, written, small) = store(&printed, size);
+        Outcome { code: if small { 1 } else { 0 }, exception: small, output: Some(output), count: counted.then_some(written) }
     }
 }

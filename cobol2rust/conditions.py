@@ -7,7 +7,7 @@ conditions ("A = 1 OR 2", "A NOT = B AND > C").
 """
 from __future__ import annotations
 
-from .frontend import CobolError, Expr
+from .frontend import CobolError, Expr, fold_binary
 
 PRIO = {"x": 0, "^": 1, "*": 2, "/": 2, "+": 3, "-": 3,
         "=": 4, "~": 4, "<": 4, ">": 4, "[": 4, "]": 4,
@@ -16,7 +16,7 @@ RELATIONAL = {"=", "~", "<", ">", "[", "]"}
 # cobc's '[' is <=, ']' is >=, '~' is not equal.
 COMPARISON = {"=": "cmp=", "~": "cmp<>", "<": "cmp<", ">": "cmp>", "[": "cmp<=", "]": "cmp>="}
 NEGATED = {"=": "~", "~": "=", "<": "]", ">": "[", "[": ">", "]": "<"}
-BOOLEAN = {"and", "or", "not", "condition", "bool", "numeric_class", "user_class", "switch", "alpha_class"}
+BOOLEAN = {"and", "or", "not", "condition", "bool", "numeric_class", "omitted_class", "user_class", "switch", "alpha_class", "imp_exception"}
 TOPSTACK = 3
 
 
@@ -35,7 +35,8 @@ def binary(x, op, y):
         return Expr(COMPARISON[op], (x, y))
     if op in {"&", "|"}:
         return Expr("and" if op == "&" else "or", (x, y))
-    return Expr("**" if op == "^" else op, (x, y))
+    # cb_build_binary_op, with its constant folding.
+    return fold_binary("**" if op == "^" else op, x, y)
 
 
 def negation(x):

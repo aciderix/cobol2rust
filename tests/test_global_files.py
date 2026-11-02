@@ -51,7 +51,6 @@ class ParseTests(unittest.TestCase):
             source(declaratives="u section.\n    use global after error procedure on f.\nu-1.\n    continue."),
             source(declaratives=GLOBAL_USE + "\n    goback."),
             source(declaratives=GLOBAL_USE, body="alter p1 to proceed to p2. go to p1.\np1. go to p2.\np2. continue."),
-            source(select='select optional f assign to "F.TXT" file status is fs.', working="01 fs pic xx."),
             source(fd="fd f.\n01 q pic x(4) global."),
             source(fd="sd f global.", select='select f assign to "F.TXT".', inner="continue."),
             source(fd="fd f external global."),

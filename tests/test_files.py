@@ -53,7 +53,7 @@ class FileFrontendTests(unittest.TestCase):
 
     def test_reject_unsupported_operations_and_incomplete_input(self):
         cases = ["open f.", "open i-o f.", "open input.", "read.", "write fs.", "close.",
-                 "read f into fs.", "read f with lock.", "rewrite rec.",
+                 "read f into fs.", "rewrite rec.",
                  "read f at end perform missing end-read."]
         for body in cases:
             with self.subTest(body=body), self.assertRaises(CobolError):

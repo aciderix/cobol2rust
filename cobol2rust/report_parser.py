@@ -46,6 +46,8 @@ class ReportEntry:
     flags: int = 0
     line: int = 0
     column: int = 0
+    # COLUMN PLUS n (col_or_plus): relative to the previous item of the line.
+    column_plus: bool = False
     picture: list = field(default_factory=list)
     source: Expr | None = None
     value: Token | None = None
@@ -273,11 +275,11 @@ def check_limits(p, report):
     report.initiate_error = None
     for line in report.report_lines:
         if line.line > 0 and report.lines > 0 and line.line > report.lines:
-            report.initiate_error = f"INITIATE {report.name} LINE {line.line} exceeds PAGE LIMIT {report.lines}"
+            report.initiate_error = f"INITIATE {getattr(report, 'written', report.name)} LINE {line.line} exceeds PAGE LIMIT {report.lines}"
         else:
             beyond = [f.line for f in line.fields if f.line and f.line > report.lines]
             if beyond:
-                report.initiate_error = f"INITIATE {report.name} LINE {beyond[0]} exceeds PAGE LIMIT"
+                report.initiate_error = f"INITIATE {getattr(report, 'written', report.name)} LINE {beyond[0]} exceeds PAGE LIMIT"
         if report.initiate_error:
             break
 
@@ -407,11 +409,14 @@ def group_entry(p, report):
             if p.at("LEFT") or p.at("RIGHT") or p.at("CENTER"):
                 p.error("COLUMN LEFT/RIGHT/CENTER non pris en charge")
             p.accept("IS") or p.accept("ARE")
-            if p.at("PLUS") or p.at("+"):
-                p.error("COLUMN PLUS non pris en charge")
-            entry.column = integer(p, "COLUMN")
-            if entry.column == 0:
-                p.error("invalid COLUMN integer; must be > 0")
+            if p.accept("PLUS") or p.accept("+"):
+                # col_or_plus: PLUS 0 is no COLUMN at all.
+                entry.column = integer(p, "COLUMN PLUS")
+                entry.column_plus = entry.column != 0
+            else:
+                entry.column = integer(p, "COLUMN")
+                if entry.column == 0:
+                    p.error("invalid COLUMN integer; must be > 0")
             if not p.t.string and p.t.text.isdigit():
                 p.error("liste de COLUMN (OCCURS) non prise en charge")
         elif p.at("PIC") or p.at("PICTURE"):
@@ -505,8 +510,6 @@ def report_description(p, report):
                 p.error("article de rapport sans SOURCE, SUM ni VALUE non pris en charge")
             if entry.source is not None and entry.value is not None:
                 p.error("article de rapport avec SOURCE et VALUE non pris en charge")
-            if not entry.column:
-                p.error("article de rapport sans COLUMN non pris en charge")
             entry.item = p.report_item(report, entry.picture)
             item = p.fields[entry.item]
             entry.size = item.size
@@ -610,6 +613,36 @@ def layout(entry, offset):
     return entry.size
 
 
+def report_columns(entries, parent):
+    """output_report_data: COLUMN PLUS n and a missing COLUMN follow the
+    previous item of the line (report_col_pos), which a 01 group, a LINE or
+    a group TYPE starts again at 1. PLUS on the first item of a LINE is
+    ignored (col_or_plus): n is then the column."""
+    position = 1
+
+    def walk(entries, parent):
+        nonlocal position
+        for index, entry in enumerate(entries):
+            if entry.level == 1 or entry.flags & (LINE | GROUP_TYPES):
+                previous = position = 1
+            else:
+                first_of_line = index == 0 and parent is not None and bool(parent.flags & LINE)
+                column = entry.column
+                if entry.column_plus and not first_of_line:
+                    column = position + entry.column - 1
+                elif column <= 0:
+                    column = position
+                if entry.picture:
+                    # A group's column only moves report_col_pos.
+                    entry.column = column
+                previous = position
+                position = column + entry.size
+            if entry.children:
+                position = previous
+                walk(entry.children, entry)
+    walk(entries, parent)
+
+
 def build_lines(p, report):
     """output_report_define_lines: one line per 01 group and per item with
     LINE, chained by sister (next 01, next LINE sibling) and child (first
@@ -618,6 +651,7 @@ def build_lines(p, report):
     rcsz = 0
     for entry in report.entries:
         layout(entry, 0)
+    report_columns(report.entries, None)
 
     def sizes(entry):
         nonlocal rcsz

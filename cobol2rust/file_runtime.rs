@@ -17,6 +17,8 @@ pub struct CobolFile {
     /// ASSIGN name (literal, or the item read by `assign` before OPEN);
     /// `path` is the name cob_chk_file_mapping gave it at the last OPEN.
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -37,6 +39,9 @@ pub struct CobolFile {
     record_max: usize,
     linage: Option<Linage>,
     line_advancing: bool,
+    /// lock_mode & COB_FILE_EXCLUSIVE: LOCK MODE EXCLUSIVE, or the OPEN's
+    /// WITH LOCK / SHARING WITH NO OTHER (COB_LOCK_OPEN_EXCLUSIVE).
+    exclusive: bool,
 }
 
 /// FD LINAGE (cob_linage): the values cob_get_int reads from the clause,
@@ -85,6 +90,50 @@ fn claim_path(path: &str) {
     crate::runtime::OPEN_FILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// cob_file_open / cob_fd_file_open (HAVE_FCNTL): a whole-file F_RDLCK for
+/// INPUT, F_WRLCK otherwise, not on /dev/ names; refused: 61 (EACCES,
+/// EAGAIN, EDEADLK) or 30. Closing the descriptor releases it.
+mod whole_file_lock {
+    use std::os::fd::RawFd;
+
+    #[repr(C)]
+    struct Flock { l_type: i16, l_whence: i16, l_start: i64, l_len: i64, l_pid: i32 }
+
+    extern "C" {
+        fn fcntl(fd: RawFd, cmd: i32, ...) -> i32;
+        fn fdatasync(fd: RawFd) -> i32;
+    }
+    const F_SETLK: i32 = 6;
+    const F_RDLCK: i16 = 0;
+    const F_WRLCK: i16 = 1;
+    const F_UNLCK: i16 = 2;
+
+    fn set(fd: RawFd, kind: i16) -> Result<(), i32> {
+        let lock = Flock { l_type: kind, l_whence: 0, l_start: 0, l_len: 0, l_pid: 0 };
+        if unsafe { fcntl(fd, F_SETLK, &lock as *const Flock) } < 0 {
+            return Err(std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
+        }
+        Ok(())
+    }
+
+    pub fn lock(fd: RawFd, path: &str, write: bool) -> Result<(), u8> {
+        if path.starts_with("/dev/") { return Ok(()); }
+        set(fd, if write { F_WRLCK } else { F_RDLCK }).map_err(|errno| match errno {
+            13 | 11 | 35 => 61,
+            _ => 30,
+        })
+    }
+
+    /// cob_file_unlock: fdcobsync, then F_UNLCK unless COB_FILE_EXCLUSIVE.
+    pub fn unlock(fd: RawFd, exclusive: bool) {
+        unsafe { fdatasync(fd); }
+        if !exclusive && set(fd, F_UNLCK).is_err() {
+            eprintln!("libcob: warning: issue during unlock (cob_file_unlock), errno: {}",
+                      std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
+        }
+    }
+}
+
 fn release_path(path: &str) {
     if OPEN_PATHS.with(|paths| paths.borrow_mut().remove(path)) {
         crate::runtime::OPEN_FILES.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
@@ -109,6 +158,15 @@ pub fn assign_text(data: &[u8]) -> Vec<u8> {
     let end = data.iter().rposition(|&b| b != b' ' && b != 0).map_or(0, |i| i + 1);
     if end > 4096 { return Vec::new(); }
     data[..end].split(|&b| b == 0).next().unwrap_or_default().to_vec()
+}
+
+/// cob_field_to_string of an ASSIGN item, whose name is "field with NULL
+/// address" when it has no storage (BASED, LINKAGE).
+fn assign_field(data: Option<Vec<u8>>) -> (Vec<u8>, bool) {
+    match data {
+        Some(data) => (assign_text(&data), false),
+        None => (b"field with NULL address".to_vec(), true),
+    }
 }
 
 fn environment(key: &[u8]) -> Option<Vec<u8>> {
@@ -381,16 +439,16 @@ impl CobolFile {
             }
         }
         let line = organization == Organization::LineSequential;
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, organization, state: State::Closed, eof: false,
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, organization, state: State::Closed, eof: false,
                fixed: line && setting("COB_LS_FIXED", false), split: line && setting("COB_LS_SPLIT", true),
                validate: line && setting("COB_LS_VALIDATE", true),
                needs_nl: false, last_read_size: 0, last_open_mode: "", read_done: false, record_min, record_max,
-               linage: None, line_advancing: false }
+               linage: None, line_advancing: false, exclusive: false }
     }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -501,6 +559,9 @@ impl CobolFile {
 
     /// Mode of the last OPEN attempt, kept by an OPEN rejected as already open.
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !matches!(self.state, State::Closed) }
 
     pub fn open(&mut self, mode: &str) -> u8 {
         if self.linage.is_some() && !matches!(mode, "OUTPUT" | "EXTEND") {
@@ -518,9 +579,40 @@ impl CobolFile {
                 linage.counter = 1;
             }
         }
+        if status < 10 {
+            if let Some(fd) = self.raw_fd() {
+                if let Err(code) = whole_file_lock::lock(fd, &self.path, mode != "INPUT") {
+                    self.state = State::Closed;
+                    status = code;
+                }
+            }
+        }
         if status < 10 { claim_path(&self.path); }
         cache_open(self.id, status < 10 && !matches!(self.state, State::Missing));
         status
+    }
+
+    fn raw_fd(&self) -> Option<std::os::fd::RawFd> {
+        use std::os::fd::AsRawFd;
+        match &self.state {
+            State::Input(reader) => Some(reader.get_ref().as_raw_fd()),
+            State::Output(file) | State::InputOutput(file) => Some(file.as_raw_fd()),
+            _ => None,
+        }
+    }
+
+    /// cob_open: lock_mode &= ~COB_LOCK_OPEN_EXCLUSIVE; lock_mode |= sharing.
+    pub fn lock_mode(&mut self, exclusive: bool) { self.exclusive = exclusive; }
+
+    /// UNLOCK (cob_unlock_file): status 00.
+    pub fn unlock(&mut self) -> u8 {
+        if !matches!(self.state, State::Closed | State::Locked) {
+            if let Some(file) = match &mut self.state { State::Output(file) | State::InputOutput(file) => Some(file), _ => None } {
+                file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+            }
+            if let Some(fd) = self.raw_fd() { whole_file_lock::unlock(fd, self.exclusive); }
+        }
+        0
     }
 
     fn open_file(&mut self, mode: &str) -> u8 {
@@ -531,6 +623,7 @@ impl CobolFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
@@ -930,8 +1023,9 @@ pub fn release_shared() {
 /// Returns libcob's END-OF-PAGE exception: a pending EOP is reported by
 /// the next 0x status, whatever the file.
 pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: bool, invalid_handled: bool, declarative: bool,
-                   name: &dyn Fn() -> Vec<u8>) -> bool {
+                   select: &str, name: &dyn Fn() -> Vec<u8>) -> bool {
     let eop = status < 10 && EOP.with(|eop| eop.replace(false));
+    crate::runtime::exception::save_status(status, eop, select);
     if let Some(field) = destination {
         let status = format!("{status:02}");
         if field.is_text() { field.assign(&Value::text(&status), false); }
@@ -946,13 +1040,17 @@ pub fn file_status(status: u8, destination: Option<&mut Value>, eof_handled: boo
 enum Access { Sequential, Random, Dynamic }
 
 #[derive(Clone, Copy)]
-pub enum StartCondition { Equal, Greater, NotLess }
+/// The START conditions of cob_start: COB_EQ, COB_GT, COB_GE, COB_LT,
+/// COB_LE, COB_FI (FIRST) and COB_LA (LAST).
+pub enum StartCondition { Equal, Greater, NotLess, Less, NotGreater, First, Last }
 
 /// GnuCOBOL 3.2 RELATIVE file on Linux x86-64: each slot is a native size_t
 /// (8 bytes, little endian) holding the record size, then `record_max` bytes.
 /// A zero size, including a hole read as zeros, marks an empty slot.
 pub struct RelativeFile {
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -968,8 +1066,11 @@ pub struct RelativeFile {
     last_open_mode: &'static str,
     nonexistent: bool,
     end_of_file: bool,
+    /// flag_begin_of_file: READ PREVIOUS reached the start.
+    begin_of_file: bool,
     first_read: u8,
     read_done: bool,
+    exclusive: bool,
 }
 
 fn read_full(file: &mut File, buffer: &mut [u8]) -> usize { read_into(file, buffer) }
@@ -1007,15 +1108,18 @@ impl RelativeFile {
             "SEQUENTIAL" => Access::Sequential, "RANDOM" => Access::Random, "DYNAMIC" => Access::Dynamic,
             _ => fail("unsupported RELATIVE access mode"),
         };
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
-               last_open_mode: "", nonexistent: false, end_of_file: false, first_read: 0, read_done: false }
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, last_read_size: 0, file: None, open_mode: "", locked: false,
+               last_open_mode: "", nonexistent: false, end_of_file: false, begin_of_file: false, first_read: 0, read_done: false, exclusive: false }
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !self.open_mode.is_empty() || self.locked }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -1031,10 +1135,32 @@ impl RelativeFile {
     fn slot_size(&self) -> u64 { self.record_max as u64 + 8 }
 
     pub fn open(&mut self, mode: &str) -> u8 {
-        let status = self.open_file(mode);
+        let mut status = self.open_file(mode);
+        if status < 10 {
+            use std::os::fd::AsRawFd;
+            if let Some(fd) = self.file.as_ref().map(|file| file.as_raw_fd()) {
+                if let Err(code) = whole_file_lock::lock(fd, &self.path, mode != "INPUT") {
+                    self.file = None;
+                    self.open_mode = "";
+                    status = code;
+                }
+            }
+        }
         if status < 10 { claim_path(&self.path); }
         cache_open(self.id, status < 10 && !self.nonexistent);
         status
+    }
+
+    pub fn lock_mode(&mut self, exclusive: bool) { self.exclusive = exclusive; }
+
+    /// UNLOCK (cob_unlock_file): status 00.
+    pub fn unlock(&mut self) -> u8 {
+        use std::os::fd::AsRawFd;
+        if let Some(file) = self.file.as_mut() {
+            file.flush().unwrap_or_else(|e| fail(&format!("file flush failed: {e}")));
+            whole_file_lock::unlock(file.as_raw_fd(), self.exclusive);
+        }
+        0
     }
 
     fn open_file(&mut self, mode: &str) -> u8 {
@@ -1044,6 +1170,7 @@ impl RelativeFile {
             "INPUT" => "INPUT", "OUTPUT" => "OUTPUT", "EXTEND" => "EXTEND", "I-O" => "I-O",
             _ => fail("unsupported file open mode"),
         };
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         self.read_done = false;
@@ -1102,13 +1229,14 @@ impl RelativeFile {
     }
 
     /// cob_read_next followed by relative_read_next.
-    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>, depending: Option<&mut Value>) -> u8 {
-        let status = self.cob_read_next(record, key);
+    pub fn read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool, depending: Option<&mut Value>) -> u8 {
+        let status = self.cob_read_next(record, key, previous);
         if status < 10 { set_depending(depending, self.last_read_size); }
         status
     }
 
-    fn cob_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+    /// cob_read_next: READ NEXT, or PREVIOUS (COB_READ_PREVIOUS).
+    fn cob_read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -1116,26 +1244,38 @@ impl RelativeFile {
             self.first_read = 0;
             return 10;
         }
-        if self.end_of_file { return 46; }
-        let status = self.relative_read_next(record, key);
+        if self.end_of_file && !previous { return 46; }
+        if self.begin_of_file && previous { return 46; }
+        let status = self.relative_read_next(record, key, previous);
         if status < 10 {
             self.first_read = 0;
             self.read_done = true;
             self.end_of_file = false;
+            self.begin_of_file = false;
         } else if status == 10 {
-            self.end_of_file = true;
+            if previous { self.begin_of_file = true; } else { self.end_of_file = true; }
         }
         status
     }
 
-    fn relative_read_next(&mut self, record: &mut Value, key: Option<&mut Value>) -> u8 {
+    /// relative_read_next. READ PREVIOUS steps back two slots from the
+    /// current position, and after a record one slot (lseek fails below
+    /// the start of the file and leaves the position), as libcob 3.2 does.
+    fn relative_read_next(&mut self, record: &mut Value, key: Option<&mut Value>, previous: bool) -> u8 {
         let slot = self.slot_size();
         let record_max = self.record_max;
+        let first_read = self.first_read != 0;
         let file = self.file.as_mut().unwrap();
         let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
         if length == 0 { return 10; }
         if length < slot { return 30; }
         let mut offset = seek(file, SeekFrom::Current(0));
+        let mut moveback = false;
+        if previous && !first_read {
+            if offset <= slot { return 10; }
+            offset = seek(file, SeekFrom::Start(offset - 2 * slot));
+            moveback = true;
+        }
         loop {
             let mut size = [0u8; 8];
             let count = read_full(file, &mut size);
@@ -1156,9 +1296,15 @@ impl RelativeFile {
                         return 14;
                     }
                 }
+                if moveback && offset >= slot { seek(file, SeekFrom::Start(offset - slot)); }
                 return 0;
             }
-            offset = seek(file, SeekFrom::Current(record_max as i64));
+            if moveback {
+                if offset <= slot { return 10; }
+                offset = seek(file, SeekFrom::Start(offset - 2 * slot));
+            } else {
+                offset = seek(file, SeekFrom::Current(record_max as i64));
+            }
         }
     }
 
@@ -1284,7 +1430,7 @@ impl RelativeFile {
         0
     }
 
-    /// cob_start then relative_start for EQUAL, GREATER and NOT LESS.
+    /// cob_start then relative_start.
     pub fn start(&mut self, condition: StartCondition, key: &Value) -> u8 {
         self.read_done = false;
         self.first_read = 0;
@@ -1293,28 +1439,48 @@ impl RelativeFile {
         if self.nonexistent { return 23; }
         let status = self.relative_start(condition, key);
         self.end_of_file = status != 0;
+        self.begin_of_file = false;
         self.first_read = 1;
         status
     }
 
     fn relative_start(&mut self, condition: StartCondition, key: &Value) -> u8 {
+        use StartCondition::*;
         let slot = self.slot_size();
         let file = self.file.as_mut().unwrap();
         let length = file.metadata().unwrap_or_else(|e| fail(&format!("file stat failed: {e}"))).len();
         if length == 0 { return 23; }
-        let mut index = key_number(key) - 1;
+        let last = (length / slot) as i64 - 1;
+        let (condition, mut index) = match condition {
+            First => (NotLess, 0),
+            Last => (NotGreater, last),
+            Less | NotGreater => {
+                // Against the current file size; LT decrements below.
+                let index = key_number(key) - 1;
+                (condition, if index > last { last + matches!(condition, Less) as i64 } else { index })
+            },
+            _ => (condition, key_number(key) - 1),
+        };
         if index < 0 {
             index = match condition {
-                StartCondition::NotLess => 0,
-                StartCondition::Greater => -1,
-                StartCondition::Equal => return 23,
+                NotLess => 0,
+                Greater => -1,
+                _ => return 23,
             };
         }
-        if matches!(condition, StartCondition::Greater) { index += 1; }
+        if matches!(condition, Less) {
+            index -= 1;
+            if index < 0 { return 23; }
+        } else if matches!(condition, Greater) {
+            index += 1;
+        }
         loop {
             if index < 0 { return 23; }
             let offset = index as u64 * slot;
-            if offset >= length { return 23; }
+            if offset >= length {
+                if matches!(condition, Less | NotGreater) { index -= 1; continue; }
+                return 23;
+            }
             seek(file, SeekFrom::Start(offset));
             let mut size = [0u8; 8];
             if read_full(file, &mut size) == 8 && u64::from_le_bytes(size) > 0 {
@@ -1322,7 +1488,8 @@ impl RelativeFile {
                 return 0;
             }
             match condition {
-                StartCondition::Equal => return 23,
+                Equal => return 23,
+                Less | NotGreater => index -= 1,
                 _ => index += 1,
             }
         }
@@ -1409,7 +1576,12 @@ impl SortFile {
 }
 
 /// One INDEXED key: its place in the record and WITH DUPLICATES.
-pub struct IndexKey { pub offset: usize, pub size: usize, pub duplicates: bool }
+/// A key of an INDEXED file; `parts` are the (offset, size) components of a
+/// split key (count_components), empty for a key that is one record item.
+/// `suppress`: char_suppress of SUPPRESS WHEN, a key of only that byte is
+/// not written to its index (bdb_suppresskey).
+pub struct IndexKey { pub offset: usize, pub size: usize, pub duplicates: bool, pub parts: Vec<(usize, usize)>,
+                      pub suppress: Option<u8> }
 
 /// A Berkeley DB btree as libcob 3.2 uses it: keys in memcmp order (a
 /// shorter key first), duplicates of a key in insertion order (DB_DUP).
@@ -1505,6 +1677,8 @@ impl Btree {
 /// DUPLICATES, a native little-endian u32 duplicate number).
 pub struct IndexedFile {
     assign: Vec<u8>,
+    /// The ASSIGN item has no address: cob_open gives status 31.
+    assign_null: bool,
     path: String,
     /// The SELECT name as written (select_name) and libcob's file cache key.
     select: String,
@@ -1547,7 +1721,7 @@ impl IndexedFile {
             _ => fail("unsupported INDEXED access mode"),
         };
         let n = keys.len();
-        Self { assign: path.as_bytes().to_vec(), path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
+        Self { assign: path.as_bytes().to_vec(), assign_null: false, path: String::new(), select: String::new(), id: next_file_id(), optional, access, record_min, record_max, keys, db: Vec::new(), open_mode: "",
                last_open_mode: "", locked: false, nonexistent: false, end_of_file: false, begin_of_file: false,
                first_read: 0, read_done: false, last_read_size: 0, key: Vec::new(), data: None, key_index: 0,
                last_readkey: vec![Vec::new(); 2 * n], last_dupno: vec![0; n], rewrite_sec_key: vec![false; n],
@@ -1555,11 +1729,14 @@ impl IndexedFile {
     }
 
     pub fn last_open_mode(&self) -> &'static str { self.last_open_mode }
+    /// cob_cancel closes the file when its open_mode is not COB_OPEN_CLOSED
+    /// (COB_OPEN_LOCKED included).
+    pub fn is_open(&self) -> bool { !self.open_mode.is_empty() || self.locked }
     pub fn last_read_size(&self) -> usize { self.last_read_size }
 
     /// ASSIGN data-name: cob_pre_open reads the item at each OPEN.
-    pub fn assign(&mut self, data: &[u8]) -> &mut Self {
-        self.assign = assign_text(data);
+    pub fn assign(&mut self, data: Option<Vec<u8>>) -> &mut Self {
+        (self.assign, self.assign_null) = assign_field(data);
         self
     }
     pub fn named(mut self, select: &str) -> Self {
@@ -1577,19 +1754,30 @@ impl IndexedFile {
     /// bdb_savekey: the key of index `idx` in `record`.
     fn savekey(&self, record: &[u8], idx: usize) -> Vec<u8> {
         let k = &self.keys[idx];
-        record[k.offset..k.offset + k.size].to_vec()
+        if k.parts.is_empty() { return record[k.offset..k.offset + k.size].to_vec(); }
+        // Each component's bytes, concatenated.
+        k.parts.iter().flat_map(|&(offset, size)| record[offset..offset + size].iter().copied()).collect()
     }
     /// bdb_cmpkey: compare the first `partlen` (0: whole key) bytes.
     fn cmpkey(&self, keyarea: &[u8], record: &[u8], idx: usize, partlen: usize) -> std::cmp::Ordering {
         let k = &self.keys[idx];
         let length = if partlen == 0 { k.size } else { partlen.min(k.size) };
-        keyarea[..length.min(keyarea.len())].cmp(&record[k.offset..k.offset + length])
+        let key = self.savekey(record, idx);
+        keyarea[..length.min(keyarea.len())].cmp(&key[..length])
     }
     fn dupno(data: &[u8], primekeylen: usize) -> u32 {
         u32::from_le_bytes(data[primekeylen..primekeylen + 4].try_into().unwrap())
     }
 
+    /// bdb_open without a BDB environment takes no lock; UNLOCK does nothing.
+    pub fn lock_mode(&mut self, _exclusive: bool) {}
+
+    pub fn unlock(&mut self) -> u8 { 0 }
+
     pub fn open(&mut self, mode: &str) -> u8 {
+        if std::env::var_os("DB_HOME").is_some_and(|home| !home.is_empty()) {
+            fail("DB_HOME : environnement Berkeley DB (verrous de fichiers et d'enregistrements) non modélisé");
+        }
         if self.locked { return 38; }
         if !self.open_mode.is_empty() { return 41; }
         self.read_done = false;
@@ -1601,6 +1789,7 @@ impl IndexedFile {
         self.end_of_file = false;
         self.begin_of_file = false;
         self.first_read = 2;
+        if self.assign_null { return 31; }
         match open_name(&self.assign) { Ok(path) => self.path = path, Err(status) => return status }
         cache_file(self.id, &self.select, &self.assign);
         let status = self.indexed_open(mode);
@@ -1674,12 +1863,18 @@ impl IndexedFile {
 
     /// cob_start then indexed_start_internal. `key` is the key of index
     /// `index` given by the START KEY item, `partlen` that item's size.
-    pub fn start(&mut self, condition: StartCondition, index: usize, partlen: usize, area: &Value) -> u8 {
+    /// `keysize` is the value of WITH SIZE/LENGTH.
+    pub fn start(&mut self, condition: StartCondition, index: usize, partlen: usize, keysize: Option<i128>, area: &Value) -> u8 {
         self.read_done = false;
         self.first_read = 0;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.access == Access::Random { return 47; }
         if self.nonexistent { return 23; }
+        let partlen = match keysize {
+            Some(size) if size < 1 || size > partlen as i128 => return 23,
+            Some(size) => size as usize,
+            None => partlen,
+        };
         let status = self.start_internal(condition, index, partlen, &area.bytes());
         self.end_of_file = status != 0;
         self.begin_of_file = false;
@@ -1695,7 +1890,11 @@ impl IndexedFile {
         let mut key = self.savekey(record, idx);
         key.truncate(partlen);
         let tree = &self.db[idx];
-        let mut found = tree.set_range(&key);
+        let mut found = match condition {
+            StartCondition::First => tree.first(),
+            StartCondition::Last => tree.last(),
+            _ => tree.set_range(&key),
+        };
         match condition {
             StartCondition::Equal => {
                 if let Some(p) = &found {
@@ -1708,7 +1907,19 @@ impl IndexedFile {
                     found = tree.next(&p);
                 }
             },
-            StartCondition::NotLess => {},
+            StartCondition::Less => found = match found { None => tree.last(), Some(p) => tree.prev(&p) },
+            StartCondition::NotGreater => {
+                found = match found {
+                    None => tree.last(),
+                    Some(p) if self.cmpkey(&p.0, record, idx, partlen) != std::cmp::Ordering::Equal => tree.prev(&p),
+                    Some(p) if self.keys[idx].duplicates => match tree.next_nodup(&p) {
+                        None => tree.last(),
+                        Some(next) => tree.prev(&next),
+                    },
+                    Some(p) => Some(p),
+                }
+            },
+            StartCondition::NotLess | StartCondition::First | StartCondition::Last => {},
         }
         let Some(position) = found else { return 23 };
         let (found_key, found_data) = tree.at(&position);
@@ -1770,7 +1981,8 @@ impl IndexedFile {
     }
 
     /// cob_read_next then indexed_read_next (NEXT only).
-    pub fn read_next(&mut self, area: &mut Value, depending: Option<&mut Value>) -> u8 {
+    /// cob_read_next: READ NEXT, or PREVIOUS (COB_READ_PREVIOUS).
+    pub fn read_next(&mut self, area: &mut Value, previous: bool, depending: Option<&mut Value>) -> u8 {
         self.read_done = false;
         if !matches!(self.open_mode, "INPUT" | "I-O") { return 47; }
         if self.nonexistent {
@@ -1778,8 +1990,9 @@ impl IndexedFile {
             self.first_read = 0;
             return 10;
         }
-        if self.end_of_file { return 46; }
-        let status = self.indexed_read_next(area);
+        if self.end_of_file && !previous { return 46; }
+        if self.begin_of_file && previous { return 46; }
+        let status = self.indexed_read_next(area, previous);
         if status < 10 {
             self.first_read = 0;
             self.read_done = true;
@@ -1787,20 +2000,26 @@ impl IndexedFile {
             self.begin_of_file = false;
             set_depending(depending, self.last_read_size);
         } else if status == 10 {
-            self.end_of_file = true;
+            if previous { self.begin_of_file = true; } else { self.end_of_file = true; }
         }
         status
     }
 
-    fn indexed_read_next(&mut self, area: &mut Value) -> u8 {
+    fn indexed_read_next(&mut self, area: &mut Value, previous: bool) -> u8 {
+        #[derive(PartialEq)]
+        enum Step { First, Last, Next, Prev }
         let idx = self.key_index;
         let n = self.keys.len();
         let primekeylen = self.primekeylen();
         let duplicates = idx > 0 && self.keys[idx].duplicates;
-        let first = self.begin_of_file;
+        // nextprev of the BDB indexed_read_next.
+        let step = if previous {
+            if self.end_of_file { Step::Last } else { Step::Prev }
+        } else if self.begin_of_file { Step::First } else { Step::Next };
         let mut file_changed = false;
         if self.first_read != 0 {
-            if self.data.is_none() { return 10; }
+            // Data read by OPEN or START; PREVIOUS right after OPEN is the end.
+            if self.data.is_none() || (self.first_read == 2 && step == Step::Prev) { return 10; }
             // Check that the record read by OPEN/START still exists.
             let tree = &self.db[idx];
             let mut position = tree.set(&self.last_readkey[idx]);
@@ -1836,30 +2055,41 @@ impl IndexedFile {
         }
         if self.first_read == 0 || file_changed {
             let tree = &self.db[idx];
-            let target = if first {
-                tree.first()
-            } else {
-                let mut read_next = false;
-                let found = tree.set_range(&self.last_readkey[idx]);
-                let mut position = match found {
+            let prev = step == Step::Prev;
+            let target = match step {
+                Step::First => tree.first(),
+                Step::Last => tree.last(),
+                _ => match tree.set_range(&self.last_readkey[idx]) {
+                    // Records may be deleted since the last read.
+                    None if prev => tree.last(),
                     None => return 10,
-                    Some(p) => p,
-                };
-                if position.0 == self.last_readkey[idx] {
-                    if duplicates {
-                        let mut dupno = Self::dupno(&tree.at(&position).1, primekeylen);
-                        let mut current = Some(position.clone());
-                        while current.is_some() && position.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
-                            current = tree.next(&position);
-                            if let Some(q) = &current { position = q.clone(); dupno = Self::dupno(&tree.at(&position).1, primekeylen); }
+                    Some(mut position) => {
+                        let mut read_nextprev = prev;
+                        let mut last = false;
+                        if position.0 == self.last_readkey[idx] {
+                            if duplicates {
+                                let mut dupno = Self::dupno(&tree.at(&position).1, primekeylen);
+                                let mut current = Some(position.clone());
+                                while current.is_some() && position.0 == self.last_readkey[idx] && dupno < self.last_dupno[idx] {
+                                    current = tree.next(&position);
+                                    if let Some(q) = &current { position = q.clone(); dupno = Self::dupno(&tree.at(&position).1, primekeylen); }
+                                }
+                                if current.is_none() {
+                                    if !prev { return 10; }
+                                    last = true;
+                                } else if position.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx] {
+                                    read_nextprev = true;
+                                }
+                            } else {
+                                read_nextprev = true;
+                            }
                         }
-                        if current.is_none() { return 10; }
-                        read_next = position.0 == self.last_readkey[idx] && dupno == self.last_dupno[idx];
-                    } else {
-                        read_next = true;
-                    }
-                }
-                if read_next { tree.next(&position) } else { Some(position) }
+                        if last { tree.last() }
+                        else if !read_nextprev { Some(position) }
+                        else if prev { tree.prev(&position) }
+                        else { tree.next(&position) }
+                    },
+                },
             };
             let Some(position) = target else { return 10 };
             let (found_key, found_data) = tree.at(&position);
@@ -1926,6 +2156,7 @@ impl IndexedFile {
         for i in 1..self.keys.len() {
             if rewrite && !self.rewrite_sec_key[i] { continue; }
             let altkey = self.savekey(full, i);
+            if self.keys[i].suppress.is_some_and(|c| altkey.iter().all(|b| *b == c)) { continue; }
             let mut data = self.savekey(full, 0);
             let duplicates = self.keys[i].duplicates;
             if duplicates {
@@ -2161,7 +2392,12 @@ impl Report {
 
     /// cob_report_initiate; the PAGE LIMIT and LINE checks were made by the translator.
     pub fn initiate(&mut self, events: &mut Events) {
-        if self.initiate_done { fail(&format!("INITIATE {} was already done (COB_EC_REPORT_ACTIVE) not modelled", self.name)); }
+        if self.initiate_done {
+            // cob_report_initiate: an error message, EC-REPORT-ACTIVE, nothing else.
+            eprintln!("libcob: error: INITIATE {} was already done", self.name);
+            crate::runtime::exception::set("EC-REPORT-ACTIVE");
+            return;
+        }
         self.curr_page = 1;
         self.curr_line = 0;
         self.incr_line = true;
@@ -2471,7 +2707,11 @@ impl Report {
 
     /// cob_report_generate of a DETAIL group, or of the report (None).
     pub fn generate(&mut self, group: Option<usize>, events: &mut Events) {
-        if !self.initiate_done { fail(&format!("GENERATE {} but no INITIATE was done", self.name)); }
+        if !self.initiate_done {
+            // cob_report_generate: EC-REPORT-INACTIVE, then cob_hard_failure.
+            crate::runtime::exception::set("EC-REPORT-INACTIVE");
+            crate::runtime::fatal_error(format!("GENERATE {} but no INITIATE was done", self.name).as_bytes());
+        }
         self.foot_next_page = false;
         if self.incr_line {
             self.incr_line = false;
@@ -2587,7 +2827,11 @@ impl Report {
     /// cob_report_terminate: the CONTROL FOOTINGs, CONTROL FOOTING FINAL,
     /// the page footing and the REPORT FOOTING.
     pub fn terminate(&mut self, events: &mut Events) {
-        if !self.initiate_done { fail(&format!("TERMINATE {} but no INITIATE was done", self.name)); }
+        if !self.initiate_done {
+            // cob_report_terminate: EC-REPORT-INACTIVE, then cob_hard_failure.
+            crate::runtime::exception::set("EC-REPORT-INACTIVE");
+            crate::runtime::fatal_error(format!("TERMINATE {} but no INITIATE was done", self.name).as_bytes());
+        }
         if self.first_generate { return; }
         for c in 0..self.controls.len() {
             for r in self.controls[c].refs.clone() {
@@ -2615,5 +2859,296 @@ impl Report {
     fn find(lines: &[ReportLine], start: Option<usize>, kind: u32) -> bool {
         let Some(index) = start else { return false };
         lines[index].flags & kind != 0 || Self::find(lines, lines[index].child, kind) || Self::find(lines, lines[index].sister, kind)
+    }
+}
+
+/// fileio.c library routines on byte-stream files and directories
+/// (CBL_OPEN_FILE ... C$DELETE). Their parameters are data addresses; a
+/// numeric literal comes as its cob_content int or u64. COB_PARAM_CHECK is
+/// not defined in GnuCOBOL 3.2: a missing argument is a NULL address.
+pub mod routines {
+    use crate::runtime::{fail, Value};
+    use crate::storage_runtime::{parameter_bytes, store_parameter};
+    use std::ffi::{c_char, c_int, c_long, c_void, CString};
+
+    extern "C" {
+        fn open(path: *const c_char, flags: c_int, ...) -> c_int;
+        fn read(fd: c_int, buf: *mut c_void, count: usize) -> isize;
+        fn write(fd: c_int, buf: *const c_void, count: usize) -> isize;
+        fn lseek(fd: c_int, offset: i64, whence: c_int) -> i64;
+        fn close(fd: c_int) -> c_int;
+        fn fdatasync(fd: c_int) -> c_int;
+        fn localtime_r(time: *const c_long, result: *mut c_int) -> *mut c_int;
+    }
+    const O_RDONLY: c_int = 0;
+    const O_WRONLY: c_int = 1;
+    const O_RDWR: c_int = 2;
+    const O_CREAT: c_int = 0o100;
+    const O_TRUNC: c_int = 0o1000;
+    const COB_FILE_MODE: c_int = 0o644;
+
+    pub fn known(name: &str) -> bool {
+        matches!(name, "CBL_OPEN_FILE" | "CBL_CREATE_FILE" | "CBL_READ_FILE" | "CBL_WRITE_FILE" | "CBL_CLOSE_FILE"
+            | "CBL_FLUSH_FILE" | "CBL_DELETE_FILE" | "CBL_COPY_FILE" | "CBL_CHECK_FILE_EXIST" | "CBL_RENAME_FILE"
+            | "CBL_GET_CURRENT_DIR" | "CBL_CREATE_DIR" | "CBL_CHANGE_DIR" | "CBL_DELETE_DIR" | "C$MAKEDIR"
+            | "C$CHDIR" | "C$COPY" | "C$FILEINFO" | "C$DELETE")
+    }
+
+    fn unsupported(name: &str, reason: &str) -> ! {
+        fail(&format!("routine système {name}: {reason}"))
+    }
+
+    /// The address passed as parameter `index`: None for OMITTED.
+    fn data(name: &str, arguments: &[Value], index: usize) -> Option<Vec<u8>> {
+        let Some(argument) = arguments.get(index) else {
+            unsupported(name, "argument absent : adresse indéterminée (pas de COB_PARAM_CHECK)")
+        };
+        parameter_bytes(argument)
+    }
+
+    fn bytes_at(name: &str, arguments: &[Value], index: usize, count: usize) -> Vec<u8> {
+        let bytes = data(name, arguments, index).unwrap_or_else(|| unsupported(name, "lecture d'une adresse NULL (SIGSEGV)"));
+        if bytes.len() < count { unsupported(name, "lecture au-delà du paramètre non modélisée"); }
+        bytes
+    }
+
+    fn store(name: &str, arguments: &[Value], index: usize, offset: usize, bytes: &[u8]) {
+        let Some(argument) = arguments.get(index) else { unsupported(name, "argument absent") };
+        store_parameter(argument, offset, bytes);
+    }
+
+    fn int(name: &str, arguments: &[Value], index: usize) -> i32 {
+        if let Some(Value::Num(..)) = arguments.get(index) {
+            // An int passed BY VALUE.
+            return arguments[index].integer("C int BY VALUE") as i32;
+        }
+        i32::from_le_bytes(bytes_at(name, arguments, index, 4)[..4].try_into().unwrap())
+    }
+
+    /// cob_str_from_fld: trailing spaces and NULs dropped, every quote removed.
+    fn str_from_fld(field: &[u8]) -> Vec<u8> {
+        let mut end = field.len();
+        while end > 1 && matches!(field[end - 1], b' ' | 0) { end -= 1; }
+        if end == 0 || matches!(field[end - 1], b' ' | 0) { return Vec::new(); }
+        field[..end].iter().copied().filter(|&b| b != b'"').collect()
+    }
+
+    /// cob_str_from_fld of parameter `index`, then cob_chk_file_mapping.
+    fn file_name(name: &str, arguments: &[Value], index: usize, mapping: bool) -> Option<CString> {
+        let field = data(name, arguments, index)?;
+        let mut text = str_from_fld(&field);
+        if text.len() > 4095 { unsupported(name, "nom de fichier au-delà de COB_FILE_MAX"); }
+        if mapping && !text.is_empty() { text = super::file_mapping(&text); }
+        Some(CString::new(text).unwrap_or_else(|_| unsupported(name, "nom de fichier avec NUL interne")))
+    }
+
+    fn os_path(path: &CString) -> &std::ffi::OsStr {
+        use std::os::unix::ffi::OsStrExt;
+        std::ffi::OsStr::from_bytes(path.as_bytes())
+    }
+
+    fn errno() -> i32 { std::io::Error::last_os_error().raw_os_error().unwrap_or(0) }
+
+    /// errno_cob_sts.
+    fn errno_status(default: i32) -> i32 {
+        match errno() {
+            28 | 122 => 34,       // ENOSPC, EDQUOT
+            1 | 13 | 21 => 37,    // EPERM, EACCES, EISDIR
+            2 => 35,              // ENOENT
+            _ => default,
+        }
+    }
+
+    fn warning(message: String) {
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        eprintln!("libcob: warning: {message}");
+    }
+
+    fn open_cbl_file(name: &str, arguments: &[Value], flags: c_int) -> i32 {
+        let failed = [0xFFu8; 4];
+        let Some(path) = file_name(name, arguments, 0, true) else {
+            store(name, arguments, 4, 0, &failed);
+            return -1;
+        };
+        let access = bytes_at(name, arguments, 1, 1)[0] & 0x3F;
+        let mode = match access {
+            1 => O_RDONLY,
+            2 => O_CREAT | O_TRUNC | O_WRONLY,
+            3 => O_RDWR,
+            _ => {
+                warning(format!("call to CBL_OPEN_FILE with wrong access mode: {access}"));
+                store(name, arguments, 4, 0, &failed);
+                return -1;
+            }
+        };
+        let fd = unsafe { open(path.as_ptr(), flags | mode, COB_FILE_MODE) };
+        if fd == -1 {
+            let status = errno_status(35);
+            store(name, arguments, 4, 0, &failed);
+            return status;
+        }
+        store(name, arguments, 4, 0, &fd.to_le_bytes());
+        0
+    }
+
+    fn file_time(name: &str, path: &CString) -> Option<(u64, [c_int; 6])> {
+        let metadata = std::fs::metadata(os_path(&path)).ok()?;
+        use std::os::unix::fs::MetadataExt;
+        let mtime = metadata.mtime() as c_long;
+        let mut tm = [0 as c_int; 16];
+        if unsafe { localtime_r(&mtime, tm.as_mut_ptr()) }.is_null() { unsupported(name, "localtime impossible"); }
+        // struct tm: sec, min, hour, mday, mon, year.
+        Some((metadata.len(), [tm[0], tm[1], tm[2], tm[3], tm[4], tm[5]]))
+    }
+
+    pub fn call(name: &str, arguments: &[Value], modes: &[&str]) -> Option<i32> {
+        if !known(name) { return None; }
+        if name == "CBL_GET_CURRENT_DIR" && modes.get(..2) != Some(&["VALUE", "VALUE"][..]) {
+            unsupported(name, "flags et longueur requis BY VALUE (int C)");
+        }
+        if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            unsupported(name, "profil Linux x86_64 requis (descripteurs et ABI natifs)");
+        }
+        Some(match name {
+            "CBL_OPEN_FILE" => open_cbl_file(name, arguments, 0),
+            "CBL_CREATE_FILE" => {
+                let lock = bytes_at(name, arguments, 2, 1)[0];
+                if lock != 0 { warning(format!("call to CBL_CREATE_FILE with wrong file_lock: {lock}")); }
+                let device = bytes_at(name, arguments, 3, 1)[0];
+                if device != 0 { warning(format!("call to CBL_CREATE_FILE with wrong file_dev: {device}")); }
+                open_cbl_file(name, arguments, O_CREAT | O_TRUNC)
+            },
+            "CBL_READ_FILE" | "CBL_WRITE_FILE" => {
+                let fd = int(name, arguments, 0);
+                let flags = bytes_at(name, arguments, 3, 1)[0];
+                if name == "CBL_READ_FILE" && flags & 0x80 != 0 {
+                    // fstat (the file position is kept): the size, big-endian.
+                    use std::os::fd::FromRawFd;
+                    let file = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd) });
+                    let Ok(metadata) = file.metadata() else { return Some(-1) };
+                    store(name, arguments, 1, 0, &(metadata.len() as i64).to_be_bytes());
+                    return Some(0);
+                }
+                let offset = i64::from_be_bytes(bytes_at(name, arguments, 1, 8)[..8].try_into().unwrap());
+                let length = i32::from_be_bytes(bytes_at(name, arguments, 2, 4)[..4].try_into().unwrap());
+                if unsafe { lseek(fd, offset, 0) } == -1 { return Some(-1); }
+                let Some(Value::View(buffer)) = arguments.get(4) else { unsupported(name, "tampon absent") };
+                if name == "CBL_READ_FILE" {
+                    if length <= 0 { return Some(0); }
+                    if length as usize > buffer.size { unsupported(name, "lecture au-delà du tampon non modélisée"); }
+                    let mut bytes = vec![0u8; length as usize];
+                    let count = unsafe { read(fd, bytes.as_mut_ptr().cast(), bytes.len()) };
+                    if count < 0 { return Some(-1); }
+                    if count == 0 { return Some(10); }
+                    store(name, arguments, 4, 0, &bytes[..count as usize]);
+                    0
+                } else {
+                    if length < 0 || length as usize > buffer.size { unsupported(name, "écriture au-delà du tampon non modélisée"); }
+                    let bytes = bytes_at(name, arguments, 4, length as usize);
+                    let count = unsafe { write(fd, bytes.as_ptr().cast(), length as usize) };
+                    if count != length as isize { 30 } else { 0 }
+                }
+            },
+            "CBL_CLOSE_FILE" => unsafe { close(int(name, arguments, 0)) },
+            "CBL_FLUSH_FILE" => unsafe { fdatasync(int(name, arguments, 0)) },
+            "CBL_DELETE_FILE" | "C$DELETE" => {
+                if name == "C$DELETE" && arguments.len() < 2 { return Some(128); }
+                let Some(path) = file_name(name, arguments, 0, true) else { return Some(if name == "C$DELETE" { 128 } else { -1 }) };
+                if std::fs::remove_file(os_path(&path)).is_err() { 128 } else { 0 }
+            },
+            "CBL_COPY_FILE" | "C$COPY" => {
+                if name == "C$COPY" && arguments.len() < 3 { return Some(128); }
+                let status = copy_file(name, arguments);
+                if name == "C$COPY" && status < 0 { 128 } else { status }
+            },
+            "CBL_RENAME_FILE" => {
+                let (Some(from), Some(to)) = (file_name(name, arguments, 0, true), file_name(name, arguments, 1, true))
+                    else { return Some(-1) };
+                if std::fs::rename(os_path(&from), os_path(&to)).is_err() { 128 } else { 0 }
+            },
+            "CBL_CHECK_FILE_EXIST" | "C$FILEINFO" => {
+                let info_area = data(name, arguments, 1);
+                let fileinfo = name == "C$FILEINFO";
+                let Some(info_area) = info_area else { return Some(if fileinfo { 128 } else { -1 }) };
+                let Some(path) = file_name(name, arguments, 0, !fileinfo) else { return Some(if fileinfo { 128 } else { -1 }) };
+                if info_area.len() < 16 {
+                    eprintln!("libcob: error: '{name}' - File detail area is too short");
+                    return Some(if fileinfo { 128 } else { -1 });
+                }
+                let Some((size, [sec, min, hour, day, month, year])) = file_time(name, &path) else { return Some(35) };
+                let (year, month, second) = (year + 1900, month + 1, if sec >= 60 { 59 } else { sec });
+                let mut info = size.to_be_bytes().to_vec();
+                if fileinfo {
+                    info.extend(((year * 10000 + month * 100 + day) as u32).to_be_bytes());
+                    info.extend(((hour * 1_000_000 + min * 10000 + second * 100) as u32).to_be_bytes());
+                } else {
+                    info.extend([day as u8, month as u8]);
+                    info.extend((year as i16).to_be_bytes());
+                    info.extend([hour as u8, min as u8, second as u8, 0]);
+                }
+                store(name, arguments, 1, 0, &info);
+                0
+            },
+            "CBL_GET_CURRENT_DIR" => {
+                let flags = int(name, arguments, 0);
+                let length = int(name, arguments, 1);
+                if length < 1 { return Some(128); }
+                if flags != 0 { return Some(129); }
+                let Some(Value::View(area)) = arguments.get(2) else { unsupported(name, "zone absente") };
+                if length as usize > area.size { unsupported(name, "écriture au-delà du paramètre non modélisée"); }
+                store(name, arguments, 2, 0, &vec![b' '; length as usize]);
+                let Ok(directory) = std::env::current_dir() else { return Some(128) };
+                let directory = directory.into_os_string().into_encoded_bytes();
+                let quoted = directory.contains(&b' ');
+                if directory.len() + if quoted { 2 } else { 0 } > length as usize { return Some(128); }
+                let text = if quoted { [&b"\""[..], &directory, b"\""].concat() } else { directory };
+                store(name, arguments, 2, 0, &text);
+                0
+            },
+            "CBL_CREATE_DIR" | "CBL_CHANGE_DIR" | "CBL_DELETE_DIR" | "C$MAKEDIR" | "C$CHDIR" => {
+                let Some(path) = file_name(name, arguments, 0, false) else {
+                    return Some(if name.starts_with("C$") { 128 } else { -1 });
+                };
+                let os = os_path(&path);
+                let ok = match name {
+                    "CBL_CREATE_DIR" | "C$MAKEDIR" => {
+                        use std::os::unix::fs::DirBuilderExt;
+                        std::fs::DirBuilder::new().mode(0o770).create(os).is_ok()
+                    },
+                    "CBL_DELETE_DIR" => std::fs::remove_dir(os).is_ok(),
+                    _ => std::env::set_current_dir(os).is_ok(),
+                };
+                let status = if ok { 0 } else { 128 };
+                if name == "C$CHDIR" {
+                    let Some(Value::View(_)) = arguments.get(1) else { unsupported(name, "statut absent") };
+                    unsupported(name, "cob_set_int du statut non modélisé");
+                }
+                status
+            },
+            _ => unreachable!(),
+        })
+    }
+
+    fn copy_file(name: &str, arguments: &[Value]) -> i32 {
+        let Some(from) = file_name(name, arguments, 0, true) else { return -1 };
+        let Some(to) = file_name(name, arguments, 1, true) else { return -1 };
+        let source = unsafe { open(from.as_ptr(), O_RDONLY, 0) };
+        if source == -1 { return errno_status(35); }
+        let target = unsafe { open(to.as_ptr(), O_CREAT | O_TRUNC | O_WRONLY, COB_FILE_MODE) };
+        if target == -1 {
+            let status = errno_status(35);
+            unsafe { close(source) };
+            return status;
+        }
+        let mut buffer = vec![0u8; 8192];
+        let mut status = 0;
+        loop {
+            let count = unsafe { read(source, buffer.as_mut_ptr().cast(), buffer.len()) };
+            if count <= 0 { break; }
+            if unsafe { write(target, buffer.as_ptr().cast(), count as usize) } != count { status = -1; break; }
+        }
+        unsafe { close(source); close(target); }
+        status
     }
 }

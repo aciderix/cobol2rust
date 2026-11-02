@@ -10,6 +10,11 @@ def layout_fields(fields):
                 f.size = f.edit_size
             elif f.usage in {"COMP-3", "COMPUTATIONAL-3", "PACKED-DECIMAL"}:
                 f.size = (f.digits + 2) // 2
+            elif f.usage in {"COMP-X", "COMP-N"}:
+                f.size = f.comp_x_size
+            elif f.usage in {"COMP-1", "COMP-2"}:
+                # C float and double.
+                f.size = 4 if f.usage == "COMP-1" else 8
             elif f.usage == "COMP-6":
                 # compute_size: no sign nibble.
                 f.size = (f.digits + 1) // 2
@@ -94,23 +99,28 @@ def layout_fields(fields):
         if not f.depending:
             continue
         controller = fields[f.depending]
-        if controller.kind != "number" or controller.scale or controller.dimensions or controller.index_for:
-            raise CobolError("DEPENDING ON requiert un entier scalaire avec PICTURE")
+        # cb_validate_one: a numeric item; cob_get_int truncates its value.
+        if controller.kind != "number" or controller.dimensions or controller.index_for:
+            raise CobolError("DEPENDING ON requiert une donnée numérique scalaire")
         if f.parent is None:
             raise CobolError("OCCURS DEPENDING ON limité à une table subordonnée")
         cursor = f
-        while cursor.parent:
+        # typeck.c validate_field_1 (parent_is_pic_l): the implicit FILLER of
+        # a PICTURE L item ends at that item, whose size is fixed above it.
+        while cursor.parent and not cursor.picture_l:
             parent = fields[cursor.parent]
-            if parent.table or parent.children[-1] != cursor.name:
+            if not parent.picture_l and (parent.table or parent.children[-1] != cursor.name):
                 raise CobolError("OCCURS DEPENDING ON doit terminer chaque groupe parent, sans OCCURS englobant")
             cursor = parent
         root = cursor
         if controller.name.startswith(f.name + "."):
             raise CobolError("contrôleur DEPENDING ON dans sa propre table non pris en charge")
         subtree = [item for item in fields.values() if item.name == root.name or item.name.startswith(root.name + ".")]
-        # The other 01 records of an FD share its area (an implicit REDEFINES).
-        if any(item.redefines for item in subtree if not (item is root and root.file_record)) or any(
-                item.redefines == root.name and not (item.file_record and item.parent is None) for item in fields.values()):
+        # The other 01 records of an FD share its area (an implicit REDEFINES);
+        # field.c validate_redefines lets a PICTURE L item redefine or be redefined.
+        if any(item.redefines for item in subtree if not (item is root and (root.file_record or root.picture_l))) or any(
+                item.redefines == root.name and not (item.file_record and item.parent is None) and not root.picture_l
+                for item in fields.values()):
             raise CobolError("REDEFINES d'un groupe variable non pris en charge")
     return total
 

@@ -7,28 +7,42 @@
 
 ## État courant — 30 octobre 2026 (à tenir à jour à chaque commit)
 
-Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4),
-sans branche distante plus avancée au contrôle du 28 octobre. Reprise locale
+Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4).
+Contrôle du 30 octobre sur `7ca8420` : aucune branche distante en avance sur
+`main` (`claude/upbeat-fermi-2hplbi` repart de `main`, `claude/hopeful-allen-q389mo`
+y est contenue) ; suite Python **491 découverts, 490 validés, un PE Windows
+ignoré** (environ 8 min), NIST statique **451/458**, mesure des corpus réels à
+jour (`tools/real_corpora.py --check`). Reprise locale
 sur cette base ; les anciens changements DATA RECORD sont préservés dans le
 stash nommé « Travail DATA RECORD du 22 octobre preserve avant synchronisation
 Claude », sans réapplication de leur production déjà remplacée.
 
-Mesure des corpus réels : **1214/3593 sources acceptées** (cobc 1617,
-écart 403, à examiner 0) ; testsuite GnuCOBOL 490/1135, six corpus d'origine
+Mesure des corpus réels : **1262/3593 sources acceptées** (cobc 1617,
+écart 355, à examiner 0) ; testsuite GnuCOBOL 538/1135, six corpus d'origine
 724/2458. Exécution globale renouvelée le 30 octobre : CardDemo 8/8,
-zopeneditor 0/3, cours 10/12, livre 53/61, soit **71/84 identiques**,
-cinq divergences et huit délais. Les trois exemples zopeneditor ont stdout
-et fichiers identiques, mais plantent en natif à la fermeture implicite
-après GOBACK (descripteur ASSIGN périmé, codes -11/16). Les deux autres
-divergences sont les indices hors bornes des deux rapports du chapitre 18.
-Listing13-6 est désormais identique. Voir VALIDATION.md et
+zopeneditor 3/3, cours 10/12, livre 53/61, soit **74/84 identiques**,
+deux divergences et huit délais. Les trois exemples zopeneditor plantaient en
+natif à la fermeture implicite après GOBACK (descripteur ASSIGN périmé,
+-11 contre 16) ; ce plantage n'est plus observé (six essais natifs à 16),
+sans changement côté Rust : il dépend de la mémoire native et peut revenir.
+Les deux divergences sont les indices hors bornes des deux rapports du
+chapitre 18. Voir VALIDATION.md et
 `measurements/real-corpora.json`.
 NIST CCVS85 : 451/458 émissions ; preuve historique du runner, 413 programmes
 exécutés/comparés et 14 autres seulement compilés. La nouvelle mesure NIST
 est statique ; elle ne relance pas les 413 programmes.
 
-Méthode suivie à chaque étape (voir CAP.md) : choisir dans « Premiers
-blocages » de CAP.md ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
+Pipeline parallèle (31 octobre, tools/README.md) : `tools/run_tests.py`
+(suite en ~3 min), `real_corpora.py` (~3,5 min avec exécution), `coverage.py`
+et `nist_verify.py` répartissent sur les CPU (`-j`). Tout build Rust passe par
+`toolchain.build_slot` ; ne pas réintroduire de `--target-dir` partagé sans
+emplacement verrouillé ni `cargo clean -p` (empreinte Cargo indépendante du
+chemin). Le cache d'analyse (`cli.analysis_cache`) ne sert qu'aux mesures,
+sur corpus en lecture seule.
+
+Méthode suivie à chaque étape (voir CAP.md) : choisir dans la table
+« Chantier » de CAP.md (inventaire de l'écart, `tools/gap_inventory.py`)
+ou dans « Premiers blocages » ; lire le C de cobc/libcob 3.2 (`/opt/src/gnucobol-3.2`
 quand `tools/install_gnucobol.sh` l'a déployé) ; essai natif `cobc -x` des
 formes, y compris les cas limites ; fixture native dans
 `tests/fixtures/` vérifiée dans la suite Python ; exécuter
@@ -40,7 +54,119 @@ pendant une mesure (elle serait périmée) : préparer l'étape suivante dans un
 copie du paquet. Lancer les longues commandes en tâche de fond de l'outil,
 pas avec `&` (SIGINT ignoré : `test_runtime_registers` échoue).
 
-Dernière étape (30 octobre) : routines système d'octets. `system_calls.py`
+Dernière étape (31 octobre) : COLUMN PLUS, erreurs de reportio et OPEN de
+plusieurs fichiers. `report_parser.report_columns` porte `output_report_data`
+(`ReportEntry.column_plus`). `Report::initiate/generate/terminate` portent les
+erreurs de reportio.c ; `ReportSpec.written` garde le nom du RD. Un OPEN de
+plusieurs modes (`Stmt.entries`, un groupe par mode) devient, dans
+`control.py`, la linéarisation de l'arbre des instructions implicites : nœuds
+`io` marqués `deferred_check` et nœuds `open_check`, ce dernier désignant le
+dernier fichier ouvert comme `cob_error_file` ;
+le programme porte `io_status`/`open_use`. `runtime::exception` suit
+`cob_exception_code` (`current`, `clear_current`, `unknown_current`,
+`pending`, `error_file`), avec les émissions de `track_current` limitées aux
+unités ayant un tel OPEN et des DECLARATIVES. Acceptation **1255 →
+1262/3593**, écart **362 → 355**. NIST : 20 programmes à OPEN multiple
+re-vérifiés 20/20 ; statique **451/458**
+(`build/coverage-nist-column-plus-20261031.json`).
+
+Étape précédente (31 octobre) : EXTERNAL AS. `data_parser.declaration` lit
+`AS littéral` et pose `external_name` (`cb_to_cname`) ; `Emitter.shared_block`
+l'utilise et refuse `ERRNO` de 4 octets ; `storage_runtime::external` porte
+`cob_external_addr` (avertissement, erreur fatale). Acceptation **1250 →
+1255/3593**, écart **367 → 362**. La pile « Last statement of … Started by »
+de libcob après une erreur fatale n'est toujours pas reproduite (chemin de
+l'exécutable) : run_misc-014/smaller et run_misc-040/callee2 n'en diffèrent
+que par elle. NIST statique **451/458**
+(`build/coverage-nist-external-as-20261031.json`). Suite complète : **514
+découverts, 513 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : INITIALIZE VALUE et DEFAULT.
+`Stmt("initialize")` porte `(cibles, with_filler, replacing, value, default)`.
+`Emitter.initialize_statement` porte `deduce_initialize_type`,
+`output_initialize_one` et `output_initialize_compound` pour les formes avec
+VALUE ou REPLACING + DEFAULT ; `declare_value` factorise la VALUE de
+l'initialisation ; `storage_runtime::propagate_table` recopie la première
+occurrence. Les formes simples et REPLACING seul gardent leurs chemins.
+Acceptation **1245 → 1250/3593**, écart **372 → 367** ; les cinq sources
+débloquées identiques avec codes zéro. NIST statique **451/458**
+(`build/coverage-nist-initialize-20261030.json`). Suite complète : **510
+découverts, 509 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : START complet et READ PREVIOUS. Le frontend
+porte `start_op` (`start_operator`, formes NOT, NOT = refusé), FIRST, LAST et
+`WITH SIZE/LENGTH` (index[2] de la clé INDEXED) ; `Stmt("read")` porte un
+sixième argument `previous`. `file_runtime.rs` : `StartCondition` à sept
+valeurs, `relative_start` et `start_internal` (chemin BDB) complets,
+`read_next(..., previous, ...)` en RELATIVE (champ `begin_of_file` ajouté,
+reculs de `relative_read_next` portés tels quels) et INDEXED (`Step`
+First/Last/Next/Prev de `indexed_read_next`). Acceptation **1240 →
+1245/3593**, écart **377 → 372** ; les cinq sources débloquées identiques
+avec codes zéro. NIST statique **451/458**
+(`build/coverage-nist-start-20261030.json`). Suite complète : **507
+découverts, 506 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : dernière exception (FUNCTION EXCEPTION-STATUS/
+LOCATION/STATEMENT/FILE, SET LAST EXCEPTION TO OFF). `runtime.rs`, module
+`exception` : table `exception.def`, `set`, `off`, `module`, `save_status`,
+`unknown`/`unknown_file` et les quatre lectures, arrêt nommé si l'état est
+inconnu. Sources portées dans le runtime (division, PROHIBITED, MOD/REM,
+ISO 8601, ACCEPT, strings.c, ALLOCATE/FREE, `file_status`) et dans
+l'émetteur : `store_exception` (DISPLAY/édité), `checked_assign` sous SIZE
+ERROR, `tally_store`, `nan_exception`, liste blanche `EXCEPTION_STATEMENTS`
+et `EXCEPTION_FUNCTIONS` (fermeture des appels d'intrinsic.c) ; le reste
+écrit `runtime::exception::unknown` au point exact d'évaluation. Suivi
+généré seulement si l'unité lit la dernière exception (`uses_exceptions`).
+`RunUnit` porte `stmt_exception`/`call_exception` : un CALL récursif sous ON
+EXCEPTION rend -1 avec EC-PROGRAM-RECURSIVE-CALL (`cob_module_global_enter`).
+Un programme RECURSIVE (ou qui appelle son propre PROGRAM-ID) actif est
+rappelé par une activation : `activation()` est un alias de l'instance
+(WORKING-STORAGE et fichiers partagés, fichiers en `Shared`) dont la
+LOCAL-STORAGE et NUMBER-OF-CALL-PARAMETERS ont une mémoire neuve
+(`storage_runtime::rehome`) ; `p<n>_base` (ou `main_base`) garde l'alias de
+l'activation externe.
+`open_files()` décide si CANCEL ou la fin d'un INITIAL ferme des fichiers.
+Attention : un NOT ON EXCEPTION écrit après le DISPLAY d'un ON EXCEPTION
+appartient à ce DISPLAY (refus nommé existant) ; une sonde native ainsi
+écrite fait croire que cobc enchaîne les deux branches du CALL, à tort.
+Acceptation **1225 → 1240/3593**, écart **392 → 377** ; douze des quinze
+sources débloquées identiques avec codes zéro, deux identiques en code 1
+voulu, callee2 de run_misc-040 seul ne diffère que par la pile de l'erreur
+fatale. NIST statique **451/458**
+(`build/coverage-nist-exceptions-20261030.json`). Sous `-debug`,
+EXCEPTION-LOCATION/STATEMENT restent refusées. Suite complète : **504
+découverts, 503 validés, un PE Windows ignoré**.
+
+Étape précédente (30 octobre) : modèle d'adresses (USAGE POINTER, BASED,
+ADDRESS OF, SET ADDRESS/UP/DOWN, ALLOCATE, FREE). `storage_runtime.rs`
+(section « Addresses ») remplace une adresse native par une région et un
+décalage dans les 8 octets du POINTER : `records` enregistre chaque 01/77
+d'un programme (registres, LINKAGE, BASED et blocs partagés exclus),
+`address_of`, `bind_address`, `allocate`, `free`, `compare_addresses`,
+`static_base`. Les vues liées portent la fin de leur région (`limit`) et
+`View::mem/mem_mut` arrêtent nommément tout accès hors région, par NULL ou
+après FREE/CANCEL. Une zone `malloc` garde un masque des octets non écrits
+(`check_defined`/`define`) : `mem_mut` suppose une écriture complète de la
+vue, STRING marque ses seuls octets copiés. Côté frontend, `kind="pointer"`
+fait refuser les pointeurs par défaut aux autres chemins ; `set_address`,
+`allocate_statement`, `free_statement` portent les diagnostics de cobc. Un
+article LINKAGE hors USING garde son adresse (pointeur statique de cobc, à
+travers CALL et CANCEL) ; `cancel_entry` libère les BASED. ASSIGN sans
+adresse : statut 31 et nom `field with NULL address` (`assign_field` de
+`file_runtime.rs`). Acceptation **1214 → 1225/3593**, écart **403 → 392** ;
+sept des onze sources débloquées identiques avec codes zéro, une arrêtée des
+deux côtés sur le statut 31, trois arrêts nommés voulus (DISPLAY d'adresse,
+deux SIGSEGV natifs). NIST statique **451/458**
+(`build/coverage-nist-pointers-20261030.json`). Restent refusés : BY VALUE
+d'un pointeur, PROGRAM-POINTER, CONTENT-OF, VALUE en LINKAGE hors BASED,
+OCCURS UNBOUNDED, TYPEDEF, EXTERNAL AS, RECURSIVE (RECURSIVE et TYPEDEF
+pris en charge depuis le 1er novembre 2026). Suite complète :
+**498 découverts, 497 validés, un PE Windows ignoré**.
+
+Les douze clauses SELECT LOCK MODE/SHARING restent des tests de verrous
+entre processus (`fcntl`, verrous Berkeley DB) avec CALL "SYSTEM".
+
+Étape précédente (30 octobre) : routines système d'octets. `system_calls.py`
 décrit les douze noms natifs et l'ABI de leur longueur scalaire ;
 `system_runtime.rs` porte les boucles de `common.c` avec alias vivants.
 Les huit CBL logiques et TOUPPER/TOLOWER (alias compris) renvoient zéro.
@@ -54,9 +180,28 @@ Les noms sont normalisés (espaces/NUL/composant de chemin) ; les appels
 dynamiques gardent leur avertissement et la priorité des programmes
 contenus, tandis qu'un appel système littéral reste direct. Les scalaires
 statiques supplémentaires ne sont pas décodés. Un argument alphanumérique
-BY VALUE est réécrit BY CONTENT, comme dans cobc. Les autres ABI utilisateur,
-paramètres formels BY VALUE, CALL RETURNING, résultats de FUNCTION à
-description conservée et FUNCTION scalaires supplémentaires restent refusés.
+BY VALUE est réécrit BY CONTENT, comme dans cobc. CALL RETURNING/GIVING
+vers une donnée numérique suit `cob_set_int` (RETURN-CODE inchangé),
+RETURNING OMITTED n'écrit rien ; un argument FUNCTION alphanumérique passe
+par un temporaire, LENGTH OF par `cob_content`. Les routines de common.c
+`SYSTEM`, `C$SLEEP`, `C$GETPID`, `C$JUSTIFY`, `C$PRINTABLE`, `C$NARG`,
+`C$PARAMSIZE` et `C$CALLEDBY` sont portées (pile des paramètres reçus dans
+`RunUnit`, qui donne aussi NUMBER-OF-CALL-PARAMETERS ; USING OPTIONAL ne joue
+que dans le contrôle d'entrée de `--runtime-checks`, la condition OMITTED
+teste l'absence de stockage), ainsi que `CBL_GC_GETOPT` (getopt GNU de cobgetopt.c, état
+statique et permutation d'argv dans `system_runtime::getopt`, `*flag` écrit
+par `storage_runtime::store_at_address` ; `verify --arg` donne les mêmes
+arguments et le même argv[0] aux deux programmes). PICTURE L est un groupe à
+FILLER ODO implicite (`Field.picture_l`, data_parser) ; `variable_groups`
+s'arrête à l'article PIC L, layout ne demande pas à son ODO de terminer les
+groupes englobants. L'environnement et les arguments (`runtime::environment`,
+`runtime::argv` partagé avec getopt) sont l'instruction `environment` du
+frontend ; ses phrases ON EXCEPTION deviennent un IF sur `imp_exception`.
+Les verrous de fichiers sont `file_runtime::whole_file_lock` (fcntl) ; l'OPEN
+reçoit l'exclusivité par `lock_mode()` (`Stmt.sharings` de l'OPEN, bits
+`FileSpec.lock_mode`), UNLOCK est l'op `unlock`. Les autres ABI utilisateur, paramètres formels BY VALUE, CALL
+RETURNING vers une donnée non numérique, FUNCTION numériques en argument et
+FUNCTION scalaires supplémentaires restent refusés.
 Les accès hors allocation, littéraux en écriture et pointeurs omis positifs
 restent nommés. Les autres limites de lecture des indices ne changent pas.
 
@@ -161,11 +306,11 @@ Les en-têtes Berkeley DB sont aussi dans le sysroot ; `CPATH` et
 `/workspace/tooling/bdb-dev-20261028/manifest.json`.
 
 Prochains chantiers, par sources débloquées (« Premiers blocages » de CAP.md) :
-SCREEN SECTION (36 des 37 « niveau de donnée attendu »), USAGE POINTER (14),
-clauses SELECT de verrouillage (12), DISPLAY ... LINE/COLUMN
+SCREEN SECTION (36 des 37 « niveau de donnée attendu »), clauses SELECT de
+verrouillage (12, essais entre processus), DISPLAY ... LINE/COLUMN
 d'écran (9 + 6), RECURSIVE et FUNCTION-ID (8 + 8),
-EXCEPTION-STATUS/LOCATION/STATEMENT (une douzaine de tests : exige de
-modéliser `cob_set_exception`), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
+les sources d'exception encore inconnues (fonctions non auditées,
+receveurs binaires/packés, -debug), MODULE-ID/CALLER-ID/DATE/TIME/SOURCE/PATH
 (7), fonctions LOCALE-*
 et symboles de `localeconv` (6 : dépendent de la locale), BIT-OF/BIT-TO-CHAR,
 COMBINED-DATETIME, SECONDS-PAST-MIDNIGHT. ANY NUMERIC et partage de
@@ -173,8 +318,8 @@ descripteurs GLOBAL sont des extensions distinctes à mesurer.
 Les ABI BY VALUE utilisateur/externe et les paramètres formels restent un
 chantier distinct ; les treize blocages historiques ne sont plus un groupe
 de treize sources à débloquer après le port des routines système.
-Exécution : cinq divergences (trois plantages natifs zopeneditor, deux
-indices hors bornes dans le livre), six délais du livre et deux du cours.
+Exécution : deux divergences (indices hors bornes dans le livre), six délais
+du livre et deux du cours ; le plantage natif zopeneditor peut revenir.
 
 L'audit des 37 premiers blocages distingue 33 programmes SCREEN manuels,
 trois tests syntaxiques SCREEN et un cas de séparateurs autour de COPY/
@@ -1053,7 +1198,14 @@ Voir aussi `README.md`, `ARCHITECTURE.md`, `VALIDATION.md` et `tools/README.md`.
    Cas de régression : `tests/fixtures/aliasing.cob`.
 3. **Arithmétique décimale.** Coefficients BigInt et échelles explicites,
    sans flottants. La division reproduit le décalage de 38 chiffres GnuCOBOL 3.2.
-   Ne pas simplifier `(1 / 3) * 3` en 1.
+   Ne pas simplifier `(1 / 3) * 3` en 1. Les COMP-1/COMP-2 ne calculent pas en
+   flottant : ils sont lus en décimal exact (`runtime::float::from_f64`,
+   `cob_decimal_set_double`) et stockés par troncature vers zéro
+   (`to_f64`, `mpf_get_d`), puis arrondi au plus près pour un float ; seuls
+   DISPLAY (`%.8G`/`%.16G`) et `cob_cmp_float` (tolérance relative 1e-7) lisent
+   les octets natifs. `cob_cmp_llint` (opérande droit entier) reste exact.
+   Le pliage constant de cobc (`fold_binary`, `cb_build_binary_op`) change le
+   chemin de comparaison ; garder sa garde de taille (`literal_size`).
 4. **SIZE ERROR.** Division par zéro et dépassement de PICTURE sont récupérables
    par le chemin contrôlé. L'arrondi précède le contrôle, et une erreur laisse
    la destination intacte. Un résultat négatif non signé perd son signe dans ce

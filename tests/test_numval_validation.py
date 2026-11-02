@@ -56,9 +56,17 @@ class NumvalValidationFrontendTests(unittest.TestCase):
 
     def test_calculated_storage_is_not_treated_as_literal_digits(self):
         for name in ("NUMVAL-F", "TEST-NUMVAL", "TEST-NUMVAL-C", "TEST-NUMVAL-F"):
-            for operand in ("-(1)", "+(1)", "1 + 2", "function integer(49.9)"):
+            for operand in ("-(1)", "+(1)", "function integer(49.9)"):
                 with self.subTest(name=name, operand=operand), self.assertRaisesRegex(CobolError, "stockage"):
                     Emitter(Parser(program("display function " + name + "(" + operand + ").")).parse()).generate()
+            # cb_build_binary_op folds 1 + 2 into the literal 3 (identical to
+            # native); numvalc_args (expr_x) admits no arithmetic at all.
+            source = program("display function " + name + "(1 + 2).")
+            if name == "TEST-NUMVAL-C":
+                with self.subTest(name=name), self.assertRaisesRegex(CobolError, "syntax error, unexpected"):
+                    Parser(source).parse()
+            else:
+                Emitter(Parser(source).parse()).generate()
             for operand in ("-12.30", "+0012.30"):
                 with self.subTest(name=name, operand=operand):
                     Emitter(Parser(program("display function " + name + "(" + operand + ").")).parse()).generate()

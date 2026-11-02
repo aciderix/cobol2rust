@@ -199,7 +199,7 @@ class ControlGraph:
             return "text" if ref.start is not None else self.program.fields[ref.name].kind
         if expr.op in {"number", "text"}:
             return expr.op
-        if expr.op.startswith("cmp") or expr.op in {"and", "or", "not", "condition", "bool", "numeric_class", "switch", "user_class"}:
+        if expr.op.startswith("cmp") or expr.op in {"and", "or", "not", "condition", "bool", "numeric_class", "omitted_class", "switch", "user_class", "imp_exception"}:
             return "bool"
         return "number"
 
@@ -326,14 +326,48 @@ class ControlGraph:
             destinations = [(value, self._body(body, after, block)) for value, body in branches]
             return self._add("evaluate", (subject, destinations, self._body(otherwise, after, block)), stmt)
         if op == "read":
-            name, into, exception, success, _ = args
+            name, into, exception, success, _, _ = args
             success_body = self._body(success, after, block)
             # cb_emit_read: on success, after INTO, the record as DEBUG-CONTENTS.
             success_body = self._file_debug(name, block, success_body, ("record", name)) or success_body
             return self._add("read", (name, into, success_body,
                                       self._body(exception, after, block), after,
                                       self._declaratives(name, after, block)), stmt)
-        if op in {"open", "close"} and len(args[0]) > 1:
+        if op == "open" and len(getattr(stmt, "entries", [])) > 1:
+            # open_file_entry: the implicit statements of an entry are the
+            # children of the last one of the previous entry, so its check
+            # follows theirs. Every check tests cob_exception_code, which the
+            # last cob_open (or a USE procedure) left.
+            groups = [[args[0][i] for i in entry] for entry in stmt.entries]
+            sequence = []
+            def run(index):
+                for position, part in enumerate(groups[index]):
+                    sequence.append(("open", part))
+                    if position == len(groups[index]) - 1 and index + 1 < len(groups):
+                        run(index + 1)
+                    sequence.append(("check", part))
+            run(0)
+            opened, last = [], None
+            for kind, part in sequence:
+                last = part[1] if kind == "open" else last
+                opened.append(last)
+            position = after
+            for (kind, part), last in reversed(list(zip(sequence, opened))):
+                if kind == "check":
+                    position = self._add("open_check", (part[1], last, position,
+                                                        self._declaratives(part[1], position, block)), stmt)
+                else:
+                    single = Stmt(op, ([part],), stmt.line)
+                    single.deferred_check = True
+                    position = self._statement(single, position, block)
+            return position
+        if op == "open" and len(args[0]) > 1:
+            # One entry: each file has its implicit statement and error check.
+            position = after
+            for part in reversed(args[0]):
+                position = self._statement(Stmt(op, ([part],), stmt.line), position, block)
+            return position
+        if op == "close" and len(args[0]) > 1:
             # cobc gives each file its own implicit statement and error check.
             position = after
             for part in reversed(args[0]):
@@ -350,7 +384,7 @@ class ControlGraph:
             if args[2] is not None:
                 node = self._add("execute", (Stmt("assign", (args[2], [args[1]], False), stmt.line), node), stmt)
             return node
-        if op in {"open", "close", "write", "rewrite", "delete", "start"}:
+        if op in {"open", "close", "write", "rewrite", "delete", "start", "unlock"}:
             name = args[0][0][1] if op == "open" else args[0][0][0] if op == "close" else args[0]
             invalid = valid = None
             if op in {"write", "rewrite", "delete", "start"} and (args[-2] or args[-1]):

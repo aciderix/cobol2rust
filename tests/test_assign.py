@@ -35,7 +35,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(spec.assign_field, "G.N")
         rust = "\n".join(Emitter(Parser(program("select f assign to n.", "01 n pic x(8).",
                                                 "open input f. close f. stop run.")).parse()).program_lines()[0])
-        self.assertIn(".assign(&", rust)
+        self.assertIn("storage_runtime::assign_bytes(&", rust)
 
     def test_external_drops_labels_and_devices(self):
         self.assertEqual(self.spec("select f assign to external UT-S-Data1.").path.text, "Data1")

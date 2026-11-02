@@ -49,11 +49,12 @@ class ReportParseTests(unittest.TestCase):
         # Without PAGE, a field's LINE exceeds the limit 0: limitCheckOneLine
         # does not guard rf->line with def_lines > 0, so INITIATE reports it.
         text = program("", "01 d type detail.\n    03 line 1 column 3 pic x(4) source w.").replace("rd r .", "rd r.")
-        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE R LINE 1 exceeds PAGE LIMIT")
-        self.assertIn('.with_initiate_error("INITIATE R LINE 1 exceeds PAGE LIMIT")', unit(text)[4])
+        # r->report_name: the RD name as written.
+        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE r LINE 1 exceeds PAGE LIMIT")
+        self.assertIn('.with_initiate_error("INITIATE r LINE 1 exceeds PAGE LIMIT")', unit(text)[4])
         # A group LINE beyond PAGE LIMIT: the message gives the limit.
         text = program("page 20", DETAIL_GROUP.replace("line plus 1", "line 21"))
-        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE R LINE 21 exceeds PAGE LIMIT 20")
+        self.assertEqual(Parser(text).parse().reports["R"].initiate_error, "INITIATE r LINE 21 exceeds PAGE LIMIT 20")
 
     def test_counters_and_statements(self):
         procedure = ("initiate r. generate d. generate r. move line-counter to n. "
@@ -84,7 +85,7 @@ class ReportParseTests(unittest.TestCase):
         cases = [
             program("page 20", DETAIL_GROUP.replace("source w", "sum n")),
             program("page 20", DETAIL_GROUP.replace('pic x(2) value "OK"', 'pic 9(2) value "12"')),
-            program("page 20", DETAIL_GROUP.replace("column 9", "column plus 2")),
+            program("page 20", DETAIL_GROUP.replace("column 9", "column right 9")),
             program("page 20", DETAIL_GROUP.replace("line plus 1", "line next page")),
             program("page 20 heading 5 first detail 3", DETAIL_GROUP),
             program("page 20 last detail 10 footing 8", DETAIL_GROUP),

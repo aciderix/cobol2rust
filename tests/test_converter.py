@@ -12,7 +12,7 @@ from cobol2rust.binary import inspect_binary, pe_info, elf_info
 from cobol2rust.cli import convert, main
 from cobol2rust.emitter import Emitter
 from cobol2rust.frontend import CobolError, Parser, lex, load_source, normalize
-from cobol2rust.toolchain import ROOT, build_rust, compiler_env, find_tool
+from cobol2rust.toolchain import ROOT, build_rust, build_slot, compiler_env, find_tool
 
 
 def program(body, data=""):
@@ -38,12 +38,11 @@ class FrontendTests(unittest.TestCase):
             program("perform missing stop run."),
             program("stop run.", "01 n pic 9(2) occurs 1 to 3 depending on count-a."),
             program("stop run.", "01 group-a."),
-            program("stop run.", "01 n usage comp-1."),
+            program("stop run.", "01 n usage float-decimal-16."),
             program("stop run.", "01 n pic 9(39)."),
             program("stop run.", "01 n pic 9 value 'bad'."),
             program("display n.", "01 n pic 9. 01 n pic 9."),   # ambiguous reference
             program("stop run.", "01 x pic x(0)."),
-            program("accept n from microsecond-time.", "01 n pic 9(8)."),
         ]
         for source in cases:
             with self.subTest(source=source), self.assertRaises(CobolError):
@@ -104,8 +103,9 @@ class FrontendTests(unittest.TestCase):
         Emitter(Parser(source("record key is k alternate record key is a with duplicates")).parse()).generate()
         # READ KEY of an item no key starts at: status 23 (cob_findkey_attr).
         Emitter(Parser(source("record key is k", "read f key is a. stop run.")).parse()).generate()
+        # SUPPRESS WHEN of an alternate key is modelled (tests/test_split_keys.py).
+        Emitter(Parser(source("record key is k alternate record key is a suppress when space")).parse()).generate()
         for case in (source("record key is w"), source("alternate record key is a"),
-                     source("record key is k alternate record key is a suppress when space"),
                      source("record key is k", "start f key is = w. stop run.")):
             with self.subTest(case=case), self.assertRaises(CobolError):
                 Emitter(Parser(case).parse()).generate()
@@ -194,7 +194,8 @@ class RuntimeTests(unittest.TestCase):
             source.write_text(program("stop run."), encoding="utf-8")
             project = root / "rust"
             convert(source, project)
-            p = subprocess.run([cargo, "test", "--quiet", "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(ROOT / "build" / "rust-target")], capture_output=True, env=compiler_env(cargo), timeout=120)
+            with build_slot() as target:
+                p = subprocess.run([cargo, "test", "--quiet", "--manifest-path", str(project / "Cargo.toml"), "--target-dir", str(target)], capture_output=True, env=compiler_env(cargo), timeout=300)
             self.assertEqual(p.returncode, 0, p.stdout.decode(errors="replace") + p.stderr.decode(errors="replace"))
 
     def test_divide_zero_overflow_and_invalid_input_abort(self):

@@ -1,5 +1,709 @@
 # Validation — 30 octobre 2026
 
+## XML GENERATE et JSON GENERATE — 1er novembre 2026
+
+- Fixture `tests/fixtures/ml_generate.cob` identique au natif (52 lignes) :
+  échappements de contenu et d'attribut (guillemet, `<>&`, CR, TAB, LF),
+  UTF-8 en référence de caractère dans un attribut, octet final laissé brut,
+  éléments et attributs `hex.` (XML-CODE 417), nombres DISPLAY, COMP-3,
+  COMP, COMP-5, INDEX, P à gauche et à droite, édité brut, JUSTIFIED, OCCURS
+  (première occurrence), WITH ATTRIBUTES (attributs numériques bruts),
+  NAME OF, TYPE OF, SUPPRESS par identifiant, EVERY et WHEN seul, attributs
+  de racine jamais testés, indicateur collant sur deux passages, dix espaces
+  de noms et cinq préfixes (416, 419), receveurs trop courts avec et sans
+  déclaration (400 et 1, COUNT IN), sortie de 4 520 octets, flottant en
+  attribut, JSON (échappements, NUL, clés en double, OMITTED), DISPLAY qui
+  prend NOT ON EXCEPTION, concaténation `"ab"- "cd"`.
+- Fixture `tests/fixtures/ml_generate_comma.cob` identique au natif, sortie
+  d'erreur et code de retour compris : virgule décimale en XML, point en
+  JSON, littéraux `,75` et `,,5`, VALUE d'un article édité, homonymes sous
+  deux groupes FILLER (non contrôlés par cobc), arrêt `cob_fatal_error` sur un
+  contenu flottant. Les deux défauts de virgule décimale corrigés existaient
+  avant ce chantier et donnaient une sortie fausse sans refus.
+- Le test qui imposait le refus de `CALL … ON EXCEPTION DISPLAY … NOT ON
+  EXCEPTION …` est remplacé : le DISPLAY prend la phrase, comme cobc
+  (vérifié : « A » puis « B »).
+- Validateur d'URI (Python et Rust) comparé à `xmlParseURI` de la libxml2
+  installée : 0 différence sur 20 027 puis 30 000 chaînes ; un test de la
+  suite le refait sur 5 000 chaînes.
+- Refus de cobc reproduits et vérifiés par `cobc -fsyntax-only` (25 formes) ;
+  XML GENERATE dans un programme contenu refusé comme cobc (« missing
+  register definition ») ; la forme sur laquelle cobc ne se termine pas
+  (vérifié : arrêt par délai) est refusée.
+- Sources débloquées identiques au natif : run_ml-002, 003, 004, 005, 008,
+  009, 010, 011, 012, run_misc-022, TEST10, TEST14, TEST15.
+- Mesure : **1395 → 1408/3593**, écart **222 → 209**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-ml.json`) ; suite
+  **632 tests**, 0 échec.
+
+## FD GLOBAL et articles non GLOBAL — 1er novembre 2026
+
+- Fixture `tests/fixtures/global_file_status.cob` identique au natif : READ
+  d'un fichier RELATIVE GLOBAL par un programme contenu, FILE STATUS (23 puis
+  00) et RELATIVE KEY non GLOBAL relus par le propriétaire ; nommer FS dans le
+  programme contenu reste refusé comme par cobc.
+- Sources débloquées identiques au natif : run_file-105,
+  run_fundamental-035, 037.
+- Mesure : **1392 → 1395/3593**, écart **225 → 222**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-gf.json`) ; suite
+  **619 tests**, 0 échec.
+
+## Clés INDEXED composées et SUPPRESS — 1er novembre 2026
+
+- Fixture `tests/fixtures/split_keys.cob` identique au natif, fichier compris :
+  clé primaire composée (ordre des composantes différent de l'enregistrement),
+  clé alternative composée avec DUPLICATES, clé alternative simple avec
+  SUPPRESS WHEN ALL "*", doublon de clé primaire (22), READ KEY par l'article
+  composé, START par la clé composée, START par un article au déplacement 0
+  (accepté par cobc, statut 23), REWRITE vers une clé supprimée, DELETE.
+- Refus de cobc reproduit : START par la première composante (« invalid key
+  item »).
+- Sources débloquées identiques au natif : run_file-024, 025, 026, 090,
+  syn_file-040.
+- Mesure : **1387 → 1392/3593**, écart **230 → 225**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-sk.json`) ; suite
+  **617 tests**, 0 échec après mise à jour du test qui imposait le refus de SUPPRESS.
+
+## Lot 3 : SPECIAL-NAMES, classes, portée des GLOBAL — 1er novembre 2026
+
+- Fixture `tests/fixtures/small_constructs_3.cob` identique au natif : deux
+  phrases CLASS séparées par un point, classe utilisateur sur PIC 9, S9 (octet
+  à surfrappe), 9.99, COMP et sous-chaîne, ALPHABETIC d'un numérique, X
+  GLOBAL d'un conteneur intermédiaire masquant celui du programme externe.
+- Sources débloquées identiques au natif : run_fundamental-021, 114.
+- Mesure : **1385 → 1387/3593**, écart **232 → 230**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lot3.json`) ; suite
+  **612 tests**, 0 échec.
+
+## Lot 2 de constructions générales — 1er novembre 2026
+
+- Fixtures identiques au natif : `small_constructs_2.cob` (EVALUATE à objets
+  partiels relationnels, de classe et de signe, avec ALSO ; STOP
+  identificateur ; point redondant ; registre WHEN-COMPILED sous sa forme),
+  `read_handler_class.cob` (READ direct RELATIVE avec AT END : statut 23
+  sans gestionnaire exécuté), `value_literals.cob` (VALUE numérique et
+  trop long en PIC X, BXX et groupe), `sort_qualified_procedures.cob`
+  (paragraphes homonymes WORK OF FEED / IN DRAIN).
+- Comportements de cobc vérifiés au natif : INVALID KEY refusé sur un READ
+  SEQUENTIAL, VALUE ZERO d'un PIC A refusé, référence à un 88 homonyme
+  ambiguë, `CBL_OC_DUMP` résolu dans `COB_LIBRARY_PATH` (laissé refusé),
+  centièmes d'ACCEPT FROM TIME présents sous Linux quel que soit le receveur.
+- Sources débloquées identiques au natif : run_accept-003 (à l'horloge
+  près), run_file-064, run_fundamental-079, run_misc-146,
+  syn_definition-019 et 059, syn_misc-062 et 093, syn_value-008, 009, 012 ;
+  case99 (che4z) seulement acceptée, la forme étant vérifiée par
+  `sort_qualified_procedures.cob`.
+- Mesure : **1373 → 1385/3593**, écart **244 → 232**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lot2.json`) ; suite
+  **610 tests**, 0 échec.
+
+## Fonctions de locale — 1er novembre 2026
+
+- Fixture `tests/fixtures/locale_functions.cob` identique au natif :
+  `localeconv` (symbole monétaire et séparateurs vides, point décimal « . »
+  sous LC_NUMERIC « C »), LOCALE-COMPARE (espaces de fin, minuscule contre
+  majuscule, locale POSIX en argument, argument de locale blanc en erreur),
+  LOCALE-DATE d'une date alphanumérique, numérique, avec locale et en
+  sous-chaîne, date invalide (dix espaces, EC-ARGUMENT-FUNCTION),
+  LOCALE-TIME (24:00:00 admis, minutes invalides), LOCALE-TIME-FROM-SECONDS
+  (86400 admis, argument alphanumérique refusé à l'exécution comme libcob).
+- Refus de cobc reproduit : littéral en second argument de LOCALE-DATE,
+  LOCALE-TIME et LOCALE-TIME-FROM-SECONDS (`locale_dt_args`).
+- Sources débloquées identiques au natif : run_functions-017, 047 à 050,
+  070 à 073.
+- Mesure : **1364 → 1373/3593**, écart **253 → 244**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-loc.json`) ; suite
+  **605 tests**, 0 échec.
+
+## Fonctions intrinsèques du module, du pointeur et du calcul — 1er novembre 2026
+
+- Fixture `tests/fixtures/module_functions.cob` identique au natif : SIGN
+  d'un littéral, d'un FLOAT-LONG et d'un -0.0 décimal (affichage sur 9
+  chiffres, signe seulement si négatif), COMBINED-DATETIME valide,
+  à 86400 secondes et invalide (EC-ARGUMENT-FUNCTION, dernière exception
+  conservée par un appel valide), CONTENT-LENGTH et CONTENT-OF (longueur,
+  sous-chaîne, octet NUL pointé, POINTER NULL dans STRING), MODULE-ID et
+  MODULE-CALLER-ID du principal et d'un programme contenu, MODULE-DATE,
+  MODULE-TIME, MODULE-FORMATTED-DATE, MODULE-PATH et SECONDS-PAST-MIDNIGHT
+  par leur forme (leurs valeurs dépendent de l'instant de compilation).
+- Comportement de cobc constaté au natif : dans `DISPLAY f EXCEPTION-STATUS`,
+  EXCEPTION-STATUS est évalué avant `f` (arguments de `cob_display` évalués
+  de droite à gauche par gcc) ; ce mélange est refusé.
+- Sources débloquées identiques au natif : run_functions-008, 013, 014,
+  063 (prog et prog2), 064 à 069, 090, 091.
+- Mesure : **1351 → 1364/3593**, écart **266 → 253**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-fn.json`) ; suite
+  **602 tests**, 0 échec.
+
+## RECURSIVE — 1er novembre 2026
+
+- Fixture `tests/fixtures/recursive_calls.cob` avec l'appelé dynamique
+  `tests/fixtures/recursive_calls/FACTR.cob` identique au natif (stdout et
+  fichier `factr.txt`) : principal RECURSIVE qui s'appelle lui-même (GOBACK
+  de l'activation appelée, LOCAL-STORAGE propre), programme contenu qui
+  appelle son propre PROGRAM-ID sans attribut, factorielle RECURSIVE à cinq
+  niveaux (WORKING-STORAGE partagée, LOCAL-STORAGE, USING, pile de PERFORM
+  et NUMBER-OF-CALL-PARAMETERS propres à chaque activation, fichier ouvert
+  au premier niveau et écrit à tous).
+- Comportements de cobc vérifiés au natif : INITIAL RECURSIVE et `IS` seul
+  en erreur de syntaxe, RECURSIVE inconnu en cobol85, appel de son propre
+  PROGRAM-ID sensible à la casse et en erreur d'exécution en cobol85
+  (message identique), CANCEL d'un programme RECURSIVE actif sans effet
+  avant l'appel suivant (arrêt nommé chez nous,
+  `tests/fixtures/recursive_cancel.cob`), END PROGRAM du programme externe
+  facultatif en fin de source, mais pas celui d'un programme contenu.
+- Sources débloquées identiques au natif : run_fundamental-048,
+  run_misc-037 (caller, callee, callee2), syn_definition-005.
+- Mesure : **1346 → 1351/3593**, écart **271 → 266**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-rec.json`) ;
+  suite **598 tests**, 0 échec.
+
+## Paramètres facultatifs et omis — 1er novembre 2026
+
+- Fixture `tests/fixtures/optional_params.cob` avec l'appelé dynamique
+  `tests/fixtures/optional_params_calls/OPTSUB.cob` identique au natif, sans
+  contrôles et sous `--runtime-checks` (`cobc -debug`) : USING OPTIONAL
+  (deux paramètres, un BY REFERENCE explicite), arguments manquants et
+  OMITTED, NUMBER-OF-CALL-PARAMETERS (principal 0, appelé, ENTRY, programme
+  contenu, MOVE vers un numérique), `[IS] [NOT] OMITTED` sur LINKAGE,
+  BASED alloué ou non et WORKING-STORAGE, SET ADDRESS d'un paramètre omis.
+- Comportements de cobc vérifiés au natif : registre affiché en +S9(9)
+  (index, pas BINARY-LONG), homonyme déclaré ambigu, registre absent et
+  OPTIONAL refusé en cobol85, OMITTED d'une sous-chaîne décalée faux (refusé
+  chez nous), ENTRY sans OPTIONAL ; sous -debug, paramètre obligatoire absent
+  arrêté à l'entrée (code 1 chez cobc, arrêt nommé chez nous).
+- Sources débloquées : run_extensions-034, run_file-021, run_misc-101
+  identiques au natif (`cobol2rust verify --call-path`) ; run_misc-116 :
+  SIGSEGV chez cobc sans -debug, arrêt nommé chez nous.
+- Mesure : **1338 → 1346/3593**, écart **279 → 271**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-opt.json`) ;
+  suite **591 tests**, 0 échec.
+
+## TYPEDEF, TYPE TO, USAGE nom-de-type et SAME AS — 1er novembre 2026
+
+- Fixture `tests/fixtures/typedefs.cob` identique au natif : BINARY-LONG
+  par USAGE nom-de-type avec VALUE de la cible, PIC S9(3)V99 SIGN LEADING
+  SEPARATE avec VALUE du type, PIC X JUSTIFIED RIGHT, type de groupe avec
+  VALUE, REDEFINES et niveau 88 copié sous une table OCCURS 2 et sous un 01,
+  SAME AS d'un élémentaire et d'un groupe.
+- Refus de cobc vérifiés au natif : PIC avec TYPE TO, TYPEDEF au niveau 05,
+  TYPE TO d'un article ordinaire, SAME AS d'un TYPEDEF, 77 TYPE TO d'un
+  groupe, entrée subordonnée à une cible TYPE TO.
+- Sources débloquées identiques au natif : run_fundamental-097 (caller avec
+  callee).
+- Mesure : **1336 → 1338/3593**, écart **281 → 279**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-type.json`) ;
+  suite **582 tests**, 0 échec.
+
+## Lot de constructions générales — 31 octobre 2026
+
+- Fixture `tests/fixtures/small_constructs.cob` identique au natif (avec
+  une ligne en entrée) : UNSTRING d'un littéral avec ON/NOT ON OVERFLOW et
+  d'une FUNCTION UPPER-CASE, CALL STATIC d'un programme contenu (ON
+  EXCEPTION ignoré, NOT ON EXCEPTION exécuté), INSPECT TALLYING FOR ALL NULL
+  et CONVERTING NULL, ACCEPT OMITTED nu et avec NOT ON EXCEPTION.
+- Essais natifs : INSPECT NULL avec un alphabet de collation modifié (NULL
+  reste x"00"), REPLACING ALL/FIRST NULL, CONVERTING vers NULL ; CALL
+  STATIC d'un programme absent (échec de l'édition de liens de cobc).
+- Sources débloquées identiques au natif : run_accept-001, run_misc-048,
+  -049, -074, -080.
+- Mesure : **1331 → 1336/3593**, écart **286 → 281**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-small.json`) ;
+  suite **578 tests**, 0 échec.
+
+## Expressions de constantes — 31 octobre 2026
+
+- Fixture `tests/fixtures/constant_lengths.cob` identique au natif :
+  LENGTH OF d'un article sous OCCURS (taille × occurrences), d'un
+  enregistrement, d'un REDEFINES, d'un 01 redéfini ensuite par un plus
+  grand, BYTE-LENGTH, littéral, mots d'usage, NEXT après un COMP-3 et après
+  une table (premier élément), NEXT après un 01 (0, puis 6 une fois sa
+  taille calculée par LENGTH OF), START OF en FILE SECTION, expression d'un
+  01 CONSTANT.
+- Essais natifs des refus : START OF en WORKING-STORAGE, START OF d'une
+  table sans indice, BYTE-LENGTH en niveau 78 ou au second emploi,
+  FLOAT-BINARY-n (mot réservé non pris en charge).
+- Sources débloquées identiques au natif : run_fundamental-044,
+  run_misc-163, run_misc-164 (>>DEFINE et CONSTANT FROM), syn_misc-105.
+- Mesure : **1327 → 1331/3593**, écart **290 → 286**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-const.json`) ;
+  suite **574 tests**, 0 échec.
+
+## Partage et verrouillage de fichiers — 31 octobre 2026
+
+- Fixture `tests/fixtures/file_locks/` (lock-main et son compagnon
+  lock-probe, qui tente un OPEN INPUT de chaque fichier) identique au
+  natif : écrivains (61 pour SEQUENTIAL, LINE SEQUENTIAL, RELATIVE et LOCK
+  MODE EXCLUSIVE, 00 pour INDEXED), UNLOCK (00 ; relâché sauf mode
+  exclusif), lecteurs compatibles, EXTEND et I-O WITH LOCK (61), INPUT
+  SHARING WITH NO OTHER (00 : verrou en lecture), UNLOCK d'un fichier fermé
+  (00), lectures WITH NO LOCK / KEPT LOCK, tout relâché au CLOSE.
+- Sources débloquées identiques au natif : run_file-028, -055 à -059, -065
+  à -072 (avec prog2 en compagnon), syn_file-011 (arrêt libcob 35
+  identique) et -012.
+- Mesure : **1310 → 1327/3593**, écart **307 → 290**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-lock.json`) ;
+  suite **571 tests**, 0 échec après retrait du cas `read f with lock` de
+  `test_files` (cobc l'accepte).
+
+## Environnement, arguments et ligne de commande — 31 octobre 2026
+
+- Fixture `tests/fixtures/environment.cob` identique au natif (stdout,
+  stderr, code) avec les arguments `first`, `two words`, `3` et sans
+  argument : variable absente (EC-IMP-ACCEPT, espace déplacé), valeur
+  tronquée de ses espaces, ON et NOT ON EXCEPTION dans les deux ordres,
+  récepteur numérique, valeur vide, FUNCTION en valeur, `setenv` refusé
+  (nom `A=B`), nom vide, héritage par CALL "SYSTEM", ARGUMENT-NUMBER vers
+  numérique et alphanumérique, parcours d'ARGUMENT-VALUE jusqu'à
+  l'exception, DISPLAY UPON ARGUMENT-NUMBER (2, 9 hors limites, -1 pris en
+  valeur absolue), COMMAND-LINE court, long et remplacé.
+- Sources débloquées : run_extensions-044 (avec arguments),
+  run_file-059/prog1 et run_file-069/prog1 identiques au natif ;
+  run_fundamental-086 s'arrête par « SET ENVIRONMENT de COB_SET_DEBUG :
+  réglage de libcob relu par cob_rescan_env_vals, non modélisé ».
+- Refus de cobc reproduits : figurative ou deux opérandes avec UPON
+  ENVIRONMENT-NAME (« syntax error »), littéral numérique ou article non
+  DISPLAY en `simple_display_value`, phrase sans instruction.
+- Mesure : **1305 → 1310/3593**, écart **312 → 307**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-env.json`) ;
+  suite **568 tests**, 0 échec.
+
+## PICTURE L — 31 octobre 2026
+
+- Fixture `tests/fixtures/picture_l.cob` identique au natif : PIC LX et LA
+  dans un groupe (taille fixe du groupe, longueur courante de l'article),
+  MOVE de littéraux et d'un numérique signé (copie d'octets de groupe :
+  « 1r »), comparaisons, compteur 0 (article vide), `LENGTH OF` (taille de la
+  PICTURE) et FUNCTION LENGTH (longueur courante), INITIALIZE de l'article
+  (longueur courante) et du groupe (capacité), REDEFINES, table OCCURS 3 de
+  PIC L avec contrôleur COMP-1, contrôleur 9V9 (3,7 → 3), MOVE CORRESPONDING
+  dans les deux sens, INSPECT, STRING, sous-chaîne.
+- Sources débloquées : run_extensions-097, -098/under, -099, -100, -101 et
+  syn_misc-147 identiques au natif ; -098/over (compteur au-delà du maximum,
+  le natif lit au-delà de l'article) s'arrête par « OCCURS DEPENDING ON
+  count out of bounds ».
+- Essais natifs du cas général : INITIALIZE d'un groupe ODO à premier fils
+  ODO (longueur courante) et à premier fils fixe (capacité) ; contrôleurs
+  9V9 et COMP-1 acceptés par cobc, résultats identiques.
+- Mesure : **1298 → 1305/3593**, écart **319 → 312**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427 conformes, 9610 PASS, 0 FAIL** (`build/nist-verify-picl.json`) ;
+  suite **563 tests**, 0 échec, après retrait du cas `depending on n` (9V9) de
+  `test_structures` (cobc l'accepte).
+
+## CBL_GC_GETOPT — 31 octobre 2026
+
+- Fixture `tests/fixtures/getopt/getopt.cob` (chaîne d'options et long-only
+  lus sur stdin) identique au natif, stdout, stderr et code, sur cinq jeux :
+  options courtes `b:` `c::` `W;`, longues exactes, abrégées, `=valeur`,
+  optionnelles, deux options à même `flag` (abréviation non ambiguë,
+  `FLAG-VAL` écrit), ambiguïté avec ses possibilités, permutation de `x1`/`x2`,
+  `--` ; long-only avec `:` en tête (messages muets, `:` pour l'argument
+  manquant) et nom de 25 octets prolongé par HAS-VALUE ; `+` (arrêt au
+  premier non-option) ; `-` (non-options rendues avec le code 1) ; options
+  inconnues, argument refusé ou manquant. Essai isolé : CALL dynamique par
+  un nom en donnée identique au natif.
+- Sources débloquées : run_extensions-070 prog à prog5 identiques au natif
+  avec les arguments de la testsuite (`prog5` : « libcob: error: call to
+  CBL_GC_GETOPT with wrong longoption size », code 1).
+- Mesure : **1293 → 1298/3593**, écart **324 → 319**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; suite
+  **558 tests**, 0 échec (`tests/test_getopt.py` : cinq tests).
+
+## Formes de CALL et routines de common.c — 31 octobre 2026
+
+- Fixture `tests/fixtures/library_routines/` (programme principal et
+  sous-programme) identique au natif : RETURNING vers COMP-5 et DISPLAY
+  (RETURN-CODE conservé), RETURNING OMITTED, C$NARG, C$PARAMSIZE (paramètre
+  OMITTED : 0), C$CALLEDBY (nom de l'appelant complété d'espaces, 0 au
+  premier niveau), C$JUSTIFY, C$PRINTABLE, C$SLEEP, SYSTEM (statut 768 de
+  `exit 3`, commande d'un octet : 1 sans exécution). Essai isolé :
+  `C$TOUPPER` BY VALUE avec RETURNING identique au natif.
+- Sources débloquées : les douze programmes principaux (run_extensions-052,
+  -053/prog, -053/caller, -054/caller, -055/caller, -056, -057, -059, -074,
+  run_functions-015, run_misc-041/caller, run_misc-133/caller) identiques au
+  natif par `cobol2rust verify`.
+- Mesure : **1277 → 1293/3593**, écart **340 → 324**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427** conformes ; suite **553 tests**, 0 échec après mise à
+  jour de quatre attentes devenues fausses (CALL RETURNING, SYSTEM et
+  C$JUSTIFY ne sont plus refusés ; `module_routine` contient un
+  `move_number` hors du programme).
+
+## Routines de fichiers d'octets et littéraux de CALL — 31 octobre 2026
+
+- Littéraux de CALL : C généré par cobc lu (`content_N.dataint`,
+  `dataull`) ; sous-programme COBOL recevant 7, 12345678901, -3, 2147483647,
+  1.5 (u64 15), 2147483648, -2147483648 et -12345678901 identique au natif.
+- Routines : `tests/fixtures/byte_stream_routines.cob` identique au natif
+  (stdout, stderr dont l'avertissement « call to CBL_OPEN_FILE with wrong
+  access mode: 9 », fichiers, code de sortie 128) : création, écriture,
+  lecture, taille (drapeau 0x80), fin de fichier (10), fichier absent (35,
+  descripteur FFFFFFFF), copie, existence, renommage, C$FILEINFO,
+  suppression (128 au second essai), répertoires, `CBL_GET_CURRENT_DIR`
+  (0, 129, 128). Sources débloquées identiques au natif : run_file-038,
+  -040, -041, -042/prog2, run_extensions-058.
+- Mesure : **1272 → 1277/3593**, écart **345 → 340**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; suite
+  **549 tests**, 0 échec après retrait du cas `call "x" using by content 1`
+  de `test_real_forms` (cobc l'accepte ; c'était notre ancien refus) ;
+  `tests/test_byte_stream_routines.py` : quatre tests.
+
+## COMP-X et COMP-N — 31 octobre 2026
+
+- Sondes natives : VALUE au-delà des chiffres (warning de cobc, valeur
+  conservée), MOVE 300 vers un octet (44), MOVE 65536 vers deux octets (0),
+  ADD au-delà de la PICTURE (stocké), SIZE ERROR sur 2^24 en 3 octets,
+  MULTIPLY replié modulo 2^16, signé replié (200 en S99 COMP-N : -56),
+  octets gros-boutistes (COMP-X, COMP-N et COMP : 0102, -2 : FFFE), MOVE
+  vers PIC X(4) (« 0258 »), comparaisons, INITIALIZE, PIC 9V9 COMP-X (1.5).
+- Preuve : `tests/fixtures/comp_x.cob` identique au natif ;
+  `tests/test_comp_x.py` : trois tests (tables de field.c, refus de cobc,
+  natif).
+- Mesure inchangée **1272/3593**, écart 345 ; exécution comparée inchangée
+  (74/84) ; NIST statique **451/458** ; suite **545 tests**, 0 échec après
+  remplacement de COMP-X par FLOAT-DECIMAL-16 comme exemple de clause
+  refusée dans `test_pipeline`.
+
+## Virgule flottante binaire — 31 octobre 2026
+
+- Conversions validées hors COBOL : `float::to_f64` (troncature vers zéro) et
+  `float::from_f64` (décimal minimal exact) face à un oracle exact Python
+  (40 000 cas, 0 écart) ; `float::display` face à `%.8G`/`%.16G` (120 028 cas,
+  0 écart) ; arrondi de `mpf_get_str` à 96 chiffres vérifié sur libgmp par
+  ctypes (14 594 entiers, au plus près ; les fractions divergent selon
+  l'approximation de GMP : arrêt nommé).
+- Sondes natives (VALUE, MOVE vers DISPLAY/édité/COMP-3/COMP, arithmétique,
+  comparaisons, dépassement avec et sans SIZE ERROR, -0.0, 2^24 + 1,
+  INITIALIZE, HIGH-VALUE, MOVE de groupe) puis fixture
+  `tests/fixtures/float_binary.cob` identique au natif, dont les sept règles
+  de comparaison (tolérance, x * 1 plié, x * 2 décimal, littéral entier
+  exact, 6.0 avec tolérance, champ entier à droite exact, à gauche avec
+  tolérance).
+- Sources débloquées identiques au natif : run_fundamental-013, -067, -068,
+  -096, run_misc-060, -168, -169 ; run_misc-167 identique jusqu'à l'arrêt
+  nommé (dénormaux, ligne 127). NUMVAL-F/TEST-NUMVAL/TEST-NUMVAL-F de `1 + 2`
+  (plié en 3) identiques au natif ; TEST-NUMVAL-C(1 + 2) refusé comme cobc.
+- Mesure : **1264 → 1272/3593**, écart **353 → 345**, à examiner 0 ;
+  exécution comparée inchangée (74/84) ; NIST statique **451/458** ; NIST
+  complet **427/427, 9610 PASS, 0 FAIL** (`build/nist-verify-float.json`) ;
+  suite **542 tests, 0 échec, un PE Windows ignoré** ;
+  `tests/test_float_binary.py` : neuf tests.
+
+## Littéraux B et H — 31 octobre 2026
+
+- `scan_b` / `scan_h` : B"…" et H"…" donnent un littéral numérique ; cinq
+  cas de refus confrontés à `cobc -fsyntax-only` (caractère invalide, H de
+  17 chiffres, B"012", B en `-std=cobol85`) et B"0101" accepté par les deux.
+- Preuves : `tests/fixtures/boolean_hex_literals.cob` identique au natif
+  (VALUE, MOVE, COMPUTE, comparaison) ; run_extensions-002 et -005
+  identiques au natif ; `tests/test_boolean_hex_literals.py` : quatre tests.
+- Mesure : **1262 → 1264/3593**, écart **355 → 353** ; exécution comparée
+  inchangée (74/84) ; NIST statique **451/458** ; suite **533 tests, 0 échec,
+  un PE Windows ignoré** (`tools/run_tests.py`).
+
+## Inventaire de l'écart — 31 octobre 2026
+
+- Mesure (`real_corpora.py --cobc --execute --record`) : total inchangé
+  **1262/3593**, écart **355**, à examiner 0 ; exécution comparée inchangée
+  (74/84). Seuls changent des libellés de refus : `SCREEN SECTION non prise
+  en charge à cet endroit` (36 sources, auparavant « niveau de donnée
+  attendu »), `GOBACK RETURNING` et `EXIT PROGRAM RETURNING/GIVING non pris
+  en charge` (auparavant « instruction non prise en charge: RETURNING »).
+- Inventaire : **355/355** sources au premier diagnostic identique à la
+  mesure, **198** à inventaire complet, 224 diagnostics distincts ; ordre
+  glouton enregistré dans CAP.md et `measurements/real-corpora.json`.
+- Le mode reprise est inactif hors inventaire (`Parser.recovered = None`) ;
+  la boucle de `block()` réécrite reste équivalente (mêmes arrêts). NIST
+  statique **451/458** (`build/coverage-nist-inventory.json`).
+- Quatre nouveaux tests dans `tests/test_pipeline.py` : diagnostics suivants
+  et premier conservé, usages d'une déclaration sautée, terminateur de
+  l'instruction refusée, plan limité aux inventaires complets.
+- Suite (`tools/run_tests.py`, 4 processus) : **529 tests, 0 échec, un PE
+  Windows ignoré**, en 255 s (somme 1018 s, après redémarrage du conteneur :
+  caches Cargo des emplacements à reconstruire).
+
+## Pipeline de validation parallèle — 31 octobre 2026
+
+Étape d'outillage : rien de ce que le convertisseur accepte ou produit ne
+change. Preuves d'identité :
+
+- Mesure des corpus réels, conversion de 3593 sources : rapports par source
+  identiques à ceux d'avant la modification (statut, diagnostic, programme,
+  empreintes du source étendu et des copybooks) : **0 écart**.
+- Cache d'analyse : Rust émis par `emit_unit` sans cache, avec cache, puis
+  une seconde fois avec cache, comparé sur les **1198 unités acceptées**
+  (programmes principaux des sept corpus) : **0 différence**.
+- Exécution comparée en parallèle : même statut et mêmes raisons pour chacun
+  des 84 programmes (CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre
+  53/61).
+- NIST statique : **451/458**, rapport identique source par source
+  (`build/coverage-nist-pipeline.json`), en 9 s au lieu d'environ une minute.
+- NIST ciblé (20 programmes à OPEN multiple) avec `--jobs` : **20/20
+  conformes**, 124 PASS, 0 FAIL, 1 INSPECT, en 16 s
+  (`build/nist-verify-pipeline.json`).
+- NIST complet avec `--jobs` : **427/427 conformes, 9610 PASS, 0 FAIL,
+  20 DELETED, 118 INSPECT**, comme la référence, en **375 s** au lieu
+  d'environ 1 h 15 (`build/nist-verify-pipeline-full.json`).
+- Suite Python avec `tools/run_tests.py` (4 processus) : **525 tests en
+  162 s** (somme des modules 603 s), un test PE Windows ignoré ; six
+  nouveaux tests dans `tests/test_pipeline.py` (cache d'analyse, portée des
+  constantes et index, builds parallèles de programmes de même nom).
+
+Défaut latent corrigé : deux crates de même nom (`cobol_prog`) compilées
+dans un même répertoire Cargo pendant que la première existait encore
+recevaient le même exécutable (empreinte Cargo indépendante du chemin d'un
+paquet racine). Reproduit par 8 programmes `prog` (sortie `v2` répétée),
+corrigé par `cargo clean -p` dans un emplacement verrouillé ; le test
+`test_programs_with_one_name_built_in_parallel_keep_their_executable` le
+couvre.
+
+## COLUMN PLUS, erreurs de reportio et OPEN de plusieurs fichiers — 31 octobre 2026
+
+- `col_or_plus` et `output_report_data` : COLUMN PLUS n se place à
+  `report_col_pos + n - 1` (la colonne suivant l'article précédent de la
+  ligne) ; sur le premier article d'une LINE, PLUS est ignoré et n est la
+  colonne ; PLUS 0 et un article sans COLUMN prennent `report_col_pos`. Un
+  01, une LINE ou un TYPE remet la position à 1. LEFT/RIGHT/CENTER restent
+  refusés.
+- reportio.c : INITIATE d'un rapport actif affiche `libcob: error: INITIATE
+  r was already done`, lève EC-REPORT-ACTIVE et poursuit ; GENERATE et
+  TERMINATE sans INITIATE lèvent EC-REPORT-INACTIVE puis `cob_hard_failure`.
+  Le nom est celui du RD tel qu'écrit (`r->report_name`).
+- OPEN de plusieurs modes (`open_file_entry`) : d'après le C généré par
+  cobc, chaque mode ouvre un groupe d'instructions implicites, enfants du
+  dernier fichier du groupe précédent (`begin_implicit_statement` avec le
+  `current_statement` d'alors) ; un fichier est contrôlé après son
+  ouverture, le dernier d'un groupe après les groupes suivants, chaque
+  contrôle testant `cob_exception_code`. Dans `OPEN INPUT a OUTPUT b`,
+  l'échec de `a` n'est vu que si `b` échoue aussi, et le gestionnaire par
+  défaut nomme `cob_error_file` (le dernier fichier ouvert). Avec USE, la procédure du
+  dernier fichier peut précéder le gestionnaire par défaut (fatal) d'un
+  autre. Le suivi de `cob_exception_code` (save_status, cob_set_exception,
+  init de STRING/UNSTRING/INSPECT, ALLOCATE/FREE ; fonctions non auditées et
+  CALL : inconnu) n'est généré que pour les unités ayant un tel OPEN et des
+  DECLARATIVES ; une lecture en état inconnu est un arrêt nommé. CLOSE
+  contrôle chaque fichier aussitôt (C généré à l'appui).
+- Preuves : `tests/fixtures/report_column_plus.cob`,
+  `tests/fixtures/open_several.cob` et `tests/fixtures/open_entries.cob`
+  identiques au natif (stdout, stderr, fichiers, codes), ainsi que
+  `declaratives.cob` (deux fichiers d'un même mode, contrôlés chacun) ;
+  `tests/test_open_several_column_plus.py` : cinq tests.
+  Re-vérification NIST des 20 programmes à OPEN multiple : **20/20
+  conformes**, 124 PASS, 0 FAIL, 1 INSPECT (`build/nist-verify-open-20261031.json`).
+
+Mesure : **1255 → 1262/3593**, testsuite **531 → 538/1135**, écart **362 →
+355**. Les sept sources débloquées (run_reportwriter-002/005/006/010/022/023/
+024) s'exécutent à l'identique, cinq avec codes zéro et deux sur l'erreur
+fatale (codes 1/1). Exécution globale renouvelée : **74/84**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-column-plus-20261031.json`).
+Suite Python complète : **519 tests découverts, 518 validés et un test PE
+Windows ignoré**.
+
+## EXTERNAL AS — 31 octobre 2026
+
+- `external_clause` : `EXTERNAL AS littéral` (01/77) ; `cb_to_cname` donne le
+  nom de tout article EXTERNAL (majuscules, `-` et espace en `_`), si bien que
+  `EXT-VAR`, `"ext-var"` et `EXT_VAR` désignent le même article.
+- `cob_external_addr` : l'article est alloué par sa première déclaration ;
+  plus court, `libcob: warning: EXTERNAL item 'X' previously allocated with
+  size N, requested size is M` et le préfixe de l'article est partagé ; plus
+  long, l'erreur `libcob: error: …` (code 1). Le cas spécial `ERRNO` de 4
+  octets (l'`errno` du C) est refusé à la conversion.
+- Preuves : `tests/fixtures/external_as.cob` (deux programmes : littéral en
+  minuscules, collision `other_b`/`other-b`, avertissement de taille)
+  identique au natif, stderr compris ; `tests/test_external_as.py` : quatre
+  tests, dont l'erreur de taille. Suite complète : **514 découverts, 513
+  validés, un PE Windows ignoré**.
+
+Mesure : **1250 → 1255/3593**, testsuite **526 → 531/1135**, écart **367 →
+362**. Quatre sources débloquées identiques avec codes zéro (run_misc-013
+caller/callee, run_misc-014 bigger/callee) ; run_misc-014/smaller s'arrête
+des deux côtés sur l'erreur de taille, mais la pile « Last statement of …
+Started by <chemin> » que libcob ajoute aux erreurs fatales n'est pas
+reproduite. Exécution globale renouvelée : **74/84**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-external-as-20261031.json`).
+
+## INITIALIZE VALUE et DEFAULT — 30 octobre 2026
+
+- Grammaire de parser.y : `_initialize_filler`, `_initialize_value` (ALL ou
+  une catégorie, TO facultatif), `_initialize_replacing`,
+  `_initialize_default` ([THEN] [TO] DEFAULT) ; sans VALUE ni REPLACING,
+  DEFAULT s'applique (`cb_emit_initialize`).
+- `deduce_initialize_type` : SIGN SEPARATE élémentaire, REDEFINES subordonné,
+  FILLER élémentaire sans WITH FILLER, VALUE de l'article ou du groupe,
+  groupe uniforme ou composé, REPLACING par catégorie, DEFAULT (édité et
+  packé par MOVE). `output_initialize_one` : VALUE comme à l'initialisation
+  du stockage (`output_initialize_to_value`), REPLACING par MOVE, DEFAULT par
+  MOVE ZERO/SPACE. `output_initialize_compound` : un article OCCURS est
+  initialisé dans sa première occurrence, recopiée octet pour octet sur les
+  autres (`propagate_table`) ; les parties non initialisées de la première
+  occurrence écrasent donc celles des suivantes, comme en natif.
+- La catégorie de `catégorie TO VALUE` n'est pas vérifiée (aucun test de
+  `p->val` contre la catégorie dans codegen.c) : elle vaut ALL, essai natif à
+  l'appui. Une sous-chaîne ou une table variable reste refusée avec ces
+  phrases ; les formes simples et REPLACING sans DEFAULT gardent leur chemin.
+- Preuves : `tests/fixtures/initialize_value.cob` (neuf cas : VALUE, VALUE
+  de groupe, FILLER, REDEFINES, édité, packé, REPLACING THEN DEFAULT,
+  propagation d'occurrence, occurrence indicée) identique au natif ;
+  `tests/test_initialize_value.py` : trois tests. Suite complète : **510
+  découverts, 509 validés, un PE Windows ignoré**.
+
+Mesure : **1245 → 1250/3593**, testsuite **521 → 526/1135**, écart **372 →
+367**, aucune acceptation refusée par cobc. Les cinq sources débloquées
+s'exécutent à l'identique avec codes zéro. Exécution globale renouvelée :
+**74/84 identiques**, inchangée. NIST statique : **451/458**
+(`build/coverage-nist-initialize-20261030.json`).
+
+## START complet et READ PREVIOUS — 30 octobre 2026
+
+- START : `start_op` de parser.y (`NOT >` = LE, `NOT <` = GE, `NOT >=` = LT,
+  `NOT <=` = GT ; NOT = est une erreur), FIRST et LAST sur la clé du fichier,
+  `WITH SIZE/LENGTH` réservé à INDEXED (`cb_emit_start`), statut 23 hors de
+  1..taille de la clé (`cob_start`). RELATIVE : `relative_start` (FIRST = GE
+  depuis 0, LAST = LE depuis le dernier emplacement, LT/LE bornés à la
+  taille du fichier). INDEXED : chemin BDB d'`indexed_start_internal`
+  (DB_SET_RANGE puis DB_PREV ou DB_LAST ; LE avec doublons par
+  DB_NEXT_NODUP puis DB_PREV).
+- READ PREVIOUS : `cob_read_next` (46 au début de fichier, drapeaux de fin et
+  de début), `relative_read_next` (recul de deux emplacements depuis la
+  position courante, d'un après un enregistrement, `lseek` négatif sans
+  effet : en natif des enregistrements sont sautés, essai à l'appui) et
+  `indexed_read_next` (DB_PREV, DB_LAST en fin de fichier ou après
+  suppression, fin immédiate après OPEN).
+- Preuves : `tests/fixtures/start_previous.cob` (INDEXED à clé alternée avec
+  doublons, clés partielles, toutes les conditions, WITH LENGTH/SIZE ;
+  RELATIVE à trous) identique au natif, statuts, enregistrements et
+  fichiers ; `tests/test_start_previous.py` : trois tests. Suite complète :
+  **507 découverts, 506 validés, un PE Windows ignoré**.
+
+Mesure : **1240 → 1245/3593**, testsuite **516 → 521/1135**, écart **377 →
+372**, aucune acceptation refusée par cobc. Les cinq sources débloquées
+(run_file-030/031/032/073/074) s'exécutent à l'identique avec codes zéro.
+Exécution globale renouvelée : **74/84 identiques**, inchangée. NIST
+statique : **451/458** (`build/coverage-nist-start-20261030.json`).
+
+## Dernière exception — 30 octobre 2026
+
+FUNCTION EXCEPTION-STATUS (9 premiers blocages) et ses voisines EXCEPTION-
+LOCATION/STATEMENT/FILE (6) forment la troisième ligne de la mesure, après
+SCREEN (backend terminal) et les verrous SELECT (essais entre processus).
+Aucune règle ne dépend du nom d'un programme.
+
+- Registre : `cob_set_exception`, `cob_get_last_exception_name` (entrée
+  exacte, puis inclusion depuis la fin de la table) et les quatre fonctions
+  de intrinsic.c ; seule SET LAST EXCEPTION TO OFF (`cob_set_exception (0)`)
+  l'efface. Sans `-fsource-location` (profil par défaut), l'emplacement est
+  « programme; ; 0 » et l'instruction des espaces. Le programme courant
+  (COB_MODULE_PTR) suit les CALL.
+- Sources portées : `save_status` (classe du statut, EC-I-O-EOP ;
+  `cob_error_file` change à chaque opération, même réussie), `cob_decimal_div`,
+  `cob_decimal_get_display` pour un receveur DISPLAY ou le temporaire DISPLAY
+  d'un édité (sans SIZE ERROR, compteurs TALLYING de `cob_add_int`, pas de
+  VARYING), tout receveur sous SIZE ERROR (KEEP_ON_OVERFLOW), PROHIBITED
+  (EC-SIZE-TRUNCATION), strings.c, `cob_allocate`/`cob_free_alloc`,
+  `cob_accept` en fin d'entrée, `cob_mod_or_rem` (zéro au lieu de l'arrêt
+  nommé précédent), les sept fonctions ISO 8601 (`invalid_args`), le CALL
+  introuvable et `cob_module_global_enter` : sous ON EXCEPTION, un appel
+  récursif rend -1 avec EC-PROGRAM-RECURSIVE-CALL, sans NOT ON EXCEPTION.
+- Inconnu, puis arrêt nommé à la lecture : fonctions intrinsèques non
+  auditées (une fermeture des appels d'intrinsic.c isole 44 fonctions sans
+  exception), exponentiation (`cob_decimal_pow`), stockage dans un receveur
+  binaire, packé ou index (chemins optimisés de `cb_build_optim_add`),
+  division par zéro dans une expression contenant une fonction (remise à
+  zéro de `cob_exception_code`), SORT/MERGE, RELEASE, Report Writer, CANCEL
+  ou fin d'un programme INITIAL avec des fichiers ouverts (`cob_close`),
+  USE GLOBAL, SET UP/DOWN et toute instruction non auditée.
+- Refus : EXCEPTION-LOCATION et EXCEPTION-STATEMENT sous `--runtime-checks`
+  (cobc -debug suit section, paragraphe, ligne et sous-clauses).
+- Preuves : `tests/fixtures/exceptions.cob` (E/S, cob_error_file, division,
+  dépassements DISPLAY et édité, PROHIBITED, SIZE ERROR, MOD, FORMATTED-DATE,
+  STRING, UNSTRING, INSPECT, FREE, ALLOCATE, CALL introuvable) et
+  `exception_recursive_call.cob` (trois programmes, code de sortie 255)
+  identiques au natif ; `tests/test_exceptions.py` : six tests dont les
+  refus et trois arrêts nommés. Suite complète : **504 découverts, 503
+  validés, un PE Windows ignoré**.
+
+Mesure : **1225 → 1240/3593 émissions acceptées**, testsuite **501 →
+516/1135**, écart **392 → 377**, aucune acceptation refusée par cobc. Les
+quinze sources débloquées sont de la testsuite : douze identiques avec codes
+zéro (run_functions-024/025 ×2/026/027/036/062/086/119, run_misc-132/170/171) ;
+run_misc-040 caller et callee identiques, terminés par le STOP RUN RETURNING
+1 de leur gestionnaire (codes 1/1, non comptés comme réussites) ; callee2
+exécuté seul s'arrête des deux côtés sur la récursion fatale, mais la pile
+« Last statement of … Started by <chemin> » de libcob n'est pas reproduite.
+Exécution globale renouvelée : **74/84 identiques**, deux divergences et huit
+délais, inchangés. NIST statique : **451/458**, zéro erreur interne
+(`build/coverage-nist-exceptions-20261030.json`).
+
+## Modèle d'adresses — 30 octobre 2026
+
+USAGE POINTER (14 premiers blocages de la mesure précédente avec SET ADDRESS,
+BASED et ALLOCATE) est le deuxième groupe après SCREEN, qui exige un backend
+terminal vérifiable. Aucune règle ne dépend du nom d'un programme.
+
+- Adresses : une région par 01/77 de chaque programme (tableaux `b_` séparés
+  de cobc), par zone ALLOCATE, bloc EXTERNAL ou copie BY CONTENT, et un
+  décalage, encodés en little endian dans les 8 octets du POINTER. Les vues
+  liées à une adresse portent la fin de leur région : tout accès au-delà, par
+  NULL ou après FREE/CANCEL est un arrêt nommé, distinct selon la cause.
+- Ports : `cob_allocate` (NULL si la taille n'est pas dans 1..2147483646 ;
+  `calloc` pour INITIALIZED à low-values, sinon `malloc` puis `cob_move` de
+  la valeur TO), `cb_emit_allocate_identifier` (INITIALIZE WITH FILLER ALL TO
+  VALUE THEN TO DEFAULT), `cob_free_alloc` (seule l'adresse exacte rendue est
+  libérée, le pointeur passe alors à NULL), `cb_check_set_to`, comparaison
+  `(int)(a-b)`, pointeur statique d'un article LINKAGE hors USING (persistant
+  à travers CALL et CANCEL), libération des BASED au CANCEL, INITIALIZE à
+  NULL (REPLACING n'y touche pas).
+- Une zone `malloc` est suivie octet par octet : lire un octet jamais écrit
+  est un arrêt nommé, puisque son contenu natif est indéterminé. Un ASSIGN
+  vers un article sans adresse donne le statut 31 ; le message d'erreur
+  nomme le fichier `('field with NULL address')`, comme `cob_field_to_string`.
+- Arrêts nommés : DISPLAY d'une adresse non NULL, seule ou dans un groupe
+  (ASLR), ordre de deux régions (disposition de l'éditeur de liens). Refus :
+  pointeur BY VALUE (tronqué en int par cobc 3.2), PROGRAM-POINTER et
+  FUNCTION-POINTER, ADDRESS OF PROGRAM, arithmétique et MOVE entre adresse et
+  autre donnée, VALUE en LINKAGE hors BASED, CONTENT-OF/CONTENT-LENGTH.
+- Preuves : fixtures `tests/fixtures/pointers.cob` (programme et
+  sous-programme `keeper` : toutes les formes, statut 31, persistance au
+  CANCEL) et `pointer_tables.cob` (OCCURS de pointeurs, INITIALIZE/REPLACING,
+  REDEFINES d'un BASED, ADDRESS OF modifié) identiques au natif ;
+  `tests/test_pointers.py` vérifie quatorze refus, le message de statut 31 et
+  huit arrêts nommés.
+
+Mesure : **1214 → 1225/3593 émissions acceptées**, testsuite **490 →
+501/1135**, écart **403 → 392**, aucune acceptation refusée par cobc. Les onze
+sources débloquées sont toutes de la testsuite : sept identiques avec codes
+zéro (run_misc-027/097/098/099/127, run_extensions-007, run_file-020/prog2) ;
+run_file-020/prog identique mais arrêté des deux côtés sur le statut 31
+(codes 1/1, non compté comme réussite) ; data_pointer-001 arrêté nommément sur
+le DISPLAY d'une adresse ; run_misc-115/prog et prog2 plantent en natif
+(SIGSEGV, -11) quand Rust s'arrête nommément (70).
+
+Exécution globale renouvelée : **74/84 identiques**, deux divergences (les
+indices hors bornes du livre) et huit délais. CardDemo 8/8, zopeneditor 3/3,
+cours 10/12, livre 53/61. Le passage de zopeneditor de 0/3 à 3/3 ne vient pas
+de ce changement : le natif terminait par -11 à la fermeture implicite
+(descripteur ASSIGN périmé après GOBACK, voir le 29 octobre) et termine
+désormais à 16 comme Rust, sur six essais natifs successifs. Ce plantage
+dépend de la mémoire native ; il peut réapparaître.
+NIST statique : **451/458**, zéro erreur interne
+(`build/coverage-nist-pointers-20261030.json`).
+
 ## Routines système d'octets — 30 octobre 2026
 
 Le chantier vise dix des treize premiers écarts `CALL BY VALUE` de la
