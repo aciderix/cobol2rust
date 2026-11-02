@@ -95,7 +95,7 @@ partie exécution), ne pas éditer à la main. Les paramètres de chaque corpus
 sont figés dans l'outil.
 
 <!-- mesure:début -->
-Dernière mesure : 2026-11-01T20:09:14+00:00 (commit `6f7b449a61`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
+Dernière mesure : 2026-11-02T07:35:37+00:00 (commit `7b3c4dc072`, cobc (GnuCOBOL) 3.2.0). Commande : `python3 tools/real_corpora.py --cobc --record`.
 
 | Corpus | Nature | Sources | cobol2rust accepte | cobc accepte | Écart (cobc oui, nous non) | À examiner (nous oui, cobc non) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -105,10 +105,10 @@ Dernière mesure : 2026-11-01T20:09:14+00:00 (commit `6f7b449a61`, cobc (GnuCOBO
 | beg-cobol-for-programmers | livre, programmes complets | 113 | 64 | 65 | 1 | 0 |
 | proleap-cobol-parser | tests de parseur (fragments, dialectes) | 759 | 306 | 311 | 5 | 0 |
 | che4z-lsp-for-cobol | tests de serveur de langage IBM | 1505 | 327 | 331 | 4 | 0 |
-| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 680 | 879 | 199 | 0 |
-| **Total** | | **3593** | **1408** | **1617** | **209** | **0** |
+| gnucobol-testsuite | testsuite GnuCOBOL 3.2 (tests du compilateur) | 1135 | 685 | 879 | 194 | 0 |
+| **Total** | | **3593** | **1413** | **1617** | **204** | **0** |
 
-Exécution comparée à cobc (niveaux 3-4) : 2026-11-01T20:09:14+00:00, commit `6f7b449a61`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
+Exécution comparée à cobc (niveaux 3-4) : 2026-11-02T07:35:37+00:00, commit `7b3c4dc072`. Commande : `python3 tools/real_corpora.py --cobc --execute --record`.
 
 | Corpus | Programmes acceptés | Identiques | Divergents | Refusés à la compilation/exécution | Délais/erreurs |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -122,15 +122,15 @@ Premiers blocages là où cobc accepte (tous corpus, premier diagnostic par sour
 1. 36 × SCREEN SECTION non prise en charge à cet endroit
 2. 14 × expression non prise en charge: LINE
 3. 8 × PROCEDURE attendu
-4. 8 × PROGRAM-ID attendu
-5. 5 × instruction non prise en charge: AT
-6. 4 × CALL dump: programme non converti ou routine système non pris en charge
-7. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
-8. 4 × USAGE/clause non pris en charge: FLOAT-DECIMAL-16
-9. 4 × entrée SPECIAL-NAMES non prise en charge: CURSOR
-10. 4 × USAGE/clause non pris en charge: is
+4. 5 × instruction non prise en charge: AT
+5. 4 × CALL dump: programme non converti ou routine système non pris en charge
+6. 4 × USAGE/clause non pris en charge: PROGRAM-POINTER
+7. 4 × USAGE/clause non pris en charge: FLOAT-DECIMAL-16
+8. 4 × entrée SPECIAL-NAMES non prise en charge: CURSOR
+9. 4 × USAGE/clause non pris en charge: is
+10. 3 × OCCURS UNBOUNDED non pris en charge
 
-Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 209 sources, 209 au premier diagnostic identique à la mesure, 104 à inventaire complet, 144 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
+Inventaire de l'écart (tous les blocages par source, parseur en mode reprise) : 204 sources, 204 au premier diagnostic identique à la mesure, 104 à inventaire complet, 146 diagnostics distincts. « Débloquées » est un plafond : seul l'inventaire complet du parseur compte, l'émission peut encore refuser.
 
 | Ordre | Chantier (diagnostic) | Sources débloquées | Cumul | 1er blocage de | Présent dans |
 | ---: | --- | ---: | ---: | ---: | ---: |
@@ -155,12 +155,12 @@ Diagnostics les plus présents (sources où ils apparaissent ; seul blocage d'un
 - 17 × expression non prise en charge: LINE (1er : 14, seul : 0)
 - 16 × instruction non prise en charge: LINE (1er : 0, seul : 0)
 - 8 × PROCEDURE attendu (1er : 8, seul : 0)
-- 8 × PROGRAM-ID attendu (1er : 8, seul : 0)
 - 6 × expression attendue (1er : 1, seul : 0)
 - 5 × instruction non prise en charge: AT (1er : 5, seul : 1)
 - 5 × donnée subordonnée sans groupe parent (1er : 0, seul : 0)
 - 4 × CALL dump: programme non converti ou routine système non pris en charge (1er : 4, seul : 0)
 - 4 × OCCURS UNBOUNDED non pris en charge (1er : 3, seul : 2)
+- 4 × USAGE/clause non pris en charge: PROGRAM-POINTER (1er : 4, seul : 0)
 <!-- mesure:fin -->
 
 ## Journal du cap
@@ -942,3 +942,22 @@ Une ligne par étape : date, ce qui a été levé, total accepté avant → apr�
   008 à 012, run_misc-022, TEST10, TEST14, TEST15 (che4z, non exécutés par la
   mesure, vérifiés un par un). che4z **324 → 327/1505**, testsuite **670 →
   680/1135**, total **1395 → 1408/3593**, écart **222 → 209**.
+- 2026-11-02 — FUNCTION-ID (chantier « PROGRAM-ID attendu », 8 sources) :
+  en-tête et END FUNCTION de parser.y, REPOSITORY `FUNCTION nom [AS]`
+  (`setup_prototype`, nom externe en majuscules), appel avec ou sans le mot
+  FUNCTION et référence directe d'une fonction à elle-même (scanner.l),
+  programme principal = premier PROGRAM-ID, activation récursive
+  (`flag_recursive`), donnée RETURNING allouée à zéro par activation
+  (`cob_malloc`) et rendue avec sa taille variable, arguments par référence
+  (constante de cobc pour un littéral), ANY LENGTH ; modification de
+  référence du résultat contrôlée puis ignorée comme codegen.c (RXWRXW).
+  Refus nommés : appel réentrant dans une instruction qui nomme un article de
+  LOCAL-STORAGE/LINKAGE (structures de champ statiques de cobc, ordre
+  d'évaluation de GCC : FACT (6) vaut 0 en natif, run_functions-126), source
+  de fonctions seules (« executable requested but no program found »).
+  Testsuite **680 → 685/1135**, total **1408 → 1413/3593**, écart **209 →
+  204**, à examiner 0. Les 5 sources débloquées (run_functions-123/124,
+  run_fundamental-025, syn_definition-026, syn_functions-003) exécutées face
+  à cobc : 5 identiques. Exécution des corpus inchangée. NIST statique
+  451/458 (`build/coverage-nist-functions-20261102.json`). Suite : 637 tests
+  (`tools/run_tests.py`), 1 ignoré.

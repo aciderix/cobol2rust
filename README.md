@@ -134,7 +134,7 @@ Ces résultats portent sur les entrées testées.
 | Registres | `LENGTH [OF]` d'un article, d'un littéral ou d'une fonction (`cb_build_length` : littéral pour une taille fixe, somme sur l'OCCURS DEPENDING actif sinon, FUNCTION LENGTH pour une sous-chaîne) ; `RETURN-CODE` (BINARY-LONG par programme, partagé par les programmes contenus, recopié de l'appelé après CALL, conservé entre les CALL, code de sortie de STOP RUN et du GOBACK principal) |
 | Tri de table | `SORT table [ON ASCENDING/DESCENDING KEY [clés]]… [WITH DUPLICATES]` comme `cob_table_sort` (stable, offset de clé relatif à son parent, clé OCCURS par défaut, ODO actif) |
 | Directives | `>>SOURCE FORMAT`, compilation conditionnelle de pplex (`>>DEFINE nom [AS] littéral|OFF [OVERRIDE]`, `>>IF`/`>>ELIF` avec `[NOT] DEFINED` ou une comparaison, `>>ELSE`, `>>END-IF`, DEFINE standard `CHARSET`, `ENDIAN`, `SIGN`, `PERFORM-TYPE`), `>>DISPLAY` sans effet à l'exécution ; directives MF `$SET` (options sans effet ignorées comme les `#OPTION` de cobc, options actives refusées), `$IF`/`$ELSE`/`$END`, `$DISPLAY` ; `>>TURN`, `>>SET`, `>>DEFINE CONSTANT`/`PARAMETER` refusés |
-| Fonctions | `REPOSITORY` : `FUNCTION ALL INTRINSIC` et `FUNCTION nom... INTRINSIC` (noms appelés sans le mot FUNCTION dans le programme et ses programmes contenus) ; fonctions utilisateur (FUNCTION-ID) refusées |
+| Fonctions | `REPOSITORY` : `FUNCTION ALL INTRINSIC` et `FUNCTION nom... INTRINSIC` (noms appelés sans le mot FUNCTION dans le programme et ses programmes contenus) ; `FUNCTION nom [AS littéral]` : prototype d'une fonction utilisateur (voir « Fonctions utilisateur ») |
 | Autres | `INITIALIZE`, `INITIALIZE ... WITH FILLER`, `INITIALIZE ... {ALL|catégorie} TO VALUE`, `INITIALIZE ... REPLACING`, `... THEN TO DEFAULT`, `CONTINUE`, `STOP RUN`, `GOBACK` ; hors `-std=cobol85`, alias de mots réservés de default.conf (`INITIALISE`, `ORGANISATION`, `SYNCHRONISED`, `TIMEOUT`…) |
 
 Les champs numériques DISPLAY et COMP-3 vont jusqu'à **38 chiffres** comme
@@ -671,8 +671,33 @@ heure 0 à 24, 0 à 86400 secondes ; dix espaces et EC-ARGUMENT-FUNCTION
 sinon). L'argument de locale (une donnée pour les trois dernières, comme
 `locale_dt_args`) passe par `cob_field_to_string` puis `setlocale` de la
 catégorie, la locale de `cob_init` étant rétablie ensuite. Les noms de
-locale de SPECIAL-NAMES, EXCEPTION-FILE-N, EXCEPTION-LOCATION-N, BIT-OF et
-les fonctions utilisateur restent refusés.
+locale de SPECIAL-NAMES, EXCEPTION-FILE-N, EXCEPTION-LOCATION-N et BIT-OF
+restent refusés.
+
+## Fonctions utilisateur (FUNCTION-ID)
+
+`FUNCTION-ID. nom [AS littéral]` … `END FUNCTION nom.` définit une fonction
+dans la source du programme (avant ou après lui ; le programme principal est
+le premier PROGRAM-ID, comme `main_flag_set`). `REPOSITORY. FUNCTION nom [AS
+littéral]` la déclare : le nom s'emploie alors avec ou sans le mot FUNCTION,
+et une fonction se nomme elle-même sans déclaration. Le nom externe est mis
+en majuscules (`cb_encode_program_id`) ; une fonction absente de la
+conversion est refusée. Comme cobc, une fonction est toujours récursive
+(`flag_recursive`) : WORKING-STORAGE partagée, LOCAL-STORAGE par activation,
+et sa donnée RETURNING (01 de LINKAGE, obligatoire, sans OCCURS ni ANY
+LENGTH) allouée à zéro à chaque entrée (`cob_malloc`) ; le résultat est ce
+champ, sa taille variable comprise. Les arguments passent par référence (une
+donnée, un littéral alphanumérique ou un entier non signé : la constante de
+cobc) ; un argument ANY LENGTH prend la taille de l'argument. Une
+modification de référence du résultat est contrôlée puis ignorée, comme le
+code de cobc 3.2 (`RXWRXW`). Restent refusés : une instruction qui contient
+un appel pouvant réentrer la fonction et un article de LOCAL-STORAGE ou de
+LINKAGE (structures de champ statiques de cobc, ordre d'évaluation du C,
+run_functions-126), la réentrée d'une fonction à article ANY LENGTH, STOP
+RUN dans une fonction, CALL d'une FUNCTION-ID, un argument expression ou
+littéral signé/décimal, un programme contenu dans une fonction, et une
+source sans PROGRAM-ID (`cobc -x` : « executable requested but no program
+found »).
 
 ### Dernière exception : FUNCTION EXCEPTION-* et SET LAST EXCEPTION
 

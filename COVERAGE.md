@@ -1067,3 +1067,11 @@ les modes suivants. Acceptation
 les sept sources débloquées s'exécutent à l'identique (cinq en code zéro, deux
 sur l'erreur fatale). 20 programmes NIST à OPEN multiple re-vérifiés : 20/20
 conformes. Exécution globale **74/84**, inchangée ; NIST statique **451/458**.
+
+## Progression : fonctions utilisateur (FUNCTION-ID)
+
+FUNCTION-ID, END FUNCTION, REPOSITORY FUNCTION nom [AS], appel avec ou sans
+le mot FUNCTION, RETURNING alloué par activation, récursivité. Testsuite :
+5 sources débloquées, identiques à cobc ; run_functions-126 (appel récursif à
+côté de la donnée RETURNING) et syn_definition-025 (fonctions seules) restent
+refusés par un diagnostic nommé. Fixture native `tests/fixtures/user_functions.cob`.

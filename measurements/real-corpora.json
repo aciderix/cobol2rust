@@ -1,15 +1,15 @@
 {
  "schema": 1,
- "measured_at": "2026-11-01T20:09:14+00:00",
- "git_head": "6f7b449a618a0be35c4a6747a01aa19ff986e7cc",
- "implementation_sha256": "201b8485af4b4b6cb80585e20f0fcb7c415d90437818babd25d14ee45ba19ddf",
+ "measured_at": "2026-11-02T07:35:37+00:00",
+ "git_head": "7b3c4dc07297b9f95d9d009d2f6686ace55f710a",
+ "implementation_sha256": "1dfba265ddbc88d36f6c7a5a271a92bcd435192f81d64eec1e17baf7c8b48562",
  "cobc": "cobc (GnuCOBOL) 3.2.0",
  "scope": "niveau 2 (émission acceptée) ; le bloc execution, s'il existe, porte les niveaux 3 et 4",
  "totals": {
   "sources": 3593,
-  "accepted": 1408,
+  "accepted": 1413,
   "cobc_accepted": 1617,
-  "gap": 209,
+  "gap": 204,
   "accepted_where_cobc_refuses": 0
  },
  "corpora": {
@@ -411,16 +411,12 @@
     "kind": "testsuite GnuCOBOL 3.2 (tests du compilateur)"
    },
    "sources": 1135,
-   "accepted": 680,
+   "accepted": 685,
    "internal_errors": 1,
    "blockers": [
     [
      "SCREEN SECTION non prise en charge à cet endroit",
      42
-    ],
-    [
-     "PROGRAM-ID attendu",
-     20
     ],
     [
      "expression non prise en charge: LINE",
@@ -432,7 +428,7 @@
     ],
     [
      "IDENTIFICATION DIVISION attendue",
-     10
+     9
     ],
     [
      "OCCURS UNBOUNDED non pris en charge",
@@ -444,6 +440,10 @@
     ],
     [
      "CURRENCY ... PICTURE SYMBOL non pris en charge",
+     5
+    ],
+    [
+     "REPOSITORY PROGRAM non pris en charge",
      5
     ],
     [
@@ -466,7 +466,7 @@
    "cobc_accepted": 879,
    "accepted_where_cobc_refuses": 0,
    "accepted_where_cobc_refuses_sources": [],
-   "gap": 199,
+   "gap": 194,
    "gap_sources": [
     [
      "run_accept-006/prog.cob",
@@ -589,16 +589,8 @@
      "FUNCTION BIT-OF non prise en charge"
     ],
     [
-     "run_functions-123/prog.cob",
-     "PROGRAM-ID attendu"
-    ],
-    [
-     "run_functions-124/prog.cob",
-     "PROGRAM-ID attendu"
-    ],
-    [
      "run_functions-126/prog.cob",
-     "PROGRAM-ID attendu"
+     "appel récursif d'une FUNCTION-ID dans une instruction qui nomme un article de LOCAL-STORAGE ou de LINKAGE (champs statiq"
     ],
     [
      "run_fundamental-001/prog.cob",
@@ -622,11 +614,7 @@
     ],
     [
      "run_fundamental-023/prog.cob",
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    [
-     "run_fundamental-025/prog.cob",
-     "PROGRAM-ID attendu"
+     "PICTURE non prise en charge: 9,9999.99Y"
     ],
     [
      "run_fundamental-027/prog.cob",
@@ -1078,11 +1066,7 @@
     ],
     [
      "syn_definition-025/prog.cob",
-     "PROGRAM-ID attendu"
-    ],
-    [
-     "syn_definition-026/prog.cob",
-     "PROGRAM-ID attendu"
+     "source sans PROGRAM-ID (FUNCTION-ID seules) : executable requested but no program found"
     ],
     [
      "syn_definition-040/prog.cob",
@@ -1117,12 +1101,8 @@
      "clause SELECT non prise en charge"
     ],
     [
-     "syn_functions-003/prog.cob",
-     "PROGRAM-ID attendu"
-    ],
-    [
      "syn_functions-005/prog.cob",
-     "PROGRAM-ID attendu"
+     "REPOSITORY PROGRAM non pris en charge"
     ],
     [
      "syn_literals-006/prog.cob",
@@ -1275,10 +1255,6 @@
      14
     ],
     [
-     "PROGRAM-ID attendu",
-     8
-    ],
-    [
      "PROCEDURE attendu",
      6
     ],
@@ -1311,18 +1287,22 @@
      3
     ],
     [
-     "IDENTIFICATION DIVISION attendue",
+     "USAGE/clause non pris en charge: IS",
      3
+    ],
+    [
+     "PROCEDURE DIVISION USING limité à BY REFERENCE",
+     2
     ]
    ]
   }
  },
  "gap_inventory": {
   "scope": "diagnostics suivants indicatifs (parseur en mode reprise) ; « débloquées » : plafond, inventaires complets seulement, l'émission peut encore refuser",
-  "sources": 209,
-  "matching": 209,
+  "sources": 204,
+  "matching": 204,
   "complete": 104,
-  "distinct": 144,
+  "distinct": 146,
   "diagnostics": [
    {
     "diagnostic": "GOBACK RETURNING non pris en charge",
@@ -1356,12 +1336,6 @@
    },
    {
     "diagnostic": "PROCEDURE attendu",
-    "first": 8,
-    "present": 8,
-    "alone": 0
-   },
-   {
-    "diagnostic": "PROGRAM-ID attendu",
     "first": 8,
     "present": 8,
     "alone": 0
@@ -1439,12 +1413,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "IDENTIFICATION DIVISION attendue",
-    "first": 3,
-    "present": 3,
-    "alone": 0
-   },
-   {
     "diagnostic": "littéral flottant hors d'un emploi numérique (display) non pris en charge",
     "first": 2,
     "present": 3,
@@ -1499,6 +1467,12 @@
     "alone": 1
    },
    {
+    "diagnostic": "IDENTIFICATION DIVISION attendue",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
     "diagnostic": "OPEN I-O limité aux fichiers SEQUENTIAL; réécriture LINE SEQUENTIAL non modélisée",
     "first": 2,
     "present": 2,
@@ -1548,6 +1522,12 @@
    },
    {
     "diagnostic": "OCCURS DEPENDING ON limité à une table subordonnée",
+    "first": 2,
+    "present": 2,
+    "alone": 0
+   },
+   {
+    "diagnostic": "REPOSITORY PROGRAM non pris en charge",
     "first": 2,
     "present": 2,
     "alone": 0
@@ -1781,7 +1761,19 @@
     "alone": 0
    },
    {
+    "diagnostic": "appel récursif d'une FUNCTION-ID dans une instruction qui nomme un article de LOCAL-STORAGE ou de LINKAGE (champs statiq",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
     "diagnostic": "expression non prise en charge: BX",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "PICTURE non prise en charge: 9,9999.99Y",
     "first": 1,
     "present": 1,
     "alone": 0
@@ -1931,12 +1923,6 @@
     "alone": 0
    },
    {
-    "diagnostic": "REPOSITORY PROGRAM non pris en charge",
-    "first": 1,
-    "present": 1,
-    "alone": 0
-   },
-   {
     "diagnostic": "CALL _SUB-PROG_NOW: programme non converti ou routine système non pris en charge",
     "first": 1,
     "present": 1,
@@ -2004,6 +1990,12 @@
    },
    {
     "diagnostic": "COPY REPLACING d'un copybook contenant COPY non pris en charge",
+    "first": 1,
+    "present": 1,
+    "alone": 0
+   },
+   {
+    "diagnostic": "source sans PROGRAM-ID (FUNCTION-ID seules) : executable requested but no program found",
     "first": 1,
     "present": 1,
     "alone": 0
@@ -2665,27 +2657,9 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "run_functions-123/prog.cob",
-    "diagnostics": [
-     "PROGRAM-ID attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_functions-124/prog.cob",
-    "diagnostics": [
-     "PROGRAM-ID attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "run_functions-126/prog.cob",
     "diagnostics": [
-     "PROGRAM-ID attendu"
+     "appel récursif d'une FUNCTION-ID dans une instruction qui nomme un article de LOCAL-STORAGE ou de LINKAGE (champs statiq"
     ],
     "complete": false,
     "matches_measure": true
@@ -2740,16 +2714,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "run_fundamental-023/prog.cob",
     "diagnostics": [
-     "IDENTIFICATION DIVISION attendue"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "run_fundamental-025/prog.cob",
-    "diagnostics": [
-     "PROGRAM-ID attendu"
+     "PICTURE non prise en charge: 9,9999.99Y"
     ],
     "complete": false,
     "matches_measure": true
@@ -3909,16 +3874,7 @@
     "corpus": "gnucobol-testsuite",
     "source": "syn_definition-025/prog.cob",
     "diagnostics": [
-     "PROGRAM-ID attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
-    "source": "syn_definition-026/prog.cob",
-    "diagnostics": [
-     "PROGRAM-ID attendu"
+     "source sans PROGRAM-ID (FUNCTION-ID seules) : executable requested but no program found"
     ],
     "complete": false,
     "matches_measure": true
@@ -4000,18 +3956,9 @@
    },
    {
     "corpus": "gnucobol-testsuite",
-    "source": "syn_functions-003/prog.cob",
-    "diagnostics": [
-     "PROGRAM-ID attendu"
-    ],
-    "complete": false,
-    "matches_measure": true
-   },
-   {
-    "corpus": "gnucobol-testsuite",
     "source": "syn_functions-005/prog.cob",
     "diagnostics": [
-     "PROGRAM-ID attendu"
+     "REPOSITORY PROGRAM non pris en charge"
     ],
     "complete": false,
     "matches_measure": true
@@ -4344,9 +4291,9 @@
   ]
  },
  "execution": {
-  "measured_at": "2026-11-01T20:09:14+00:00",
-  "git_head": "6f7b449a618a0be35c4a6747a01aa19ff986e7cc",
-  "implementation_sha256": "201b8485af4b4b6cb80585e20f0fcb7c415d90437818babd25d14ee45ba19ddf",
+  "measured_at": "2026-11-02T07:35:37+00:00",
+  "git_head": "7b3c4dc07297b9f95d9d009d2f6686ace55f710a",
+  "implementation_sha256": "1dfba265ddbc88d36f6c7a5a271a92bcd435192f81d64eec1e17baf7c8b48562",
   "scope": "stdin vide, fichiers du dossier du programme en entrée ; stdout, fichiers finaux et code de sortie comparés à cobc",
   "corpora": {
    "carddemo": {

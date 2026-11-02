@@ -1192,6 +1192,9 @@ class Parser:
         # cb_build_program: nest_level, and the programs of the source in
         # PROGRAM-ID order (cobc's next_program chain, reversed).
         self.level = 0
+        # REPOSITORY FUNCTION name [AS literal] (user_spec_list): name -> the
+        # external name, folded to upper case like cb_encode_program_id.
+        self.user_functions = {}
         # The is_suppressed flags of the JSON/XML GENERATE trees (static in cobc).
         self.ml_slots = 0
         self.chain = []
@@ -1564,20 +1567,25 @@ class Parser:
         """_identification_header is optional: IDENTIFICATION DIVISION or
         PROGRAM-ID starts the next program."""
         return ((self.at("IDENTIFICATION") or self.at("ID")) and self.tokens[self.i + 1].key == "DIVISION") \
-            or (self.at("PROGRAM-ID") and self.tokens[self.i + 1].key == ".")
+            or ((self.at("PROGRAM-ID") or self.at("FUNCTION-ID")) and self.tokens[self.i + 1].key == ".")
 
     def program_end(self):
         """_procedure_division may be empty: the program ends here."""
-        return self.at("<EOF>") or (self.at("END") and self.tokens[self.i + 1].key == "PROGRAM")
+        return self.at("<EOF>") or (self.at("END") and self.tokens[self.i + 1].key in {"PROGRAM", "FUNCTION"})
 
     def parse(self):
         # _identification_header: the header itself is optional.
         if self.accept("IDENTIFICATION") or self.accept("ID"):
             self.expect("DIVISION")
             self.expect(".")
-        elif not self.at("PROGRAM-ID"):
+        elif not self.at("PROGRAM-ID") and not self.at("FUNCTION-ID"):
             self.error("IDENTIFICATION DIVISION attendue")
-        self.expect("PROGRAM-ID")
+        # function_id_paragraph: a user-defined function (COB_MODULE_TYPE_FUNCTION).
+        function = self.function = bool(self.accept("FUNCTION-ID"))
+        if function and self.level:
+            self.error("functions may not be defined within a program/function")
+        if not function:
+            self.expect("PROGRAM-ID")
         self.expect(".")
         entry_name = self.program_name = self.t.text
         self.check_valid_name(entry_name)
@@ -1595,8 +1603,17 @@ class Parser:
         # init_or_recurse} [PROGRAM]; RECURSIVE is no cobol85 word.
         common = initial = recursive = False
         self.orig_program_id, self.self_call = internal, False
+        if function:
+            # cb_build_program_id folds a function's external name to upper
+            # case; the function may name itself (Direct recursive reference).
+            entry_name = self.program_name = entry_name.upper()
+            self.user_functions[internal.upper()] = entry_name
+            self.chain[-1]["name"] = entry_name
+            self.function_calls = set()
         kinds = {"COMMON", "INITIAL"} | ({"RECURSIVE"} if STD != "cobol85" else set())
-        if self.accept("IS") or (not self.t.string and self.t.key in kinds):
+        if function:
+            self.function_names({internal.upper()})
+        if not function and (self.accept("IS") or (not self.t.string and self.t.key in kinds)):
             if self.t.string or self.t.key not in kinds:
                 self.error("syntax error, unexpected Identifier")
             first = self.take().key
@@ -1756,6 +1773,8 @@ class Parser:
             self.files[file_name] = spec
         using = []
         procedure = not self.program_end()
+        if function and not procedure:
+            self.error(f"FUNCTION '{name}' has no PROCEDURE DIVISION")
         if procedure:
             self.expect("PROCEDURE")
             self.expect("DIVISION")
@@ -1781,7 +1800,29 @@ class Parser:
             if not self.chaining:
                 self.error("CHAINING requiert au moins un paramètre")
         elif procedure and self.accept("USING"):
-            using = self.using_list(lambda: self.at(".") or returning_omitted())
+            using = self.using_list(lambda: self.at(".") or returning_omitted() or (function and self.at("RETURNING")))
+        self.returning = None
+        if procedure and function and self.at("RETURNING") and not returning_omitted():
+            # _procedure_returning: the returning item is allocated by the
+            # activation (cob_malloc of its size at each entry).
+            self.take()
+            key = self.resolve(self.name())
+            item = self.fields[key]
+            if not item.linkage:
+                self.error("RETURNING item is not defined in LINKAGE SECTION")
+            if item.parent is not None:
+                self.error("RETURNING item must have level 01")
+            if item.occurs > 1 or item.depending:
+                self.error("RETURNING item should not have OCCURS")
+            if item.any_length:
+                self.error("function RETURNING item may not be ANY LENGTH")
+            if key in using:
+                self.error("RETURNING item est aussi un paramètre USING : non pris en charge")
+            self.returning = key
+        elif function and returning_omitted():
+            self.error("RETURNING clause cannot be OMITTED for a FUNCTION")
+        elif function:
+            self.error("RETURNING clause is required for a FUNCTION")
         if procedure and returning_omitted():
             # procedure_returning: RETURNING OMITTED declares no return item;
             # cobc refuses it for a main program (-x): the program is a module.
@@ -1834,9 +1875,15 @@ class Parser:
                 nested_start = True
                 break
             if self.accept("END"):
-                self.expect("PROGRAM")
+                if function:
+                    # end_function: decrement_depth compares the names as written.
+                    self.expect("FUNCTION")
+                    if self.t.text != internal or self.name() != name:
+                        self.error(f"END FUNCTION '{self.t.text}' is different from FUNCTION-ID '{internal}'")
+                else:
+                    self.expect("PROGRAM")
                 # cobc compares the names as written, case included.
-                if self.t.text != internal or self.name() != name:
+                if not function and (self.t.text != internal or self.name() != name):
                     self.error("END PROGRAM ne correspond pas au PROGRAM-ID")
                 self.expect(".")
                 ended = True
@@ -1943,12 +1990,17 @@ class Parser:
         program.initial = initial
         # RECURSIVE (flag_recursive), or assumed for a CALL of the program's
         # own PROGRAM-ID (self-call-recursive: warning; skip in cobol85).
-        program.recursive = recursive or self.self_call
+        program.recursive = recursive or self.self_call or function
+        # FUNCTION-ID: flag_recursive, its RETURNING item, the functions it calls.
+        program.function, program.returning = function, self.returning
+        program.function_calls = sorted(getattr(self, "function_calls", ()))
         # module_name (orig_program_id): the PROGRAM-ID as written, not AS.
         program.module_name = internal
         if self.level and not ended and not nested_start and self.at("<EOF>"):
             # A contained program needs its END PROGRAM (depth > 1 at the end).
             self.error("multiple PROGRAM-ID's without matching END PROGRAM")
+        if nested_start and function:
+            self.error("programme contenu dans une FUNCTION-ID non pris en charge")
         if nested_start:
             # Nested programs, then END PROGRAM of this one (parser.y nested_list).
             if self.reports:
@@ -1964,6 +2016,8 @@ class Parser:
                 child_parser.level, child_parser.chain = self.level + 1, self.chain
                 child_parser.containers = [*self.containers, entry_name]
                 child_parser.report_move_state = self.report_move_state
+                # Contained programs inherit user_spec_list.
+                child_parser.user_functions = dict(self.user_functions)
                 child = child_parser.parse()
                 self.i = child_parser.i
                 for item in [child, *child.siblings]:
@@ -2645,8 +2699,19 @@ class Parser:
                 names |= INTRINSIC_NAMES
                 continue
             listed = []
-            while not self.t.string and self.t.key not in {"INTRINSIC", ".", "AS", "FUNCTION", "<EOF>"}:
+            while not self.t.string and self.t.key not in {"INTRINSIC", ".", "AS", "FUNCTION", "PROGRAM", "<EOF>"}:
                 listed.append(self.take().key)
+            if len(listed) == 1 and not self.at("INTRINSIC"):
+                # FUNCTION WORD _as_literal: a prototype (setup_prototype) of a
+                # user-defined function, named by its external name.
+                external = listed[0]
+                if self.accept("AS"):
+                    if not self.t.string:
+                        self.error("littéral attendu après AS")
+                    external = self.take().text
+                self.user_functions[listed[0]] = external.upper()
+                names.add(listed[0])
+                continue
             if not listed or not self.accept("INTRINSIC"):
                 self.error("FUNCTION utilisateur (FUNCTION-ID) non prise en charge")
             for name in listed:
@@ -2655,12 +2720,17 @@ class Parser:
             names |= set(listed)
         if names or self.at("."):
             self.expect(".")
+        self.function_names(names)
+
+    def function_names(self, names):
+        """The scanner returns these names as functions in the rest of the
+        program and its contained programs: a FUNCTION word before each."""
         end, depth = self.i, 0
         while end < len(self.tokens) and self.tokens[end].key != "<EOF>":
             t = self.tokens[end]
-            if not t.string and t.key == "PROGRAM-ID":
+            if not t.string and t.key in {"PROGRAM-ID", "FUNCTION-ID"}:
                 depth += 1
-            if not t.string and t.key == "END" and self.tokens[end + 1].key == "PROGRAM":
+            if not t.string and t.key == "END" and self.tokens[end + 1].key in {"PROGRAM", "FUNCTION"}:
                 if depth == 0:
                     break
                 depth -= 1
@@ -3848,6 +3918,14 @@ class Parser:
         self.expect(":")
         length = None if self.at(")") else self.expr()
         self.expect(")")
+        if result.op == "user_function":
+            # cb_build_intrinsic checks a literal offset or length; codegen.c
+            # does not pass them to the user function (RXWRXW): the whole
+            # returned field is used.
+            for bound in (start, length):
+                if bound is not None and bound.op == "number" and int(bound.args[0].split(".")[0] or 0) < 1:
+                    self.error(f"FUNCTION '{result.args[0]}' has invalid reference modification")
+            return result
         if not (result.op == "text" or (result.op == "function" and self.FUNCTIONS[result.args[0]][1] == "text")):
             self.error("modification de référence d'une FUNCTION numérique non prise en charge")
         return Expr("refmod", (result, start, length))
@@ -3865,6 +3943,19 @@ class Parser:
     def function_value(self):
         """FUNCTION name [(exp_list)]: arguments separated by spaces or commas."""
         name = self.take()
+        if not name.string and name.key in self.user_functions:
+            # USER_FUNCTION_NAME func_args: the arguments in parentheses.
+            args = []
+            if self.accept("("):
+                while not self.accept(")"):
+                    self.accept(",")
+                    if not self.at(")"):
+                        args.append(self.expr())
+            external = self.user_functions[name.key]
+            if not hasattr(self, "function_calls"):
+                self.function_calls = set()
+            self.function_calls.add(external)
+            return Expr("user_function", (external, tuple(args)))
         if name.string or name.key not in self.FUNCTIONS:
             self.error(f"FUNCTION {name.text} non prise en charge")
         if name.key.startswith("EXCEPTION-"):
@@ -3953,7 +4044,7 @@ class Parser:
                 f = self.fields[arg.args[0].name]
                 if not f.any_length and not self.variable_size(f):
                     return Expr("number", (str(getattr(f, "parse_size", f.size)),))
-            if arg.op != "function" and not (arg.op == "var" and (arg.args[0].start is None
+            if arg.op not in {"function", "user_function"} and not (arg.op == "var" and (arg.args[0].start is None
                                                                   or self.fields[arg.args[0].name].any_length)):
                 self.error("FUNCTION LENGTH d'un élément variable non prise en charge")
         if name.key in {"FORMATTED-TIME", "FORMATTED-DATETIME"}:

@@ -88,7 +88,9 @@ def statements(program):
 
 
 def call_targets(program):
-    literals, dynamic = set(), False
+    # The user-defined functions a program references are found like the
+    # programs of its literal CALLs (cob_resolve_func by external name).
+    literals, dynamic = set(getattr(program, "function_calls", ())), False
     for stmt in statements(program):
         if stmt.op == "call_program":
             if stmt.args[0][0] == "literal":
@@ -133,7 +135,14 @@ def run_unit(source: Path, fmt, includes, call_paths):
     A dynamic CALL brings in every program of the call path that converts.
     """
     expanded, copies = load_cached(source, includes, fmt)
-    main = parse_cached(expanded)
+    first = parse_cached(expanded)
+    # The main program is the first PROGRAM-ID of the source (main_flag_set):
+    # a FUNCTION-ID before it is one more program of the run unit.
+    programs = [first, *first.siblings]
+    main = next((program for program in programs if not getattr(program, "function", False)), None)
+    if main is None:
+        raise CobolError("source sans PROGRAM-ID (FUNCTION-ID seules) : executable requested but no program found")
+    siblings = [program for program in programs if program is not main]
     directories = [Path(path) for path in call_paths]
     units = {}
     # Programs after the main one in its source are in the executable itself:
@@ -145,7 +154,9 @@ def run_unit(source: Path, fmt, includes, call_paths):
             local[child.entry_name] = child
             gather(child)
     gather(main)
-    for program in main.siblings:
+    for program in siblings:
+        if program.entry_name in local:
+            raise CobolError(f"nom externe dupliqué dans le source: {program.entry_name}")
         local[program.entry_name] = program
         gather(program)
     check_nested_calls(main, local)
@@ -244,10 +255,11 @@ def emit_unit(source: Path, fmt="auto", includes=(), call_paths=()):
                for path in directory.iterdir() if path.suffix in SOURCE_SUFFIXES}
     entries = [name for program in (main, *(sub for _, sub, _, _ in subprograms))
                for name, _ in getattr(program, "entries", [])]
-    emitters = [Emitter(main, called=called, present=present, entries=entries)]
+    functions = {sub.entry_name: sub for _, sub, _, _ in subprograms if getattr(sub, "function", False)}
+    emitters = [Emitter(main, called=called, present=present, entries=entries, functions=functions)]
     for index, (_, sub, _, _) in enumerate(subprograms, 1):
         emitters.append(Emitter(sub, struct=f"Program{index}", subprogram=True, called=called, present=present,
-                                entries=entries))
+                                entries=entries, functions=functions))
     rust, mapping = generate_unit(emitters)
     return main, expanded, copies, subprograms, rust, mapping
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .frontend import CobolError, Program, ProcedureBlock, DataRef, Expr
+from .frontend import CobolError, Program, ProcedureBlock, DataRef, Expr, Stmt
 from .layout import leaves
 from .control import ControlGraph
 
@@ -43,8 +43,11 @@ def byte_pattern_bytes(text):
 
 
 class Emitter:
-    def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=(), entries=()):
+    def __init__(self, program: Program, struct="Program", subprogram=False, called=None, present=(), entries=(),
+                 functions=None):
         self.program = program
+        # The run unit's FUNCTION-IDs by external name (cob_resolve_func).
+        self.functions = functions or {}
         from .frontend import Parser
         self.program_functions = Parser.FUNCTIONS
         self.struct = struct
@@ -132,6 +135,8 @@ class Emitter:
         static pointer, which CANCEL does not reset."""
         fields = self.program.fields
         parameters = set(self.program.using) | {name for _, using in getattr(self.program, "entries", []) for name in using}
+        # A function's RETURNING item has storage of each activation.
+        parameters.add(getattr(self.program, "returning", None))
         return [key for key, f in fields.items() if f.parent is None and f.linkage and not f.redefines and key not in parameters]
 
     def rebind_address(self, root, address, receiver="self"):
@@ -168,6 +173,11 @@ class Emitter:
         raise CobolError("adresse (POINTER, ADDRESS OF ou NULL) attendue")
 
     def kind(self, e):
+        if e.op == "user_function":
+            # The returned field is a copy of the function's RETURNING item.
+            function = self.function_program(e.args[0])
+            kind = function.fields[function.returning].kind
+            return "text" if kind in {"text", "group"} else kind
         if e.op in {"null", "address_of"}:
             return "pointer"
         if e.op == "function":
@@ -441,6 +451,8 @@ class Emitter:
             return f"{self.class_bytes(item)}.iter().all(|byte| {table}.contains(byte))"
         if op == "function":
             return self.function(*args)
+        if op == "user_function":
+            return self.user_function(*args)
         if op == "refmod":
             value, start, length = args
             length = f"Some(&({self.expression(length)}))" if length is not None else "None"
@@ -618,6 +630,32 @@ class Emitter:
             raise CobolError("FUNCTION EXCEPTION-* évaluée avec une fonction qui modifie l'exception : "
                              "ordre d'évaluation des arguments C non modélisé")
 
+    def function_program(self, name):
+        if name not in self.functions:
+            raise CobolError(f"FUNCTION {name}: fonction utilisateur non convertie avec ce programme")
+        return self.functions[name]
+
+    def user_function(self, name, args):
+        """func_X.funcfld: the arguments are passed as fields (their address),
+        a literal as cobc's constant; the result is the RETURNING item of the
+        activation."""
+        self.function_program(name)
+        values = []
+        for a in args:
+            if a.op == "var":
+                ref = a.args[0]
+                values.append(self.reference(ref, active=ref.start is not None) + ".clone()")
+            elif a.op == "text" and not getattr(a, "figurative_space", False):
+                data = self.byte_vector(a.args[0])
+                values.append(f"storage_runtime::literal_argument({quoted(self.struct + ':' + a.args[0])}, &{data})")
+            elif a.op == "number" and a.args[0].isdigit():
+                # An unsigned integer literal: its digits as written.
+                data = self.byte_vector(a.args[0])
+                values.append(f"storage_runtime::literal_argument({quoted(self.struct + ':9:' + a.args[0])}, &{data})")
+            else:
+                raise CobolError(f"FUNCTION {name}: argument expression, figuratif ou littéral signé/décimal non pris en charge")
+        return f"unit.function({quoted(name)}, vec![{', '.join(values)}])"
+
     def function(self, name, args):
         if len(args) > 1:
             self.check_argument_order(args)
@@ -677,7 +715,7 @@ class Emitter:
                     values.append(f"Value::Bytes(storage_runtime::Operand::of(&{self.reference(a.args[0])}).data)")
                 elif a.op == "text":
                     values.append(text_value(a.args[0]))
-                elif a.op == "function" and self.kind(a) == "text":
+                elif (a.op == "function" and self.kind(a) == "text") or a.op == "user_function":
                     values.append(self.expression(a))
                 else:
                     raise CobolError(f"FUNCTION {name}: argument alphanumérique attendu")
@@ -734,6 +772,9 @@ class Emitter:
             if getattr(self.program, "decimal_comma", False):
                 literal = literal.replace(".", ",")
             return f"Value::text({quoted(literal)})"
+        if e.op == "user_function":
+            # cob_display of the returned field, as the RETURNING item shows.
+            return self.expression(e)
         if e.op not in {"text", "number", "var"}:
             raise CobolError("DISPLAY accepte uniquement champs et littéraux simples")
         # Preserve the spelling of numeric literals (leading zeros, trailing fractional zeros).
@@ -2164,12 +2205,66 @@ class Emitter:
         for present, what in [(self.reports, "REPORT SECTION"), (program.alters, "ALTER"),
                               (self.based_roots(), "article BASED"),
                               (self.static_bases(), "article LINKAGE hors de tout USING"),
-                              ([f for f in program.fields.values() if f.any_length], "article ANY LENGTH")]:
+                              # A function re-entered while active stops at run time instead.
+                              ([f for f in program.fields.values() if f.any_length and not getattr(program, "function", False)],
+                               "article ANY LENGTH")]:
             if present:
                 raise CobolError(f"programme RECURSIVE avec {what} non pris en charge")
 
+    def reentering(self, name):
+        """Whether a call of the function `name` may re-enter this program."""
+        seen, pending = set(), [name]
+        while pending:
+            current = pending.pop()
+            if current == self.program.entry_name:
+                return True
+            if current in seen or current not in self.functions:
+                continue
+            seen.add(current)
+            pending.extend(getattr(self.functions[current], "function_calls", ()))
+        return False
+
+    def recursive_result_refusal(self, node):
+        """In a function, a statement with a call that may re-enter it and an
+        item whose data belongs to the activation (LOCAL-STORAGE, LINKAGE,
+        RETURNING): cobc keeps the field structures static, so the inner
+        activation re-points the field that libcob then reads or writes, in
+        an order GCC chooses (run_functions-126). The call's own arguments
+        are read at its entry."""
+        program = self.program
+        if not getattr(program, "function", False) or node.stmt is None:
+            return
+        fields = program.fields
+        per_activation = {key for key, f in fields.items() if f.linkage or getattr(f, "local", False)}
+        found = set()
+
+        def walk(item):
+            if isinstance(item, Stmt) or (isinstance(item, (list, tuple)) and item and isinstance(item[0], Stmt)):
+                return
+            if isinstance(item, Expr):
+                if item.op == "user_function":
+                    if self.reentering(item.args[0]):
+                        found.add("call")
+                    return
+                walk(item.args)
+            elif isinstance(item, DataRef):
+                if item.name in per_activation:
+                    found.add("item")
+                walk((item.indices, item.start, item.length))
+            elif isinstance(item, (list, tuple)):
+                for element in item:
+                    walk(element)
+        args = node.args
+        if node.op == "execute" and args and isinstance(args[0], Stmt):
+            args = args[0].args
+        walk(args)
+        if found == {"call", "item"}:
+            raise CobolError("appel récursif d'une FUNCTION-ID dans une instruction qui nomme un article de "
+                             "LOCAL-STORAGE ou de LINKAGE (champs statiques de cobc, ordre d'évaluation du C) non pris en charge")
+
     def control_node(self, index, node):
         op, a = node.op, node.args
+        self.recursive_result_refusal(node)
         if op == "end":
             # Falling off the end: STOP RUN in a main program, GOBACK in a subprogram.
             self.called_return()
@@ -2251,6 +2346,8 @@ class Emitter:
             not_found = ('runtime::exception::set("EC-PROGRAM-NOT-FOUND"); ' f"pc = {exception};" if exception is not None
                          else "runtime::module_not_found({});")
             from .system_calls import SYSTEM_ROUTINES
+            if target[0] == "literal" and target[1] in self.functions:
+                raise CobolError(f"CALL {target[1]}: CALL d'une FUNCTION-ID (autre ABI) non pris en charge")
             if target[0] == "literal" and target[1] not in self.called and target[1] not in SYSTEM_ROUTINES:
                 if getattr(node.stmt, "static", False):
                     raise CobolError(f"CALL STATIC {target[1]}: programme non converti (édition de liens statique de cobc)")
@@ -3258,6 +3355,15 @@ class Emitter:
                            f"else {{ storage_runtime::unbind(&self.{rust}) }};")
             self.indent -= 1
             self.write("}")
+        returning = getattr(self.program, "returning", None)
+        if returning:
+            # output_internal_function: "Storage for returning item", a
+            # cob_malloc (zeroed) of its size at each activation.
+            family = self.address_family(returning)
+            size = max(fields[key].offset + fields[key].size for key in family)
+            self.write(f"let returned = storage_runtime::memory({size});")
+            for key in family:
+                self.write(f"self.{self.names[key]} = storage_runtime::rehome(&self.{self.names[key]}, &returned);")
         local = [name for name, field in fields.items() if getattr(field, "local", False) and field.parent is None]
         for name in local:
             # LOCAL-STORAGE: fresh storage (zeroed) initialized at each entry.
@@ -3275,6 +3381,12 @@ class Emitter:
             self.write("self.run(unit)")
         self.indent -= 1
         self.write("}")
+        if returning:
+            # **cob_fret = *floc->ret_fld: the RETURNING item's field, its
+            # variable size included.
+            self.write("fn function_result(&self) -> Value {")
+            self.write(f"    {self.reference(DataRef(returning))}.clone()")
+            self.write("}")
         self.write("/// The program's return value: its RETURN-CODE.")
         self.write("fn return_code(&self) -> Option<i64> {")
         self.write(f"    {'Some(' + self.register + '.integer(' + chr(34) + 'RETURN-CODE' + chr(34) + ') as i64)' if self.register else 'None'}")
@@ -3431,6 +3543,9 @@ def generate_unit(emitters):
                 kept = 'if program.open_files() { runtime::exception::unknown_file("files closed by an INITIAL program"); } ' + kept
         else:
             kept = f"self.p{index} = Some(program);"
+        if getattr(emitter.program, "function", False):
+            # A FUNCTION-ID is reached by RunUnit::function only.
+            continue
         entries = getattr(emitter.program, "entries", [])
         for number, name in enumerate([emitter.program.entry_name, *(entry for entry, _ in entries)]):
             guard = f" if self.p{index}_loaded" if number else ""
@@ -3489,8 +3604,40 @@ def generate_unit(emitters):
                      "            }"]
         else:
             unit.append(f"            {quoted(name)} => self.recursive({main_name}),")
-    unit += ["            _ => None,", "        }", "    }",
-             "    /// cob_module_global_enter: a program without RECURSIVE called while active",
+    unit += ["            _ => None,", "        }", "    }"]
+    functions = [(index, emitter) for index, emitter in enumerate(subprograms, 1) if getattr(emitter.program, "function", False)]
+    if functions:
+        # func_X.funcfld: cob_save_func, the function's entry (always an
+        # activation of a recursive module), the returned field, cob_restore_func.
+        unit += ["    fn function(&mut self, name: &str, arguments: Vec<Value>) -> Value {", "        match name {"]
+        for index, emitter in functions:
+            name = quoted(emitter.program.entry_name)
+            reentry = []
+            if any_items(emitter):
+                # The ANY LENGTH field descriptors are static in cobc's module.
+                reentry = [f"                if !outer {{ runtime::fail(\"FUNCTION {emitter.program.entry_name} re-entered with ANY LENGTH items (static field descriptors of cobc) not modelled\"); }}"]
+            unit += [f"            {name} => {{",
+                     f"                let outer = !self.p{index}_active;",
+                     *reentry,
+                     f"                let mut program = if outer {{ self.p{index}.take().unwrap_or_else(|| Box::new({emitter.struct}::new())) }} "
+                     f"else {{ Box::new(self.p{index}_base.as_ref().unwrap().activation()) }};",
+                     f"                if outer {{ self.p{index}_base = Some(Box::new(program.alias())); }}",
+                     f"                self.p{index}_active = true;",
+                     f"                self.callers.push({name});",
+                     "                self.params.push(arguments.iter().map(|a| storage_runtime::parameter_bytes(a).map(|_| storage_runtime::descriptor_size(a))).collect());",
+                     *([f"                runtime::exception::module({name});"] if exceptions else []),
+                     "                if let runtime::Outcome::Stop = program.call_entry(self, arguments, 0) {",
+                     "                    runtime::fail(\"STOP RUN in a FUNCTION-ID not modelled\");",
+                     "                }",
+                     "                let result = program.function_result();",
+                     "                self.callers.pop();",
+                     "                self.params.pop();",
+                     *(["                runtime::exception::module(self.callers.last().copied().unwrap_or(\"\"));"] if exceptions else []),
+                     f"                if outer {{ self.p{index}_active = false; self.p{index}_base = None; self.p{index} = Some(program); }}",
+                     "                result",
+                     "            }"]
+        unit += ["            _ => unreachable!(\"FUNCTION absent from the run unit\"),", "        }", "    }"]
+    unit += ["    /// cob_module_global_enter: a program without RECURSIVE called while active",
              "    /// returns -1 with EC-PROGRAM-RECURSIVE-CALL to a CALL with ON EXCEPTION,",
              "    /// otherwise cob_fatal_error (COB_FERROR_RECURSIVE).",
              "    /// common.c routines that read the current module: C$NARG",

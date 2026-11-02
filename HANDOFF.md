@@ -5,7 +5,22 @@
 > (`python3 tools/real_corpora.py --cobc --record`), pas dans les blocages
 > NIST. Les « prochains blocages » NIST cités plus bas sont historiques.
 
-## État courant — 30 octobre 2026 (à tenir à jour à chaque commit)
+## État courant — 2 novembre 2026 (à tenir à jour à chaque commit)
+
+Branche `claude/hopeful-allen-q389mo`, repartie de `main` (`7b3c4dc`, PR #5)
+par avance rapide. Mesure : **1413/3593 sources acceptées** (cobc 1617, écart
+**204**, à examiner 0) ; testsuite GnuCOBOL 685/1135. Exécution comparée :
+CardDemo 8/8, zopeneditor 3/3, cours 10/12, livre 53/61. NIST statique
+451/458. Dernière étape : FUNCTION-ID (journal de CAP.md du 2 novembre ;
+README « Fonctions utilisateur » ; `tests/test_user_functions.py`). Le
+prochain chantier se lit dans la table « Chantier » de CAP.md : l'écran
+(SCREEN SECTION, DISPLAY/ACCEPT LINE … COL, AT, CRT : environ 70 sources de
+run_manual_screen et syn_screen) domine désormais l'écart ; viennent ensuite
+« PROCEDURE attendu » (8), PROGRAM-POINTER, FLOAT-DECIMAL-16 et CALL "dump"
+(4 chacun), OCCURS UNBOUNDED (3).
+
+### Bilan du 30 octobre (historique)
+
 
 Les deux branches Claude sont intégrées à `main` (`ab7c864`, PR #1 à #4).
 Contrôle du 30 octobre sur `7ca8420` : aucune branche distante en avance sur
